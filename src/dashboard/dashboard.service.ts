@@ -36,10 +36,6 @@ export interface DashboardStats {
   totalFriends: number;
   pendingFriendRequests: number;
 
-  // Mistakes
-  totalMistakes: number;
-  unresolvedMistakes: number;
-
   // Rewards & Punishments
   totalRewards: number;
   claimedRewards: number;
@@ -47,7 +43,7 @@ export interface DashboardStats {
 }
 
 export interface RecentActivity {
-  type: 'goal' | 'habit' | 'task' | 'challenge' | 'mistake' | 'reward' | 'punishment';
+  type: 'goal' | 'habit' | 'task' | 'challenge' | 'reward' | 'punishment';
   title: string;
   action: string;
   timestamp: string;
@@ -100,7 +96,6 @@ export class DashboardService {
       challengesSnapshot,
       friendsSnapshot,
       friendRequestsSnapshot,
-      mistakesSnapshot,
       rewardsSnapshot,
       punishmentsSnapshot,
     ] = await Promise.all([
@@ -111,7 +106,6 @@ export class DashboardService {
       db.collection('challenges').where('participantIds', 'array-contains', userId).get(),
       userRef.collection('friends').get(),
       db.collection('friendRequests').where('toUserId', '==', userId).where('status', '==', 'pending').get(),
-      userRef.collection('mistakes').get(),
       userRef.collection('rewards').get(),
       userRef.collection('punishments').get(),
     ]);
@@ -171,11 +165,6 @@ export class DashboardService {
     const totalFriends = friendsSnapshot.size;
     const pendingFriendRequests = friendRequestsSnapshot.size;
 
-    // Process mistakes
-    const mistakes = mistakesSnapshot.docs.map((d) => d.data());
-    const totalMistakes = mistakes.length;
-    const unresolvedMistakes = mistakes.filter((m) => !m.isResolved).length;
-
     // Process rewards
     const rewards = rewardsSnapshot.docs.map((d) => d.data());
     const totalRewards = rewards.length;
@@ -207,8 +196,6 @@ export class DashboardService {
       upcomingChallenges,
       totalFriends,
       pendingFriendRequests,
-      totalMistakes,
-      unresolvedMistakes,
       totalRewards,
       claimedRewards,
       pendingPunishments,
@@ -224,13 +211,11 @@ export class DashboardService {
       goalsSnapshot,
       habitsSnapshot,
       tasksSnapshot,
-      mistakesSnapshot,
       rewardsSnapshot,
     ] = await Promise.all([
       userRef.collection('goals').orderBy('updatedAt', 'desc').limit(5).get(),
       userRef.collection('habits').orderBy('updatedAt', 'desc').limit(5).get(),
       userRef.collection('tasks').orderBy('updatedAt', 'desc').limit(5).get(),
-      userRef.collection('mistakes').orderBy('updatedAt', 'desc').limit(5).get(),
       userRef.collection('rewards').orderBy('updatedAt', 'desc').limit(5).get(),
     ]);
 
@@ -265,17 +250,6 @@ export class DashboardService {
         type: 'task',
         title: data.title,
         action: data.status === 'completed' ? 'completed' : 'updated',
-        timestamp: data.updatedAt,
-      });
-    });
-
-    // Process mistakes
-    mistakesSnapshot.docs.forEach((doc) => {
-      const data = doc.data();
-      activities.push({
-        type: 'mistake',
-        title: data.title,
-        action: data.isResolved ? 'resolved' : 'logged',
         timestamp: data.updatedAt,
       });
     });
