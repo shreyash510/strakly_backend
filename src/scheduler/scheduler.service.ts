@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { StreaksService } from '../streaks/streaks.service';
+import { ChallengesService } from '../challenges/challenges.service';
 
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
 
-  constructor(private readonly streaksService: StreaksService) {}
+  constructor(
+    private readonly streaksService: StreaksService,
+    private readonly challengesService: ChallengesService,
+  ) {}
 
   // Run every day at 11:45 PM
   @Cron('45 23 * * *')
@@ -20,6 +24,15 @@ export class SchedulerService {
       );
     } catch (error) {
       this.logger.error('Error during end-of-day processing:', error);
+    }
+
+    // Update challenge statuses
+    try {
+      this.logger.log('Updating challenge statuses...');
+      await this.challengesService.updateChallengeStatuses();
+      this.logger.log('Challenge statuses updated successfully');
+    } catch (error) {
+      this.logger.error('Error updating challenge statuses:', error);
     }
   }
 

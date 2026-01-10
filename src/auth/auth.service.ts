@@ -3,10 +3,11 @@ import {
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { FirebaseService } from '../firebase/firebase.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
-import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 export interface User {
   id: string;
@@ -23,15 +24,38 @@ export interface UserResponse {
   email: string;
 }
 
+export interface AuthResponse {
+  user: UserResponse;
+  accessToken: string;
+}
+
 @Injectable()
 export class AuthService {
-  constructor(private readonly firebaseService: FirebaseService) {}
+  private readonly SALT_ROUNDS = 10;
 
-  private hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password).digest('hex');
+  constructor(
+    private readonly firebaseService: FirebaseService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  private async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, this.SALT_ROUNDS);
   }
 
-  async register(createUserDto: CreateUserDto): Promise<UserResponse> {
+  private async comparePassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  private generateToken(user: UserResponse): string {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+    };
+    return this.jwtService.sign(payload);
+  }
+
+  async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
     const db = this.firebaseService.getFirestore();
 
     // Check if user already exists
@@ -47,21 +71,26 @@ export class AuthService {
     const userData = {
       name: createUserDto.name,
       email: createUserDto.email,
-      passwordHash: this.hashPassword(createUserDto.password),
+      passwordHash: await this.hashPassword(createUserDto.password),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     const docRef = await db.collection('users').add(userData);
 
-    return {
+    const user: UserResponse = {
       id: docRef.id,
       name: userData.name,
       email: userData.email,
     };
+
+    return {
+      user,
+      accessToken: this.generateToken(user),
+    };
   }
 
-  async login(loginDto: LoginDto): Promise<UserResponse> {
+  async login(loginDto: LoginDto): Promise<AuthResponse> {
     const db = this.firebaseService.getFirestore();
 
     const usersSnapshot = await db
@@ -76,16 +105,25 @@ export class AuthService {
     const userDoc = usersSnapshot.docs[0];
     const userData = userDoc.data() as User;
 
-    const passwordHash = this.hashPassword(loginDto.password);
+    // Check password with bcrypt
+    const isPasswordValid = await this.comparePassword(
+      loginDto.password,
+      userData.passwordHash,
+    );
 
-    if (userData.passwordHash !== passwordHash) {
+    if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return {
+    const user: UserResponse = {
       id: userDoc.id,
       name: userData.name,
       email: userData.email,
+    };
+
+    return {
+      user,
+      accessToken: this.generateToken(user),
     };
   }
 
@@ -125,6 +163,47 @@ export class AuthService {
       id: userDoc.id,
       name: userData.name,
       email: userData.email,
+    };
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean }> {
+    const db = this.firebaseService.getFirestore();
+
+    const userDoc = await db.collection('users').doc(userId).get();
+
+    if (!userDoc.exists) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const userData = userDoc.data() as User;
+
+    // Verify current password
+    const isPasswordValid = await this.comparePassword(
+      currentPassword,
+      userData.passwordHash,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Update password
+    await db.collection('users').doc(userId).update({
+      passwordHash: await this.hashPassword(newPassword),
+      updatedAt: new Date().toISOString(),
+    });
+
+    return { success: true };
+  }
+
+  async refreshToken(userId: string): Promise<{ accessToken: string }> {
+    const user = await this.getProfile(userId);
+    return {
+      accessToken: this.generateToken(user),
     };
   }
 }

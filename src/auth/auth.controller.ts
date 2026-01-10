@@ -4,23 +4,18 @@ import {
   Get,
   Patch,
   Body,
-  Headers,
-  UnauthorizedException,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  private getUserId(authHeader: string): string {
-    if (!authHeader) {
-      throw new UnauthorizedException('User ID header is required');
-    }
-    return authHeader;
-  }
 
   @Post('register')
   register(@Body() createUserDto: CreateUserDto) {
@@ -32,16 +27,31 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('profile')
-  getProfile(@Headers('x-user-id') userId: string) {
-    return this.authService.getProfile(this.getUserId(userId));
+  getProfile(@Request() req: any) {
+    return this.authService.getProfile(req.user.userId);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch('profile')
-  updateProfile(
-    @Headers('x-user-id') userId: string,
-    @Body('name') name: string,
-  ) {
-    return this.authService.updateProfile(this.getUserId(userId), name);
+  updateProfile(@Request() req: any, @Body('name') name: string) {
+    return this.authService.updateProfile(req.user.userId, name);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(
+      req.user.userId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('refresh')
+  refreshToken(@Request() req: any) {
+    return this.authService.refreshToken(req.user.userId);
   }
 }

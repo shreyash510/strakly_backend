@@ -14,6 +14,10 @@ import { RewardsModule } from './rewards/rewards.module';
 import { StreaksModule } from './streaks/streaks.module';
 import { PunishmentsModule } from './punishments/punishments.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { FriendsModule } from './friends/friends.module';
+import { ChallengesModule } from './challenges/challenges.module';
+import { PostsModule } from './posts/posts.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import firebaseConfig from './config/firebase.config';
 
 @Module({
@@ -34,6 +38,10 @@ import firebaseConfig from './config/firebase.config';
     StreaksModule,
     PunishmentsModule,
     SchedulerModule,
+    FriendsModule,
+    ChallengesModule,
+    PostsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
