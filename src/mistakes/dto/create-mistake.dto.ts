@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   MaxLength,
   IsEnum,
-  IsBoolean,
+  IsOptional,
 } from 'class-validator';
 
 export enum MistakeCategory {
@@ -16,6 +16,12 @@ export enum MistakeCategory {
   HEALTH = 'health',
   FINANCIAL = 'financial',
   OTHER = 'other',
+}
+
+export enum MistakeStatus {
+  PENDING = 'pending',
+  RESOLVED = 'resolved',
+  FAILED = 'failed',
 }
 
 export class CreateMistakeDto {
@@ -36,11 +42,15 @@ export class CreateMistakeDto {
 
   @IsString()
   @IsNotEmpty()
-  date: string;
+  startDate: string;
+
+  @IsString()
+  @IsOptional()
+  endDate?: string;
 
   @IsEnum(MistakeCategory)
   category: MistakeCategory;
 
-  @IsBoolean()
-  isResolved: boolean;
+  @IsEnum(MistakeStatus)
+  status: MistakeStatus;
 }

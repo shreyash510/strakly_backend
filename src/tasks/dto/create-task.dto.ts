@@ -3,14 +3,12 @@ import {
   IsNotEmpty,
   MaxLength,
   IsEnum,
+  IsArray,
+  IsNumber,
+  Min,
+  Max,
+  IsOptional,
 } from 'class-validator';
-
-export enum TaskPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  URGENT = 'urgent',
-}
 
 export enum TaskStatus {
   PENDING = 'pending',
@@ -26,14 +24,14 @@ export class CreateTaskDto {
 
   @IsString()
   @MaxLength(500)
-  description: string;
+  @IsOptional()
+  description?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  dueDate: string;
-
-  @IsEnum(TaskPriority)
-  priority: TaskPriority;
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  repeatDays: number[]; // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
 
   @IsEnum(TaskStatus)
   status: TaskStatus;

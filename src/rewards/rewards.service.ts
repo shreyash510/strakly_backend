@@ -7,8 +7,11 @@ export interface Reward {
   id: string;
   challenge: string;
   reward: string;
-  startDate: string;
-  endDate: string;
+  targetStreak: number;
+  currentStreak: number;
+  category?: string;
+  linkedItemId?: string;
+  linkedItemName?: string;
   status: string;
   claimedAt?: string;
   createdAt: string;
@@ -48,6 +51,7 @@ export class RewardsService {
   ): Promise<Reward> {
     const rewardData = {
       ...createRewardDto,
+      currentStreak: 0,
       status: 'in_progress',
     };
 
@@ -75,6 +79,33 @@ export class RewardsService {
     }
 
     return reward;
+  }
+
+  async incrementStreak(userId: string, id: string): Promise<Reward> {
+    const reward = await this.findOne(userId, id);
+    const newStreak = reward.currentStreak + 1;
+    const updates: Partial<Reward> = { currentStreak: newStreak };
+
+    // Auto-complete if target reached
+    if (newStreak >= reward.targetStreak) {
+      updates.status = 'completed';
+    }
+
+    return this.firebaseService.updateDocument<Reward>(
+      this.collectionName,
+      userId,
+      id,
+      updates,
+    );
+  }
+
+  async resetStreak(userId: string, id: string): Promise<Reward> {
+    return this.firebaseService.updateDocument<Reward>(
+      this.collectionName,
+      userId,
+      id,
+      { currentStreak: 0 },
+    );
   }
 
   async markCompleted(userId: string, id: string): Promise<Reward> {

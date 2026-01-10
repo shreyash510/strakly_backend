@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { FirebaseService } from '../firebase/firebase.service';
+import { StreaksService } from '../streaks/streaks.service';
+import { StreakItemType } from '../streaks/dto/create-streak-record.dto';
 import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
 
@@ -9,11 +11,10 @@ export interface Habit {
   description: string;
   frequency: string;
   customDays: number[];
-  streak: number;
-  longestStreak: number;
-  completedDates: string[];
   isGoodHabit: boolean;
   isActive: boolean;
+  targetDays?: number;
+  thoughts?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,7 +23,11 @@ export interface Habit {
 export class HabitsService {
   private readonly collectionName = 'habits';
 
-  constructor(private readonly firebaseService: FirebaseService) {}
+  constructor(
+    private readonly firebaseService: FirebaseService,
+    @Inject(forwardRef(() => StreaksService))
+    private readonly streaksService: StreaksService,
+  ) {}
 
   async findAll(userId: string): Promise<Habit[]> {
     return this.firebaseService.getCollection<Habit>(
@@ -49,17 +54,26 @@ export class HabitsService {
     const habitData = {
       ...createHabitDto,
       customDays: createHabitDto.customDays || [],
-      streak: 0,
-      longestStreak: 0,
-      completedDates: [],
       isActive: true,
     };
 
-    return this.firebaseService.createDocument<Habit>(
+    // Create habit in database
+    const habit = await this.firebaseService.createDocument<Habit>(
       this.collectionName,
       userId,
       habitData,
     );
+
+    // Register habit for streak tracking
+    await this.streaksService.registerItem(
+      userId,
+      habit.id,
+      StreakItemType.HABIT,
+      habit.title,
+      habit.isGoodHabit,
+    );
+
+    return habit;
   }
 
   async update(
@@ -78,34 +92,22 @@ export class HabitsService {
       throw new NotFoundException(`Habit with ID ${id} not found`);
     }
 
+    // Update name in streak tracking if title changed
+    if (updateHabitDto.title) {
+      await this.streaksService.updateItemName(userId, id, updateHabitDto.title);
+    }
+
     return habit;
   }
 
-  async toggleCompletion(
-    userId: string,
-    id: string,
-    date: string,
-  ): Promise<Habit> {
+  // Complete habit for today - uses central streak service
+  async completeToday(userId: string, id: string): Promise<{ habit: Habit; streak: any }> {
     const habit = await this.findOne(userId, id);
 
-    const dateIndex = habit.completedDates.indexOf(date);
-    let completedDates: string[];
+    // Use central streak service to track completion
+    const streak = await this.streaksService.completeItem(userId, id);
 
-    if (dateIndex > -1) {
-      completedDates = habit.completedDates.filter((d) => d !== date);
-    } else {
-      completedDates = [...habit.completedDates, date];
-    }
-
-    const newStreak = this.calculateStreak(completedDates, habit.frequency);
-    const longestStreak = Math.max(newStreak, habit.longestStreak);
-
-    return this.firebaseService.updateDocument<Habit>(
-      this.collectionName,
-      userId,
-      id,
-      { completedDates, streak: newStreak, longestStreak },
-    );
+    return { habit, streak };
   }
 
   async toggleActive(userId: string, id: string): Promise<Habit> {
@@ -120,46 +122,31 @@ export class HabitsService {
   }
 
   async remove(userId: string, id: string): Promise<{ success: boolean }> {
+    // Remove from streak tracking
+    await this.streaksService.removeItem(userId, id);
+
+    // Delete habit
     await this.firebaseService.deleteDocument(this.collectionName, userId, id);
     return { success: true };
   }
 
-  private calculateStreak(completedDates: string[], frequency: string): number {
-    if (completedDates.length === 0) return 0;
+  // Get habit with its current streak
+  async getHabitWithStreak(userId: string, id: string): Promise<{ habit: Habit; streak: any }> {
+    const habit = await this.findOne(userId, id);
+    const streak = await this.streaksService.getItemStreak(userId, id);
+    return { habit, streak };
+  }
 
-    const sortedDates = [...completedDates].sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime(),
-    );
+  // Get all habits with their streaks
+  async getAllWithStreaks(userId: string): Promise<{ habit: Habit; streak: any }[]> {
+    const habits = await this.findAll(userId);
+    const results: { habit: Habit; streak: any }[] = [];
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const lastCompleted = new Date(sortedDates[0]);
-    lastCompleted.setHours(0, 0, 0, 0);
-
-    const daysDiff = Math.floor(
-      (today.getTime() - lastCompleted.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (frequency === 'daily' && daysDiff > 1) return 0;
-    if (frequency === 'weekly' && daysDiff > 7) return 0;
-
-    let streak = 1;
-    for (let i = 1; i < sortedDates.length; i++) {
-      const current = new Date(sortedDates[i - 1]);
-      const previous = new Date(sortedDates[i]);
-      const diff = Math.floor(
-        (current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      const maxGap = frequency === 'weekly' ? 7 : 1;
-      if (diff <= maxGap) {
-        streak++;
-      } else {
-        break;
-      }
+    for (const habit of habits) {
+      const streak = await this.streaksService.getItemStreak(userId, habit.id);
+      results.push({ habit, streak });
     }
 
-    return streak;
+    return results;
   }
 }

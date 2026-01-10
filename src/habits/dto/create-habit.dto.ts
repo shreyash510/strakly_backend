@@ -7,6 +7,8 @@ import {
   IsArray,
   IsNumber,
   IsOptional,
+  Min,
+  Max,
 } from 'class-validator';
 
 export enum HabitFrequency {
@@ -35,4 +37,16 @@ export class CreateHabitDto {
   @IsNumber({}, { each: true })
   @IsOptional()
   customDays?: number[];
+
+  // For bad habits - tracking slip/clean days
+  @IsNumber()
+  @Min(1)
+  @Max(365)
+  @IsOptional()
+  targetDays?: number;
+
+  @IsString()
+  @MaxLength(1000)
+  @IsOptional()
+  thoughts?: string;
 }

@@ -120,4 +120,56 @@ export class FirebaseService implements OnModuleInit {
 
     return true;
   }
+
+  async setDocument<T>(
+    collectionName: string,
+    userId: string,
+    docId: string,
+    data: Record<string, any>,
+  ): Promise<T> {
+    const docRef = this.db
+      .collection('users')
+      .doc(userId)
+      .collection(collectionName)
+      .doc(docId);
+
+    await docRef.set(
+      {
+        ...data,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    const doc = await docRef.get();
+    return { id: doc.id, ...doc.data() } as T;
+  }
+
+  // Get all documents from a collection across all users (for cron jobs)
+  async getAllUsersCollection<T>(
+    collectionName: string,
+  ): Promise<{ userId: string; habits: T[] }[]> {
+    const usersSnapshot = await this.db.collection('users').get();
+    const results: { userId: string; habits: T[] }[] = [];
+
+    for (const userDoc of usersSnapshot.docs) {
+      const userId = userDoc.id;
+      const collectionSnapshot = await this.db
+        .collection('users')
+        .doc(userId)
+        .collection(collectionName)
+        .get();
+
+      const items = collectionSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as T[];
+
+      if (items.length > 0) {
+        results.push({ userId, habits: items });
+      }
+    }
+
+    return results;
+  }
 }

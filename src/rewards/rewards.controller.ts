@@ -55,6 +55,19 @@ export class RewardsController {
     );
   }
 
+  @Patch(':id/increment-streak')
+  incrementStreak(
+    @Headers('x-user-id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.rewardsService.incrementStreak(this.getUserId(userId), id);
+  }
+
+  @Patch(':id/reset-streak')
+  resetStreak(@Headers('x-user-id') userId: string, @Param('id') id: string) {
+    return this.rewardsService.resetStreak(this.getUserId(userId), id);
+  }
+
   @Patch(':id/complete')
   markCompleted(
     @Headers('x-user-id') userId: string,

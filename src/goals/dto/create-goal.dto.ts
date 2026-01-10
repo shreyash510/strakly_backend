@@ -6,6 +6,7 @@ import {
   IsNumber,
   Min,
   Max,
+  IsOptional,
 } from 'class-validator';
 
 export enum GoalStatus {
@@ -25,6 +26,11 @@ export enum GoalCategory {
   OTHER = 'other',
 }
 
+export enum GoalType {
+  REGULAR = 'regular',
+  SAVINGS = 'savings',
+}
+
 export class CreateGoalDto {
   @IsString()
   @IsNotEmpty()
@@ -38,6 +44,10 @@ export class CreateGoalDto {
   @IsEnum(GoalCategory)
   category: GoalCategory;
 
+  @IsEnum(GoalType)
+  @IsOptional()
+  goalType?: GoalType = GoalType.REGULAR;
+
   @IsString()
   @IsNotEmpty()
   targetDate: string;
@@ -49,4 +59,15 @@ export class CreateGoalDto {
 
   @IsEnum(GoalStatus)
   status: GoalStatus;
+
+  // For savings goals
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  targetAmount?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  currentAmount?: number;
 }

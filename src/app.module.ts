@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FirebaseModule } from './firebase/firebase.module';
@@ -10,6 +11,9 @@ import { TasksModule } from './tasks/tasks.module';
 import { MistakesModule } from './mistakes/mistakes.module';
 import { RulesModule } from './rules/rules.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { StreaksModule } from './streaks/streaks.module';
+import { PunishmentsModule } from './punishments/punishments.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import firebaseConfig from './config/firebase.config';
 
 @Module({
@@ -18,6 +22,7 @@ import firebaseConfig from './config/firebase.config';
       isGlobal: true,
       load: [firebaseConfig],
     }),
+    ScheduleModule.forRoot(),
     FirebaseModule,
     AuthModule,
     GoalsModule,
@@ -26,6 +31,9 @@ import firebaseConfig from './config/firebase.config';
     MistakesModule,
     RulesModule,
     RewardsModule,
+    StreaksModule,
+    PunishmentsModule,
+    SchedulerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
