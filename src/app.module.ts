@@ -9,7 +9,6 @@ import { GoalsModule } from './goals/goals.module';
 import { HabitsModule } from './habits/habits.module';
 import { TasksModule } from './tasks/tasks.module';
 import { MistakesModule } from './mistakes/mistakes.module';
-import { RulesModule } from './rules/rules.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { StreaksModule } from './streaks/streaks.module';
 import { PunishmentsModule } from './punishments/punishments.module';
@@ -33,7 +32,6 @@ import firebaseConfig from './config/firebase.config';
     HabitsModule,
     TasksModule,
     MistakesModule,
-    RulesModule,
     RewardsModule,
     StreaksModule,
     PunishmentsModule,

@@ -36,11 +36,9 @@ export interface DashboardStats {
   totalFriends: number;
   pendingFriendRequests: number;
 
-  // Mistakes & Rules
+  // Mistakes
   totalMistakes: number;
   unresolvedMistakes: number;
-  totalRules: number;
-  activeRules: number;
 
   // Rewards & Punishments
   totalRewards: number;
@@ -103,7 +101,6 @@ export class DashboardService {
       friendsSnapshot,
       friendRequestsSnapshot,
       mistakesSnapshot,
-      rulesSnapshot,
       rewardsSnapshot,
       punishmentsSnapshot,
     ] = await Promise.all([
@@ -115,7 +112,6 @@ export class DashboardService {
       userRef.collection('friends').get(),
       db.collection('friendRequests').where('toUserId', '==', userId).where('status', '==', 'pending').get(),
       userRef.collection('mistakes').get(),
-      userRef.collection('rules').get(),
       userRef.collection('rewards').get(),
       userRef.collection('punishments').get(),
     ]);
@@ -180,11 +176,6 @@ export class DashboardService {
     const totalMistakes = mistakes.length;
     const unresolvedMistakes = mistakes.filter((m) => !m.isResolved).length;
 
-    // Process rules
-    const rules = rulesSnapshot.docs.map((d) => d.data());
-    const totalRules = rules.length;
-    const activeRules = rules.filter((r) => r.isActive).length;
-
     // Process rewards
     const rewards = rewardsSnapshot.docs.map((d) => d.data());
     const totalRewards = rewards.length;
@@ -218,8 +209,6 @@ export class DashboardService {
       pendingFriendRequests,
       totalMistakes,
       unresolvedMistakes,
-      totalRules,
-      activeRules,
       totalRewards,
       claimedRewards,
       pendingPunishments,
