@@ -69,7 +69,12 @@ export class UserMongoService extends BaseMongoService {
     };
   }
 
-  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
+  async searchUsers(
+    query: string,
+    excludeUserId?: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ users: any[]; hasMore: boolean; page: number; total?: number }> {
     const model = this.getModel('users');
     const filter: any = {};
 
@@ -86,13 +91,21 @@ export class UserMongoService extends BaseMongoService {
       ];
     }
 
-    const docs = await model.find(filter).limit(50).lean();
-    return docs.map((doc: any) => ({
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      model.find(filter).skip(skip).limit(limit + 1).lean(), // +1 to check hasMore
+      model.countDocuments(filter),
+    ]);
+
+    const hasMore = docs.length > limit;
+    const users = docs.slice(0, limit).map((doc: any) => ({
       id: doc._id.toString(),
       name: doc.name,
       email: doc.email,
       bio: doc.bio || '',
       streak: doc.streak || 0,
     }));
+
+    return { users, hasMore, page, total };
   }
 }

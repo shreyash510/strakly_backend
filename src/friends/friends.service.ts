@@ -80,7 +80,8 @@ export class FriendsService {
 
   // Get all users (excluding current user)
   async getAllUsers(currentUserId: string): Promise<UserProfile[]> {
-    return this.databaseService.searchUsers('', currentUserId);
+    const result = await this.databaseService.searchUsers('', currentUserId, 1, 100);
+    return result.users;
   }
 
   // Get all friends with stats

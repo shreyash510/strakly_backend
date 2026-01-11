@@ -157,11 +157,16 @@ export class DatabaseService implements OnModuleInit {
     return this.userFirebaseService.updateUser(userId, data);
   }
 
-  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
+  async searchUsers(
+    query: string,
+    excludeUserId?: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ users: any[]; hasMore: boolean; page: number; total?: number }> {
     if (this.isMongoDB()) {
-      return this.userMongoService.searchUsers(query, excludeUserId);
+      return this.userMongoService.searchUsers(query, excludeUserId, page, limit);
     }
-    return this.userFirebaseService.searchUsers(query, excludeUserId);
+    return this.userFirebaseService.searchUsers(query, excludeUserId, page, limit);
   }
 
   // Friends methods

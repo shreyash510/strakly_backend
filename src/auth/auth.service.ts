@@ -175,15 +175,25 @@ export class AuthService {
     };
   }
 
-  async searchUsers(query: string, currentUserId: string): Promise<UserResponse[]> {
+  async searchUsers(
+    query: string,
+    currentUserId: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ users: UserResponse[]; hasMore: boolean; page: number; total?: number }> {
     if (!query || query.length < 2) {
-      return [];
+      return { users: [], hasMore: false, page: 1 };
     }
-    const users = await this.databaseService.searchUsers(query, currentUserId);
-    return users.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    }));
+    const result = await this.databaseService.searchUsers(query, currentUserId, page, limit);
+    return {
+      users: result.users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      })),
+      hasMore: result.hasMore,
+      page: result.page,
+      total: result.total,
+    };
   }
 }

@@ -45,20 +45,35 @@ export class UserFirebaseService {
     return { id: doc.id, ...doc.data() };
   }
 
-  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
+  async searchUsers(
+    query: string,
+    excludeUserId?: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ users: any[]; hasMore: boolean; page: number; total?: number }> {
     const db = this.firebaseService.getFirestore();
+    // Firebase doesn't support offset well, so we fetch more and slice
+    const fetchLimit = page * limit + 1;
     const snapshot = await db
       .collection('users')
       .where('name', '>=', query)
       .where('name', '<=', query + '\uf8ff')
-      .limit(20)
+      .limit(fetchLimit)
       .get();
-    return snapshot.docs
-      .filter((doc) => !excludeUserId || doc.id !== excludeUserId)
-      .map((doc) => ({
-        id: doc.id,
-        name: doc.data().name,
-        email: doc.data().email,
-      }));
+
+    const allDocs = snapshot.docs.filter(
+      (doc) => !excludeUserId || doc.id !== excludeUserId,
+    );
+    const startIndex = (page - 1) * limit;
+    const paginatedDocs = allDocs.slice(startIndex, startIndex + limit);
+    const hasMore = allDocs.length > startIndex + limit;
+
+    const users = paginatedDocs.map((doc) => ({
+      id: doc.id,
+      name: doc.data().name,
+      email: doc.data().email,
+    }));
+
+    return { users, hasMore, page };
   }
 }

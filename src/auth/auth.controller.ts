@@ -58,7 +58,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('search')
-  searchUsers(@Request() req: any, @Query('q') query: string) {
-    return this.authService.searchUsers(query, req.user.userId);
+  searchUsers(
+    @Request() req: any,
+    @Query('q') query: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = parseInt(page || '1', 10) || 1;
+    const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50); // Max 50 per page
+    return this.authService.searchUsers(query, req.user.userId, pageNum, limitNum);
   }
 }
