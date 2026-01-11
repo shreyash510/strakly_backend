@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
-import * as admin from 'firebase-admin';
+import { DatabaseService } from '../database/database.service';
 
 export interface DashboardStats {
   // Goals
@@ -63,11 +62,7 @@ export interface DashboardData {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly firebaseService: FirebaseService) {}
-
-  private getDb(): admin.firestore.Firestore {
-    return this.firebaseService.getFirestore();
-  }
+  constructor(private readonly databaseService: DatabaseService) {}
 
   async getDashboardData(userId: string): Promise<DashboardData> {
     const [stats, recentActivity, streakSummary] = await Promise.all([
@@ -84,77 +79,67 @@ export class DashboardService {
   }
 
   async getStats(userId: string): Promise<DashboardStats> {
-    const db = this.getDb();
-    const userRef = db.collection('users').doc(userId);
-
     // Fetch all data in parallel
     const [
-      goalsSnapshot,
-      habitsSnapshot,
-      tasksSnapshot,
-      streaksDoc,
-      challengesSnapshot,
-      friendsSnapshot,
-      friendRequestsSnapshot,
-      rewardsSnapshot,
-      punishmentsSnapshot,
+      goals,
+      habits,
+      tasks,
+      streaksData,
+      challenges,
+      friends,
+      friendRequests,
+      rewards,
+      punishments,
     ] = await Promise.all([
-      userRef.collection('goals').get(),
-      userRef.collection('habits').get(),
-      userRef.collection('tasks').get(),
-      userRef.collection('current-streaks').doc('user-streaks').get(),
-      db.collection('challenges').where('participantIds', 'array-contains', userId).get(),
-      userRef.collection('friends').get(),
-      db.collection('friendRequests').where('toUserId', '==', userId).where('status', '==', 'pending').get(),
-      userRef.collection('rewards').get(),
-      userRef.collection('punishments').get(),
+      this.databaseService.getCollection<any>('goals', userId),
+      this.databaseService.getCollection<any>('habits', userId),
+      this.databaseService.getCollection<any>('tasks', userId),
+      this.databaseService.getDocument<any>('current-streaks', userId, 'user-streaks'),
+      this.databaseService.getUserChallenges(userId),
+      this.databaseService.getCollection<any>('friends', userId),
+      this.databaseService.getPendingFriendRequests(userId),
+      this.databaseService.getCollection<any>('rewards', userId),
+      this.databaseService.getCollection<any>('punishments', userId),
     ]);
 
     // Process goals
-    const goals = goalsSnapshot.docs.map((d) => d.data());
     const totalGoals = goals.length;
-    const completedGoals = goals.filter((g) => g.status === 'completed').length;
-    const inProgressGoals = goals.filter((g) => g.status === 'in_progress').length;
+    const completedGoals = goals.filter((g: any) => g.status === 'completed').length;
+    const inProgressGoals = goals.filter((g: any) => g.status === 'in_progress').length;
     const goalsProgress = totalGoals > 0
-      ? Math.round(goals.reduce((sum, g) => sum + (g.progress || 0), 0) / totalGoals)
+      ? Math.round(goals.reduce((sum: number, g: any) => sum + (g.progress || 0), 0) / totalGoals)
       : 0;
 
     // Process habits
-    const habits = habitsSnapshot.docs.map((d) => d.data());
     const totalHabits = habits.length;
-    const activeHabits = habits.filter((h) => h.isActive).length;
-    const goodHabits = habits.filter((h) => h.isGoodHabit).length;
-    const badHabits = habits.filter((h) => !h.isGoodHabit).length;
+    const activeHabits = habits.filter((h: any) => h.isActive).length;
+    const goodHabits = habits.filter((h: any) => h.isGoodHabit).length;
+    const badHabits = habits.filter((h: any) => !h.isGoodHabit).length;
 
     // Process tasks
-    const tasks = tasksSnapshot.docs.map((d) => d.data());
     const today = new Date().toISOString().split('T')[0];
     const totalTasks = tasks.length;
-    const completedTasks = tasks.filter((t) => t.status === 'completed').length;
-    const pendingTasks = tasks.filter((t) => t.status === 'pending').length;
-    const todayTasks = tasks.filter((t) => t.dueDate?.startsWith(today)).length;
+    const completedTasks = tasks.filter((t: any) => t.status === 'completed').length;
+    const pendingTasks = tasks.filter((t: any) => t.status === 'pending').length;
+    const todayTasks = tasks.filter((t: any) => t.dueDate?.startsWith(today)).length;
 
     // Process streaks
     let totalCurrentStreak = 0;
     let longestStreak = 0;
     let activeStreaks = 0;
 
-    if (streaksDoc.exists) {
-      const streaksData = streaksDoc.data();
-      if (streaksData?.items) {
-        const items = Object.values(streaksData.items as Record<string, any>);
-        items.forEach((item) => {
-          totalCurrentStreak += item.streak || 0;
-          if ((item.streak || 0) > 0) activeStreaks++;
-          if ((item.longestStreak || 0) > longestStreak) {
-            longestStreak = item.longestStreak;
-          }
-        });
-      }
+    if (streaksData?.items) {
+      const items = Object.values(streaksData.items as Record<string, any>);
+      items.forEach((item) => {
+        totalCurrentStreak += item.streak || 0;
+        if ((item.streak || 0) > 0) activeStreaks++;
+        if ((item.longestStreak || 0) > longestStreak) {
+          longestStreak = item.longestStreak;
+        }
+      });
     }
 
     // Process challenges
-    const challenges = challengesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     const activeChallenges = challenges.filter((c: any) => c.status === 'active').length;
     const upcomingChallenges = challenges.filter((c: any) => c.status === 'upcoming').length;
     const completedChallenges = challenges.filter((c: any) => c.status === 'completed');
@@ -162,17 +147,15 @@ export class DashboardService {
     const challengesLost = completedChallenges.filter((c: any) => c.winnerId && c.winnerId !== userId).length;
 
     // Process friends
-    const totalFriends = friendsSnapshot.size;
-    const pendingFriendRequests = friendRequestsSnapshot.size;
+    const totalFriends = friends.length;
+    const pendingFriendRequests = friendRequests.length;
 
     // Process rewards
-    const rewards = rewardsSnapshot.docs.map((d) => d.data());
     const totalRewards = rewards.length;
-    const claimedRewards = rewards.filter((r) => r.status === 'claimed').length;
+    const claimedRewards = rewards.filter((r: any) => r.status === 'claimed').length;
 
     // Process punishments
-    const punishments = punishmentsSnapshot.docs.map((d) => d.data());
-    const pendingPunishments = punishments.filter((p) => p.status === 'pending').length;
+    const pendingPunishments = punishments.filter((p: any) => p.status === 'pending').length;
 
     return {
       totalGoals,
@@ -203,27 +186,18 @@ export class DashboardService {
   }
 
   async getRecentActivity(userId: string, limit = 10): Promise<RecentActivity[]> {
-    const db = this.getDb();
-    const userRef = db.collection('users').doc(userId);
-
     // Fetch recent items from each collection
-    const [
-      goalsSnapshot,
-      habitsSnapshot,
-      tasksSnapshot,
-      rewardsSnapshot,
-    ] = await Promise.all([
-      userRef.collection('goals').orderBy('updatedAt', 'desc').limit(5).get(),
-      userRef.collection('habits').orderBy('updatedAt', 'desc').limit(5).get(),
-      userRef.collection('tasks').orderBy('updatedAt', 'desc').limit(5).get(),
-      userRef.collection('rewards').orderBy('updatedAt', 'desc').limit(5).get(),
+    const [goals, habits, tasks, rewards] = await Promise.all([
+      this.databaseService.getCollection<any>('goals', userId),
+      this.databaseService.getCollection<any>('habits', userId),
+      this.databaseService.getCollection<any>('tasks', userId),
+      this.databaseService.getCollection<any>('rewards', userId),
     ]);
 
     const activities: RecentActivity[] = [];
 
-    // Process goals
-    goalsSnapshot.docs.forEach((doc) => {
-      const data = doc.data();
+    // Process goals (take last 5)
+    goals.slice(0, 5).forEach((data: any) => {
       activities.push({
         type: 'goal',
         title: data.title,
@@ -232,9 +206,8 @@ export class DashboardService {
       });
     });
 
-    // Process habits
-    habitsSnapshot.docs.forEach((doc) => {
-      const data = doc.data();
+    // Process habits (take last 5)
+    habits.slice(0, 5).forEach((data: any) => {
       activities.push({
         type: 'habit',
         title: data.title,
@@ -243,9 +216,8 @@ export class DashboardService {
       });
     });
 
-    // Process tasks
-    tasksSnapshot.docs.forEach((doc) => {
-      const data = doc.data();
+    // Process tasks (take last 5)
+    tasks.slice(0, 5).forEach((data: any) => {
       activities.push({
         type: 'task',
         title: data.title,
@@ -254,9 +226,8 @@ export class DashboardService {
       });
     });
 
-    // Process rewards
-    rewardsSnapshot.docs.forEach((doc) => {
-      const data = doc.data();
+    // Process rewards (take last 5)
+    rewards.slice(0, 5).forEach((data: any) => {
       activities.push({
         type: 'reward',
         title: data.reward,
@@ -280,19 +251,12 @@ export class DashboardService {
     streak: number;
     longestStreak: number;
   }[]> {
-    const db = this.getDb();
-    const streaksDoc = await db
-      .collection('users')
-      .doc(userId)
-      .collection('current-streaks')
-      .doc('user-streaks')
-      .get();
+    const streaksData = await this.databaseService.getDocument<any>(
+      'current-streaks',
+      userId,
+      'user-streaks',
+    );
 
-    if (!streaksDoc.exists) {
-      return [];
-    }
-
-    const streaksData = streaksDoc.data();
     if (!streaksData?.items) {
       return [];
     }

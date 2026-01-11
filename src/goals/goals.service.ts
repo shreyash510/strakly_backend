@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { StreaksService } from '../streaks/streaks.service';
 import { StreakItemType } from '../streaks/dto/create-streak-record.dto';
 import { CreateGoalDto } from './dto/create-goal.dto';
@@ -25,20 +25,20 @@ export class GoalsService {
   private readonly collectionName = 'goals';
 
   constructor(
-    private readonly firebaseService: FirebaseService,
+    private readonly databaseService: DatabaseService,
     @Inject(forwardRef(() => StreaksService))
     private readonly streaksService: StreaksService,
   ) {}
 
   async findAll(userId: string): Promise<Goal[]> {
-    return this.firebaseService.getCollection<Goal>(
+    return this.databaseService.getCollection<Goal>(
       this.collectionName,
       userId,
     );
   }
 
   async findOne(userId: string, id: string): Promise<Goal> {
-    const goal = await this.firebaseService.getDocument<Goal>(
+    const goal = await this.databaseService.getDocument<Goal>(
       this.collectionName,
       userId,
       id,
@@ -64,7 +64,7 @@ export class GoalsService {
     }
 
     // Create goal in database
-    const goal = await this.firebaseService.createDocument<Goal>(
+    const goal = await this.databaseService.createDocument<Goal>(
       this.collectionName,
       userId,
       goalData,
@@ -100,7 +100,7 @@ export class GoalsService {
       }
     }
 
-    const goal = await this.firebaseService.updateDocument<Goal>(
+    const goal = await this.databaseService.updateDocument<Goal>(
       this.collectionName,
       userId,
       id,
@@ -158,7 +158,7 @@ export class GoalsService {
     // Also mark streak progress when adding savings
     await this.streaksService.completeItem(userId, id);
 
-    return this.firebaseService.updateDocument<Goal>(
+    return this.databaseService.updateDocument<Goal>(
       this.collectionName,
       userId,
       id,
@@ -171,7 +171,7 @@ export class GoalsService {
     await this.streaksService.removeItem(userId, id);
 
     // Delete goal
-    await this.firebaseService.deleteDocument(this.collectionName, userId, id);
+    await this.databaseService.deleteDocument(this.collectionName, userId, id);
     return { success: true };
   }
 

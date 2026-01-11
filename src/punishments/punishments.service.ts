@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { CreatePunishmentRuleDto } from './dto/create-punishment-rule.dto';
 import { UpdatePunishmentRuleDto } from './dto/update-punishment-rule.dto';
 import { CreatePunishmentDto } from './dto/create-punishment.dto';
@@ -41,18 +41,18 @@ export class PunishmentsService {
   private readonly rulesCollection = 'punishment-rules';
   private readonly punishmentsCollection = 'punishments';
 
-  constructor(private readonly firebaseService: FirebaseService) {}
+  constructor(private readonly databaseService: DatabaseService) {}
 
   // Punishment Rules CRUD
   async findAllRules(userId: string): Promise<PunishmentRule[]> {
-    return this.firebaseService.getCollection<PunishmentRule>(
+    return this.databaseService.getCollection<PunishmentRule>(
       this.rulesCollection,
       userId,
     );
   }
 
   async findOneRule(userId: string, id: string): Promise<PunishmentRule> {
-    const rule = await this.firebaseService.getDocument<PunishmentRule>(
+    const rule = await this.databaseService.getDocument<PunishmentRule>(
       this.rulesCollection,
       userId,
       id,
@@ -74,7 +74,7 @@ export class PunishmentsService {
       isActive: true,
     };
 
-    return this.firebaseService.createDocument<PunishmentRule>(
+    return this.databaseService.createDocument<PunishmentRule>(
       this.rulesCollection,
       userId,
       ruleData,
@@ -86,7 +86,7 @@ export class PunishmentsService {
     id: string,
     updateRuleDto: UpdatePunishmentRuleDto,
   ): Promise<PunishmentRule> {
-    const rule = await this.firebaseService.updateDocument<PunishmentRule>(
+    const rule = await this.databaseService.updateDocument<PunishmentRule>(
       this.rulesCollection,
       userId,
       id,
@@ -102,7 +102,7 @@ export class PunishmentsService {
 
   async toggleRuleActive(userId: string, id: string): Promise<PunishmentRule> {
     const rule = await this.findOneRule(userId, id);
-    return this.firebaseService.updateDocument<PunishmentRule>(
+    return this.databaseService.updateDocument<PunishmentRule>(
       this.rulesCollection,
       userId,
       id,
@@ -111,20 +111,20 @@ export class PunishmentsService {
   }
 
   async removeRule(userId: string, id: string): Promise<{ success: boolean }> {
-    await this.firebaseService.deleteDocument(this.rulesCollection, userId, id);
+    await this.databaseService.deleteDocument(this.rulesCollection, userId, id);
     return { success: true };
   }
 
   // Punishments CRUD
   async findAllPunishments(userId: string): Promise<Punishment[]> {
-    return this.firebaseService.getCollection<Punishment>(
+    return this.databaseService.getCollection<Punishment>(
       this.punishmentsCollection,
       userId,
     );
   }
 
   async findOnePunishment(userId: string, id: string): Promise<Punishment> {
-    const punishment = await this.firebaseService.getDocument<Punishment>(
+    const punishment = await this.databaseService.getDocument<Punishment>(
       this.punishmentsCollection,
       userId,
       id,
@@ -146,7 +146,7 @@ export class PunishmentsService {
       status: 'pending',
     };
 
-    return this.firebaseService.createDocument<Punishment>(
+    return this.databaseService.createDocument<Punishment>(
       this.punishmentsCollection,
       userId,
       punishmentData,
@@ -158,7 +158,7 @@ export class PunishmentsService {
     id: string,
     updatePunishmentDto: UpdatePunishmentDto,
   ): Promise<Punishment> {
-    const punishment = await this.firebaseService.updateDocument<Punishment>(
+    const punishment = await this.databaseService.updateDocument<Punishment>(
       this.punishmentsCollection,
       userId,
       id,
@@ -173,7 +173,7 @@ export class PunishmentsService {
   }
 
   async completePunishment(userId: string, id: string): Promise<Punishment> {
-    return this.firebaseService.updateDocument<Punishment>(
+    return this.databaseService.updateDocument<Punishment>(
       this.punishmentsCollection,
       userId,
       id,
@@ -185,7 +185,7 @@ export class PunishmentsService {
   }
 
   async skipPunishment(userId: string, id: string): Promise<Punishment> {
-    return this.firebaseService.updateDocument<Punishment>(
+    return this.databaseService.updateDocument<Punishment>(
       this.punishmentsCollection,
       userId,
       id,
@@ -194,7 +194,7 @@ export class PunishmentsService {
   }
 
   async removePunishment(userId: string, id: string): Promise<{ success: boolean }> {
-    await this.firebaseService.deleteDocument(this.punishmentsCollection, userId, id);
+    await this.databaseService.deleteDocument(this.punishmentsCollection, userId, id);
     return { success: true };
   }
 

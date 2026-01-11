@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { StreakItemType } from './dto/create-streak-record.dto';
 
 // Current streak state for an item
@@ -41,7 +41,7 @@ export class StreaksService {
   private readonly recordsCollection = 'streak-records';
   private readonly docId = 'user-streaks';
 
-  constructor(private readonly firebaseService: FirebaseService) {}
+  constructor(private readonly databaseService: DatabaseService) {}
 
   // =====================
   // CURRENT STREAKS MANAGEMENT
@@ -49,7 +49,7 @@ export class StreaksService {
 
   // Get all current streaks for a user
   async getCurrentStreaks(userId: string): Promise<Record<string, ItemStreak>> {
-    const doc = await this.firebaseService.getDocument<UserStreaks>(
+    const doc = await this.databaseService.getDocument<UserStreaks>(
       this.streaksCollection,
       userId,
       this.docId,
@@ -84,7 +84,7 @@ export class StreaksService {
 
     streaks[itemId] = newItem;
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -117,7 +117,7 @@ export class StreaksService {
 
     streaks[itemId] = item;
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -147,7 +147,7 @@ export class StreaksService {
 
     streaks[itemId] = item;
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -174,7 +174,7 @@ export class StreaksService {
 
     streaks[itemId] = item;
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -189,7 +189,7 @@ export class StreaksService {
     const streaks = await this.getCurrentStreaks(userId);
     delete streaks[itemId];
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -211,7 +211,7 @@ export class StreaksService {
 
     streaks[itemId].itemName = newName;
 
-    await this.firebaseService.setDocument(
+    await this.databaseService.setDocument(
       this.streaksCollection,
       userId,
       this.docId,
@@ -249,7 +249,7 @@ export class StreaksService {
       isGoodHabit: item.isGoodHabit,
     };
 
-    return this.firebaseService.createDocument<StreakRecord>(
+    return this.databaseService.createDocument<StreakRecord>(
       this.recordsCollection,
       userId,
       record,
@@ -262,7 +262,7 @@ export class StreaksService {
     itemId: string,
     limit: number = 30,
   ): Promise<StreakRecord[]> {
-    const records = await this.firebaseService.getCollection<StreakRecord>(
+    const records = await this.databaseService.getCollection<StreakRecord>(
       this.recordsCollection,
       userId,
     );
@@ -275,7 +275,7 @@ export class StreaksService {
 
   // Get all records for a specific date
   async getRecordsForDate(userId: string, date: string): Promise<StreakRecord[]> {
-    const records = await this.firebaseService.getCollection<StreakRecord>(
+    const records = await this.databaseService.getCollection<StreakRecord>(
       this.recordsCollection,
       userId,
     );
@@ -301,7 +301,7 @@ export class StreaksService {
     let recordsCreated = 0;
 
     // Get all users with streaks
-    const allUsersData = await this.firebaseService.getAllUsersCollection<UserStreaks>(
+    const allUsersData = await this.databaseService.getAllUsersCollection<UserStreaks>(
       this.streaksCollection,
     );
 

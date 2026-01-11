@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { FriendsService } from '../friends/friends.service';
 import {
   CreatePostDto,
@@ -11,7 +11,6 @@ import {
   ReactionType,
   PostCategory,
 } from './dto/create-post.dto';
-import * as admin from 'firebase-admin';
 
 export interface PostReaction {
   userId: string;
@@ -41,16 +40,10 @@ export interface Post {
 
 @Injectable()
 export class PostsService {
-  private readonly postsCollection = 'posts';
-
   constructor(
-    private readonly firebaseService: FirebaseService,
+    private readonly databaseService: DatabaseService,
     private readonly friendsService: FriendsService,
   ) {}
-
-  private getDb(): admin.firestore.Firestore {
-    return this.firebaseService.getFirestore();
-  }
 
   // Get feed posts (own posts + friends' posts)
   async getFeed(userId: string): Promise<Post[]> {
@@ -61,21 +54,7 @@ export class PostsService {
     // Include user's own posts
     const allowedUserIds = [userId, ...friendIds];
 
-    // Firestore 'in' query supports max 30 values
-    // For larger friend lists, we'd need pagination or different approach
-    const userIdsToQuery = allowedUserIds.slice(0, 30);
-
-    const snapshot = await this.getDb()
-      .collection(this.postsCollection)
-      .where('userId', 'in', userIdsToQuery)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Post[];
+    return this.databaseService.getFriendsPosts(allowedUserIds, 50);
   }
 
   // Get posts by category
@@ -83,50 +62,22 @@ export class PostsService {
     userId: string,
     category: PostCategory,
   ): Promise<Post[]> {
-    const friends = await this.friendsService.getFriends(userId);
-    const friendIds = friends.map((f) => f.friendUserId);
-    const allowedUserIds = [userId, ...friendIds].slice(0, 30);
-
-    const snapshot = await this.getDb()
-      .collection(this.postsCollection)
-      .where('userId', 'in', allowedUserIds)
-      .where('category', '==', category)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Post[];
+    const allPosts = await this.getFeed(userId);
+    return allPosts.filter((p) => p.category === category);
   }
 
   // Get user's own posts
   async getMyPosts(userId: string): Promise<Post[]> {
-    const snapshot = await this.getDb()
-      .collection(this.postsCollection)
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Post[];
+    return this.databaseService.getFriendsPosts([userId], 50);
   }
 
   // Get single post
   async getPost(userId: string, postId: string): Promise<Post> {
-    const doc = await this.getDb()
-      .collection(this.postsCollection)
-      .doc(postId)
-      .get();
+    const post = await this.databaseService.getPostById(postId);
 
-    if (!doc.exists) {
+    if (!post) {
       throw new NotFoundException('Post not found');
     }
-
-    const post = { id: doc.id, ...doc.data() } as Post;
 
     // Check if user can view this post (own post or friend's post)
     if (post.userId !== userId) {
@@ -153,20 +104,9 @@ export class PostsService {
       userName: user.name || 'Unknown',
       content: dto.content,
       category: dto.category || null,
-      reactions: [],
-      comments: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    const docRef = await this.getDb()
-      .collection(this.postsCollection)
-      .add(postData);
-
-    return {
-      id: docRef.id,
-      ...postData,
-    } as Post;
+    return this.databaseService.createPost(postData);
   }
 
   // Update a post (only own posts)
@@ -175,22 +115,17 @@ export class PostsService {
     postId: string,
     dto: UpdatePostDto,
   ): Promise<Post> {
-    const postRef = this.getDb().collection(this.postsCollection).doc(postId);
-    const postDoc = await postRef.get();
+    const post = await this.databaseService.getPostById(postId);
 
-    if (!postDoc.exists) {
+    if (!post) {
       throw new NotFoundException('Post not found');
     }
-
-    const post = postDoc.data() as Post;
 
     if (post.userId !== userId) {
       throw new ForbiddenException('Cannot update this post');
     }
 
-    const updateData: Partial<Post> = {
-      updatedAt: new Date().toISOString(),
-    };
+    const updateData: Partial<Post> = {};
 
     if (dto.content !== undefined) {
       updateData.content = dto.content;
@@ -200,28 +135,22 @@ export class PostsService {
       updateData.category = dto.category;
     }
 
-    await postRef.update(updateData);
-
-    const updatedDoc = await postRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() } as Post;
+    return this.databaseService.updatePost(postId, updateData);
   }
 
   // Delete a post (only own posts)
   async deletePost(userId: string, postId: string): Promise<{ success: boolean }> {
-    const postRef = this.getDb().collection(this.postsCollection).doc(postId);
-    const postDoc = await postRef.get();
+    const post = await this.databaseService.getPostById(postId);
 
-    if (!postDoc.exists) {
+    if (!post) {
       throw new NotFoundException('Post not found');
     }
-
-    const post = postDoc.data() as Post;
 
     if (post.userId !== userId) {
       throw new ForbiddenException('Cannot delete this post');
     }
 
-    await postRef.delete();
+    await this.databaseService.deletePost(postId);
 
     return { success: true };
   }
@@ -233,7 +162,6 @@ export class PostsService {
     type: ReactionType,
   ): Promise<Post> {
     const post = await this.getPost(userId, postId);
-    const postRef = this.getDb().collection(this.postsCollection).doc(postId);
 
     const user = await this.friendsService.getUserProfile(userId);
     if (!user) {
@@ -264,13 +192,9 @@ export class PostsService {
       ];
     }
 
-    await postRef.update({
+    return this.databaseService.updatePost(postId, {
       reactions: updatedReactions,
-      updatedAt: new Date().toISOString(),
     });
-
-    const updatedDoc = await postRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() } as Post;
   }
 
   // Add comment
@@ -280,7 +204,6 @@ export class PostsService {
     content: string,
   ): Promise<Post> {
     const post = await this.getPost(userId, postId);
-    const postRef = this.getDb().collection(this.postsCollection).doc(postId);
 
     const user = await this.friendsService.getUserProfile(userId);
     if (!user) {
@@ -295,13 +218,11 @@ export class PostsService {
       createdAt: new Date().toISOString(),
     };
 
-    await postRef.update({
-      comments: admin.firestore.FieldValue.arrayUnion(newComment),
-      updatedAt: new Date().toISOString(),
-    });
+    const updatedComments = [...post.comments, newComment];
 
-    const updatedDoc = await postRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() } as Post;
+    return this.databaseService.updatePost(postId, {
+      comments: updatedComments,
+    });
   }
 
   // Delete comment (only own comments)
@@ -311,7 +232,6 @@ export class PostsService {
     commentId: string,
   ): Promise<Post> {
     const post = await this.getPost(userId, postId);
-    const postRef = this.getDb().collection(this.postsCollection).doc(postId);
 
     const comment = post.comments.find((c) => c.id === commentId);
 
@@ -326,12 +246,8 @@ export class PostsService {
 
     const updatedComments = post.comments.filter((c) => c.id !== commentId);
 
-    await postRef.update({
+    return this.databaseService.updatePost(postId, {
       comments: updatedComments,
-      updatedAt: new Date().toISOString(),
     });
-
-    const updatedDoc = await postRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() } as Post;
   }
 }

@@ -4,8 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
-import * as admin from 'firebase-admin';
+import { DatabaseService } from '../database/database.service';
 
 export interface Friend {
   id: string;
@@ -46,58 +45,24 @@ export class FriendsService {
   private readonly friendsCollection = 'friends';
   private readonly requestsCollection = 'friendRequests';
 
-  constructor(private readonly firebaseService: FirebaseService) {}
-
-  private getDb(): admin.firestore.Firestore {
-    return this.firebaseService.getFirestore();
-  }
+  constructor(private readonly databaseService: DatabaseService) {}
 
   // Get user profile by email
   async findUserByEmail(email: string): Promise<UserProfile | null> {
-    const usersSnapshot = await this.getDb()
-      .collection('users')
-      .where('email', '==', email)
-      .limit(1)
-      .get();
-
-    if (usersSnapshot.empty) {
-      return null;
-    }
-
-    const userDoc = usersSnapshot.docs[0];
-    return {
-      id: userDoc.id,
-      ...userDoc.data(),
-    } as UserProfile;
+    return this.databaseService.findUserByEmail(email);
   }
 
   // Get user profile by ID
   async getUserProfile(userId: string): Promise<UserProfile | null> {
-    const userDoc = await this.getDb().collection('users').doc(userId).get();
-
-    if (!userDoc.exists) {
-      return null;
-    }
-
-    return {
-      id: userDoc.id,
-      ...userDoc.data(),
-    } as UserProfile;
+    return this.databaseService.findUserById(userId);
   }
 
   // Get all friends for a user
   async getFriends(userId: string): Promise<Friend[]> {
-    const snapshot = await this.getDb()
-      .collection('users')
-      .doc(userId)
-      .collection(this.friendsCollection)
-      .orderBy('connectedAt', 'desc')
-      .get();
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Friend[];
+    return this.databaseService.getCollection<Friend>(
+      this.friendsCollection,
+      userId,
+    );
   }
 
   // Get all friends with stats (totalStreak, challengesWon, challengesLost)
@@ -128,41 +93,31 @@ export class FriendsService {
   ): Promise<{ totalStreak: number; challengesWon: number; challengesLost: number }> {
     // Get total streak from current-streaks
     let totalStreak = 0;
-    const streaksDoc = await this.getDb()
-      .collection('users')
-      .doc(friendUserId)
-      .collection('current-streaks')
-      .doc('user-streaks')
-      .get();
+    const streaksData = await this.databaseService.getDocument<any>(
+      'current-streaks',
+      friendUserId,
+      'user-streaks',
+    );
 
-    if (streaksDoc.exists) {
-      const streaksData = streaksDoc.data();
-      if (streaksData?.items) {
-        // Sum all streaks
-        totalStreak = Object.values(streaksData.items as Record<string, { streak: number }>).reduce(
-          (sum, item) => sum + (item.streak || 0),
-          0,
-        );
-      }
+    if (streaksData?.items) {
+      totalStreak = Object.values(streaksData.items as Record<string, { streak: number }>).reduce(
+        (sum, item) => sum + (item.streak || 0),
+        0,
+      );
     }
 
     // Get challenges won/lost
     let challengesWon = 0;
     let challengesLost = 0;
 
-    const challengesSnapshot = await this.getDb()
-      .collection('challenges')
-      .where('participantIds', 'array-contains', friendUserId)
-      .where('status', '==', 'completed')
-      .get();
-
-    challengesSnapshot.docs.forEach((doc) => {
-      const challenge = doc.data();
-      if (challenge.winnerId === friendUserId) {
-        challengesWon++;
-      } else if (challenge.winnerId) {
-        // Has a winner but it's not this user
-        challengesLost++;
+    const challenges = await this.databaseService.getUserChallenges(friendUserId);
+    challenges.forEach((challenge: any) => {
+      if (challenge.status === 'completed') {
+        if (challenge.winnerId === friendUserId) {
+          challengesWon++;
+        } else if (challenge.winnerId) {
+          challengesLost++;
+        }
       }
     });
 
@@ -173,31 +128,8 @@ export class FriendsService {
   async getFriendRequests(
     userId: string,
   ): Promise<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }> {
-    // Get incoming requests
-    const incomingSnapshot = await this.getDb()
-      .collection(this.requestsCollection)
-      .where('toUserId', '==', userId)
-      .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .get();
-
-    const incoming = incomingSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as FriendRequest[];
-
-    // Get outgoing requests
-    const outgoingSnapshot = await this.getDb()
-      .collection(this.requestsCollection)
-      .where('fromUserId', '==', userId)
-      .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .get();
-
-    const outgoing = outgoingSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as FriendRequest[];
+    const incoming = await this.databaseService.getPendingFriendRequests(userId);
+    const outgoing = await this.databaseService.getSentFriendRequests(userId);
 
     return { incoming, outgoing };
   }
@@ -218,43 +150,26 @@ export class FriendsService {
     }
 
     // Check if already friends
-    const existingFriend = await this.getDb()
-      .collection('users')
-      .doc(fromUserId)
-      .collection(this.friendsCollection)
-      .where('friendUserId', '==', toUser.id)
-      .limit(1)
-      .get();
+    const friends = await this.getFriends(fromUserId);
+    const existingFriend = friends.find((f) => f.friendUserId === toUser.id);
 
-    if (!existingFriend.empty) {
+    if (existingFriend) {
       throw new ConflictException('Already friends with this user');
     }
 
     // Check if request already exists
-    const existingRequest = await this.getDb()
-      .collection(this.requestsCollection)
-      .where('fromUserId', '==', fromUserId)
-      .where('toUserId', '==', toUser.id)
-      .where('status', '==', 'pending')
-      .limit(1)
-      .get();
+    const existingRequest = await this.databaseService.findFriendRequest(fromUserId, toUser.id);
 
-    if (!existingRequest.empty) {
+    if (existingRequest) {
       throw new ConflictException('Friend request already sent');
     }
 
     // Check if there's a pending request from the other user
-    const reverseRequest = await this.getDb()
-      .collection(this.requestsCollection)
-      .where('fromUserId', '==', toUser.id)
-      .where('toUserId', '==', fromUserId)
-      .where('status', '==', 'pending')
-      .limit(1)
-      .get();
+    const reverseRequest = await this.databaseService.findFriendRequest(toUser.id, fromUserId);
 
-    if (!reverseRequest.empty) {
+    if (reverseRequest) {
       // Auto-accept the reverse request
-      return this.respondToRequest(fromUserId, reverseRequest.docs[0].id, 'accept');
+      return this.respondToRequest(fromUserId, reverseRequest.id, 'accept');
     }
 
     // Get sender profile
@@ -271,19 +186,9 @@ export class FriendsService {
       toUserId: toUser.id,
       toUserName: toUser.name || 'Unknown',
       toUserEmail: toUser.email,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    const docRef = await this.getDb()
-      .collection(this.requestsCollection)
-      .add(requestData);
-
-    return {
-      id: docRef.id,
-      ...requestData,
-    } as FriendRequest;
+    return this.databaseService.createFriendRequest(requestData);
   }
 
   // Respond to friend request (accept/decline)
@@ -292,17 +197,11 @@ export class FriendsService {
     requestId: string,
     action: 'accept' | 'decline',
   ): Promise<FriendRequest> {
-    const requestRef = this.getDb()
-      .collection(this.requestsCollection)
-      .doc(requestId);
+    const request = await this.databaseService.getFriendRequestById(requestId);
 
-    const requestDoc = await requestRef.get();
-
-    if (!requestDoc.exists) {
+    if (!request) {
       throw new NotFoundException('Friend request not found');
     }
-
-    const request = { id: requestDoc.id, ...requestDoc.data() } as FriendRequest;
 
     if (request.toUserId !== userId) {
       throw new BadRequestException('Cannot respond to this request');
@@ -316,68 +215,42 @@ export class FriendsService {
 
     if (action === 'accept') {
       // Add to both users' friends lists
-      const batch = this.getDb().batch();
+      await this.databaseService.createDocument(
+        this.friendsCollection,
+        userId,
+        {
+          friendUserId: request.fromUserId,
+          friendName: request.fromUserName,
+          friendEmail: request.fromUserEmail,
+          connectedAt: now,
+        },
+      );
 
-      // Add friend for current user
-      const friend1Ref = this.getDb()
-        .collection('users')
-        .doc(userId)
-        .collection(this.friendsCollection)
-        .doc();
-
-      batch.set(friend1Ref, {
-        friendUserId: request.fromUserId,
-        friendName: request.fromUserName,
-        friendEmail: request.fromUserEmail,
-        connectedAt: now,
-      });
-
-      // Add friend for sender
-      const friend2Ref = this.getDb()
-        .collection('users')
-        .doc(request.fromUserId)
-        .collection(this.friendsCollection)
-        .doc();
-
-      batch.set(friend2Ref, {
-        friendUserId: userId,
-        friendName: request.toUserName,
-        friendEmail: request.toUserEmail,
-        connectedAt: now,
-      });
-
-      // Update request status
-      batch.update(requestRef, {
-        status: 'accepted',
-        updatedAt: now,
-      });
-
-      await batch.commit();
-    } else {
-      // Decline - just update status
-      await requestRef.update({
-        status: 'declined',
-        updatedAt: now,
-      });
+      await this.databaseService.createDocument(
+        this.friendsCollection,
+        request.fromUserId,
+        {
+          friendUserId: userId,
+          friendName: request.toUserName,
+          friendEmail: request.toUserEmail,
+          connectedAt: now,
+        },
+      );
     }
 
-    const updatedDoc = await requestRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() } as FriendRequest;
+    // Update request status
+    return this.databaseService.updateFriendRequest(requestId, {
+      status: action === 'accept' ? 'accepted' : 'declined',
+    });
   }
 
   // Cancel sent friend request
   async cancelRequest(userId: string, requestId: string): Promise<{ success: boolean }> {
-    const requestRef = this.getDb()
-      .collection(this.requestsCollection)
-      .doc(requestId);
+    const request = await this.databaseService.getFriendRequestById(requestId);
 
-    const requestDoc = await requestRef.get();
-
-    if (!requestDoc.exists) {
+    if (!request) {
       throw new NotFoundException('Friend request not found');
     }
-
-    const request = requestDoc.data() as FriendRequest;
 
     if (request.fromUserId !== userId) {
       throw new BadRequestException('Cannot cancel this request');
@@ -387,7 +260,10 @@ export class FriendsService {
       throw new BadRequestException('Request already processed');
     }
 
-    await requestRef.delete();
+    // Delete the request - for now update status to cancelled
+    await this.databaseService.updateFriendRequest(requestId, {
+      status: 'cancelled',
+    });
 
     return { success: true };
   }
@@ -395,45 +271,33 @@ export class FriendsService {
   // Remove friend
   async removeFriend(userId: string, friendId: string): Promise<{ success: boolean }> {
     // Get friend document
-    const friendDoc = await this.getDb()
-      .collection('users')
-      .doc(userId)
-      .collection(this.friendsCollection)
-      .doc(friendId)
-      .get();
+    const friend = await this.databaseService.getDocument<Friend>(
+      this.friendsCollection,
+      userId,
+      friendId,
+    );
 
-    if (!friendDoc.exists) {
+    if (!friend) {
       throw new NotFoundException('Friend not found');
     }
 
-    const friend = friendDoc.data() as Friend;
-
-    // Remove from both users
-    const batch = this.getDb().batch();
-
     // Remove from current user
-    batch.delete(
-      this.getDb()
-        .collection('users')
-        .doc(userId)
-        .collection(this.friendsCollection)
-        .doc(friendId),
-    );
+    await this.databaseService.deleteDocument(this.friendsCollection, userId, friendId);
 
     // Find and remove from other user
-    const otherFriendSnapshot = await this.getDb()
-      .collection('users')
-      .doc(friend.friendUserId)
-      .collection(this.friendsCollection)
-      .where('friendUserId', '==', userId)
-      .limit(1)
-      .get();
+    const otherUserFriends = await this.databaseService.getCollection<Friend>(
+      this.friendsCollection,
+      friend.friendUserId,
+    );
 
-    if (!otherFriendSnapshot.empty) {
-      batch.delete(otherFriendSnapshot.docs[0].ref);
+    const otherFriend = otherUserFriends.find((f) => f.friendUserId === userId);
+    if (otherFriend) {
+      await this.databaseService.deleteDocument(
+        this.friendsCollection,
+        friend.friendUserId,
+        otherFriend.id,
+      );
     }
-
-    await batch.commit();
 
     return { success: true };
   }

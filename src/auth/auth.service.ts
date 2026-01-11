@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
@@ -34,7 +34,7 @@ export class AuthService {
   private readonly SALT_ROUNDS = 10;
 
   constructor(
-    private readonly firebaseService: FirebaseService,
+    private readonly databaseService: DatabaseService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -56,15 +56,10 @@ export class AuthService {
   }
 
   async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
-    const db = this.firebaseService.getFirestore();
-
     // Check if user already exists
-    const existingUser = await db
-      .collection('users')
-      .where('email', '==', createUserDto.email)
-      .get();
+    const existingUser = await this.databaseService.findUserByEmail(createUserDto.email);
 
-    if (!existingUser.empty) {
+    if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
@@ -72,16 +67,14 @@ export class AuthService {
       name: createUserDto.name,
       email: createUserDto.email,
       passwordHash: await this.hashPassword(createUserDto.password),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    const docRef = await db.collection('users').add(userData);
+    const createdUser = await this.databaseService.createUser(userData);
 
     const user: UserResponse = {
-      id: docRef.id,
-      name: userData.name,
-      email: userData.email,
+      id: createdUser.id,
+      name: createdUser.name,
+      email: createdUser.email,
     };
 
     return {
@@ -91,19 +84,11 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
-    const db = this.firebaseService.getFirestore();
+    const userData = await this.databaseService.findUserByEmail(loginDto.email);
 
-    const usersSnapshot = await db
-      .collection('users')
-      .where('email', '==', loginDto.email)
-      .get();
-
-    if (usersSnapshot.empty) {
+    if (!userData) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
-    const userDoc = usersSnapshot.docs[0];
-    const userData = userDoc.data() as User;
 
     // Check password with bcrypt
     const isPasswordValid = await this.comparePassword(
@@ -116,7 +101,7 @@ export class AuthService {
     }
 
     const user: UserResponse = {
-      id: userDoc.id,
+      id: userData.id,
       name: userData.name,
       email: userData.email,
     };
@@ -128,18 +113,14 @@ export class AuthService {
   }
 
   async getProfile(userId: string): Promise<UserResponse> {
-    const db = this.firebaseService.getFirestore();
+    const userData = await this.databaseService.findUserById(userId);
 
-    const userDoc = await db.collection('users').doc(userId).get();
-
-    if (!userDoc.exists) {
+    if (!userData) {
       throw new UnauthorizedException('User not found');
     }
 
-    const userData = userDoc.data() as User;
-
     return {
-      id: userDoc.id,
+      id: userData.id,
       name: userData.name,
       email: userData.email,
     };
@@ -149,18 +130,10 @@ export class AuthService {
     userId: string,
     name: string,
   ): Promise<UserResponse> {
-    const db = this.firebaseService.getFirestore();
-
-    await db.collection('users').doc(userId).update({
-      name,
-      updatedAt: new Date().toISOString(),
-    });
-
-    const userDoc = await db.collection('users').doc(userId).get();
-    const userData = userDoc.data() as User;
+    const userData = await this.databaseService.updateUser(userId, { name });
 
     return {
-      id: userDoc.id,
+      id: userData.id,
       name: userData.name,
       email: userData.email,
     };
@@ -171,15 +144,11 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
   ): Promise<{ success: boolean }> {
-    const db = this.firebaseService.getFirestore();
+    const userData = await this.databaseService.findUserById(userId);
 
-    const userDoc = await db.collection('users').doc(userId).get();
-
-    if (!userDoc.exists) {
+    if (!userData) {
       throw new UnauthorizedException('User not found');
     }
-
-    const userData = userDoc.data() as User;
 
     // Verify current password
     const isPasswordValid = await this.comparePassword(
@@ -192,9 +161,8 @@ export class AuthService {
     }
 
     // Update password
-    await db.collection('users').doc(userId).update({
+    await this.databaseService.updateUser(userId, {
       passwordHash: await this.hashPassword(newPassword),
-      updatedAt: new Date().toISOString(),
     });
 
     return { success: true };

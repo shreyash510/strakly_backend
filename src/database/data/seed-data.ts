@@ -1,0 +1,103 @@
+// Seed data for initial database population
+
+export const seedData = {
+  user: {
+    name: 'Shreyash',
+    email: 'shreyash1@gmail.com',
+    password: 'shreyash@510',
+  },
+  goals: [
+    {
+      title: 'Learn Spanish',
+      description: 'Become conversational in Spanish by end of year',
+      category: 'education',
+      goalType: 'regular',
+      targetDate: '2024-12-31',
+      progress: 35,
+      status: 'in_progress',
+      streak: 7,
+      longestStreak: 14,
+    },
+    {
+      title: 'Save for vacation',
+      description: 'Save $5000 for summer vacation',
+      category: 'finance',
+      goalType: 'savings',
+      targetDate: '2024-06-30',
+      progress: 60,
+      status: 'in_progress',
+      streak: 0,
+      longestStreak: 0,
+      targetAmount: 5000,
+      currentAmount: 3000,
+    },
+  ],
+  habits: [
+    {
+      title: 'Morning meditation',
+      description: '10 minutes of mindfulness every morning',
+      frequency: 'daily',
+      isGoodHabit: true,
+      isActive: true,
+      streak: 21,
+      longestStreak: 30,
+      completedDates: ['2024-01-19', '2024-01-20'],
+    },
+    {
+      title: 'Read 30 minutes',
+      description: 'Read non-fiction books',
+      frequency: 'daily',
+      isGoodHabit: true,
+      isActive: true,
+      streak: 14,
+      longestStreak: 21,
+      completedDates: ['2024-01-19', '2024-01-20'],
+    },
+  ],
+  tasks: [
+    {
+      title: 'Complete project proposal',
+      description: 'Draft and submit Q1 project proposal',
+      dueDate: '2024-01-25',
+      priority: 'high',
+      status: 'in_progress',
+      category: 'Work',
+    },
+    {
+      title: 'Buy groceries',
+      dueDate: '2024-01-21',
+      priority: 'medium',
+      status: 'pending',
+      category: 'Personal',
+    },
+  ],
+  rewards: [
+    {
+      reward: 'Movie night',
+      description: 'Watch any movie of choice',
+      category: 'entertainment',
+      pointsRequired: 100,
+      currentPoints: 75,
+      status: 'in_progress',
+    },
+    {
+      reward: 'Fancy dinner',
+      description: 'Dinner at favorite restaurant',
+      category: 'food',
+      pointsRequired: 200,
+      currentPoints: 200,
+      status: 'available',
+    },
+  ],
+  punishments: [
+    {
+      title: 'No Netflix for a day',
+      description: 'Skip streaming for 24 hours',
+      category: 'restriction',
+      severity: 'mild',
+      triggerCondition: 'Breaking habit streak',
+      isActive: true,
+      status: 'pending',
+    },
+  ],
+};

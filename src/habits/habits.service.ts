@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { StreaksService } from '../streaks/streaks.service';
 import { StreakItemType } from '../streaks/dto/create-streak-record.dto';
 import { CreateHabitDto } from './dto/create-habit.dto';
@@ -24,20 +24,20 @@ export class HabitsService {
   private readonly collectionName = 'habits';
 
   constructor(
-    private readonly firebaseService: FirebaseService,
+    private readonly databaseService: DatabaseService,
     @Inject(forwardRef(() => StreaksService))
     private readonly streaksService: StreaksService,
   ) {}
 
   async findAll(userId: string): Promise<Habit[]> {
-    return this.firebaseService.getCollection<Habit>(
+    return this.databaseService.getCollection<Habit>(
       this.collectionName,
       userId,
     );
   }
 
   async findOne(userId: string, id: string): Promise<Habit> {
-    const habit = await this.firebaseService.getDocument<Habit>(
+    const habit = await this.databaseService.getDocument<Habit>(
       this.collectionName,
       userId,
       id,
@@ -58,7 +58,7 @@ export class HabitsService {
     };
 
     // Create habit in database
-    const habit = await this.firebaseService.createDocument<Habit>(
+    const habit = await this.databaseService.createDocument<Habit>(
       this.collectionName,
       userId,
       habitData,
@@ -81,7 +81,7 @@ export class HabitsService {
     id: string,
     updateHabitDto: UpdateHabitDto,
   ): Promise<Habit> {
-    const habit = await this.firebaseService.updateDocument<Habit>(
+    const habit = await this.databaseService.updateDocument<Habit>(
       this.collectionName,
       userId,
       id,
@@ -113,7 +113,7 @@ export class HabitsService {
   async toggleActive(userId: string, id: string): Promise<Habit> {
     const habit = await this.findOne(userId, id);
 
-    return this.firebaseService.updateDocument<Habit>(
+    return this.databaseService.updateDocument<Habit>(
       this.collectionName,
       userId,
       id,
@@ -126,7 +126,7 @@ export class HabitsService {
     await this.streaksService.removeItem(userId, id);
 
     // Delete habit
-    await this.firebaseService.deleteDocument(this.collectionName, userId, id);
+    await this.databaseService.deleteDocument(this.collectionName, userId, id);
     return { success: true };
   }
 

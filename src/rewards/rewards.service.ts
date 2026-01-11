@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { FirebaseService } from '../firebase/firebase.service';
+import { DatabaseService } from '../database/database.service';
 import { CreateRewardDto } from './dto/create-reward.dto';
 import { UpdateRewardDto } from './dto/update-reward.dto';
 
@@ -22,17 +22,17 @@ export interface Reward {
 export class RewardsService {
   private readonly collectionName = 'rewards';
 
-  constructor(private readonly firebaseService: FirebaseService) {}
+  constructor(private readonly databaseService: DatabaseService) {}
 
   async findAll(userId: string): Promise<Reward[]> {
-    return this.firebaseService.getCollection<Reward>(
+    return this.databaseService.getCollection<Reward>(
       this.collectionName,
       userId,
     );
   }
 
   async findOne(userId: string, id: string): Promise<Reward> {
-    const reward = await this.firebaseService.getDocument<Reward>(
+    const reward = await this.databaseService.getDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -55,7 +55,7 @@ export class RewardsService {
       status: 'in_progress',
     };
 
-    return this.firebaseService.createDocument<Reward>(
+    return this.databaseService.createDocument<Reward>(
       this.collectionName,
       userId,
       rewardData,
@@ -67,7 +67,7 @@ export class RewardsService {
     id: string,
     updateRewardDto: UpdateRewardDto,
   ): Promise<Reward> {
-    const reward = await this.firebaseService.updateDocument<Reward>(
+    const reward = await this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -91,7 +91,7 @@ export class RewardsService {
       updates.status = 'completed';
     }
 
-    return this.firebaseService.updateDocument<Reward>(
+    return this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -100,7 +100,7 @@ export class RewardsService {
   }
 
   async resetStreak(userId: string, id: string): Promise<Reward> {
-    return this.firebaseService.updateDocument<Reward>(
+    return this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -109,7 +109,7 @@ export class RewardsService {
   }
 
   async markCompleted(userId: string, id: string): Promise<Reward> {
-    return this.firebaseService.updateDocument<Reward>(
+    return this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -118,7 +118,7 @@ export class RewardsService {
   }
 
   async markFailed(userId: string, id: string): Promise<Reward> {
-    return this.firebaseService.updateDocument<Reward>(
+    return this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -133,7 +133,7 @@ export class RewardsService {
       throw new NotFoundException('Reward can only be claimed when completed');
     }
 
-    return this.firebaseService.updateDocument<Reward>(
+    return this.databaseService.updateDocument<Reward>(
       this.collectionName,
       userId,
       id,
@@ -145,7 +145,7 @@ export class RewardsService {
   }
 
   async remove(userId: string, id: string): Promise<{ success: boolean }> {
-    await this.firebaseService.deleteDocument(this.collectionName, userId, id);
+    await this.databaseService.deleteDocument(this.collectionName, userId, id);
     return { success: true };
   }
 }

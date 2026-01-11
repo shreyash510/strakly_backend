@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FirebaseModule } from './firebase/firebase.module';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { GoalsModule } from './goals/goals.module';
 import { HabitsModule } from './habits/habits.module';
@@ -17,14 +18,16 @@ import { ChallengesModule } from './challenges/challenges.module';
 import { PostsModule } from './posts/posts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import firebaseConfig from './config/firebase.config';
+import databaseConfig from './config/database.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [firebaseConfig],
+      load: [firebaseConfig, databaseConfig],
     }),
     ScheduleModule.forRoot(),
+    DatabaseModule.forRoot(),
     FirebaseModule,
     AuthModule,
     GoalsModule,
