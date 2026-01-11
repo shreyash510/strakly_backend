@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FirebaseModule } from './firebase/firebase.module';
@@ -26,6 +28,10 @@ import databaseConfig from './config/database.config';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [firebaseConfig, databaseConfig],
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      exclude: ['/api*', '/docs*'],
     }),
     ScheduleModule.forRoot(),
     DatabaseModule.forRoot(),

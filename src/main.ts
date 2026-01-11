@@ -1,9 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Swagger API Documentation
+  const config = new DocumentBuilder()
+    .setTitle('Strakly API')
+    .setDescription('Personal Growth API - Goals, Habits, Streaks & More')
+    .setVersion('1.0.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
   // Enable CORS for frontend
   const allowedOrigins = [
