@@ -1,0 +1,76 @@
+### Strakly API - REST Client Tests
+### Base URL
+@baseUrl = http://localhost:3000/api
+@prodUrl = https://strakly-backend-g9ovf.ondigitalocean.app/api
+
+### ==================== AUTH ====================
+
+### Register User (Local)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "testuser@gmail.com",
+  "password": "test123456"
+}
+
+###
+
+### Register User (Production)
+POST {{prodUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "testuser2@gmail.com",
+  "password": "test123456"
+}
+
+###
+
+### Login User
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "shreyash1@gmail.com",
+  "password": "shreyash@510"
+}
+
+###
+
+### Login User (Production)
+POST {{prodUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "shreyash1@gmail.com",
+  "password": "shreyash@510"
+}
+
+###
+
+### ==================== HEALTH ====================
+
+### Health Check (Local)
+GET {{baseUrl}}/health
+
+###
+
+### Health Check (Production)
+GET {{prodUrl}}/health
+
+###
+
+### ==================== SCHEDULER ====================
+
+### Trigger Activity Simulation (Local)
+POST {{baseUrl}}/scheduler/trigger-activity
+
+###
+
+### Trigger Activity Simulation (Production)
+POST {{prodUrl}}/scheduler/trigger-activity
+
+###
