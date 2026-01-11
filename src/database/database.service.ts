@@ -157,7 +157,7 @@ export class DatabaseService implements OnModuleInit {
     return this.userFirebaseService.updateUser(userId, data);
   }
 
-  async searchUsers(query: string, excludeUserId: string): Promise<any[]> {
+  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
     if (this.isMongoDB()) {
       return this.userMongoService.searchUsers(query, excludeUserId);
     }
@@ -165,6 +165,27 @@ export class DatabaseService implements OnModuleInit {
   }
 
   // Friends methods
+  async getFriendsDocument(userId: string): Promise<{ userId: string; friends: string[] } | null> {
+    if (this.isMongoDB()) {
+      return this.friendMongoService.getFriendsDocument(userId);
+    }
+    return this.friendFirebaseService.getFriendsDocument(userId);
+  }
+
+  async addFriend(userId: string, friendId: string): Promise<void> {
+    if (this.isMongoDB()) {
+      return this.friendMongoService.addFriend(userId, friendId);
+    }
+    return this.friendFirebaseService.addFriend(userId, friendId);
+  }
+
+  async removeFriend(userId: string, friendId: string): Promise<void> {
+    if (this.isMongoDB()) {
+      return this.friendMongoService.removeFriend(userId, friendId);
+    }
+    return this.friendFirebaseService.removeFriend(userId, friendId);
+  }
+
   async findFriendship(userId1: string, userId2: string): Promise<any | null> {
     if (this.isMongoDB()) {
       return this.friendMongoService.findFriendship(userId1, userId2);

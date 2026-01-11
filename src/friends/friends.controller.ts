@@ -31,6 +31,12 @@ export class FriendsController {
     return this.friendsService.getFriends(this.getUserId(userId));
   }
 
+  // Get all users (for adding friends) - excludes current user
+  @Get('all-users')
+  getAllUsers(@Headers('x-user-id') userId: string) {
+    return this.friendsService.getAllUsers(this.getUserId(userId));
+  }
+
   // Get all friends with stats (totalStreak, challengesWon, challengesLost)
   @Get('with-stats')
   getFriendsWithStats(@Headers('x-user-id') userId: string) {
@@ -51,7 +57,7 @@ export class FriendsController {
   ) {
     return this.friendsService.sendFriendRequest(
       this.getUserId(userId),
-      dto.email,
+      dto.toUserId,
     );
   }
 
@@ -64,7 +70,7 @@ export class FriendsController {
     return this.friendsService.respondToRequest(
       this.getUserId(userId),
       dto.requestId,
-      dto.action,
+      dto.accept ? 'accept' : 'decline',
     );
   }
 

@@ -4,6 +4,7 @@ import {
   Get,
   Patch,
   Body,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -53,5 +54,11 @@ export class AuthController {
   @Post('refresh')
   refreshToken(@Request() req: any) {
     return this.authService.refreshToken(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('search')
+  searchUsers(@Request() req: any, @Query('q') query: string) {
+    return this.authService.searchUsers(query, req.user.userId);
   }
 }

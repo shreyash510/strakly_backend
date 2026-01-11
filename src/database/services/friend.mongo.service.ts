@@ -9,6 +9,36 @@ export class FriendMongoService extends BaseMongoService {
     super(connection);
   }
 
+  // New array-based friends structure
+  async getFriendsDocument(userId: string): Promise<{ userId: string; friends: string[] } | null> {
+    const model = this.getModel('friends');
+    const doc = await model.findOne({ userId }).lean();
+    if (!doc) {
+      return null;
+    }
+    return {
+      userId: (doc as any).userId,
+      friends: (doc as any).friends || [],
+    };
+  }
+
+  async addFriend(userId: string, friendId: string): Promise<void> {
+    const model = this.getModel('friends');
+    await model.findOneAndUpdate(
+      { userId },
+      { $addToSet: { friends: friendId } },
+      { upsert: true, new: true },
+    );
+  }
+
+  async removeFriend(userId: string, friendId: string): Promise<void> {
+    const model = this.getModel('friends');
+    await model.findOneAndUpdate(
+      { userId },
+      { $pull: { friends: friendId } },
+    );
+  }
+
   async findFriendship(userId1: string, userId2: string): Promise<any | null> {
     const model = this.getModel('friends');
     const doc = await model.findOne({

@@ -1,9 +1,9 @@
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class SendFriendRequestDto {
-  @IsEmail()
+  @IsString()
   @IsNotEmpty()
-  email: string;
+  toUserId: string;
 }
 
 export class RespondFriendRequestDto {
@@ -11,7 +11,6 @@ export class RespondFriendRequestDto {
   @IsNotEmpty()
   requestId: string;
 
-  @IsString()
   @IsNotEmpty()
-  action: 'accept' | 'decline';
+  accept: boolean;
 }

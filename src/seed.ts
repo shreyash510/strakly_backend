@@ -10,7 +10,7 @@ import {
   RewardSchema,
   PunishmentSchema,
 } from './database/schemas';
-import { seedData } from './database/data';
+import { seedData, seedUsers } from './database/data';
 
 dotenv.config();
 
@@ -33,67 +33,83 @@ async function seedMongoDB() {
   const Reward = mongoose.model('Reward', RewardSchema);
   const Punishment = mongoose.model('Punishment', PunishmentSchema);
 
-  // Check if user exists
-  const existingUser = await User.findOne({ email: seedData.user.email });
-  if (existingUser) {
-    console.log(`User ${seedData.user.email} already exists. Updating password...`);
-    existingUser.passwordHash = await hashPassword(seedData.user.password);
-    existingUser.updatedAt = new Date().toISOString();
-    await existingUser.save();
-    console.log('Password updated successfully!');
-    console.log(`Email: ${seedData.user.email}`);
-    console.log(`Password: ${seedData.user.password}`);
-    await mongoose.disconnect();
-    return;
-  }
-
   const now = new Date().toISOString();
+  let primaryUserId: string | null = null;
 
-  // Create user
-  const user = await User.create({
-    name: seedData.user.name,
-    email: seedData.user.email,
-    passwordHash: await hashPassword(seedData.user.password),
-    createdAt: now,
-    updatedAt: now,
+  // Create all users
+  console.log('\nCreating users...');
+  for (const userData of seedUsers) {
+    const existingUser = await User.findOne({ email: userData.email });
+    if (existingUser) {
+      console.log(`  User ${userData.email} already exists. Updating password...`);
+      existingUser.passwordHash = await hashPassword(userData.password);
+      existingUser.updatedAt = new Date().toISOString();
+      await existingUser.save();
+      if (userData.email === seedData.user.email) {
+        primaryUserId = existingUser._id.toString();
+      }
+    } else {
+      const user = await User.create({
+        name: userData.name,
+        email: userData.email,
+        passwordHash: await hashPassword(userData.password),
+        createdAt: now,
+        updatedAt: now,
+      });
+      console.log(`  Created user: ${userData.name} (${userData.email})`);
+      if (userData.email === seedData.user.email) {
+        primaryUserId = user._id.toString();
+      }
+    }
+  }
+  console.log(`Created/Updated ${seedUsers.length} users`);
+
+  // Create sample data only for primary user
+  if (primaryUserId) {
+    const userId = primaryUserId;
+
+    // Check if goals already exist for this user
+    const existingGoals = await Goal.findOne({ userId });
+    if (!existingGoals) {
+      // Create goals
+      for (const goal of seedData.goals) {
+        await Goal.create({ ...goal, userId, createdAt: now, updatedAt: now });
+      }
+      console.log(`Created ${seedData.goals.length} goals for primary user`);
+
+      // Create habits
+      for (const habit of seedData.habits) {
+        await Habit.create({ ...habit, userId, createdAt: now, updatedAt: now });
+      }
+      console.log(`Created ${seedData.habits.length} habits for primary user`);
+
+      // Create tasks
+      for (const task of seedData.tasks) {
+        await Task.create({ ...task, userId, createdAt: now, updatedAt: now });
+      }
+      console.log(`Created ${seedData.tasks.length} tasks for primary user`);
+
+      // Create rewards
+      for (const reward of seedData.rewards) {
+        await Reward.create({ ...reward, userId, createdAt: now, updatedAt: now });
+      }
+      console.log(`Created ${seedData.rewards.length} rewards for primary user`);
+
+      // Create punishments
+      for (const punishment of seedData.punishments) {
+        await Punishment.create({ ...punishment, userId, createdAt: now, updatedAt: now });
+      }
+      console.log(`Created ${seedData.punishments.length} punishments for primary user`);
+    } else {
+      console.log('Sample data already exists for primary user');
+    }
+  }
+
+  console.log('\n========== MongoDB seeding completed! ==========');
+  console.log('\nAll users:');
+  seedUsers.forEach((u, i) => {
+    console.log(`  ${i + 1}. ${u.name} - ${u.email} (password: ${u.password})`);
   });
-  console.log(`User created with ID: ${user._id}`);
-
-  const userId = user._id.toString();
-
-  // Create goals
-  for (const goal of seedData.goals) {
-    await Goal.create({ ...goal, userId, createdAt: now, updatedAt: now });
-  }
-  console.log(`Created ${seedData.goals.length} goals`);
-
-  // Create habits
-  for (const habit of seedData.habits) {
-    await Habit.create({ ...habit, userId, createdAt: now, updatedAt: now });
-  }
-  console.log(`Created ${seedData.habits.length} habits`);
-
-  // Create tasks
-  for (const task of seedData.tasks) {
-    await Task.create({ ...task, userId, createdAt: now, updatedAt: now });
-  }
-  console.log(`Created ${seedData.tasks.length} tasks`);
-
-  // Create rewards
-  for (const reward of seedData.rewards) {
-    await Reward.create({ ...reward, userId, createdAt: now, updatedAt: now });
-  }
-  console.log(`Created ${seedData.rewards.length} rewards`);
-
-  // Create punishments
-  for (const punishment of seedData.punishments) {
-    await Punishment.create({ ...punishment, userId, createdAt: now, updatedAt: now });
-  }
-  console.log(`Created ${seedData.punishments.length} punishments`);
-
-  console.log('\nMongoDB seeding completed!');
-  console.log(`Email: ${seedData.user.email}`);
-  console.log(`Password: ${seedData.user.password}`);
 
   await mongoose.disconnect();
 }
@@ -111,83 +127,103 @@ async function seedFirebase() {
 
   const db = admin.firestore();
   const now = new Date().toISOString();
+  let primaryUserId: string | null = null;
 
-  // Check if user exists
-  const existingUser = await db
-    .collection('users')
-    .where('email', '==', seedData.user.email)
-    .get();
+  // Create all users
+  console.log('\nCreating users...');
+  for (const userData of seedUsers) {
+    const existingUser = await db
+      .collection('users')
+      .where('email', '==', userData.email)
+      .get();
 
-  if (!existingUser.empty) {
-    console.log(`User ${seedData.user.email} already exists. Skipping...`);
-    return;
+    if (!existingUser.empty) {
+      console.log(`  User ${userData.email} already exists. Skipping...`);
+      if (userData.email === seedData.user.email) {
+        primaryUserId = existingUser.docs[0].id;
+      }
+    } else {
+      const userRef = await db.collection('users').add({
+        name: userData.name,
+        email: userData.email,
+        passwordHash: await hashPassword(userData.password),
+        createdAt: now,
+        updatedAt: now,
+      });
+      console.log(`  Created user: ${userData.name} (${userData.email})`);
+      if (userData.email === seedData.user.email) {
+        primaryUserId = userRef.id;
+      }
+    }
+  }
+  console.log(`Created/Updated ${seedUsers.length} users`);
+
+  // Create sample data only for primary user
+  if (primaryUserId) {
+    const userId = primaryUserId;
+
+    // Check if goals already exist
+    const existingGoals = await db.collection('users').doc(userId).collection('goals').limit(1).get();
+    if (existingGoals.empty) {
+      // Create goals (subcollection)
+      for (const goal of seedData.goals) {
+        await db.collection('users').doc(userId).collection('goals').add({
+          ...goal,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log(`Created ${seedData.goals.length} goals for primary user`);
+
+      // Create habits (subcollection)
+      for (const habit of seedData.habits) {
+        await db.collection('users').doc(userId).collection('habits').add({
+          ...habit,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log(`Created ${seedData.habits.length} habits for primary user`);
+
+      // Create tasks (subcollection)
+      for (const task of seedData.tasks) {
+        await db.collection('users').doc(userId).collection('tasks').add({
+          ...task,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log(`Created ${seedData.tasks.length} tasks for primary user`);
+
+      // Create rewards (subcollection)
+      for (const reward of seedData.rewards) {
+        await db.collection('users').doc(userId).collection('rewards').add({
+          ...reward,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log(`Created ${seedData.rewards.length} rewards for primary user`);
+
+      // Create punishments (subcollection)
+      for (const punishment of seedData.punishments) {
+        await db.collection('users').doc(userId).collection('punishments').add({
+          ...punishment,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      console.log(`Created ${seedData.punishments.length} punishments for primary user`);
+    } else {
+      console.log('Sample data already exists for primary user');
+    }
   }
 
-  // Create user
-  const userRef = await db.collection('users').add({
-    name: seedData.user.name,
-    email: seedData.user.email,
-    passwordHash: await hashPassword(seedData.user.password),
-    createdAt: now,
-    updatedAt: now,
+  console.log('\n========== Firebase seeding completed! ==========');
+  console.log('\nAll users:');
+  seedUsers.forEach((u, i) => {
+    console.log(`  ${i + 1}. ${u.name} - ${u.email} (password: ${u.password})`);
   });
-  console.log(`User created with ID: ${userRef.id}`);
-
-  const userId = userRef.id;
-
-  // Create goals (subcollection)
-  for (const goal of seedData.goals) {
-    await db.collection('users').doc(userId).collection('goals').add({
-      ...goal,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`Created ${seedData.goals.length} goals`);
-
-  // Create habits (subcollection)
-  for (const habit of seedData.habits) {
-    await db.collection('users').doc(userId).collection('habits').add({
-      ...habit,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`Created ${seedData.habits.length} habits`);
-
-  // Create tasks (subcollection)
-  for (const task of seedData.tasks) {
-    await db.collection('users').doc(userId).collection('tasks').add({
-      ...task,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`Created ${seedData.tasks.length} tasks`);
-
-  // Create rewards (subcollection)
-  for (const reward of seedData.rewards) {
-    await db.collection('users').doc(userId).collection('rewards').add({
-      ...reward,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`Created ${seedData.rewards.length} rewards`);
-
-  // Create punishments (subcollection)
-  for (const punishment of seedData.punishments) {
-    await db.collection('users').doc(userId).collection('punishments').add({
-      ...punishment,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  console.log(`Created ${seedData.punishments.length} punishments`);
-
-  console.log('\nFirebase seeding completed!');
-  console.log(`Email: ${seedData.user.email}`);
-  console.log(`Password: ${seedData.user.password}`);
 }
 
 async function seed() {

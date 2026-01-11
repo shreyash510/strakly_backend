@@ -45,7 +45,7 @@ export class UserFirebaseService {
     return { id: doc.id, ...doc.data() };
   }
 
-  async searchUsers(query: string, excludeUserId: string): Promise<any[]> {
+  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
     const db = this.firebaseService.getFirestore();
     const snapshot = await db
       .collection('users')
@@ -54,7 +54,7 @@ export class UserFirebaseService {
       .limit(20)
       .get();
     return snapshot.docs
-      .filter((doc) => doc.id !== excludeUserId)
+      .filter((doc) => !excludeUserId || doc.id !== excludeUserId)
       .map((doc) => ({
         id: doc.id,
         name: doc.data().name,

@@ -111,7 +111,7 @@ export class ChallengesService {
 
     // Verify all invited users are friends
     const friends = await this.friendsService.getFriends(userId);
-    const friendIds = friends.map((f) => f.friendUserId);
+    const friendIds = friends.map((f) => f.id);
 
     for (const friendId of dto.invitedFriendIds) {
       if (!friendIds.includes(friendId)) {
@@ -152,7 +152,7 @@ export class ChallengesService {
 
     // Create invitations for each invited friend
     for (const friendId of dto.invitedFriendIds) {
-      const friend = friends.find((f) => f.friendUserId === friendId);
+      const friend = friends.find((f) => f.id === friendId);
       if (friend) {
         await this.databaseService.createChallengeInvitation({
           challengeId: challenge.id,

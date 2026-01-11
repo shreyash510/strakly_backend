@@ -248,16 +248,19 @@ export class MongoDBService implements OnModuleInit {
     };
   }
 
-  // Search users by name (for friends feature)
-  async searchUsers(query: string, excludeUserId: string): Promise<any[]> {
+  // Search users by name or email (for friends feature)
+  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
     const model = this.getModel('users');
-    const docs = await model
-      .find({
-        name: { $regex: query, $options: 'i' },
-        _id: { $ne: excludeUserId },
-      })
-      .limit(20)
-      .lean();
+    const filter: any = {
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } },
+      ],
+    };
+    if (excludeUserId) {
+      filter._id = { $ne: excludeUserId };
+    }
+    const docs = await model.find(filter).limit(20).lean();
     return docs.map((doc: any) => ({
       id: doc._id.toString(),
       name: doc.name,

@@ -174,4 +174,16 @@ export class AuthService {
       accessToken: this.generateToken(user),
     };
   }
+
+  async searchUsers(query: string, currentUserId: string): Promise<UserResponse[]> {
+    if (!query || query.length < 2) {
+      return [];
+    }
+    const users = await this.databaseService.searchUsers(query, currentUserId);
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    }));
+  }
 }

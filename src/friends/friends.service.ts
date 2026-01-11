@@ -6,16 +6,14 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 
-export interface Friend {
+export interface FriendWithDetails {
   id: string;
-  odataEntityId: string;
-  friendUserId: string;
-  friendName: string;
-  friendEmail: string;
-  connectedAt: string;
+  name: string;
+  email: string;
+  connectedAt?: string;
 }
 
-export interface FriendWithStats extends Friend {
+export interface FriendWithStats extends FriendWithDetails {
   totalStreak: number;
   challengesWon: number;
   challengesLost: number;
@@ -42,9 +40,6 @@ export interface UserProfile {
 
 @Injectable()
 export class FriendsService {
-  private readonly friendsCollection = 'friends';
-  private readonly requestsCollection = 'friendRequests';
-
   constructor(private readonly databaseService: DatabaseService) {}
 
   // Get user profile by email
@@ -57,15 +52,36 @@ export class FriendsService {
     return this.databaseService.findUserById(userId);
   }
 
-  // Get all friends for a user
-  async getFriends(userId: string): Promise<Friend[]> {
-    return this.databaseService.getCollection<Friend>(
-      this.friendsCollection,
-      userId,
-    );
+  // Get all friends for a user (with details)
+  async getFriends(userId: string): Promise<FriendWithDetails[]> {
+    const friendDoc = await this.databaseService.getFriendsDocument(userId);
+
+    if (!friendDoc || !friendDoc.friends || friendDoc.friends.length === 0) {
+      return [];
+    }
+
+    // Get details for each friend
+    const friendsWithDetails: FriendWithDetails[] = [];
+    for (const friendId of friendDoc.friends) {
+      const user = await this.getUserProfile(friendId);
+      if (user) {
+        friendsWithDetails.push({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        });
+      }
+    }
+
+    return friendsWithDetails;
   }
 
-  // Get all friends with stats (totalStreak, challengesWon, challengesLost)
+  // Get all users (excluding current user)
+  async getAllUsers(currentUserId: string): Promise<UserProfile[]> {
+    return this.databaseService.searchUsers('', currentUserId);
+  }
+
+  // Get all friends with stats
   async getFriendsWithStats(userId: string): Promise<FriendWithStats[]> {
     const friends = await this.getFriends(userId);
 
@@ -73,10 +89,9 @@ export class FriendsService {
       return [];
     }
 
-    // Get stats for each friend
     const friendsWithStats: FriendWithStats[] = await Promise.all(
       friends.map(async (friend) => {
-        const stats = await this.getFriendStats(friend.friendUserId);
+        const stats = await this.getFriendStats(friend.id);
         return {
           ...friend,
           ...stats,
@@ -87,11 +102,10 @@ export class FriendsService {
     return friendsWithStats;
   }
 
-  // Get stats for a specific user (totalStreak, challengesWon, challengesLost)
+  // Get stats for a specific user
   async getFriendStats(
     friendUserId: string,
   ): Promise<{ totalStreak: number; challengesWon: number; challengesLost: number }> {
-    // Get total streak from current-streaks
     let totalStreak = 0;
     const streaksData = await this.databaseService.getDocument<any>(
       'current-streaks',
@@ -106,7 +120,6 @@ export class FriendsService {
       );
     }
 
-    // Get challenges won/lost
     let challengesWon = 0;
     let challengesLost = 0;
 
@@ -124,25 +137,25 @@ export class FriendsService {
     return { totalStreak, challengesWon, challengesLost };
   }
 
-  // Get pending friend requests (both incoming and outgoing)
+  // Get pending friend requests
   async getFriendRequests(
     userId: string,
-  ): Promise<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }> {
+  ): Promise<{ incoming: FriendRequest[]; sent: FriendRequest[] }> {
     const incoming = await this.databaseService.getPendingFriendRequests(userId);
-    const outgoing = await this.databaseService.getSentFriendRequests(userId);
+    const sent = await this.databaseService.getSentFriendRequests(userId);
 
-    return { incoming, outgoing };
+    return { incoming, sent };
   }
 
   // Send friend request
   async sendFriendRequest(
     fromUserId: string,
-    toEmail: string,
+    toUserId: string,
   ): Promise<FriendRequest> {
-    // Find target user by email
-    const toUser = await this.findUserByEmail(toEmail);
+    // Find target user
+    const toUser = await this.getUserProfile(toUserId);
     if (!toUser) {
-      throw new NotFoundException('User with this email not found');
+      throw new NotFoundException('User not found');
     }
 
     if (toUser.id === fromUserId) {
@@ -150,23 +163,19 @@ export class FriendsService {
     }
 
     // Check if already friends
-    const friends = await this.getFriends(fromUserId);
-    const existingFriend = friends.find((f) => f.friendUserId === toUser.id);
-
-    if (existingFriend) {
+    const friendDoc = await this.databaseService.getFriendsDocument(fromUserId);
+    if (friendDoc?.friends?.includes(toUserId)) {
       throw new ConflictException('Already friends with this user');
     }
 
     // Check if request already exists
-    const existingRequest = await this.databaseService.findFriendRequest(fromUserId, toUser.id);
-
+    const existingRequest = await this.databaseService.findFriendRequest(fromUserId, toUserId);
     if (existingRequest) {
       throw new ConflictException('Friend request already sent');
     }
 
     // Check if there's a pending request from the other user
-    const reverseRequest = await this.databaseService.findFriendRequest(toUser.id, fromUserId);
-
+    const reverseRequest = await this.databaseService.findFriendRequest(toUserId, fromUserId);
     if (reverseRequest) {
       // Auto-accept the reverse request
       return this.respondToRequest(fromUserId, reverseRequest.id, 'accept');
@@ -191,7 +200,7 @@ export class FriendsService {
     return this.databaseService.createFriendRequest(requestData);
   }
 
-  // Respond to friend request (accept/decline)
+  // Respond to friend request
   async respondToRequest(
     userId: string,
     requestId: string,
@@ -211,31 +220,10 @@ export class FriendsService {
       throw new BadRequestException('Request already processed');
     }
 
-    const now = new Date().toISOString();
-
     if (action === 'accept') {
-      // Add to both users' friends lists
-      await this.databaseService.createDocument(
-        this.friendsCollection,
-        userId,
-        {
-          friendUserId: request.fromUserId,
-          friendName: request.fromUserName,
-          friendEmail: request.fromUserEmail,
-          connectedAt: now,
-        },
-      );
-
-      await this.databaseService.createDocument(
-        this.friendsCollection,
-        request.fromUserId,
-        {
-          friendUserId: userId,
-          friendName: request.toUserName,
-          friendEmail: request.toUserEmail,
-          connectedAt: now,
-        },
-      );
+      // Add to both users' friends arrays
+      await this.databaseService.addFriend(userId, request.fromUserId);
+      await this.databaseService.addFriend(request.fromUserId, userId);
     }
 
     // Update request status
@@ -260,7 +248,6 @@ export class FriendsService {
       throw new BadRequestException('Request already processed');
     }
 
-    // Delete the request - for now update status to cancelled
     await this.databaseService.updateFriendRequest(requestId, {
       status: 'cancelled',
     });
@@ -270,34 +257,11 @@ export class FriendsService {
 
   // Remove friend
   async removeFriend(userId: string, friendId: string): Promise<{ success: boolean }> {
-    // Get friend document
-    const friend = await this.databaseService.getDocument<Friend>(
-      this.friendsCollection,
-      userId,
-      friendId,
-    );
+    // Remove from current user's friends
+    await this.databaseService.removeFriend(userId, friendId);
 
-    if (!friend) {
-      throw new NotFoundException('Friend not found');
-    }
-
-    // Remove from current user
-    await this.databaseService.deleteDocument(this.friendsCollection, userId, friendId);
-
-    // Find and remove from other user
-    const otherUserFriends = await this.databaseService.getCollection<Friend>(
-      this.friendsCollection,
-      friend.friendUserId,
-    );
-
-    const otherFriend = otherUserFriends.find((f) => f.friendUserId === userId);
-    if (otherFriend) {
-      await this.databaseService.deleteDocument(
-        this.friendsCollection,
-        friend.friendUserId,
-        otherFriend.id,
-      );
-    }
+    // Remove from other user's friends
+    await this.databaseService.removeFriend(friendId, userId);
 
     return { success: true };
   }

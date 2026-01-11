@@ -5,20 +5,11 @@ export type FriendDocument = Friend & Document;
 
 @Schema({ timestamps: true, collection: 'friends' })
 export class Friend {
-  @Prop({ required: true })
-  oderId: string;
+  @Prop({ required: true, unique: true })
+  userId: string;
 
-  @Prop({ required: true })
-  friendUserId: string;
-
-  @Prop({ required: true })
-  friendName: string;
-
-  @Prop({ required: true })
-  friendEmail: string;
-
-  @Prop()
-  addedAt: string;
+  @Prop({ type: [String], default: [] })
+  friends: string[];
 }
 
 export const FriendSchema = SchemaFactory.createForClass(Friend);

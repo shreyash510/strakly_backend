@@ -124,4 +124,50 @@ export class FriendFirebaseService {
     const doc = await db.collection('friendRequests').doc(requestId).get();
     return { id: doc.id, ...doc.data() };
   }
+
+  // New array-based friends structure
+  async getFriendsDocument(userId: string): Promise<{ userId: string; friends: string[] } | null> {
+    const db = this.firebaseService.getFirestore();
+    const doc = await db.collection('friends').doc(userId).get();
+    if (!doc.exists) {
+      return null;
+    }
+    const data = doc.data();
+    return {
+      userId: data?.userId || userId,
+      friends: data?.friends || [],
+    };
+  }
+
+  async addFriend(userId: string, friendId: string): Promise<void> {
+    const db = this.firebaseService.getFirestore();
+    const docRef = db.collection('friends').doc(userId);
+    const doc = await docRef.get();
+
+    if (doc.exists) {
+      const data = doc.data();
+      const friends = data?.friends || [];
+      if (!friends.includes(friendId)) {
+        await docRef.update({ friends: [...friends, friendId] });
+      }
+    } else {
+      await docRef.set({
+        userId,
+        friends: [friendId],
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  async removeFriend(userId: string, friendId: string): Promise<void> {
+    const db = this.firebaseService.getFirestore();
+    const docRef = db.collection('friends').doc(userId);
+    const doc = await docRef.get();
+
+    if (doc.exists) {
+      const data = doc.data();
+      const friends = (data?.friends || []).filter((id: string) => id !== friendId);
+      await docRef.update({ friends });
+    }
+  }
 }

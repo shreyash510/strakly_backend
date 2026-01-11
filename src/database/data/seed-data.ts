@@ -1,11 +1,60 @@
 // Seed data for initial database population
 
-export const seedData = {
-  user: {
+export const seedUsers = [
+  {
     name: 'Shreyash',
     email: 'shreyash1@gmail.com',
     password: 'shreyash@510',
   },
+  {
+    name: 'John Doe',
+    email: 'john.doe@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Jane Smith',
+    email: 'jane.smith@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Alex Johnson',
+    email: 'alex.j@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Maria Garcia',
+    email: 'maria.garcia@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'David Brown',
+    email: 'david.brown@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Emily Wilson',
+    email: 'emily.wilson@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Michael Lee',
+    email: 'michael.lee@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Sarah Taylor',
+    email: 'sarah.taylor@example.com',
+    password: 'password123',
+  },
+  {
+    name: 'Chris Martin',
+    email: 'chris.martin@example.com',
+    password: 'password123',
+  },
+];
+
+export const seedData = {
+  user: seedUsers[0],
   goals: [
     {
       title: 'Learn Spanish',

@@ -49,7 +49,7 @@ export class PostsService {
   async getFeed(userId: string): Promise<Post[]> {
     // Get user's friends
     const friends = await this.friendsService.getFriends(userId);
-    const friendIds = friends.map((f) => f.friendUserId);
+    const friendIds = friends.map((f) => f.id);
 
     // Include user's own posts
     const allowedUserIds = [userId, ...friendIds];
@@ -82,7 +82,7 @@ export class PostsService {
     // Check if user can view this post (own post or friend's post)
     if (post.userId !== userId) {
       const friends = await this.friendsService.getFriends(userId);
-      const friendIds = friends.map((f) => f.friendUserId);
+      const friendIds = friends.map((f) => f.id);
 
       if (!friendIds.includes(post.userId)) {
         throw new ForbiddenException('Cannot view this post');

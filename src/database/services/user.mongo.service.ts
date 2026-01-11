@@ -69,15 +69,24 @@ export class UserMongoService extends BaseMongoService {
     };
   }
 
-  async searchUsers(query: string, excludeUserId: string): Promise<any[]> {
+  async searchUsers(query: string, excludeUserId?: string): Promise<any[]> {
     const model = this.getModel('users');
-    const docs = await model
-      .find({
-        name: { $regex: query, $options: 'i' },
-        _id: { $ne: excludeUserId },
-      })
-      .limit(20)
-      .lean();
+    const filter: any = {};
+
+    // Only exclude user if ID is provided
+    if (excludeUserId) {
+      filter._id = { $ne: excludeUserId };
+    }
+
+    // Only add search filter if query is provided
+    if (query && query.trim().length > 0) {
+      filter.$or = [
+        { name: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } },
+      ];
+    }
+
+    const docs = await model.find(filter).limit(50).lean();
     return docs.map((doc: any) => ({
       id: doc._id.toString(),
       name: doc.name,
