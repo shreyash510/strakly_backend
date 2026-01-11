@@ -91,6 +91,8 @@ export class UserMongoService extends BaseMongoService {
       id: doc._id.toString(),
       name: doc.name,
       email: doc.email,
+      bio: doc.bio || '',
+      streak: doc.streak || 0,
     }));
   }
 }

@@ -41,8 +41,10 @@ async function seedMongoDB() {
   for (const userData of seedUsers) {
     const existingUser = await User.findOne({ email: userData.email });
     if (existingUser) {
-      console.log(`  User ${userData.email} already exists. Updating password...`);
+      console.log(`  User ${userData.email} already exists. Updating...`);
       existingUser.passwordHash = await hashPassword(userData.password);
+      existingUser.bio = userData.bio || '';
+      existingUser.streak = userData.streak || 0;
       existingUser.updatedAt = new Date().toISOString();
       await existingUser.save();
       if (userData.email === seedData.user.email) {
@@ -53,6 +55,8 @@ async function seedMongoDB() {
         name: userData.name,
         email: userData.email,
         passwordHash: await hashPassword(userData.password),
+        bio: userData.bio || '',
+        streak: userData.streak || 0,
         createdAt: now,
         updatedAt: now,
       });

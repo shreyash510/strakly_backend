@@ -15,6 +15,12 @@ export class User {
   passwordHash: string;
 
   @Prop()
+  bio: string;
+
+  @Prop({ default: 0 })
+  streak: number;
+
+  @Prop()
   createdAt: string;
 
   @Prop()
