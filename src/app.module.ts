@@ -17,6 +17,7 @@ import { FriendsModule } from './friends/friends.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { PostsModule } from './posts/posts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CounterModule } from './counter/counter.module';
 import firebaseConfig from './config/firebase.config';
 import databaseConfig from './config/database.config';
 
@@ -41,6 +42,7 @@ import databaseConfig from './config/database.config';
     ChallengesModule,
     PostsModule,
     DashboardModule,
+    CounterModule,
   ],
   controllers: [AppController],
   providers: [AppService],
