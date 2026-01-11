@@ -23,6 +23,7 @@ async function bootstrap() {
     'https://strakly.com',
     'https://www.strakly.com',
     'https://strakly-g9ovf.ondigitalocean.app',
+    'https://shark-app-yak3y.ondigitalocean.app',
     process.env.FRONTEND_URL,
   ].filter(Boolean);
 
