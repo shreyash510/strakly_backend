@@ -18,6 +18,16 @@ import { ChallengesModule } from './challenges/challenges.module';
 import { PostsModule } from './posts/posts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CounterModule } from './counter/counter.module';
+
+// New RBAC & Gym modules
+import { RolesModule } from './roles/roles.module';
+import { GymsModule } from './gyms/gyms.module';
+import { TrainerAssignmentsModule } from './trainer-assignments/trainer-assignments.module';
+import { DietPlansModule } from './diet-plans/diet-plans.module';
+import { ExercisePlansModule } from './exercise-plans/exercise-plans.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+
 import firebaseConfig from './config/firebase.config';
 import databaseConfig from './config/database.config';
 
@@ -34,6 +44,21 @@ import databaseConfig from './config/database.config';
     DatabaseModule.forRoot(),
     FirebaseModule,
     AuthModule,
+
+    // RBAC & Gym Management
+    RolesModule,
+    GymsModule,
+    TrainerAssignmentsModule,
+
+    // Plans
+    DietPlansModule,
+    ExercisePlansModule,
+
+    // Gym Features
+    AnnouncementsModule,
+    SubscriptionsModule,
+
+    // User Features
     GoalsModule,
     HabitsModule,
     TasksModule,

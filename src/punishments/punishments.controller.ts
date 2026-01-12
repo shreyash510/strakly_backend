@@ -6,139 +6,111 @@ import {
   Patch,
   Param,
   Delete,
-  Headers,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { PunishmentsService } from './punishments.service';
 import { CreatePunishmentRuleDto } from './dto/create-punishment-rule.dto';
 import { UpdatePunishmentRuleDto } from './dto/update-punishment-rule.dto';
 import { CreatePunishmentDto } from './dto/create-punishment.dto';
 import { UpdatePunishmentDto } from './dto/update-punishment.dto';
+import { JwtAuthGuard } from '../auth/guards';
+import { CurrentUser } from '../auth/decorators';
 
 @Controller('punishments')
+@UseGuards(JwtAuthGuard)
 export class PunishmentsController {
   constructor(private readonly punishmentsService: PunishmentsService) {}
 
-  private getUserId(authHeader: string): string {
-    if (!authHeader) {
-      throw new UnauthorizedException('User ID header is required');
-    }
-    return authHeader;
-  }
-
   // Punishment Rules Endpoints
   @Get('rules')
-  findAllRules(@Headers('x-user-id') userId: string) {
-    return this.punishmentsService.findAllRules(this.getUserId(userId));
+  findAllRules(@CurrentUser() user: any) {
+    return this.punishmentsService.findAllRules(user.userId);
   }
 
   @Get('rules/:id')
-  findOneRule(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.punishmentsService.findOneRule(this.getUserId(userId), id);
+  findOneRule(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.findOneRule(user.userId, id);
   }
 
   @Post('rules')
   createRule(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Body() createRuleDto: CreatePunishmentRuleDto,
   ) {
-    return this.punishmentsService.createRule(this.getUserId(userId), createRuleDto);
+    return this.punishmentsService.createRule(user.userId, createRuleDto);
   }
 
   @Patch('rules/:id')
   updateRule(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() updateRuleDto: UpdatePunishmentRuleDto,
   ) {
-    return this.punishmentsService.updateRule(
-      this.getUserId(userId),
-      id,
-      updateRuleDto,
-    );
+    return this.punishmentsService.updateRule(user.userId, id, updateRuleDto);
   }
 
   @Patch('rules/:id/toggle')
-  toggleRuleActive(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.punishmentsService.toggleRuleActive(this.getUserId(userId), id);
+  toggleRuleActive(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.toggleRuleActive(user.userId, id);
   }
 
   @Delete('rules/:id')
-  removeRule(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.punishmentsService.removeRule(this.getUserId(userId), id);
+  removeRule(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.removeRule(user.userId, id);
   }
 
   // Punishments Endpoints
   @Get()
-  findAllPunishments(@Headers('x-user-id') userId: string) {
-    return this.punishmentsService.findAllPunishments(this.getUserId(userId));
+  findAllPunishments(@CurrentUser() user: any) {
+    return this.punishmentsService.findAllPunishments(user.userId);
   }
 
   @Get(':id')
-  findOnePunishment(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.punishmentsService.findOnePunishment(this.getUserId(userId), id);
+  findOnePunishment(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.findOnePunishment(user.userId, id);
   }
 
   @Post()
   createPunishment(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Body() createPunishmentDto: CreatePunishmentDto,
   ) {
-    return this.punishmentsService.createPunishment(
-      this.getUserId(userId),
-      createPunishmentDto,
-    );
+    return this.punishmentsService.createPunishment(user.userId, createPunishmentDto);
   }
 
   @Patch(':id')
   updatePunishment(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() updatePunishmentDto: UpdatePunishmentDto,
   ) {
-    return this.punishmentsService.updatePunishment(
-      this.getUserId(userId),
-      id,
-      updatePunishmentDto,
-    );
+    return this.punishmentsService.updatePunishment(user.userId, id, updatePunishmentDto);
   }
 
   @Patch(':id/complete')
-  completePunishment(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.punishmentsService.completePunishment(this.getUserId(userId), id);
+  completePunishment(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.completePunishment(user.userId, id);
   }
 
   @Patch(':id/skip')
-  skipPunishment(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.punishmentsService.skipPunishment(this.getUserId(userId), id);
+  skipPunishment(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.skipPunishment(user.userId, id);
   }
 
   @Delete(':id')
-  removePunishment(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.punishmentsService.removePunishment(this.getUserId(userId), id);
+  removePunishment(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.punishmentsService.removePunishment(user.userId, id);
   }
 
   // Trigger punishment from rule
   @Post('trigger/:ruleId')
   triggerPunishment(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('ruleId') ruleId: string,
     @Body() body: { reason: string; streak?: number },
   ) {
     return this.punishmentsService.triggerPunishment(
-      this.getUserId(userId),
+      user.userId,
       ruleId,
       body.reason,
       body.streak,

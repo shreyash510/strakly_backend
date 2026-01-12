@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type PostDocument = Post & Document;
 
 @Schema({ _id: false })
 export class PostReaction {
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
   userName: string;
@@ -19,11 +19,11 @@ export const PostReactionSchema = SchemaFactory.createForClass(PostReaction);
 
 @Schema({ _id: false })
 export class PostComment {
-  @Prop({ required: true })
-  id: string;
+  @Prop({ type: Types.ObjectId, default: () => new Types.ObjectId() })
+  id: Types.ObjectId;
 
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
   userName: string;
@@ -34,16 +34,16 @@ export class PostComment {
   @Prop({ required: true })
   content: string;
 
-  @Prop({ required: true })
-  createdAt: string;
+  @Prop({ default: () => new Date() })
+  createdAt: Date;
 }
 
 export const PostCommentSchema = SchemaFactory.createForClass(PostComment);
 
 @Schema({ timestamps: true, collection: 'posts' })
 export class Post {
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
   userName: string;
@@ -63,11 +63,27 @@ export class Post {
   @Prop({ type: [PostCommentSchema], default: [] })
   comments: PostComment[];
 
-  @Prop()
-  createdAt: string;
+  // Audit fields
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ default: false })
+  isArchived: boolean;
 
   @Prop()
-  updatedAt: string;
+  archivedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  archivedBy: Types.ObjectId;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
+
+// Indexes
+PostSchema.index({ userId: 1 });
+PostSchema.index({ category: 1 });
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ isArchived: 1 });

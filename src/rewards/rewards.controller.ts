@@ -6,88 +6,70 @@ import {
   Patch,
   Param,
   Delete,
-  Headers,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { RewardsService } from './rewards.service';
 import { CreateRewardDto } from './dto/create-reward.dto';
 import { UpdateRewardDto } from './dto/update-reward.dto';
+import { JwtAuthGuard } from '../auth/guards';
+import { CurrentUser } from '../auth/decorators';
 
 @Controller('rewards')
+@UseGuards(JwtAuthGuard)
 export class RewardsController {
   constructor(private readonly rewardsService: RewardsService) {}
 
-  private getUserId(authHeader: string): string {
-    if (!authHeader) {
-      throw new UnauthorizedException('User ID header is required');
-    }
-    return authHeader;
-  }
-
   @Get()
-  findAll(@Headers('x-user-id') userId: string) {
-    return this.rewardsService.findAll(this.getUserId(userId));
+  findAll(@CurrentUser() user: any) {
+    return this.rewardsService.findAll(user.userId);
   }
 
   @Get(':id')
-  findOne(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.rewardsService.findOne(this.getUserId(userId), id);
+  findOne(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.findOne(user.userId, id);
   }
 
   @Post()
-  create(
-    @Headers('x-user-id') userId: string,
-    @Body() createRewardDto: CreateRewardDto,
-  ) {
-    return this.rewardsService.create(this.getUserId(userId), createRewardDto);
+  create(@CurrentUser() user: any, @Body() createRewardDto: CreateRewardDto) {
+    return this.rewardsService.create(user.userId, createRewardDto);
   }
 
   @Patch(':id')
   update(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() updateRewardDto: UpdateRewardDto,
   ) {
-    return this.rewardsService.update(
-      this.getUserId(userId),
-      id,
-      updateRewardDto,
-    );
+    return this.rewardsService.update(user.userId, id, updateRewardDto);
   }
 
   @Patch(':id/increment-streak')
-  incrementStreak(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.rewardsService.incrementStreak(this.getUserId(userId), id);
+  incrementStreak(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.incrementStreak(user.userId, id);
   }
 
   @Patch(':id/reset-streak')
-  resetStreak(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.rewardsService.resetStreak(this.getUserId(userId), id);
+  resetStreak(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.resetStreak(user.userId, id);
   }
 
   @Patch(':id/complete')
-  markCompleted(
-    @Headers('x-user-id') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.rewardsService.markCompleted(this.getUserId(userId), id);
+  markCompleted(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.markCompleted(user.userId, id);
   }
 
   @Patch(':id/fail')
-  markFailed(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.rewardsService.markFailed(this.getUserId(userId), id);
+  markFailed(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.markFailed(user.userId, id);
   }
 
   @Patch(':id/claim')
-  claimReward(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.rewardsService.claimReward(this.getUserId(userId), id);
+  claimReward(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.claimReward(user.userId, id);
   }
 
   @Delete(':id')
-  remove(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.rewardsService.remove(this.getUserId(userId), id);
+  remove(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rewardsService.remove(user.userId, id);
   }
 }

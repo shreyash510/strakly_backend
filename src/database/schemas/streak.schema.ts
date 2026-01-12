@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type StreakDocument = Streak & Document;
 
 @Schema({ _id: false })
 export class StreakItem {
-  @Prop({ required: true })
-  itemId: string;
+  @Prop({ type: Types.ObjectId, required: true })
+  itemId: Types.ObjectId;
 
   @Prop({ required: true })
   itemName: string;
@@ -21,21 +21,21 @@ export class StreakItem {
   longestStreak: number;
 
   @Prop()
-  lastCompletedDate: string;
+  lastCompletedDate: Date;
 }
 
 export const StreakItemSchema = SchemaFactory.createForClass(StreakItem);
 
 @Schema({ timestamps: true, collection: 'streaks' })
 export class Streak {
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true })
+  userId: Types.ObjectId;
 
   @Prop({ type: Map, of: StreakItemSchema, default: {} })
   items: Map<string, StreakItem>;
-
-  @Prop()
-  updatedAt: string;
 }
 
 export const StreakSchema = SchemaFactory.createForClass(Streak);
+
+// Indexes
+StreakSchema.index({ userId: 1 }, { unique: true });

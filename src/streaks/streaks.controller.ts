@@ -7,80 +7,65 @@ import {
   Body,
   Param,
   Query,
-  Headers,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { StreaksService } from './streaks.service';
 import { StreakItemType } from './dto/create-streak-record.dto';
+import { JwtAuthGuard } from '../auth/guards';
+import { CurrentUser } from '../auth/decorators';
 
 @Controller('streaks')
+@UseGuards(JwtAuthGuard)
 export class StreaksController {
   constructor(private readonly streaksService: StreaksService) {}
 
-  private getUserId(authHeader: string): string {
-    if (!authHeader) {
-      throw new UnauthorizedException('User ID header is required');
-    }
-    return authHeader;
-  }
-
   // Get all current streaks
   @Get()
-  async getCurrentStreaks(@Headers('x-user-id') userId: string) {
-    return this.streaksService.getCurrentStreaks(this.getUserId(userId));
+  async getCurrentStreaks(@CurrentUser() user: any) {
+    return this.streaksService.getCurrentStreaks(user.userId);
   }
 
   // Get streak summary for dashboard
   @Get('summary')
-  async getStreakSummary(@Headers('x-user-id') userId: string) {
-    return this.streaksService.getStreakSummary(this.getUserId(userId));
+  async getStreakSummary(@CurrentUser() user: any) {
+    return this.streaksService.getStreakSummary(user.userId);
   }
 
   // Get streak for a specific item
   @Get('item/:itemId')
-  async getItemStreak(
-    @Headers('x-user-id') userId: string,
-    @Param('itemId') itemId: string,
-  ) {
-    return this.streaksService.getItemStreak(this.getUserId(userId), itemId);
+  async getItemStreak(@CurrentUser() user: any, @Param('itemId') itemId: string) {
+    return this.streaksService.getItemStreak(user.userId, itemId);
   }
 
   // Get items by type (habit/goal/task)
   @Get('type/:itemType')
   async getItemsByType(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('itemType') itemType: StreakItemType,
   ) {
-    return this.streaksService.getItemsByType(this.getUserId(userId), itemType);
+    return this.streaksService.getItemsByType(user.userId, itemType);
   }
 
   // Get streak history for an item
   @Get('history/:itemId')
   async getStreakHistory(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('itemId') itemId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.streaksService.getStreakHistory(
-      this.getUserId(userId),
-      itemId,
-      limit || 30,
-    );
+    return this.streaksService.getStreakHistory(user.userId, itemId, limit || 30);
   }
 
   // Get all records for a specific date
   @Get('date/:date')
-  async getRecordsForDate(
-    @Headers('x-user-id') userId: string,
-    @Param('date') date: string,
-  ) {
-    return this.streaksService.getRecordsForDate(this.getUserId(userId), date);
+  async getRecordsForDate(@CurrentUser() user: any, @Param('date') date: string) {
+    return this.streaksService.getRecordsForDate(user.userId, date);
   }
 
   // Register a new item for streak tracking
   @Post('register')
   async registerItem(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Body()
     body: {
       itemId: string;
@@ -90,7 +75,7 @@ export class StreaksController {
     },
   ) {
     return this.streaksService.registerItem(
-      this.getUserId(userId),
+      user.userId,
       body.itemId,
       body.itemType,
       body.itemName,
@@ -100,43 +85,30 @@ export class StreaksController {
 
   // Complete item for today (increment streak)
   @Patch('complete/:itemId')
-  async completeItem(
-    @Headers('x-user-id') userId: string,
-    @Param('itemId') itemId: string,
-  ) {
-    return this.streaksService.completeItem(this.getUserId(userId), itemId);
+  async completeItem(@CurrentUser() user: any, @Param('itemId') itemId: string) {
+    return this.streaksService.completeItem(user.userId, itemId);
   }
 
   // Reset streak to zero
   @Patch('reset/:itemId')
-  async resetStreak(
-    @Headers('x-user-id') userId: string,
-    @Param('itemId') itemId: string,
-  ) {
-    return this.streaksService.resetStreak(this.getUserId(userId), itemId);
+  async resetStreak(@CurrentUser() user: any, @Param('itemId') itemId: string) {
+    return this.streaksService.resetStreak(user.userId, itemId);
   }
 
   // Update item name
   @Patch('rename/:itemId')
   async updateItemName(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('itemId') itemId: string,
     @Body('name') name: string,
   ) {
-    return this.streaksService.updateItemName(
-      this.getUserId(userId),
-      itemId,
-      name,
-    );
+    return this.streaksService.updateItemName(user.userId, itemId, name);
   }
 
   // Remove item from streak tracking
   @Delete(':itemId')
-  async removeItem(
-    @Headers('x-user-id') userId: string,
-    @Param('itemId') itemId: string,
-  ) {
-    await this.streaksService.removeItem(this.getUserId(userId), itemId);
+  async removeItem(@CurrentUser() user: any, @Param('itemId') itemId: string) {
+    await this.streaksService.removeItem(user.userId, itemId);
     return { success: true };
   }
 }

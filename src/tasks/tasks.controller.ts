@@ -6,58 +6,50 @@ import {
   Patch,
   Param,
   Delete,
-  Headers,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { JwtAuthGuard } from '../auth/guards';
+import { CurrentUser } from '../auth/decorators';
 
 @Controller('tasks')
+@UseGuards(JwtAuthGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
-  private getUserId(authHeader: string): string {
-    if (!authHeader) {
-      throw new UnauthorizedException('User ID header is required');
-    }
-    return authHeader;
-  }
-
   @Get()
-  findAll(@Headers('x-user-id') userId: string) {
-    return this.tasksService.findAll(this.getUserId(userId));
+  findAll(@CurrentUser() user: any) {
+    return this.tasksService.findAll(user.userId);
   }
 
   @Get(':id')
-  findOne(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.tasksService.findOne(this.getUserId(userId), id);
+  findOne(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tasksService.findOne(user.userId, id);
   }
 
   @Post()
-  create(
-    @Headers('x-user-id') userId: string,
-    @Body() createTaskDto: CreateTaskDto,
-  ) {
-    return this.tasksService.create(this.getUserId(userId), createTaskDto);
+  create(@CurrentUser() user: any, @Body() createTaskDto: CreateTaskDto) {
+    return this.tasksService.create(user.userId, createTaskDto);
   }
 
   @Patch(':id')
   update(
-    @Headers('x-user-id') userId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() updateTaskDto: UpdateTaskDto,
   ) {
-    return this.tasksService.update(this.getUserId(userId), id, updateTaskDto);
+    return this.tasksService.update(user.userId, id, updateTaskDto);
   }
 
   @Patch(':id/toggle')
-  toggleStatus(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.tasksService.toggleStatus(this.getUserId(userId), id);
+  toggleStatus(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tasksService.toggleStatus(user.userId, id);
   }
 
   @Delete(':id')
-  remove(@Headers('x-user-id') userId: string, @Param('id') id: string) {
-    return this.tasksService.remove(this.getUserId(userId), id);
+  remove(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tasksService.remove(user.userId, id);
   }
 }

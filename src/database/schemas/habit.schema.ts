@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type HabitDocument = Habit & Document;
 
 @Schema({ timestamps: true, collection: 'habits' })
 export class Habit {
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
   title: string;
@@ -32,11 +32,26 @@ export class Habit {
   @Prop({ type: [String], default: [] })
   completedDates: string[];
 
-  @Prop()
-  createdAt: string;
+  // Audit fields
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ default: false })
+  isArchived: boolean;
 
   @Prop()
-  updatedAt: string;
+  archivedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  archivedBy: Types.ObjectId;
 }
 
 export const HabitSchema = SchemaFactory.createForClass(Habit);
+
+// Indexes
+HabitSchema.index({ userId: 1 });
+HabitSchema.index({ userId: 1, isActive: 1 });
+HabitSchema.index({ isArchived: 1 });

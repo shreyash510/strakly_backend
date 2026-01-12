@@ -1,18 +1,18 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type ChallengeDocument = Challenge & Document;
 
 @Schema({ _id: false })
 export class ChallengeParticipant {
-  @Prop({ required: true })
-  oderId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
-  odername: string;
+  userName: string;
 
   @Prop({ required: true })
-  oderedAt: string;
+  joinedAt: Date;
 
   @Prop({ default: 0 })
   progress: number;
@@ -31,11 +31,11 @@ export class Challenge {
   @Prop()
   description: string;
 
-  @Prop({ required: true })
-  creatorId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  creatorId: Types.ObjectId;
 
-  @Prop({ type: [String], default: [] })
-  participantIds: string[];
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  participantIds: Types.ObjectId[];
 
   @Prop({ type: [ChallengeParticipantSchema], default: [] })
   participants: ChallengeParticipant[];
@@ -50,10 +50,10 @@ export class Challenge {
   unit: string;
 
   @Prop({ required: true })
-  startDate: string;
+  startDate: Date;
 
   @Prop({ required: true })
-  endDate: string;
+  endDate: Date;
 
   @Prop()
   prize: string;
@@ -61,14 +61,30 @@ export class Challenge {
   @Prop({ enum: ['upcoming', 'active', 'completed', 'cancelled'], default: 'upcoming' })
   status: string;
 
-  @Prop()
-  winnerId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  winnerId: Types.ObjectId;
+
+  // Audit fields
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ default: false })
+  isArchived: boolean;
 
   @Prop()
-  createdAt: string;
+  archivedAt: Date;
 
-  @Prop()
-  updatedAt: string;
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  archivedBy: Types.ObjectId;
 }
 
 export const ChallengeSchema = SchemaFactory.createForClass(Challenge);
+
+// Indexes
+ChallengeSchema.index({ creatorId: 1 });
+ChallengeSchema.index({ participantIds: 1 });
+ChallengeSchema.index({ status: 1 });
+ChallengeSchema.index({ isArchived: 1 });

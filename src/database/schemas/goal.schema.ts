@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type GoalDocument = Goal & Document;
 
 @Schema({ timestamps: true, collection: 'goals' })
 export class Goal {
-  @Prop({ required: true })
-  userId: string;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
 
   @Prop({ required: true })
   title: string;
@@ -41,11 +41,27 @@ export class Goal {
   @Prop()
   currentAmount: number;
 
-  @Prop()
-  createdAt: string;
+  // Audit fields
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ default: false })
+  isArchived: boolean;
 
   @Prop()
-  updatedAt: string;
+  archivedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  archivedBy: Types.ObjectId;
 }
 
 export const GoalSchema = SchemaFactory.createForClass(Goal);
+
+// Indexes
+GoalSchema.index({ userId: 1 });
+GoalSchema.index({ userId: 1, status: 1 });
+GoalSchema.index({ userId: 1, category: 1 });
+GoalSchema.index({ isArchived: 1 });
