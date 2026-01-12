@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AppController } from './app.controller';
@@ -14,7 +13,6 @@ import { TasksModule } from './tasks/tasks.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { StreaksModule } from './streaks/streaks.module';
 import { PunishmentsModule } from './punishments/punishments.module';
-import { SchedulerModule } from './scheduler/scheduler.module';
 import { FriendsModule } from './friends/friends.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { PostsModule } from './posts/posts.module';
@@ -33,7 +31,6 @@ import databaseConfig from './config/database.config';
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api*', '/docs*'],
     }),
-    ScheduleModule.forRoot(),
     DatabaseModule.forRoot(),
     FirebaseModule,
     AuthModule,
@@ -43,7 +40,6 @@ import databaseConfig from './config/database.config';
     RewardsModule,
     StreaksModule,
     PunishmentsModule,
-    SchedulerModule,
     FriendsModule,
     ChallengesModule,
     PostsModule,
