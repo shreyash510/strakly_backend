@@ -1,7 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { GYM_STATUSES } from '../../constants';
+import type { GymStatus } from '../../constants';
 
-export type GymStatus = 'active' | 'inactive' | 'pending';
+export type { GymStatus };
 
 export type GymDocument = Gym & Document;
 
@@ -52,7 +54,7 @@ export class Gym {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop({ type: String, enum: ['active', 'inactive', 'pending'], default: 'active' })
+  @Prop({ type: String, enum: GYM_STATUSES, default: 'active' })
   status: GymStatus;
 
   @Prop({ type: [String], default: [] })

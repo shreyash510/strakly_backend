@@ -1,6 +1,7 @@
 // User
 export { User, UserSchema } from './user.schema';
-export type { UserDocument, UserRole, UserStatus, Gender } from './user.schema';
+export type { UserDocument } from './user.schema';
+export type { UserRole, UserStatus, Gender } from '../../constants';
 
 // Goal
 export { Goal, GoalSchema } from './goal.schema';
@@ -48,7 +49,8 @@ export type { StreakDocument } from './streak.schema';
 
 // Gym
 export { Gym, GymSchema } from './gym.schema';
-export type { GymDocument, GymStatus } from './gym.schema';
+export type { GymDocument } from './gym.schema';
+export type { GymStatus } from '../../constants';
 
 // Trainer
 export { Trainer, TrainerSchema } from './trainer.schema';

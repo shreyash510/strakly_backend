@@ -1,8 +1,8 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { TICKET_CATEGORIES, TICKET_PRIORITIES, TICKET_STATUSES } from '../../constants';
+import type { TicketCategory, TicketPriority, TicketStatus } from '../../constants';
 
-export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
-export type TicketCategory = 'bug' | 'feature_request' | 'account' | 'billing' | 'other';
+export type { TicketCategory, TicketPriority, TicketStatus };
 
 export class CreateSupportDto {
   @IsString()
@@ -12,11 +12,11 @@ export class CreateSupportDto {
   description: string;
 
   @IsOptional()
-  @IsEnum(['bug', 'feature_request', 'account', 'billing', 'other'])
+  @IsEnum(TICKET_CATEGORIES)
   category?: TicketCategory;
 
   @IsOptional()
-  @IsEnum(['low', 'medium', 'high', 'urgent'])
+  @IsEnum(TICKET_PRIORITIES)
   priority?: TicketPriority;
 
   @IsOptional()
@@ -34,15 +34,15 @@ export class UpdateSupportDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(['bug', 'feature_request', 'account', 'billing', 'other'])
+  @IsEnum(TICKET_CATEGORIES)
   category?: TicketCategory;
 
   @IsOptional()
-  @IsEnum(['low', 'medium', 'high', 'urgent'])
+  @IsEnum(TICKET_PRIORITIES)
   priority?: TicketPriority;
 
   @IsOptional()
-  @IsEnum(['open', 'in_progress', 'resolved', 'closed'])
+  @IsEnum(TICKET_STATUSES)
   status?: TicketStatus;
 
   @IsOptional()

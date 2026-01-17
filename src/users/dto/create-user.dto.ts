@@ -1,8 +1,8 @@
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
+import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
+import type { UserRole, UserStatus, Gender } from '../../constants';
 
-export type UserRole = 'superadmin' | 'admin' | 'trainer' | 'user';
-export type UserStatus = 'active' | 'inactive' | 'suspended';
-export type Gender = 'male' | 'female' | 'other';
+export type { UserRole, UserStatus, Gender };
 
 export class CreateUserDto {
   @IsString()
@@ -28,11 +28,11 @@ export class CreateUserDto {
   bio?: string;
 
   @IsOptional()
-  @IsEnum(['superadmin', 'admin', 'trainer', 'user'])
+  @IsEnum(USER_ROLES)
   role?: UserRole;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive', 'suspended'])
+  @IsEnum(USER_STATUSES)
   status?: UserStatus;
 
   @IsOptional()
@@ -40,7 +40,7 @@ export class CreateUserDto {
   dateOfBirth?: string;
 
   @IsOptional()
-  @IsEnum(['male', 'female', 'other'])
+  @IsEnum(GENDERS)
   gender?: Gender;
 
   @IsOptional()
@@ -90,11 +90,11 @@ export class UpdateUserDto {
   bio?: string;
 
   @IsOptional()
-  @IsEnum(['superadmin', 'admin', 'trainer', 'user'])
+  @IsEnum(USER_ROLES)
   role?: UserRole;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive', 'suspended'])
+  @IsEnum(USER_STATUSES)
   status?: UserStatus;
 
   @IsOptional()
@@ -102,7 +102,7 @@ export class UpdateUserDto {
   dateOfBirth?: string;
 
   @IsOptional()
-  @IsEnum(['male', 'female', 'other'])
+  @IsEnum(GENDERS)
   gender?: Gender;
 
   @IsOptional()

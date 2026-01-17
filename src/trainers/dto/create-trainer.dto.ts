@@ -1,7 +1,8 @@
 import { IsString, IsEmail, IsOptional, IsArray, IsNumber, IsEnum } from 'class-validator';
+import { TRAINER_STATUSES, TRAINER_SPECIALIZATIONS, GENDERS } from '../../constants';
+import type { TrainerStatus, TrainerSpecialization, Gender } from '../../constants';
 
-export type TrainerStatus = 'active' | 'inactive' | 'on_leave';
-export type TrainerSpecialization = 'strength' | 'cardio' | 'yoga' | 'pilates' | 'crossfit' | 'nutrition' | 'rehabilitation' | 'personal_training';
+export type { TrainerStatus, TrainerSpecialization, Gender };
 
 export class CreateTrainerDto {
   @IsString()
@@ -45,7 +46,7 @@ export class CreateTrainerDto {
   gymId?: string;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive', 'on_leave'])
+  @IsEnum(TRAINER_STATUSES)
   status?: TrainerStatus;
 
   @IsOptional()
@@ -53,8 +54,8 @@ export class CreateTrainerDto {
   dateOfBirth?: string;
 
   @IsOptional()
-  @IsEnum(['male', 'female', 'other'])
-  gender?: 'male' | 'female' | 'other';
+  @IsEnum(GENDERS)
+  gender?: Gender;
 
   @IsOptional()
   @IsString()
@@ -117,7 +118,7 @@ export class UpdateTrainerDto {
   gymId?: string;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive', 'on_leave'])
+  @IsEnum(TRAINER_STATUSES)
   status?: TrainerStatus;
 
   @IsOptional()
@@ -125,8 +126,8 @@ export class UpdateTrainerDto {
   dateOfBirth?: string;
 
   @IsOptional()
-  @IsEnum(['male', 'female', 'other'])
-  gender?: 'male' | 'female' | 'other';
+  @IsEnum(GENDERS)
+  gender?: Gender;
 
   @IsOptional()
   @IsString()

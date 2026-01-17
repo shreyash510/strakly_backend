@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
+import type { UserRole, UserStatus, Gender } from '../../constants';
 
-export type UserRole = 'superadmin' | 'admin' | 'trainer' | 'user';
-export type UserStatus = 'active' | 'inactive' | 'suspended';
-export type Gender = 'male' | 'female' | 'other';
+export type { UserRole, UserStatus, Gender };
 
 export type UserDocument = User & Document;
 
@@ -27,16 +27,16 @@ export class User {
   @Prop()
   bio?: string;
 
-  @Prop({ type: String, enum: ['superadmin', 'admin', 'trainer', 'user'], default: 'user' })
+  @Prop({ type: String, enum: USER_ROLES, default: 'user' })
   role: UserRole;
 
-  @Prop({ type: String, enum: ['active', 'inactive', 'suspended'], default: 'active' })
+  @Prop({ type: String, enum: USER_STATUSES, default: 'active' })
   status: UserStatus;
 
   @Prop()
   dateOfBirth?: string;
 
-  @Prop({ type: String, enum: ['male', 'female', 'other'] })
+  @Prop({ type: String, enum: GENDERS })
   gender?: Gender;
 
   @Prop()
