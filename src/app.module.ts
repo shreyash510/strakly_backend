@@ -28,6 +28,7 @@ import { ProgramsModule } from './programs/programs.module';
 import { ReportsModule } from './reports/reports.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AdminModule } from './admin/admin.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import firebaseConfig from './config/firebase.config';
 import databaseConfig from './config/database.config';
 
@@ -65,6 +66,7 @@ import databaseConfig from './config/database.config';
     ReportsModule,
     SubscriptionsModule,
     AdminModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

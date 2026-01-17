@@ -174,3 +174,20 @@ export type FriendRequestStatus = typeof FRIEND_REQUEST_STATUSES[number];
 // ============================================
 export const STREAK_ITEM_TYPES = ['habit', 'goal'] as const;
 export type StreakItemType = typeof STREAK_ITEM_TYPES[number];
+
+// ============================================
+// PERMISSION CONSTANTS
+// ============================================
+export const PERMISSION_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges', 'rewards', 'reports'] as const;
+export type PermissionResource = typeof PERMISSION_RESOURCES[number];
+
+export const PERMISSION_ACTIONS = ['create', 'read', 'update', 'delete'] as const;
+export type PermissionAction = typeof PERMISSION_ACTIONS[number];
+
+// Resources that only have read permission
+export const READ_ONLY_RESOURCES = ['reports'] as const;
+export type ReadOnlyResource = typeof READ_ONLY_RESOURCES[number];
+
+// Resources that have full CRUD permissions
+export const CRUD_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges', 'rewards'] as const;
+export type CrudResource = typeof CRUD_RESOURCES[number];
