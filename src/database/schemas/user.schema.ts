@@ -61,6 +61,12 @@ export class User {
   streak: number;
 
   @Prop()
+  joinDate?: string;
+
+  @Prop()
+  lastLoginAt?: string;
+
+  @Prop()
   createdAt: Date;
 
   @Prop()

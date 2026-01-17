@@ -8,6 +8,7 @@ export interface JwtPayload {
   sub: string; // userId
   email: string;
   name: string;
+  role?: string;
 }
 
 @Injectable()
@@ -32,10 +33,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found');
     }
 
+    const userData = userDoc.data();
+
     return {
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
+      role: payload.role || userData?.role || 'user',
     };
   }
 }
