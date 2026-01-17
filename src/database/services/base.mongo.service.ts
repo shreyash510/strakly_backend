@@ -14,6 +14,12 @@ import {
   ChallengeInvitationSchema,
   PostSchema,
   StreakSchema,
+  GymSchema,
+  TrainerSchema,
+  ProgramSchema,
+  AnnouncementSchema,
+  SupportSchema,
+  NotificationSchema,
 } from '../schemas';
 
 @Injectable()
@@ -36,6 +42,13 @@ export class BaseMongoService implements OnModuleInit {
     this.models.set('challengeInvitations', this.connection.model('ChallengeInvitation', ChallengeInvitationSchema));
     this.models.set('posts', this.connection.model('Post', PostSchema));
     this.models.set('streaks', this.connection.model('Streak', StreakSchema));
+    // New models
+    this.models.set('gyms', this.connection.model('Gym', GymSchema));
+    this.models.set('trainers', this.connection.model('Trainer', TrainerSchema));
+    this.models.set('programs', this.connection.model('Program', ProgramSchema));
+    this.models.set('announcements', this.connection.model('Announcement', AnnouncementSchema));
+    this.models.set('support_tickets', this.connection.model('Support', SupportSchema));
+    this.models.set('notifications', this.connection.model('Notification', NotificationSchema));
   }
 
   getModel(name: string): Model<any> {

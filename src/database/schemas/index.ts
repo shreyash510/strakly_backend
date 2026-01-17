@@ -1,6 +1,6 @@
 // User
 export { User, UserSchema } from './user.schema';
-export type { UserDocument } from './user.schema';
+export type { UserDocument, UserRole, UserStatus, Gender } from './user.schema';
 
 // Goal
 export { Goal, GoalSchema } from './goal.schema';
@@ -45,3 +45,35 @@ export type { PostDocument } from './post.schema';
 // Streak
 export { Streak, StreakSchema, StreakItem, StreakItemSchema } from './streak.schema';
 export type { StreakDocument } from './streak.schema';
+
+// Gym
+export { Gym, GymSchema } from './gym.schema';
+export type { GymDocument, GymStatus } from './gym.schema';
+
+// Trainer
+export { Trainer, TrainerSchema } from './trainer.schema';
+export type { TrainerDocument, TrainerStatus } from './trainer.schema';
+
+// Program
+export { Program, ProgramSchema, Exercise, ExerciseSchema } from './program.schema';
+export type { ProgramDocument, ProgramType, DifficultyLevel } from './program.schema';
+
+// Announcement
+export { Announcement, AnnouncementSchema } from './announcement.schema';
+export type { AnnouncementDocument, AnnouncementType, AnnouncementPriority, AnnouncementStatus } from './announcement.schema';
+
+// Support
+export { Support, SupportSchema, SupportResponse, SupportResponseSchema } from './support.schema';
+export type { SupportDocument, SupportCategory, SupportPriority, SupportStatus } from './support.schema';
+
+// Notification
+export { Notification, NotificationSchema } from './notification.schema';
+export type { NotificationDocument, NotificationType } from './notification.schema';
+
+// Report
+export { Report, ReportSchema, ReportMetrics, ReportMetricsSchema } from './report.schema';
+export type { ReportDocument, ReportType, ReportStatus, ReportPeriod } from './report.schema';
+
+// Subscription
+export { Subscription, SubscriptionSchema } from './subscription.schema';
+export type { SubscriptionDocument, SubscriptionPlan, SubscriptionStatus, BillingCycle } from './subscription.schema';

@@ -14,6 +14,9 @@ export interface User {
   name: string;
   email: string;
   passwordHash: string;
+  role?: string;
+  status?: string;
+  avatar?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,11 +25,22 @@ export interface UserResponse {
   id: string;
   name: string;
   email: string;
+  role?: string;
+  avatar?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthResponse {
   user: UserResponse;
   accessToken: string;
+  tokens?: {
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
+    tokenType: string;
+  };
 }
 
 @Injectable()
@@ -51,6 +65,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       name: user.name,
+      role: user.role || 'user',
     };
     return this.jwtService.sign(payload);
   }
@@ -67,6 +82,9 @@ export class AuthService {
       name: createUserDto.name,
       email: createUserDto.email,
       passwordHash: await this.hashPassword(createUserDto.password),
+      role: 'user',
+      status: 'active',
+      joinDate: new Date().toISOString().split('T')[0],
     };
 
     const createdUser = await this.databaseService.createUser(userData);
@@ -75,11 +93,23 @@ export class AuthService {
       id: createdUser.id,
       name: createdUser.name,
       email: createdUser.email,
+      role: createdUser.role || 'user',
+      avatar: createdUser.avatar,
+      status: createdUser.status || 'active',
+      createdAt: createdUser.createdAt,
+      updatedAt: createdUser.updatedAt,
     };
+
+    const accessToken = this.generateToken(user);
 
     return {
       user,
-      accessToken: this.generateToken(user),
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
     };
   }
 
@@ -88,6 +118,11 @@ export class AuthService {
 
     if (!userData) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is suspended
+    if (userData.status === 'suspended') {
+      throw new UnauthorizedException('Your account has been suspended');
     }
 
     // Check password with bcrypt
@@ -100,15 +135,32 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Update last login time
+    await this.databaseService.updateUser(userData.id, {
+      lastLoginAt: new Date().toISOString(),
+    });
+
     const user: UserResponse = {
       id: userData.id,
       name: userData.name,
       email: userData.email,
+      role: userData.role || 'user',
+      avatar: userData.avatar,
+      status: userData.status || 'active',
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt,
     };
+
+    const accessToken = this.generateToken(user);
 
     return {
       user,
-      accessToken: this.generateToken(user),
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
     };
   }
 
@@ -123,19 +175,29 @@ export class AuthService {
       id: userData.id,
       name: userData.name,
       email: userData.email,
+      role: userData.role || 'user',
+      avatar: userData.avatar,
+      status: userData.status || 'active',
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt,
     };
   }
 
   async updateProfile(
     userId: string,
-    name: string,
+    data: { name?: string; bio?: string; avatar?: string; phone?: string },
   ): Promise<UserResponse> {
-    const userData = await this.databaseService.updateUser(userId, { name });
+    const userData = await this.databaseService.updateUser(userId, data);
 
     return {
       id: userData.id,
       name: userData.name,
       email: userData.email,
+      role: userData.role || 'user',
+      avatar: userData.avatar,
+      status: userData.status || 'active',
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt,
     };
   }
 
@@ -190,10 +252,20 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: user.role || 'user',
+        avatar: user.avatar,
       })),
       hasMore: result.hasMore,
       page: result.page,
       total: result.total,
     };
+  }
+
+  async logout(userId: string): Promise<{ success: boolean }> {
+    // In a production environment, you might want to:
+    // - Invalidate the token in a blacklist
+    // - Remove refresh tokens from database
+    // For now, we just return success as JWT tokens are stateless
+    return { success: true };
   }
 }

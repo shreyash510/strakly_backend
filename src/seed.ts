@@ -45,7 +45,7 @@ async function seedMongoDB() {
       existingUser.passwordHash = await hashPassword(userData.password);
       existingUser.bio = userData.bio || '';
       existingUser.streak = userData.streak || 0;
-      existingUser.updatedAt = new Date().toISOString();
+      existingUser.updatedAt = new Date();
       await existingUser.save();
       if (userData.email === seedData.user.email) {
         primaryUserId = existingUser._id.toString();

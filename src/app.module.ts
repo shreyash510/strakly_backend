@@ -18,6 +18,16 @@ import { ChallengesModule } from './challenges/challenges.module';
 import { PostsModule } from './posts/posts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CounterModule } from './counter/counter.module';
+import { GymsModule } from './gyms/gyms.module';
+import { UsersModule } from './users/users.module';
+import { TrainersModule } from './trainers/trainers.module';
+import { SupportModule } from './support/support.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ProgramsModule } from './programs/programs.module';
+import { ReportsModule } from './reports/reports.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { AdminModule } from './admin/admin.module';
 import firebaseConfig from './config/firebase.config';
 import databaseConfig from './config/database.config';
 
@@ -45,6 +55,16 @@ import databaseConfig from './config/database.config';
     PostsModule,
     DashboardModule,
     CounterModule,
+    GymsModule,
+    UsersModule,
+    TrainersModule,
+    SupportModule,
+    AnnouncementsModule,
+    NotificationsModule,
+    ProgramsModule,
+    ReportsModule,
+    SubscriptionsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
