@@ -61,12 +61,6 @@ export class ManagerPermissionsDto {
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => CrudPermissionsDto)
-  @IsObject()
-  rewards?: CrudPermissionsDto;
-
-  @IsOptional()
-  @ValidateNested()
   @Type(() => ReadOnlyPermissionsDto)
   @IsObject()
   reports?: ReadOnlyPermissionsDto;

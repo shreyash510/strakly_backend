@@ -140,24 +140,6 @@ export const seedData = {
       category: 'Personal',
     },
   ],
-  rewards: [
-    {
-      reward: 'Movie night',
-      description: 'Watch any movie of choice',
-      category: 'entertainment',
-      pointsRequired: 100,
-      currentPoints: 75,
-      status: 'in_progress',
-    },
-    {
-      reward: 'Fancy dinner',
-      description: 'Dinner at favorite restaurant',
-      category: 'food',
-      pointsRequired: 200,
-      currentPoints: 200,
-      status: 'available',
-    },
-  ],
   punishments: [
     {
       title: 'No Netflix for a day',

@@ -7,7 +7,6 @@ import {
   GoalSchema,
   HabitSchema,
   TaskSchema,
-  RewardSchema,
   PunishmentSchema,
 } from './database/schemas';
 import { seedData, seedUsers } from './database/data';
@@ -30,7 +29,6 @@ async function seedMongoDB() {
   const Goal = mongoose.model('Goal', GoalSchema);
   const Habit = mongoose.model('Habit', HabitSchema);
   const Task = mongoose.model('Task', TaskSchema);
-  const Reward = mongoose.model('Reward', RewardSchema);
   const Punishment = mongoose.model('Punishment', PunishmentSchema);
 
   const now = new Date().toISOString();
@@ -92,12 +90,6 @@ async function seedMongoDB() {
         await Task.create({ ...task, userId, createdAt: now, updatedAt: now });
       }
       console.log(`Created ${seedData.tasks.length} tasks for primary user`);
-
-      // Create rewards
-      for (const reward of seedData.rewards) {
-        await Reward.create({ ...reward, userId, createdAt: now, updatedAt: now });
-      }
-      console.log(`Created ${seedData.rewards.length} rewards for primary user`);
 
       // Create punishments
       for (const punishment of seedData.punishments) {
@@ -198,16 +190,6 @@ async function seedFirebase() {
         });
       }
       console.log(`Created ${seedData.tasks.length} tasks for primary user`);
-
-      // Create rewards (subcollection)
-      for (const reward of seedData.rewards) {
-        await db.collection('users').doc(userId).collection('rewards').add({
-          ...reward,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-      console.log(`Created ${seedData.rewards.length} rewards for primary user`);
 
       // Create punishments (subcollection)
       for (const punishment of seedData.punishments) {

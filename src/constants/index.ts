@@ -134,15 +134,6 @@ export const NOTIFICATION_TYPES = ['info', 'warning', 'success', 'error', 'syste
 export type NotificationType = typeof NOTIFICATION_TYPES[number];
 
 // ============================================
-// REWARD CONSTANTS
-// ============================================
-export const REWARD_CATEGORIES = ['entertainment', 'food', 'shopping', 'experience', 'self_care', 'other'] as const;
-export type RewardCategory = typeof REWARD_CATEGORIES[number];
-
-export const REWARD_STATUSES = ['in_progress', 'available', 'claimed'] as const;
-export type RewardStatus = typeof REWARD_STATUSES[number];
-
-// ============================================
 // PUNISHMENT CONSTANTS
 // ============================================
 export const PUNISHMENT_CATEGORIES = ['restriction', 'task', 'financial', 'social', 'other'] as const;
@@ -153,15 +144,6 @@ export type PunishmentSeverity = typeof PUNISHMENT_SEVERITIES[number];
 
 export const PUNISHMENT_STATUSES = ['pending', 'completed', 'skipped'] as const;
 export type PunishmentStatus = typeof PUNISHMENT_STATUSES[number];
-
-// ============================================
-// POST CONSTANTS
-// ============================================
-export const POST_CATEGORIES = ['general', 'challenge'] as const;
-export type PostCategory = typeof POST_CATEGORIES[number];
-
-export const REACTION_TYPES = ['like', 'celebrate', 'support'] as const;
-export type ReactionType = typeof REACTION_TYPES[number];
 
 // ============================================
 // FRIEND REQUEST CONSTANTS
@@ -178,7 +160,7 @@ export type StreakItemType = typeof STREAK_ITEM_TYPES[number];
 // ============================================
 // PERMISSION CONSTANTS
 // ============================================
-export const PERMISSION_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges', 'rewards', 'reports'] as const;
+export const PERMISSION_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges', 'reports'] as const;
 export type PermissionResource = typeof PERMISSION_RESOURCES[number];
 
 export const PERMISSION_ACTIONS = ['create', 'read', 'update', 'delete'] as const;
@@ -189,5 +171,5 @@ export const READ_ONLY_RESOURCES = ['reports'] as const;
 export type ReadOnlyResource = typeof READ_ONLY_RESOURCES[number];
 
 // Resources that have full CRUD permissions
-export const CRUD_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges', 'rewards'] as const;
+export const CRUD_RESOURCES = ['users', 'trainers', 'programs', 'announcements', 'challenges'] as const;
 export type CrudResource = typeof CRUD_RESOURCES[number];

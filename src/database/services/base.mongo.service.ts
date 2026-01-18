@@ -6,13 +6,11 @@ import {
   GoalSchema,
   HabitSchema,
   TaskSchema,
-  RewardSchema,
   PunishmentSchema,
   FriendSchema,
   FriendRequestSchema,
   ChallengeSchema,
   ChallengeInvitationSchema,
-  PostSchema,
   StreakSchema,
   GymSchema,
   TrainerSchema,
@@ -34,13 +32,11 @@ export class BaseMongoService implements OnModuleInit {
     this.models.set('goals', this.connection.model('Goal', GoalSchema));
     this.models.set('habits', this.connection.model('Habit', HabitSchema));
     this.models.set('tasks', this.connection.model('Task', TaskSchema));
-    this.models.set('rewards', this.connection.model('Reward', RewardSchema));
     this.models.set('punishments', this.connection.model('Punishment', PunishmentSchema));
     this.models.set('friends', this.connection.model('Friend', FriendSchema));
     this.models.set('friendRequests', this.connection.model('FriendRequest', FriendRequestSchema));
     this.models.set('challenges', this.connection.model('Challenge', ChallengeSchema));
     this.models.set('challengeInvitations', this.connection.model('ChallengeInvitation', ChallengeInvitationSchema));
-    this.models.set('posts', this.connection.model('Post', PostSchema));
     this.models.set('streaks', this.connection.model('Streak', StreakSchema));
     // New models
     this.models.set('gyms', this.connection.model('Gym', GymSchema));

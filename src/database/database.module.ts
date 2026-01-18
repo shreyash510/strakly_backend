@@ -10,7 +10,6 @@ import {
   UserMongoService,
   FriendMongoService,
   ChallengeMongoService,
-  PostMongoService,
   StreakMongoService,
 } from './services';
 
@@ -52,7 +51,6 @@ export class DatabaseModule {
         UserMongoService,
         FriendMongoService,
         ChallengeMongoService,
-        PostMongoService,
         StreakMongoService,
       ],
       exports: [
@@ -63,7 +61,6 @@ export class DatabaseModule {
         UserMongoService,
         FriendMongoService,
         ChallengeMongoService,
-        PostMongoService,
         StreakMongoService,
       ],
     };

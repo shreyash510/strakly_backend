@@ -4,7 +4,6 @@ import {
   UserFirebaseService,
   FriendFirebaseService,
   ChallengeFirebaseService,
-  PostFirebaseService,
   StreakFirebaseService,
 } from './services';
 
@@ -15,7 +14,6 @@ import {
     UserFirebaseService,
     FriendFirebaseService,
     ChallengeFirebaseService,
-    PostFirebaseService,
     StreakFirebaseService,
   ],
   exports: [
@@ -23,7 +21,6 @@ import {
     UserFirebaseService,
     FriendFirebaseService,
     ChallengeFirebaseService,
-    PostFirebaseService,
     StreakFirebaseService,
   ],
 })

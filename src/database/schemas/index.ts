@@ -15,9 +15,6 @@ export type { HabitDocument } from './habit.schema';
 export { Task, TaskSchema } from './task.schema';
 export type { TaskDocument } from './task.schema';
 
-// Reward
-export { Reward, RewardSchema } from './reward.schema';
-export type { RewardDocument } from './reward.schema';
 
 // Punishment
 export { Punishment, PunishmentSchema } from './punishment.schema';
@@ -39,9 +36,6 @@ export type { ChallengeDocument } from './challenge.schema';
 export { ChallengeInvitation, ChallengeInvitationSchema } from './challenge-invitation.schema';
 export type { ChallengeInvitationDocument } from './challenge-invitation.schema';
 
-// Post
-export { Post, PostSchema, PostReaction, PostReactionSchema, PostComment, PostCommentSchema } from './post.schema';
-export type { PostDocument } from './post.schema';
 
 // Streak
 export { Streak, StreakSchema, StreakItem, StreakItemSchema } from './streak.schema';

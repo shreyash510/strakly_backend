@@ -35,14 +35,12 @@ export interface DashboardStats {
   totalFriends: number;
   pendingFriendRequests: number;
 
-  // Rewards & Punishments
-  totalRewards: number;
-  claimedRewards: number;
+  // Punishments
   pendingPunishments: number;
 }
 
 export interface RecentActivity {
-  type: 'goal' | 'habit' | 'task' | 'challenge' | 'reward' | 'punishment';
+  type: 'goal' | 'habit' | 'task' | 'challenge' | 'punishment';
   title: string;
   action: string;
   timestamp: string;
@@ -88,7 +86,6 @@ export class DashboardService {
       challenges,
       friends,
       friendRequests,
-      rewards,
       punishments,
     ] = await Promise.all([
       this.databaseService.getCollection<any>('goals', userId),
@@ -98,7 +95,6 @@ export class DashboardService {
       this.databaseService.getUserChallenges(userId),
       this.databaseService.getCollection<any>('friends', userId),
       this.databaseService.getPendingFriendRequests(userId),
-      this.databaseService.getCollection<any>('rewards', userId),
       this.databaseService.getCollection<any>('punishments', userId),
     ]);
 
@@ -150,10 +146,6 @@ export class DashboardService {
     const totalFriends = friends.length;
     const pendingFriendRequests = friendRequests.length;
 
-    // Process rewards
-    const totalRewards = rewards.length;
-    const claimedRewards = rewards.filter((r: any) => r.status === 'claimed').length;
-
     // Process punishments
     const pendingPunishments = punishments.filter((p: any) => p.status === 'pending').length;
 
@@ -179,19 +171,16 @@ export class DashboardService {
       upcomingChallenges,
       totalFriends,
       pendingFriendRequests,
-      totalRewards,
-      claimedRewards,
       pendingPunishments,
     };
   }
 
   async getRecentActivity(userId: string, limit = 10): Promise<RecentActivity[]> {
     // Fetch recent items from each collection
-    const [goals, habits, tasks, rewards] = await Promise.all([
+    const [goals, habits, tasks] = await Promise.all([
       this.databaseService.getCollection<any>('goals', userId),
       this.databaseService.getCollection<any>('habits', userId),
       this.databaseService.getCollection<any>('tasks', userId),
-      this.databaseService.getCollection<any>('rewards', userId),
     ]);
 
     const activities: RecentActivity[] = [];
@@ -222,16 +211,6 @@ export class DashboardService {
         type: 'task',
         title: data.title,
         action: data.status === 'completed' ? 'completed' : 'updated',
-        timestamp: data.updatedAt,
-      });
-    });
-
-    // Process rewards (take last 5)
-    rewards.slice(0, 5).forEach((data: any) => {
-      activities.push({
-        type: 'reward',
-        title: data.reward,
-        action: data.status === 'claimed' ? 'claimed' : 'progress',
         timestamp: data.updatedAt,
       });
     });

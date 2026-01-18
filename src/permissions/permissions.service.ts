@@ -134,7 +134,6 @@ export class PermissionsService {
       programs: this.mergeCrudPermissions(DEFAULT_MANAGER_PERMISSIONS.programs, permissions.programs),
       announcements: this.mergeCrudPermissions(DEFAULT_MANAGER_PERMISSIONS.announcements, permissions.announcements),
       challenges: this.mergeCrudPermissions(DEFAULT_MANAGER_PERMISSIONS.challenges, permissions.challenges),
-      rewards: this.mergeCrudPermissions(DEFAULT_MANAGER_PERMISSIONS.rewards, permissions.rewards),
       reports: this.mergeReadOnlyPermissions(DEFAULT_MANAGER_PERMISSIONS.reports, permissions.reports),
     };
   }
@@ -156,7 +155,6 @@ export class PermissionsService {
       programs: this.mergeCrudPermissions(existing.programs, updates.programs),
       announcements: this.mergeCrudPermissions(existing.announcements, updates.announcements),
       challenges: this.mergeCrudPermissions(existing.challenges, updates.challenges),
-      rewards: this.mergeCrudPermissions(existing.rewards, updates.rewards),
       reports: this.mergeReadOnlyPermissions(existing.reports, updates.reports),
     };
   }

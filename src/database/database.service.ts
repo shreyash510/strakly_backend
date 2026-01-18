@@ -5,7 +5,6 @@ import {
   UserFirebaseService,
   FriendFirebaseService,
   ChallengeFirebaseService,
-  PostFirebaseService,
   StreakFirebaseService,
 } from '../firebase/services';
 import {
@@ -13,7 +12,6 @@ import {
   UserMongoService,
   FriendMongoService,
   ChallengeMongoService,
-  PostMongoService,
   StreakMongoService,
 } from './services';
 
@@ -28,14 +26,12 @@ export class DatabaseService implements OnModuleInit {
     @Optional() private userFirebaseService: UserFirebaseService,
     @Optional() private friendFirebaseService: FriendFirebaseService,
     @Optional() private challengeFirebaseService: ChallengeFirebaseService,
-    @Optional() private postFirebaseService: PostFirebaseService,
     @Optional() private streakFirebaseService: StreakFirebaseService,
     // MongoDB services
     @Optional() private baseMongoService: BaseMongoService,
     @Optional() private userMongoService: UserMongoService,
     @Optional() private friendMongoService: FriendMongoService,
     @Optional() private challengeMongoService: ChallengeMongoService,
-    @Optional() private postMongoService: PostMongoService,
     @Optional() private streakMongoService: StreakMongoService,
   ) {
     this.databaseType = this.configService.get<string>('DATABASE_TYPE') || 'firebase';
@@ -68,10 +64,6 @@ export class DatabaseService implements OnModuleInit {
 
   getChallengeMongoService(): ChallengeMongoService {
     return this.challengeMongoService;
-  }
-
-  getPostMongoService(): PostMongoService {
-    return this.postMongoService;
   }
 
   getStreakMongoService(): StreakMongoService {
@@ -332,49 +324,6 @@ export class DatabaseService implements OnModuleInit {
       return this.challengeMongoService.findExistingChallengeInvitation(challengeId, toUserId);
     }
     return this.challengeFirebaseService.findExistingChallengeInvitation(challengeId, toUserId);
-  }
-
-  // Posts methods
-  async getAllPosts(limit: number = 50): Promise<any[]> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.getAllPosts(limit);
-    }
-    return this.postFirebaseService.getAllPosts(limit);
-  }
-
-  async getFriendsPosts(friendIds: string[], limit: number = 50): Promise<any[]> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.getFriendsPosts(friendIds, limit);
-    }
-    return this.postFirebaseService.getFriendsPosts(friendIds, limit);
-  }
-
-  async getPostById(postId: string): Promise<any | null> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.getPostById(postId);
-    }
-    return this.postFirebaseService.getPostById(postId);
-  }
-
-  async createPost(data: Record<string, any>): Promise<any> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.createPost(data);
-    }
-    return this.postFirebaseService.createPost(data);
-  }
-
-  async updatePost(postId: string, data: Record<string, any>): Promise<any> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.updatePost(postId, data);
-    }
-    return this.postFirebaseService.updatePost(postId, data);
-  }
-
-  async deletePost(postId: string): Promise<boolean> {
-    if (this.isMongoDB()) {
-      return this.postMongoService.deletePost(postId);
-    }
-    return this.postFirebaseService.deletePost(postId);
   }
 
   // Streaks methods

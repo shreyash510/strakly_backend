@@ -10,12 +10,10 @@ import { AuthModule } from './auth/auth.module';
 import { GoalsModule } from './goals/goals.module';
 import { HabitsModule } from './habits/habits.module';
 import { TasksModule } from './tasks/tasks.module';
-import { RewardsModule } from './rewards/rewards.module';
 import { StreaksModule } from './streaks/streaks.module';
 import { PunishmentsModule } from './punishments/punishments.module';
 import { FriendsModule } from './friends/friends.module';
 import { ChallengesModule } from './challenges/challenges.module';
-import { PostsModule } from './posts/posts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CounterModule } from './counter/counter.module';
 import { GymsModule } from './gyms/gyms.module';
@@ -48,12 +46,10 @@ import databaseConfig from './config/database.config';
     GoalsModule,
     HabitsModule,
     TasksModule,
-    RewardsModule,
     StreaksModule,
     PunishmentsModule,
     FriendsModule,
     ChallengesModule,
-    PostsModule,
     DashboardModule,
     CounterModule,
     GymsModule,

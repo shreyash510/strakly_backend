@@ -23,7 +23,6 @@ export interface ManagerPermissions {
   programs: CrudPermissions;
   announcements: CrudPermissions;
   challenges: CrudPermissions;
-  rewards: CrudPermissions;
   reports: ReadOnlyPermissions;
 }
 
@@ -47,7 +46,6 @@ export const DEFAULT_MANAGER_PERMISSIONS: ManagerPermissions = {
   programs: { ...defaultCrudPermissions },
   announcements: { ...defaultCrudPermissions },
   challenges: { ...defaultCrudPermissions },
-  rewards: { ...defaultCrudPermissions },
   reports: { ...defaultReadOnlyPermissions },
 };
 
@@ -91,9 +89,6 @@ export class ManagerPermissionsSchema {
 
   @Prop({ type: CrudPermissionsSchema, default: () => ({ ...defaultCrudPermissions }) })
   challenges: CrudPermissionsSchema;
-
-  @Prop({ type: CrudPermissionsSchema, default: () => ({ ...defaultCrudPermissions }) })
-  rewards: CrudPermissionsSchema;
 
   @Prop({ type: ReadOnlyPermissionsSchema, default: () => ({ ...defaultReadOnlyPermissions }) })
   reports: ReadOnlyPermissionsSchema;

@@ -7,9 +7,7 @@ export interface CollectionCounts {
   goals: number;
   habits: number;
   tasks: number;
-  rewards: number;
   punishments: number;
-  posts: number;
   challenges: number;
   friendRequests: number;
   friends: number;
@@ -49,9 +47,7 @@ export class CounterService {
       goals: 0,
       habits: 0,
       tasks: 0,
-      rewards: 0,
       punishments: 0,
-      posts: 0,
       challenges: 0,
       friendRequests: 0,
       friends: 0,
@@ -125,9 +121,7 @@ export class CounterService {
       'goals',
       'habits',
       'tasks',
-      'rewards',
       'punishments',
-      'posts',
       'challenges',
       'friend-requests',
       'friends',
@@ -138,9 +132,7 @@ export class CounterService {
       goals: 0,
       habits: 0,
       tasks: 0,
-      rewards: 0,
       punishments: 0,
-      posts: 0,
       challenges: 0,
       friendRequests: 0,
       friends: 0,
@@ -185,11 +177,9 @@ export class CounterService {
     goals: number;
     habits: number;
     tasks: number;
-    rewards: number;
     punishments: number;
-    posts: number;
   }> {
-    const collections = ['goals', 'habits', 'tasks', 'rewards', 'punishments', 'posts'];
+    const collections = ['goals', 'habits', 'tasks', 'punishments'];
     const counts: any = {};
 
     for (const collectionName of collections) {
