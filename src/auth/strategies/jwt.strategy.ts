@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { FirebaseService } from '../../firebase/firebase.service';
+import { DatabaseService } from '../../database/database.service';
 
 export interface JwtPayload {
   sub: string; // userId
@@ -15,7 +15,7 @@ export interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly configService: ConfigService,
-    private readonly firebaseService: FirebaseService,
+    private readonly databaseService: DatabaseService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -26,20 +26,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtPayload) {
     // Verify user still exists
-    const db = this.firebaseService.getFirestore();
-    const userDoc = await db.collection('users').doc(payload.sub).get();
+    const user = await this.databaseService.findUserById(payload.sub);
 
-    if (!userDoc.exists) {
+    if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    const userData = userDoc.data();
+    // Check if user is suspended
+    if (user.status === 'suspended') {
+      throw new UnauthorizedException('Your account has been suspended');
+    }
 
     return {
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
-      role: payload.role || userData?.role || 'user',
+      role: payload.role || user.role || 'user',
     };
   }
 }

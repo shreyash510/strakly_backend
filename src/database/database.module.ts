@@ -4,14 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import databaseConfig from '../config/database.config';
 import { MongoDBService } from './mongodb.service';
 import { DatabaseService } from './database.service';
-import { FirebaseModule } from '../firebase/firebase.module';
-import {
-  BaseMongoService,
-  UserMongoService,
-  FriendMongoService,
-  ChallengeMongoService,
-  StreakMongoService,
-} from './services';
+import { BaseMongoService, UserMongoService } from './services';
 
 @Global()
 @Module({})
@@ -21,26 +14,13 @@ export class DatabaseModule {
       module: DatabaseModule,
       imports: [
         ConfigModule.forFeature(databaseConfig),
-        FirebaseModule,
         MongooseModule.forRootAsync({
           imports: [ConfigModule],
           inject: [ConfigService],
           useFactory: (configService: ConfigService) => {
-            const dbType = configService.get<string>('database.type');
-
-            if (dbType === 'mongodb') {
-              const uri = configService.get<string>('database.mongodb.uri');
-              console.log('Connecting to MongoDB Atlas...');
-              return {
-                uri,
-              };
-            }
-
-            // Return dummy config for Firebase (MongoDB won't be connected)
-            console.log('Using Firebase - MongoDB disabled');
-            return {
-              uri: undefined,
-            };
+            const uri = configService.get<string>('database.mongodb.uri');
+            console.log('Connecting to MongoDB Atlas...');
+            return { uri };
           },
         }),
       ],
@@ -49,9 +29,6 @@ export class DatabaseModule {
         DatabaseService,
         BaseMongoService,
         UserMongoService,
-        FriendMongoService,
-        ChallengeMongoService,
-        StreakMongoService,
       ],
       exports: [
         MongooseModule,
@@ -59,9 +36,6 @@ export class DatabaseModule {
         DatabaseService,
         BaseMongoService,
         UserMongoService,
-        FriendMongoService,
-        ChallengeMongoService,
-        StreakMongoService,
       ],
     };
   }

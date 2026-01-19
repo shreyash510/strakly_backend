@@ -1,24 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
-import {
-  UserSchema,
-  GoalSchema,
-  HabitSchema,
-  TaskSchema,
-  PunishmentSchema,
-  FriendSchema,
-  FriendRequestSchema,
-  ChallengeSchema,
-  ChallengeInvitationSchema,
-  StreakSchema,
-  GymSchema,
-  TrainerSchema,
-  ProgramSchema,
-  AnnouncementSchema,
-  SupportSchema,
-  NotificationSchema,
-} from '../schemas';
+import { UserSchema } from '../schemas';
 
 @Injectable()
 export class BaseMongoService implements OnModuleInit {
@@ -27,24 +10,8 @@ export class BaseMongoService implements OnModuleInit {
   constructor(@InjectConnection() protected connection: Connection) {}
 
   onModuleInit() {
-    // Register all models
+    // Register user model
     this.models.set('users', this.connection.model('User', UserSchema));
-    this.models.set('goals', this.connection.model('Goal', GoalSchema));
-    this.models.set('habits', this.connection.model('Habit', HabitSchema));
-    this.models.set('tasks', this.connection.model('Task', TaskSchema));
-    this.models.set('punishments', this.connection.model('Punishment', PunishmentSchema));
-    this.models.set('friends', this.connection.model('Friend', FriendSchema));
-    this.models.set('friendRequests', this.connection.model('FriendRequest', FriendRequestSchema));
-    this.models.set('challenges', this.connection.model('Challenge', ChallengeSchema));
-    this.models.set('challengeInvitations', this.connection.model('ChallengeInvitation', ChallengeInvitationSchema));
-    this.models.set('streaks', this.connection.model('Streak', StreakSchema));
-    // New models
-    this.models.set('gyms', this.connection.model('Gym', GymSchema));
-    this.models.set('trainers', this.connection.model('Trainer', TrainerSchema));
-    this.models.set('programs', this.connection.model('Program', ProgramSchema));
-    this.models.set('announcements', this.connection.model('Announcement', AnnouncementSchema));
-    this.models.set('support_tickets', this.connection.model('Support', SupportSchema));
-    this.models.set('notifications', this.connection.model('Notification', NotificationSchema));
   }
 
   getModel(name: string): Model<any> {
@@ -138,28 +105,5 @@ export class BaseMongoService implements OnModuleInit {
       ...doc,
       _id: undefined,
     } as T;
-  }
-
-  async getAllUsersCollection<T>(collectionName: string): Promise<{ userId: string; habits: T[] }[]> {
-    const model = this.getModel(collectionName);
-    const docs = await model.find().lean();
-
-    const groupedByUser = new Map<string, T[]>();
-    for (const doc of docs) {
-      const userId = (doc as any).userId;
-      if (!groupedByUser.has(userId)) {
-        groupedByUser.set(userId, []);
-      }
-      groupedByUser.get(userId)!.push({
-        id: (doc as any)._id.toString(),
-        ...doc,
-        _id: undefined,
-      } as T);
-    }
-
-    return Array.from(groupedByUser.entries()).map(([userId, habits]) => ({
-      userId,
-      habits,
-    }));
   }
 }
