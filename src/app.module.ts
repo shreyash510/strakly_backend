@@ -13,6 +13,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { PlansModule } from './plans/plans.module';
 import { OffersModule } from './offers/offers.module';
 import { MembershipsModule } from './memberships/memberships.module';
+import { BodyMetricsModule } from './body-metrics/body-metrics.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MembershipsModule } from './memberships/memberships.module';
     PlansModule,
     OffersModule,
     MembershipsModule,
+    BodyMetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

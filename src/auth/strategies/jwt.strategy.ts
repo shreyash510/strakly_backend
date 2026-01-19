@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 
 export interface JwtPayload {
-  sub: string; // userId
+  sub: number; // userId
   email: string;
   name: string;
   role?: string;
@@ -25,9 +25,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
+
     // Verify user still exists
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: userId },
+      include: { role: true },
     });
 
     if (!user) {
@@ -39,11 +42,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Your account has been suspended');
     }
 
+    const userRole = user.role?.code || 'user';
+
     return {
-      userId: payload.sub,
+      userId: userId,
       email: payload.email,
       name: payload.name,
-      role: payload.role || user.role || 'user',
+      role: payload.role || userRole,
     };
   }
 }

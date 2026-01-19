@@ -6,10 +6,12 @@ import {
   Body,
   Param,
   Query,
+  Headers,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
 import {
   CreateMembershipDto,
@@ -34,14 +36,18 @@ export class MembershipsController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
-  @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'planId', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false, description: 'Filter by user ID' })
   findAll(
     @Query('status') status?: string,
-    @Query('userId') userId?: string,
+    @Headers('x-user-id') userId?: string,
     @Query('planId') planId?: string,
   ) {
-    return this.membershipsService.findAll({ status, userId, planId });
+    return this.membershipsService.findAll({
+      status,
+      userId: userId ? parseInt(userId) : undefined,
+      planId
+    });
   }
 
   @Get('expiring')
@@ -69,7 +75,8 @@ export class MembershipsController {
     return this.membershipsService.markExpiredMemberships();
   }
 
-  // Current user endpoints
+  // ============ CURRENT USER ENDPOINTS ============
+
   @Get('me')
   @ApiOperation({ summary: 'Get current user memberships' })
   getMyMemberships(@Request() req: any) {
@@ -94,32 +101,50 @@ export class MembershipsController {
     return this.membershipsService.renew(req.user.userId, dto);
   }
 
-  // User-specific endpoints (admin access)
-  @Get('user/:userId')
+  // ============ USER-SPECIFIC ENDPOINTS (admin - userId from header) ============
+
+  @Get('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
-  findByUser(@Param('userId') userId: string) {
-    return this.membershipsService.findByUser(userId);
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  findByUser(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.membershipsService.findByUser(parseInt(userId));
   }
 
-  @Get('user/:userId/active')
+  @Get('user/active')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get active membership for a user' })
-  getActiveMembership(@Param('userId') userId: string) {
-    return this.membershipsService.getActiveMembership(userId);
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  getActiveMembership(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.membershipsService.getActiveMembership(parseInt(userId));
   }
 
-  @Get('user/:userId/status')
+  @Get('user/status')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Check membership status for a user' })
-  checkStatus(@Param('userId') userId: string) {
-    return this.membershipsService.checkMembershipStatus(userId);
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  checkStatus(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.membershipsService.checkMembershipStatus(parseInt(userId));
   }
 
-  // Individual membership endpoints
+  @Post('user/renew')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Renew membership for a user' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  renew(@Headers('x-user-id') userId: string, @Body() dto: RenewMembershipDto) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.membershipsService.renew(parseInt(userId), dto);
+  }
+
+  // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
+
   @Get(':id')
   @ApiOperation({ summary: 'Get membership by ID' })
   findOne(@Param('id') id: string) {
@@ -180,13 +205,5 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Resume a paused membership' })
   resume(@Param('id') id: string) {
     return this.membershipsService.resume(id);
-  }
-
-  @Post('user/:userId/renew')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
-  @ApiOperation({ summary: 'Renew membership for a user' })
-  renew(@Param('userId') userId: string, @Body() dto: RenewMembershipDto) {
-    return this.membershipsService.renew(userId, dto);
   }
 }

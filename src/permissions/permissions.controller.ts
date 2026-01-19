@@ -6,10 +6,12 @@ import {
   Delete,
   Body,
   Param,
+  Headers,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { PermissionsService } from './permissions.service';
 import { CreatePermissionDto, UpdatePermissionDto, AssignRolePermissionsDto } from './dto/permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -141,5 +143,29 @@ export class PermissionsController {
   @ApiOperation({ summary: 'Get current user permission codes' })
   getMyPermissionCodes(@Request() req: any) {
     return this.permissionsService.getUserPermissionCodes(req.user.userId);
+  }
+
+  // ============ USER PERMISSIONS (admin - userId from header) ============
+
+  @Get('user')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get permissions for a specific user' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  getUserPermissions(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.permissionsService.getUserPermissions(userId);
+  }
+
+  @Get('user/codes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get permission codes for a specific user' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  getUserPermissionCodes(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.permissionsService.getUserPermissionCodes(userId);
   }
 }

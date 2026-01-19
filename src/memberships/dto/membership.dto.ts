@@ -2,8 +2,9 @@ import { IsString, IsOptional, IsDateString, IsNumber, Min } from 'class-validat
 import { Type } from 'class-transformer';
 
 export class CreateMembershipDto {
-  @IsString()
-  userId: string;
+  @IsNumber()
+  @Type(() => Number)
+  userId: number;
 
   @IsString()
   planId: string;

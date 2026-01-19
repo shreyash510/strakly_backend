@@ -1,16 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { CreateUserDto, UpdateUserDto, UserRole, UserStatus } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(filters?: { role?: UserRole; status?: UserStatus }): Promise<any[]> {
+  async findAll(filters?: { role?: string; status?: string }): Promise<any[]> {
     const where: any = {};
 
     if (filters?.role) {
-      where.role = filters.role;
+      where.role = { code: filters.role };
     }
     if (filters?.status) {
       where.status = filters.status;
@@ -18,50 +18,37 @@ export class UsersService {
 
     const users = await this.prisma.user.findMany({
       where,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        avatar: true,
-        bio: true,
+      include: {
         role: true,
-        status: true,
-        dateOfBirth: true,
-        gender: true,
-        address: true,
-        city: true,
-        state: true,
-        zipCode: true,
-                createdAt: true,
-        updatedAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return users;
+    return users.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      bio: user.bio,
+      role: user.role?.code || 'user',
+      status: user.status,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    }));
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: number): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        avatar: true,
-        bio: true,
+      include: {
         role: true,
-        status: true,
-        dateOfBirth: true,
-        gender: true,
-        address: true,
-        city: true,
-        state: true,
-        zipCode: true,
-                createdAt: true,
-        updatedAt: true,
       },
     });
 
@@ -69,49 +56,89 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    return user;
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      bio: user.bio,
+      role: user.role?.code || 'user',
+      status: user.status,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
-  async findByRole(role: UserRole): Promise<any[]> {
+  async findByRole(role: string): Promise<any[]> {
     return this.findAll({ role });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<any> {
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<any> {
     await this.findOne(id);
+
+    // Extract role from DTO and handle separately
+    const { role: roleCode, ...updateData } = updateUserDto;
+
+    let roleId: string | undefined;
+    if (roleCode) {
+      const roleLookup = await this.prisma.lookup.findFirst({
+        where: {
+          lookupType: { code: 'USER_ROLE' },
+          code: roleCode,
+        },
+      });
+
+      if (!roleLookup) {
+        throw new NotFoundException(`Role ${roleCode} not found`);
+      }
+      roleId = roleLookup.id;
+    }
 
     const user = await this.prisma.user.update({
       where: { id },
-      data: updateUserDto,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        avatar: true,
-        bio: true,
+      data: {
+        ...updateData,
+        ...(roleId && { roleId }),
+      },
+      include: {
         role: true,
-        status: true,
-        dateOfBirth: true,
-        gender: true,
-        address: true,
-        city: true,
-        state: true,
-        zipCode: true,
-                createdAt: true,
-        updatedAt: true,
       },
     });
 
-    return user;
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      bio: user.bio,
+      role: user.role?.code || 'user',
+      status: user.status,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
-  async remove(id: string): Promise<{ success: boolean }> {
+  async remove(id: number): Promise<{ success: boolean }> {
     await this.findOne(id);
     await this.prisma.user.delete({ where: { id } });
     return { success: true };
   }
 
-  async updateStatus(userId: string, status: UserStatus): Promise<any> {
-    return this.update(userId, { status });
+  async updateStatus(userId: number, status: string): Promise<any> {
+    return this.update(userId, { status } as UpdateUserDto);
   }
 }

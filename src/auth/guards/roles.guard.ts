@@ -31,13 +31,14 @@ export class RolesGuard implements CanActivate {
     // Get user from database to get their role
     const userData = await this.prisma.user.findUnique({
       where: { id: user.userId },
+      include: { role: true },
     });
 
     if (!userData) {
       throw new ForbiddenException('User not found');
     }
 
-    const userRole = userData.role || 'user';
+    const userRole = userData.role?.code || 'user';
 
     // Attach full user data to request for controllers to use
     request.user = {

@@ -11,7 +11,7 @@ datasource db {
 
 // User model
 model User {
-  id           String      @id @default(uuid())
+  id           Int         @id @default(autoincrement())
   name         String
   email        String      @unique
   passwordHash String      @map("password_hash")
@@ -26,11 +26,14 @@ model User {
   state        String?
   zipCode      String?     @map("zip_code")
 
-  // Lookup references (storing lookup code for flexibility)
-  role           String      @default("user")
+  // Lookup references
+  roleId         String      @map("role_id")
   status         String      @default("active")
   gender         String?
   attendanceCode String?     @unique @map("attendance_code")
+
+  // Role relation
+  role           Lookup      @relation(fields: [roleId], references: [id])
 
   // Tracking
   joinDate     String?     @map("join_date")
@@ -83,6 +86,7 @@ model Lookup {
 
   // Relations
   lookupType    LookupType @relation(fields: [lookupTypeId], references: [id], onDelete: Cascade)
+  users         User[]     // Users with this lookup as their role
 
   @@unique([lookupTypeId, code])
   @@map("lookups")
@@ -283,7 +287,7 @@ model Membership {
   id              String    @id @default(uuid())
 
   // User reference
-  userId          String    @map("user_id")
+  userId          Int       @map("user_id")
 
   // Plan reference
   planId          String    @map("plan_id")
@@ -339,7 +343,7 @@ model Membership {
 // BodyMetrics model - Current/latest body metrics for a user
 model BodyMetrics {
   id              String    @id @default(uuid())
-  userId          String    @unique @map("user_id")
+  userId          Int       @unique @map("user_id")
 
   // Basic measurements
   height          Decimal?  @db.Decimal(5, 2)   // in cm
@@ -391,7 +395,7 @@ model BodyMetrics {
 // BodyMetricsHistory model - Historical body metrics records
 model BodyMetricsHistory {
   id              String    @id @default(uuid())
-  userId          String    @map("user_id")
+  userId          Int       @map("user_id")
 
   // Measurement date
   measuredAt      DateTime  @map("measured_at")

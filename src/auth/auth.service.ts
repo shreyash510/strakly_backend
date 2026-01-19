@@ -10,7 +10,7 @@ import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 
 export interface UserResponse {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role?: string;
@@ -46,6 +46,31 @@ export class AuthService {
     return bcrypt.hash(password, this.SALT_ROUNDS);
   }
 
+  private async generateUniqueAttendanceCode(): Promise<string> {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code: string;
+    let isUnique = false;
+
+    while (!isUnique) {
+      // Generate 4-character alphanumeric code
+      code = '';
+      for (let i = 0; i < 4; i++) {
+        code += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+
+      // Check if code already exists
+      const existing = await this.prisma.user.findUnique({
+        where: { attendanceCode: code },
+      });
+
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+
+    return code!;
+  }
+
   private async comparePassword(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
   }
@@ -61,11 +86,14 @@ export class AuthService {
   }
 
   private toUserResponse(user: any): UserResponse {
+    // Handle role - can be a relation object or undefined
+    const roleCode = user.role?.code || 'user';
+
     return {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role || 'user',
+      role: roleCode,
       avatar: user.avatar,
       status: user.status || 'active',
       phone: user.phone,
@@ -85,14 +113,33 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
+    // Find the 'user' role from Lookup table
+    const userRole = await this.prisma.lookup.findFirst({
+      where: {
+        lookupType: { code: 'USER_ROLE' },
+        code: 'user',
+      },
+    });
+
+    if (!userRole) {
+      throw new Error('Default user role not found in lookup table');
+    }
+
+    // Generate unique attendance code for the new user
+    const attendanceCode = await this.generateUniqueAttendanceCode();
+
     const createdUser = await this.prisma.user.create({
       data: {
         name: createUserDto.name,
         email: createUserDto.email,
         passwordHash: await this.hashPassword(createUserDto.password),
-        role: 'user',
+        roleId: userRole.id,
         status: 'active',
         joinDate: new Date().toISOString().split('T')[0],
+        attendanceCode,
+      },
+      include: {
+        role: true,
       },
     });
 
@@ -113,6 +160,9 @@ export class AuthService {
   async login(loginDto: LoginDto): Promise<AuthResponse> {
     const userData = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
+      include: {
+        role: true,
+      },
     });
 
     if (!userData) {
@@ -154,9 +204,12 @@ export class AuthService {
     };
   }
 
-  async getProfile(userId: string): Promise<UserResponse> {
+  async getProfile(userId: number): Promise<UserResponse> {
     const userData = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        role: true,
+      },
     });
 
     if (!userData) {
@@ -167,19 +220,22 @@ export class AuthService {
   }
 
   async updateProfile(
-    userId: string,
+    userId: number,
     data: { name?: string; bio?: string; avatar?: string; phone?: string },
   ): Promise<UserResponse> {
     const userData = await this.prisma.user.update({
       where: { id: userId },
       data,
+      include: {
+        role: true,
+      },
     });
 
     return this.toUserResponse(userData);
   }
 
   async changePassword(
-    userId: string,
+    userId: number,
     currentPassword: string,
     newPassword: string,
   ): Promise<{ success: boolean }> {
@@ -210,7 +266,7 @@ export class AuthService {
     return { success: true };
   }
 
-  async refreshToken(userId: string): Promise<{ accessToken: string }> {
+  async refreshToken(userId: number): Promise<{ accessToken: string }> {
     const user = await this.getProfile(userId);
     return {
       accessToken: this.generateToken(user),
@@ -219,7 +275,7 @@ export class AuthService {
 
   async searchUsers(
     query: string,
-    currentUserId: string,
+    currentUserId: number,
     page: number = 1,
     limit: number = 20,
   ): Promise<{ users: UserResponse[]; hasMore: boolean; page: number; total?: number }> {
@@ -244,11 +300,7 @@ export class AuthService {
         },
         skip,
         take: limit,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          avatar: true,
+        include: {
           role: true,
         },
       }),
@@ -272,7 +324,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role || 'user',
+        role: user.role?.code || 'user',
         avatar: user.avatar ?? undefined,
       })),
       hasMore: skip + users.length < total,
@@ -281,7 +333,7 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string): Promise<{ success: boolean }> {
+  async logout(userId: number): Promise<{ success: boolean }> {
     // In a production environment, you might want to:
     // - Invalidate the token in a blacklist
     // - Remove refresh tokens from database

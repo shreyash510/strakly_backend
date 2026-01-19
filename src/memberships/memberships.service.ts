@@ -18,7 +18,7 @@ export class MembershipsService {
     private readonly offersService: OffersService,
   ) {}
 
-  async findAll(filters?: { status?: string; userId?: string; planId?: string }) {
+  async findAll(filters?: { status?: string; userId?: number; planId?: string }) {
     const where: any = {};
 
     if (filters?.status) {
@@ -63,7 +63,7 @@ export class MembershipsService {
     return membership;
   }
 
-  async findByUser(userId: string) {
+  async findByUser(userId: number) {
     return this.prisma.membership.findMany({
       where: { userId },
       include: {
@@ -74,7 +74,7 @@ export class MembershipsService {
     });
   }
 
-  async getActiveMembership(userId: string) {
+  async getActiveMembership(userId: number) {
     const now = new Date();
 
     return this.prisma.membership.findFirst({
@@ -91,7 +91,7 @@ export class MembershipsService {
     });
   }
 
-  async checkMembershipStatus(userId: string) {
+  async checkMembershipStatus(userId: number) {
     const active = await this.getActiveMembership(userId);
 
     if (!active) {
@@ -283,7 +283,7 @@ export class MembershipsService {
     });
   }
 
-  async renew(userId: string, dto: RenewMembershipDto) {
+  async renew(userId: number, dto: RenewMembershipDto) {
     // Get current membership to determine renewal plan
     const currentMembership = await this.getActiveMembership(userId);
 

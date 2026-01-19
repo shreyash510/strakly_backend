@@ -197,15 +197,17 @@ export class PermissionsService {
 
   async getUserPermissions(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
+      where: { id: parseInt(userId) },
+      include: { role: true },
     });
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    return this.getPermissionsByRole(user.role);
+    // Get role code from the lookup relation
+    const roleCode = user.role?.code || 'user';
+    return this.getPermissionsByRole(roleCode);
   }
 
   async getUserPermissionCodes(userId: string) {

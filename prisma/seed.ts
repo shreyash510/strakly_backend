@@ -54,47 +54,167 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
 
 // Permissions data
 const permissions = [
-  // Users module
-  { code: 'users.create', name: 'Create Users', module: 'users', description: 'Create new users' },
-  { code: 'users.read', name: 'Read Users', module: 'users', description: 'View user list and details' },
-  { code: 'users.update', name: 'Update Users', module: 'users', description: 'Edit user information' },
-  { code: 'users.delete', name: 'Delete Users', module: 'users', description: 'Delete users' },
+  // Dashboard module
+  { code: 'dashboard.view', name: 'View Dashboard', module: 'dashboard', description: 'Access dashboard' },
+
+  // Users module (superadmin - all users)
+  { code: 'users.view', name: 'View Users', module: 'users', description: 'View all users' },
+  { code: 'users.manage', name: 'Manage Users', module: 'users', description: 'Create/edit/delete users' },
+
+  // Members module (admin/manager)
+  { code: 'members.view', name: 'View Members', module: 'members', description: 'View member list' },
+  { code: 'members.manage', name: 'Manage Members', module: 'members', description: 'Create/edit/delete members' },
+
+  // Managers module (admin only)
+  { code: 'managers.view', name: 'View Managers', module: 'managers', description: 'View manager list' },
+  { code: 'managers.manage', name: 'Manage Managers', module: 'managers', description: 'Create/edit/delete managers' },
+
+  // Trainers module
+  { code: 'trainers.view', name: 'View Trainers', module: 'trainers', description: 'View trainer list' },
+  { code: 'trainers.manage', name: 'Manage Trainers', module: 'trainers', description: 'Create/edit/delete trainers' },
+
+  // Clients module (trainer's clients)
+  { code: 'clients.view', name: 'View Clients', module: 'clients', description: 'View assigned clients' },
+
   // Attendance module
-  { code: 'attendance.mark', name: 'Mark Attendance', module: 'attendance', description: 'Mark check-in/out' },
-  { code: 'attendance.read', name: 'Read Attendance', module: 'attendance', description: 'View attendance records' },
-  { code: 'attendance.manage', name: 'Manage Attendance', module: 'attendance', description: 'Edit/delete attendance records' },
-  // Lookups module
-  { code: 'lookups.create', name: 'Create Lookups', module: 'lookups', description: 'Create lookup values' },
-  { code: 'lookups.read', name: 'Read Lookups', module: 'lookups', description: 'View lookup values' },
-  { code: 'lookups.update', name: 'Update Lookups', module: 'lookups', description: 'Edit lookup values' },
-  { code: 'lookups.delete', name: 'Delete Lookups', module: 'lookups', description: 'Delete lookup values' },
-  // Settings/Admin module
+  { code: 'attendance.view', name: 'View Attendance', module: 'attendance', description: 'View own attendance' },
+  { code: 'attendance.manage', name: 'Manage Attendance', module: 'attendance', description: 'Mark/edit attendance records' },
+
+  // Subscription module
+  { code: 'subscription.view', name: 'View Subscription', module: 'subscription', description: 'View own subscription' },
+  { code: 'subscription.manage', name: 'Manage Subscriptions', module: 'subscription', description: 'Manage membership plans' },
+
+  // Gym module (superadmin)
+  { code: 'gym.view', name: 'View Gym', module: 'gym', description: 'View gym details' },
+  { code: 'gym.manage', name: 'Manage Gym', module: 'gym', description: 'Manage gym settings' },
+
+  // Health & Fitness module
+  { code: 'health.view', name: 'View Health & Fitness', module: 'health', description: 'View health data' },
+
+  // Support module
+  { code: 'support.view', name: 'View Support', module: 'support', description: 'View support tickets' },
+  { code: 'support.manage', name: 'Manage Support', module: 'support', description: 'Manage support tickets' },
+
+  // Settings module
+  { code: 'settings.view', name: 'View Settings', module: 'settings', description: 'View settings' },
   { code: 'settings.manage', name: 'Manage Settings', module: 'settings', description: 'Manage system settings' },
+
+  // Reports & Analytics module
+  { code: 'reports.view', name: 'View Reports', module: 'reports', description: 'View reports' },
+  { code: 'analytics.view', name: 'View Analytics', module: 'analytics', description: 'View analytics' },
+
+  // Profile module
+  { code: 'profile.view', name: 'View Profile', module: 'profile', description: 'View own profile' },
+
+  // Lookups module
+  { code: 'lookups.read', name: 'Read Lookups', module: 'lookups', description: 'View lookup values' },
+  { code: 'lookups.manage', name: 'Manage Lookups', module: 'lookups', description: 'Manage lookup values' },
+
+  // Permissions module
   { code: 'permissions.manage', name: 'Manage Permissions', module: 'permissions', description: 'Manage role permissions' },
 ];
 
 // Role permissions mapping - which permissions each role has
 const rolePermissions: Record<string, string[]> = {
-  superadmin: permissions.map(p => p.code), // All permissions
-  admin: [
-    'users.create', 'users.read', 'users.update', 'users.delete',
-    'attendance.mark', 'attendance.read', 'attendance.manage',
-    'lookups.create', 'lookups.read', 'lookups.update', 'lookups.delete',
+  superadmin: [
+    // Dashboard
+    'dashboard.view',
+    // Gym Management
+    'gym.view',
+    'gym.manage',
+    // User Management (all users)
+    'users.view',
+    'users.manage',
+    // Reports & Analytics
+    'reports.view',
+    'analytics.view',
+    // Settings
+    'settings.view',
     'settings.manage',
+    // Profile
+    'profile.view',
+    // Support (can manage all tickets)
+    'support.view',
+    'support.manage',
   ],
+
+  admin: [
+    // Dashboard
+    'dashboard.view',
+    // Member Management
+    'members.view',
+    'members.manage',
+    // Trainer Management
+    'trainers.view',
+    'trainers.manage',
+    // Manager Management
+    'managers.view',
+    'managers.manage',
+    // Reports & Analytics
+    'reports.view',
+    'analytics.view',
+    // Subscriptions
+    'subscription.manage',
+    // Attendance
+    'attendance.manage',
+    // Settings
+    'settings.view',
+    'settings.manage',
+    // Profile
+    'profile.view',
+    // Support (view only)
+    'support.view',
+  ],
+
   manager: [
-    'users.create', 'users.read', 'users.update',
-    'attendance.mark', 'attendance.read', 'attendance.manage',
-    'lookups.read',
+    // Dashboard
+    'dashboard.view',
+    // Member Management
+    'members.view',
+    'members.manage',
+    // Trainer Management
+    'trainers.view',
+    'trainers.manage',
+    // Reports & Analytics
+    'reports.view',
+    'analytics.view',
+    // Attendance
+    'attendance.manage',
+    // Settings
+    'settings.view',
+    'settings.manage',
+    // Profile
+    'profile.view',
   ],
+
   trainer: [
-    'users.read',
-    'attendance.mark', 'attendance.read',
-    'lookups.read',
+    // Dashboard
+    'dashboard.view',
+    // View my clients (trainer's assigned clients)
+    'clients.view',
+    // Reports (limited)
+    'reports.view',
+    // Attendance
+    'attendance.manage',
+    // Settings (own profile)
+    'settings.view',
+    // Profile
+    'profile.view',
   ],
+
   user: [
-    'attendance.read',
-    'lookups.read',
+    // Dashboard
+    'dashboard.view',
+    // Subscription (view own subscription)
+    'subscription.view',
+    // Attendance (view own attendance)
+    'attendance.view',
+    // Health & Fitness
+    'health.view',
+    // Profile
+    'profile.view',
+    // Settings (own profile)
+    'settings.view',
   ],
 };
 
@@ -221,12 +341,22 @@ const offers = [
 async function seedUsers() {
   console.log('Seeding users...');
 
+  // Get USER_ROLE lookup type
+  const userRoleType = await prisma.lookupType.findUnique({
+    where: { code: 'USER_ROLE' },
+  });
+
+  if (!userRoleType) {
+    console.log('  USER_ROLE lookup type not found, skipping users...');
+    return;
+  }
+
   const testUsers = [
-    { name: 'Super Admin', email: 'superadmin@test.com', password: 'password123', role: 'superadmin' },
-    { name: 'Admin User', email: 'admin@test.com', password: 'password123', role: 'admin' },
-    { name: 'Manager User', email: 'manager@test.com', password: 'password123', role: 'manager' },
-    { name: 'Trainer User', email: 'trainer@test.com', password: 'password123', role: 'trainer' },
-    { name: 'Test User', email: 'user@test.com', password: 'password123', role: 'user' },
+    { name: 'Super Admin', email: 'superadmin@test.com', password: 'password123', roleCode: 'superadmin' },
+    { name: 'Admin User', email: 'admin@test.com', password: 'password123', roleCode: 'admin' },
+    { name: 'Manager User', email: 'manager@test.com', password: 'password123', roleCode: 'manager' },
+    { name: 'Trainer User', email: 'trainer@test.com', password: 'password123', roleCode: 'trainer' },
+    { name: 'Test User', email: 'user@test.com', password: 'password123', roleCode: 'user' },
   ];
 
   for (const userData of testUsers) {
@@ -239,17 +369,30 @@ async function seedUsers() {
       continue;
     }
 
+    // Find the role lookup
+    const roleLookup = await prisma.lookup.findFirst({
+      where: {
+        lookupTypeId: userRoleType.id,
+        code: userData.roleCode,
+      },
+    });
+
+    if (!roleLookup) {
+      console.log(`  Role ${userData.roleCode} not found, skipping user ${userData.email}...`);
+      continue;
+    }
+
     const passwordHash = await hashPassword(userData.password);
     const user = await prisma.user.create({
       data: {
         name: userData.name,
         email: userData.email,
         passwordHash,
-        role: userData.role,
+        roleId: roleLookup.id,
         status: 'active',
       },
     });
-    console.log(`  Created user: ${user.email} with role: ${user.role}`);
+    console.log(`  Created user: ${user.email} with role: ${userData.roleCode}`);
   }
 }
 
