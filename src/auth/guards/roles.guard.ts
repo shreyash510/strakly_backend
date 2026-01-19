@@ -1,14 +1,14 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { UserRole } from '../../database/schemas/user.schema';
-import { DatabaseService } from '../../database/database.service';
+import { UserRole } from '@prisma/client';
+import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private databaseService: DatabaseService,
+    private prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -29,7 +29,9 @@ export class RolesGuard implements CanActivate {
     }
 
     // Get user from database to get their role
-    const userData = await this.databaseService.findUserById(user.userId);
+    const userData = await this.prisma.user.findUnique({
+      where: { id: user.userId },
+    });
 
     if (!userData) {
       throw new ForbiddenException('User not found');
@@ -45,7 +47,7 @@ export class RolesGuard implements CanActivate {
     };
 
     // Check if user has required role
-    const hasRole = requiredRoles.includes(userRole);
+    const hasRole = requiredRoles.includes(userRole as UserRole);
 
     if (!hasRole) {
       throw new ForbiddenException(

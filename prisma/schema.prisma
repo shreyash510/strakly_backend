@@ -1,0 +1,67 @@
+// Prisma schema for Strakly
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User roles enum
+enum UserRole {
+  superadmin
+  admin
+  manager
+  trainer
+  user
+}
+
+// User status enum
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+// Gender enum
+enum Gender {
+  male
+  female
+  other
+}
+
+// User model
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+
+  // Optional profile fields
+  phone        String?
+  avatar       String?
+  bio          String?
+  dateOfBirth  String?     @map("date_of_birth")
+  gender       Gender?
+  address      String?
+  city         String?
+  state        String?
+  zipCode      String?     @map("zip_code")
+
+  // Role & Status
+  role         UserRole    @default(user)
+  status       UserStatus  @default(active)
+
+  // Tracking
+  streak       Int         @default(0)
+  joinDate     String?     @map("join_date")
+  lastLoginAt  String?     @map("last_login_at")
+
+  // Timestamps
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@map("users")
+}

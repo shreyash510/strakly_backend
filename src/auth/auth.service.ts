@@ -4,22 +4,10 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DatabaseService } from '../database/database.service';
+import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  passwordHash: string;
-  role?: string;
-  status?: string;
-  avatar?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface UserResponse {
   id: string;
@@ -28,8 +16,8 @@ export interface UserResponse {
   role?: string;
   avatar?: string;
   status?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface AuthResponse {
@@ -48,7 +36,7 @@ export class AuthService {
   private readonly SALT_ROUNDS = 10;
 
   constructor(
-    private readonly databaseService: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -70,36 +58,41 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
+  private toUserResponse(user: any): UserResponse {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role || 'user',
+      avatar: user.avatar,
+      status: user.status || 'active',
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
   async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
     // Check if user already exists
-    const existingUser = await this.databaseService.findUserByEmail(createUserDto.email);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: createUserDto.email },
+    });
 
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
-    const userData = {
-      name: createUserDto.name,
-      email: createUserDto.email,
-      passwordHash: await this.hashPassword(createUserDto.password),
-      role: 'user',
-      status: 'active',
-      joinDate: new Date().toISOString().split('T')[0],
-    };
+    const createdUser = await this.prisma.user.create({
+      data: {
+        name: createUserDto.name,
+        email: createUserDto.email,
+        passwordHash: await this.hashPassword(createUserDto.password),
+        role: 'user',
+        status: 'active',
+        joinDate: new Date().toISOString().split('T')[0],
+      },
+    });
 
-    const createdUser = await this.databaseService.createUser(userData);
-
-    const user: UserResponse = {
-      id: createdUser.id,
-      name: createdUser.name,
-      email: createdUser.email,
-      role: createdUser.role || 'user',
-      avatar: createdUser.avatar,
-      status: createdUser.status || 'active',
-      createdAt: createdUser.createdAt,
-      updatedAt: createdUser.updatedAt,
-    };
-
+    const user = this.toUserResponse(createdUser);
     const accessToken = this.generateToken(user);
 
     return {
@@ -114,7 +107,9 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
-    const userData = await this.databaseService.findUserByEmail(loginDto.email);
+    const userData = await this.prisma.user.findUnique({
+      where: { email: loginDto.email },
+    });
 
     if (!userData) {
       throw new UnauthorizedException('Invalid credentials');
@@ -136,21 +131,12 @@ export class AuthService {
     }
 
     // Update last login time
-    await this.databaseService.updateUser(userData.id, {
-      lastLoginAt: new Date().toISOString(),
+    await this.prisma.user.update({
+      where: { id: userData.id },
+      data: { lastLoginAt: new Date().toISOString() },
     });
 
-    const user: UserResponse = {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      role: userData.role || 'user',
-      avatar: userData.avatar,
-      status: userData.status || 'active',
-      createdAt: userData.createdAt,
-      updatedAt: userData.updatedAt,
-    };
-
+    const user = this.toUserResponse(userData);
     const accessToken = this.generateToken(user);
 
     return {
@@ -165,40 +151,27 @@ export class AuthService {
   }
 
   async getProfile(userId: string): Promise<UserResponse> {
-    const userData = await this.databaseService.findUserById(userId);
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
 
     if (!userData) {
       throw new UnauthorizedException('User not found');
     }
 
-    return {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      role: userData.role || 'user',
-      avatar: userData.avatar,
-      status: userData.status || 'active',
-      createdAt: userData.createdAt,
-      updatedAt: userData.updatedAt,
-    };
+    return this.toUserResponse(userData);
   }
 
   async updateProfile(
     userId: string,
     data: { name?: string; bio?: string; avatar?: string; phone?: string },
   ): Promise<UserResponse> {
-    const userData = await this.databaseService.updateUser(userId, data);
+    const userData = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
 
-    return {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      role: userData.role || 'user',
-      avatar: userData.avatar,
-      status: userData.status || 'active',
-      createdAt: userData.createdAt,
-      updatedAt: userData.updatedAt,
-    };
+    return this.toUserResponse(userData);
   }
 
   async changePassword(
@@ -206,7 +179,9 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
   ): Promise<{ success: boolean }> {
-    const userData = await this.databaseService.findUserById(userId);
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
 
     if (!userData) {
       throw new UnauthorizedException('User not found');
@@ -223,8 +198,9 @@ export class AuthService {
     }
 
     // Update password
-    await this.databaseService.updateUser(userId, {
-      passwordHash: await this.hashPassword(newPassword),
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await this.hashPassword(newPassword) },
     });
 
     return { success: true };
@@ -246,18 +222,58 @@ export class AuthService {
     if (!query || query.length < 2) {
       return { users: [], hasMore: false, page: 1 };
     }
-    const result = await this.databaseService.searchUsers(query, currentUserId, page, limit);
+
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where: {
+          AND: [
+            { id: { not: currentUserId } },
+            {
+              OR: [
+                { name: { contains: query, mode: 'insensitive' } },
+                { email: { contains: query, mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar: true,
+          role: true,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          AND: [
+            { id: { not: currentUserId } },
+            {
+              OR: [
+                { name: { contains: query, mode: 'insensitive' } },
+                { email: { contains: query, mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+      }),
+    ]);
+
     return {
-      users: result.users.map((user) => ({
+      users: users.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role || 'user',
-        avatar: user.avatar,
+        avatar: user.avatar ?? undefined,
       })),
-      hasMore: result.hasMore,
-      page: result.page,
-      total: result.total,
+      hasMore: skip + users.length < total,
+      page,
+      total,
     };
   }
 
