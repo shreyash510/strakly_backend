@@ -80,14 +80,14 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: user.role || 'user',
+      role: user.role || 'member',
     };
     return this.jwtService.sign(payload);
   }
 
   private toUserResponse(user: any): UserResponse {
     // Handle role - can be a relation object or undefined
-    const roleCode = user.role?.code || 'user';
+    const roleCode = user.role?.code || 'member';
 
     return {
       id: user.id,
@@ -113,16 +113,16 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Find the 'user' role from Lookup table
-    const userRole = await this.prisma.lookup.findFirst({
+    // Find the 'member' role from Lookup table
+    const memberRole = await this.prisma.lookup.findFirst({
       where: {
         lookupType: { code: 'USER_ROLE' },
-        code: 'user',
+        code: 'member',
       },
     });
 
-    if (!userRole) {
-      throw new Error('Default user role not found in lookup table');
+    if (!memberRole) {
+      throw new Error('Default member role not found in lookup table');
     }
 
     // Generate unique attendance code for the new user
@@ -133,7 +133,7 @@ export class AuthService {
         name: createUserDto.name,
         email: createUserDto.email,
         passwordHash: await this.hashPassword(createUserDto.password),
-        roleId: userRole.id,
+        roleId: memberRole.id,
         status: 'active',
         joinDate: new Date().toISOString().split('T')[0],
         attendanceCode,
@@ -324,7 +324,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role?.code || 'user',
+        role: user.role?.code || 'member',
         avatar: user.avatar ?? undefined,
       })),
       hasMore: skip + users.length < total,

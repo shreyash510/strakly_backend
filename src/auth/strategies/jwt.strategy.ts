@@ -42,7 +42,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Your account has been suspended');
     }
 
-    const userRole = user.role?.code || 'user';
+    const userRole = user.role?.code || 'member';
 
     return {
       userId: userId,

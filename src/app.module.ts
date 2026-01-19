@@ -22,7 +22,7 @@ import { BodyMetricsModule } from './body-metrics/body-metrics.module';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
-      exclude: ['/api*', '/docs*'],
+      exclude: ['/api/{*path}', '/docs/{*path}'],
     }),
     DatabaseModule,
     AuthModule,

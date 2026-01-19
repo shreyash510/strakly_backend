@@ -38,7 +38,7 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not found');
     }
 
-    const userRole = userData.role?.code || 'user';
+    const userRole = userData.role?.code || 'member';
 
     // Attach full user data to request for controllers to use
     request.user = {

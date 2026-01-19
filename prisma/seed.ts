@@ -29,7 +29,7 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
     { code: 'admin', name: 'Admin', value: 'admin', displayOrder: 2 },
     { code: 'manager', name: 'Manager', value: 'manager', displayOrder: 3 },
     { code: 'trainer', name: 'Trainer', value: 'trainer', displayOrder: 4 },
-    { code: 'user', name: 'User', value: 'user', displayOrder: 5 },
+    { code: 'member', name: 'Member', value: 'member', displayOrder: 5 },
   ],
   USER_STATUS: [
     { code: 'active', name: 'Active', value: 'active', displayOrder: 1 },
@@ -202,7 +202,7 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
   ],
 
-  user: [
+  member: [
     // Dashboard
     'dashboard.view',
     // Subscription (view own subscription)
@@ -356,7 +356,7 @@ async function seedUsers() {
     { name: 'Admin User', email: 'admin@test.com', password: 'password123', roleCode: 'admin' },
     { name: 'Manager User', email: 'manager@test.com', password: 'password123', roleCode: 'manager' },
     { name: 'Trainer User', email: 'trainer@test.com', password: 'password123', roleCode: 'trainer' },
-    { name: 'Test User', email: 'user@test.com', password: 'password123', roleCode: 'user' },
+    { name: 'Test Member', email: 'member@test.com', password: 'password123', roleCode: 'member' },
   ];
 
   for (const userData of testUsers) {
