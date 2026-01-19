@@ -55,7 +55,6 @@ model User {
   status       UserStatus  @default(active)
 
   // Tracking
-  streak       Int         @default(0)
   joinDate     String?     @map("join_date")
   lastLoginAt  String?     @map("last_login_at")
 
@@ -64,4 +63,44 @@ model User {
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+// LookupType model - Categories for lookup values
+model LookupType {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  lookups     Lookup[]
+
+  @@map("lookup_types")
+}
+
+// Lookup model - Actual lookup values
+model Lookup {
+  id            String     @id @default(uuid())
+  lookupTypeId  String     @map("lookup_type_id")
+  code          String
+  name          String
+  value         String?
+  displayOrder  Int        @default(0) @map("display_order")
+  isActive      Boolean    @default(true) @map("is_active")
+  metadata      Json?      // For any additional data
+
+  // Timestamps
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  lookupType    LookupType @relation(fields: [lookupTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([lookupTypeId, code])
+  @@map("lookups")
 }
