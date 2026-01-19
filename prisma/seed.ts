@@ -98,6 +98,126 @@ const rolePermissions: Record<string, string[]> = {
   ],
 };
 
+// Membership Plans
+const plans = [
+  {
+    code: 'monthly-basic',
+    name: 'Monthly Basic',
+    description: 'Basic gym access for 1 month',
+    durationValue: 1,
+    durationType: 'month',
+    price: 1499,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'Basic Equipment'],
+    displayOrder: 1,
+    isFeatured: false,
+  },
+  {
+    code: 'monthly-premium',
+    name: 'Monthly Premium',
+    description: 'Premium gym access with personal trainer for 1 month',
+    durationValue: 1,
+    durationType: 'month',
+    price: 2999,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (2 sessions)', 'Diet Consultation'],
+    displayOrder: 2,
+    isFeatured: true,
+  },
+  {
+    code: 'quarterly-basic',
+    name: 'Quarterly Basic',
+    description: 'Basic gym access for 3 months',
+    durationValue: 3,
+    durationType: 'month',
+    price: 3999,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'Basic Equipment'],
+    displayOrder: 3,
+    isFeatured: false,
+  },
+  {
+    code: 'quarterly-premium',
+    name: 'Quarterly Premium',
+    description: 'Premium gym access with personal trainer for 3 months',
+    durationValue: 3,
+    durationType: 'month',
+    price: 7999,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (8 sessions)', 'Diet Plan', 'Progress Tracking'],
+    displayOrder: 4,
+    isFeatured: true,
+  },
+  {
+    code: 'annual-basic',
+    name: 'Annual Basic',
+    description: 'Basic gym access for 12 months',
+    durationValue: 12,
+    durationType: 'month',
+    price: 12999,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'Basic Equipment', '1 Month Free'],
+    displayOrder: 5,
+    isFeatured: false,
+  },
+  {
+    code: 'annual-premium',
+    name: 'Annual Premium',
+    description: 'Premium gym access with personal trainer for 12 months',
+    durationValue: 12,
+    durationType: 'month',
+    price: 24999,
+    currency: 'INR',
+    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (24 sessions)', 'Diet Plan', 'Progress Tracking', 'Nutrition Supplements', '2 Months Free'],
+    displayOrder: 6,
+    isFeatured: true,
+  },
+];
+
+// Promotional Offers
+const offers = [
+  {
+    code: 'WELCOME10',
+    name: 'Welcome Offer',
+    description: '10% off for new members',
+    discountType: 'percentage',
+    discountValue: 10,
+    validFrom: new Date(),
+    validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+    maxUsageCount: null,
+    maxUsagePerUser: 1,
+    minPurchaseAmount: null,
+    applicableToAll: true,
+  },
+  {
+    code: 'SUMMER25',
+    name: 'Summer Sale',
+    description: '25% off on quarterly and annual plans',
+    discountType: 'percentage',
+    discountValue: 25,
+    validFrom: new Date(),
+    validTo: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+    maxUsageCount: 100,
+    maxUsagePerUser: 1,
+    minPurchaseAmount: 3000,
+    applicableToAll: false, // Will be linked to specific plans
+    planCodes: ['quarterly-basic', 'quarterly-premium', 'annual-basic', 'annual-premium'],
+  },
+  {
+    code: 'FLAT500',
+    name: 'Flat ₹500 Off',
+    description: 'Flat ₹500 off on all plans',
+    discountType: 'fixed',
+    discountValue: 500,
+    validFrom: new Date(),
+    validTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    maxUsageCount: 50,
+    maxUsagePerUser: 1,
+    minPurchaseAmount: 2000,
+    applicableToAll: true,
+  },
+];
+
 async function seedUsers() {
   console.log('Seeding users...');
 
@@ -252,6 +372,67 @@ async function seedRolePermissions() {
   }
 }
 
+async function seedPlans() {
+  console.log('Seeding plans...');
+
+  for (const planData of plans) {
+    const existing = await prisma.plan.findUnique({
+      where: { code: planData.code },
+    });
+
+    if (existing) {
+      console.log(`  Plan ${planData.code} already exists, skipping...`);
+      continue;
+    }
+
+    await prisma.plan.create({
+      data: planData,
+    });
+    console.log(`  Created plan: ${planData.code}`);
+  }
+}
+
+async function seedOffers() {
+  console.log('Seeding offers...');
+
+  for (const offerData of offers) {
+    const existing = await prisma.offer.findUnique({
+      where: { code: offerData.code },
+    });
+
+    if (existing) {
+      console.log(`  Offer ${offerData.code} already exists, skipping...`);
+      continue;
+    }
+
+    const { planCodes, ...offerCreateData } = offerData as any;
+
+    const offer = await prisma.offer.create({
+      data: offerCreateData,
+    });
+    console.log(`  Created offer: ${offer.code}`);
+
+    // Link to specific plans if not applicable to all
+    if (planCodes && planCodes.length > 0) {
+      for (const planCode of planCodes) {
+        const plan = await prisma.plan.findUnique({
+          where: { code: planCode },
+        });
+
+        if (plan) {
+          await prisma.planOffer.create({
+            data: {
+              planId: plan.id,
+              offerId: offer.id,
+            },
+          });
+        }
+      }
+      console.log(`    Linked to ${planCodes.length} plans`);
+    }
+  }
+}
+
 async function main() {
   console.log('Starting seed...\n');
 
@@ -262,6 +443,10 @@ async function main() {
   await seedPermissions();
   console.log('');
   await seedRolePermissions();
+  console.log('');
+  await seedPlans();
+  console.log('');
+  await seedOffers();
   console.log('');
   await seedUsers();
 

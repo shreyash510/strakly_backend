@@ -16,6 +16,8 @@ export interface UserResponse {
   role?: string;
   avatar?: string;
   status?: string;
+  phone?: string;
+  attendanceCode?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -66,6 +68,8 @@ export class AuthService {
       role: user.role || 'user',
       avatar: user.avatar,
       status: user.status || 'active',
+      phone: user.phone,
+      attendanceCode: user.attendanceCode,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

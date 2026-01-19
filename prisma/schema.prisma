@@ -40,6 +40,11 @@ model User {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
+  // Relations
+  memberships        Membership[]
+  bodyMetrics        BodyMetrics?
+  bodyMetricsHistory BodyMetricsHistory[]
+
   @@map("users")
 }
 
@@ -175,4 +180,259 @@ model AttendanceHistory {
   @@index([userId, checkInTime])
   @@index([attendanceCode, date])
   @@map("attendance_history")
+}
+
+// ============================================
+// MEMBERSHIP & SUBSCRIPTION MODELS
+// ============================================
+
+// Plan model - Membership plans available
+model Plan {
+  id              String       @id @default(uuid())
+  code            String       @unique                    // e.g., "basic", "premium", "vip"
+  name            String                                  // e.g., "Basic Plan", "Premium Plan"
+  description     String?
+
+  // Duration
+  durationValue   Int          @map("duration_value")     // e.g., 1, 3, 6, 12
+  durationType    String       @map("duration_type")      // day, month, year
+
+  // Pricing
+  price           Decimal      @db.Decimal(10, 2)         // Base price
+  currency        String       @default("INR")
+
+  // Features (JSON array of feature strings or objects)
+  features        Json?                                   // e.g., ["Gym Access", "Personal Trainer", "Diet Plan"]
+
+  // Display
+  displayOrder    Int          @default(0) @map("display_order")
+  isFeatured      Boolean      @default(false) @map("is_featured")  // Highlighted plan
+  isActive        Boolean      @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  planOffers      PlanOffer[]
+  memberships     Membership[]
+
+  @@index([isActive, displayOrder])
+  @@map("plans")
+}
+
+// Offer model - Discounts and promotions
+model Offer {
+  id                String       @id @default(uuid())
+  code              String       @unique                  // e.g., "SUMMER20", "NEWYEAR50"
+  name              String                                // e.g., "Summer Sale", "New Year Offer"
+  description       String?
+
+  // Discount
+  discountType      String       @map("discount_type")    // percentage, fixed
+  discountValue     Decimal      @map("discount_value") @db.Decimal(10, 2)  // 20 for 20% or 500 for ₹500
+
+  // Validity
+  validFrom         DateTime     @map("valid_from")
+  validTo           DateTime     @map("valid_to")
+
+  // Usage limits
+  maxUsageCount     Int?         @map("max_usage_count")  // null = unlimited
+  usedCount         Int          @default(0) @map("used_count")
+  maxUsagePerUser   Int?         @map("max_usage_per_user")  // null = unlimited per user
+
+  // Conditions
+  minPurchaseAmount Decimal?     @map("min_purchase_amount") @db.Decimal(10, 2)
+  applicableToAll   Boolean      @default(true) @map("applicable_to_all")  // If false, check PlanOffer
+
+  // Status
+  isActive          Boolean      @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  planOffers        PlanOffer[]
+  memberships       Membership[]
+
+  @@index([isActive, validFrom, validTo])
+  @@index([code])
+  @@map("offers")
+}
+
+// PlanOffer model - Many-to-many: which offers apply to which plans
+model PlanOffer {
+  id        String   @id @default(uuid())
+  planId    String   @map("plan_id")
+  offerId   String   @map("offer_id")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, offerId])
+  @@map("plan_offers")
+}
+
+// Membership model - User's subscription/membership record
+model Membership {
+  id              String    @id @default(uuid())
+
+  // User reference
+  userId          String    @map("user_id")
+
+  // Plan reference
+  planId          String    @map("plan_id")
+
+  // Offer reference (optional - if discount was applied)
+  offerId         String?   @map("offer_id")
+
+  // Membership period
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime  @map("end_date")
+
+  // Status: active, expired, cancelled, paused, pending
+  status          String    @default("pending")
+
+  // Payment details
+  originalAmount  Decimal   @map("original_amount") @db.Decimal(10, 2)
+  discountAmount  Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount     Decimal   @map("final_amount") @db.Decimal(10, 2)
+  currency        String    @default("INR")
+
+  // Payment status: paid, pending, failed, refunded
+  paymentStatus   String    @default("pending") @map("payment_status")
+  paymentMethod   String?   @map("payment_method")  // cash, card, upi, online
+  paymentRef      String?   @map("payment_ref")     // Transaction reference
+  paidAt          DateTime? @map("paid_at")
+
+  // Cancellation
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelReason    String?   @map("cancel_reason")
+
+  // Additional info
+  notes           String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            Plan      @relation(fields: [planId], references: [id])
+  offer           Offer?    @relation(fields: [offerId], references: [id])
+
+  @@index([userId, status])
+  @@index([status, endDate])
+  @@index([planId])
+  @@map("memberships")
+}
+
+// ============================================
+// BODY METRICS MODELS
+// ============================================
+
+// BodyMetrics model - Current/latest body metrics for a user
+model BodyMetrics {
+  id              String    @id @default(uuid())
+  userId          String    @unique @map("user_id")
+
+  // Basic measurements
+  height          Decimal?  @db.Decimal(5, 2)   // in cm
+  weight          Decimal?  @db.Decimal(5, 2)   // in kg
+  bmi             Decimal?  @db.Decimal(4, 2)   // Body Mass Index
+
+  // Body composition
+  bodyFat         Decimal?  @map("body_fat") @db.Decimal(4, 2)      // percentage
+  muscleMass      Decimal?  @map("muscle_mass") @db.Decimal(5, 2)   // in kg
+  boneMass        Decimal?  @map("bone_mass") @db.Decimal(4, 2)     // in kg
+  waterPercentage Decimal?  @map("water_percentage") @db.Decimal(4, 2)  // percentage
+
+  // Measurements (in cm)
+  chest           Decimal?  @db.Decimal(5, 2)
+  waist           Decimal?  @db.Decimal(5, 2)
+  hips            Decimal?  @db.Decimal(5, 2)
+  biceps          Decimal?  @db.Decimal(5, 2)
+  thighs          Decimal?  @db.Decimal(5, 2)
+  calves          Decimal?  @db.Decimal(5, 2)
+  shoulders       Decimal?  @db.Decimal(5, 2)
+  neck            Decimal?  @db.Decimal(5, 2)
+
+  // Health indicators
+  restingHeartRate  Int?    @map("resting_heart_rate")  // bpm
+  bloodPressureSys  Int?    @map("blood_pressure_sys")  // systolic
+  bloodPressureDia  Int?    @map("blood_pressure_dia")  // diastolic
+
+  // Goals
+  targetWeight    Decimal?  @map("target_weight") @db.Decimal(5, 2)
+  targetBodyFat   Decimal?  @map("target_body_fat") @db.Decimal(4, 2)
+
+  // Last measured
+  lastMeasuredAt  DateTime? @map("last_measured_at")
+  measuredBy      String?   @map("measured_by")  // trainer/self
+
+  // Notes
+  notes           String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("body_metrics")
+}
+
+// BodyMetricsHistory model - Historical body metrics records
+model BodyMetricsHistory {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+
+  // Measurement date
+  measuredAt      DateTime  @map("measured_at")
+
+  // Basic measurements
+  height          Decimal?  @db.Decimal(5, 2)   // in cm
+  weight          Decimal?  @db.Decimal(5, 2)   // in kg
+  bmi             Decimal?  @db.Decimal(4, 2)   // Body Mass Index
+
+  // Body composition
+  bodyFat         Decimal?  @map("body_fat") @db.Decimal(4, 2)
+  muscleMass      Decimal?  @map("muscle_mass") @db.Decimal(5, 2)
+  boneMass        Decimal?  @map("bone_mass") @db.Decimal(4, 2)
+  waterPercentage Decimal?  @map("water_percentage") @db.Decimal(4, 2)
+
+  // Measurements (in cm)
+  chest           Decimal?  @db.Decimal(5, 2)
+  waist           Decimal?  @db.Decimal(5, 2)
+  hips            Decimal?  @db.Decimal(5, 2)
+  biceps          Decimal?  @db.Decimal(5, 2)
+  thighs          Decimal?  @db.Decimal(5, 2)
+  calves          Decimal?  @db.Decimal(5, 2)
+  shoulders       Decimal?  @db.Decimal(5, 2)
+  neck            Decimal?  @db.Decimal(5, 2)
+
+  // Health indicators
+  restingHeartRate  Int?    @map("resting_heart_rate")
+  bloodPressureSys  Int?    @map("blood_pressure_sys")
+  bloodPressureDia  Int?    @map("blood_pressure_dia")
+
+  // Metadata
+  measuredBy      String?   @map("measured_by")
+  notes           String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, measuredAt])
+  @@index([userId, createdAt])
+  @@map("body_metrics_history")
 }

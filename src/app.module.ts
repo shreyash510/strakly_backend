@@ -10,6 +10,9 @@ import { UsersModule } from './users/users.module';
 import { LookupsModule } from './lookups/lookups.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { PlansModule } from './plans/plans.module';
+import { OffersModule } from './offers/offers.module';
+import { MembershipsModule } from './memberships/memberships.module';
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { PermissionsModule } from './permissions/permissions.module';
     LookupsModule,
     AttendanceModule,
     PermissionsModule,
+    PlansModule,
+    OffersModule,
+    MembershipsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
