@@ -7,26 +7,7 @@ import { AppService } from './app.service';
 import { FirebaseModule } from './firebase/firebase.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
-import { GoalsModule } from './goals/goals.module';
-import { HabitsModule } from './habits/habits.module';
-import { TasksModule } from './tasks/tasks.module';
-import { StreaksModule } from './streaks/streaks.module';
-import { PunishmentsModule } from './punishments/punishments.module';
-import { FriendsModule } from './friends/friends.module';
-import { ChallengesModule } from './challenges/challenges.module';
-import { DashboardModule } from './dashboard/dashboard.module';
-import { CounterModule } from './counter/counter.module';
-import { GymsModule } from './gyms/gyms.module';
 import { UsersModule } from './users/users.module';
-import { TrainersModule } from './trainers/trainers.module';
-import { SupportModule } from './support/support.module';
-import { AnnouncementsModule } from './announcements/announcements.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { ProgramsModule } from './programs/programs.module';
-import { ReportsModule } from './reports/reports.module';
-import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-import { AdminModule } from './admin/admin.module';
-import { PermissionsModule } from './permissions/permissions.module';
 import firebaseConfig from './config/firebase.config';
 import databaseConfig from './config/database.config';
 
@@ -43,26 +24,7 @@ import databaseConfig from './config/database.config';
     DatabaseModule.forRoot(),
     FirebaseModule,
     AuthModule,
-    GoalsModule,
-    HabitsModule,
-    TasksModule,
-    StreaksModule,
-    PunishmentsModule,
-    FriendsModule,
-    ChallengesModule,
-    DashboardModule,
-    CounterModule,
-    GymsModule,
     UsersModule,
-    TrainersModule,
-    SupportModule,
-    AnnouncementsModule,
-    NotificationsModule,
-    ProgramsModule,
-    ReportsModule,
-    SubscriptionsModule,
-    AdminModule,
-    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
