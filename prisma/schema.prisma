@@ -9,29 +9,6 @@ datasource db {
   provider = "postgresql"
 }
 
-// User roles enum
-enum UserRole {
-  superadmin
-  admin
-  manager
-  trainer
-  user
-}
-
-// User status enum
-enum UserStatus {
-  active
-  inactive
-  suspended
-}
-
-// Gender enum
-enum Gender {
-  male
-  female
-  other
-}
-
 // User model
 model User {
   id           String      @id @default(uuid())
@@ -44,15 +21,16 @@ model User {
   avatar       String?
   bio          String?
   dateOfBirth  String?     @map("date_of_birth")
-  gender       Gender?
   address      String?
   city         String?
   state        String?
   zipCode      String?     @map("zip_code")
 
-  // Role & Status
-  role         UserRole    @default(user)
-  status       UserStatus  @default(active)
+  // Lookup references (storing lookup code for flexibility)
+  role           String      @default("user")
+  status         String      @default("active")
+  gender         String?
+  attendanceCode String?     @unique @map("attendance_code")
 
   // Tracking
   joinDate     String?     @map("join_date")
@@ -103,4 +81,98 @@ model Lookup {
 
   @@unique([lookupTypeId, code])
   @@map("lookups")
+}
+
+// Permission model - Defines all available permissions
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique  // e.g., "users.create", "users.read", "attendance.mark"
+  name        String                    // e.g., "Create Users", "Read Users"
+  module      String                    // e.g., "users", "attendance", "lookups"
+  description String?
+  isActive    Boolean          @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+// RolePermission model - Links roles to permissions
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         String     // Role code from lookup (e.g., "admin", "manager")
+  permissionId String     @map("permission_id")
+
+  // Timestamps
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+// Attendance model - Active check-in sessions
+model Attendance {
+  id              String    @id @default(uuid())
+  odooEmployeeId  String?   @map("odoo_employee_id")
+  odooUserId      String?   @map("odoo_user_id")
+  userId          String    @map("user_id")
+  userName        String    @map("user_name")
+  userEmail       String    @map("user_email")
+  attendanceCode  String    @map("attendance_code")
+  checkInTime     DateTime  @map("check_in_time")
+  checkOutTime    DateTime? @map("check_out_time")
+  date            String    // YYYY-MM-DD format
+  markedBy        String    @map("marked_by")
+  markedByName    String    @map("marked_by_name")
+  status          String    @default("present") // present, checked_out
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, date])
+  @@index([date, status])
+  @@index([attendanceCode])
+  @@map("attendance")
+}
+
+// AttendanceHistory model - Completed attendance records
+model AttendanceHistory {
+  id                String    @id @default(uuid())
+  odooEmployeeId    String?   @map("odoo_employee_id")
+  odooUserId        String?   @map("odoo_user_id")
+  userId            String    @map("user_id")
+  userName          String    @map("user_name")
+  userEmail         String    @map("user_email")
+  attendanceCode    String    @map("attendance_code")
+  checkInTime       DateTime  @map("check_in_time")
+  checkOutTime      DateTime  @map("check_out_time")
+  date              String    // YYYY-MM-DD format
+  duration          Int?      // Duration in minutes
+  markedBy          String    @map("marked_by")
+  markedByName      String    @map("marked_by_name")
+  checkedOutBy      String?   @map("checked_out_by")
+  checkedOutByName  String?   @map("checked_out_by_name")
+  status            String    @default("checked_out")
+
+  // Timestamps
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, date])
+  @@index([date])
+  @@index([userId, checkInTime])
+  @@index([attendanceCode, date])
+  @@map("attendance_history")
 }

@@ -8,6 +8,8 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { LookupsModule } from './lookups/lookups.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { LookupsModule } from './lookups/lookups.module';
     AuthModule,
     UsersModule,
     LookupsModule,
+    AttendanceModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
