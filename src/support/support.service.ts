@@ -6,19 +6,31 @@ import {
   AddMessageDto,
   TicketFilterDto,
 } from './dto/support.dto';
+import {
+  PaginationParams,
+  PaginatedResponse,
+  getPaginationParams,
+  createPaginationMeta,
+} from '../common/pagination.util';
+
+export interface SupportFilters extends PaginationParams {
+  status?: string;
+  category?: string;
+  priority?: string;
+  userId?: number;
+  assignedToId?: number;
+}
 
 @Injectable()
 export class SupportService {
   constructor(private prisma: PrismaService) {}
 
-  // Generate unique ticket number
   private generateTicketNumber(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
     return `TKT-${timestamp}-${random}`;
   }
 
-  // Create a new support ticket
   async create(userId: number, createTicketDto: CreateTicketDto) {
     const ticketNumber = this.generateTicketNumber();
 
@@ -34,7 +46,6 @@ export class SupportService {
       },
     });
 
-    // Add initial message
     await this.prisma.supportTicketMessage.create({
       data: {
         ticketId: ticket.id,
@@ -47,28 +58,31 @@ export class SupportService {
     return this.findOne(ticket.id, userId);
   }
 
-  // Get all tickets (admin) or user's tickets
-  async findAll(filters: TicketFilterDto, userRole: string, userId?: number) {
+  async findAll(
+    filters: SupportFilters,
+    userRole: string,
+    userId?: number
+  ): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
     const where: any = {};
 
-    // Non-admin users can only see their own tickets
     if (!isAdmin) {
       where.userId = userId;
     } else if (filters.userId) {
       where.userId = filters.userId;
     }
 
-    if (filters.status) {
+    if (filters.status && filters.status !== 'all') {
       where.status = filters.status;
     }
 
-    if (filters.category) {
+    if (filters.category && filters.category !== 'all') {
       where.category = filters.category;
     }
 
-    if (filters.priority) {
+    if (filters.priority && filters.priority !== 'all') {
       where.priority = filters.priority;
     }
 
@@ -76,11 +90,24 @@ export class SupportService {
       where.assignedToId = filters.assignedToId;
     }
 
+    // Apply search filter
+    if (filters.search) {
+      where.OR = [
+        { subject: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { ticketNumber: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Get total count
+    const total = await this.prisma.supportTicket.count({ where });
+
+    // Get paginated data
     const tickets = await this.prisma.supportTicket.findMany({
       where,
       orderBy: [
-        { status: 'asc' }, // Open tickets first
-        { priority: 'desc' }, // High priority first
+        { status: 'asc' },
+        { priority: 'desc' },
         { createdAt: 'desc' },
       ],
       include: {
@@ -89,9 +116,10 @@ export class SupportService {
           take: 1,
         },
       },
+      skip,
+      take,
     });
 
-    // Get user info for each ticket
     const ticketsWithUserInfo = await Promise.all(
       tickets.map(async (ticket) => {
         const user = await this.prisma.user.findUnique({
@@ -117,10 +145,12 @@ export class SupportService {
       }),
     );
 
-    return ticketsWithUserInfo;
+    return {
+      data: ticketsWithUserInfo,
+      pagination: createPaginationMeta(total, page, limit, noPagination),
+    };
   }
 
-  // Get single ticket by ID
   async findOne(ticketId: number, userId?: number, userRole?: string) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
@@ -135,13 +165,11 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
-    // Check permission - non-admin can only view their own tickets
     const isAdmin = userRole && ['superadmin', 'admin'].includes(userRole);
     if (!isAdmin && userId && ticket.userId !== userId) {
       throw new ForbiddenException('You can only view your own tickets');
     }
 
-    // Get user info
     const user = await this.prisma.user.findUnique({
       where: { id: ticket.userId },
       select: { id: true, name: true, email: true },
@@ -155,7 +183,6 @@ export class SupportService {
       });
     }
 
-    // Get sender info for each message
     const messagesWithSenderInfo = await Promise.all(
       ticket.messages.map(async (message) => {
         const sender = await this.prisma.user.findUnique({
@@ -177,7 +204,6 @@ export class SupportService {
     };
   }
 
-  // Update ticket (admin only for most fields)
   async update(
     ticketId: number,
     updateTicketDto: UpdateTicketDto,
@@ -194,12 +220,10 @@ export class SupportService {
 
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
-    // Non-admin can only update their own tickets and only certain fields
     if (!isAdmin) {
       if (ticket.userId !== userId) {
         throw new ForbiddenException('You can only update your own tickets');
       }
-      // Non-admin can only update subject, description, category
       const allowedFields = ['subject', 'description', 'category'];
       const updateData: any = {};
       for (const field of allowedFields) {
@@ -213,10 +237,8 @@ export class SupportService {
       });
     }
 
-    // Admin can update all fields
     const updateData: any = { ...updateTicketDto };
 
-    // Handle status changes
     if (updateTicketDto.status === 'resolved' && !ticket.resolvedAt) {
       updateData.resolvedAt = new Date();
     }
@@ -233,7 +255,6 @@ export class SupportService {
     return this.findOne(updatedTicket.id, userId, userRole);
   }
 
-  // Add message to ticket
   async addMessage(
     ticketId: number,
     addMessageDto: AddMessageDto,
@@ -250,7 +271,6 @@ export class SupportService {
 
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
-    // Non-admin can only add messages to their own tickets
     if (!isAdmin && ticket.userId !== senderId) {
       throw new ForbiddenException('You can only add messages to your own tickets');
     }
@@ -267,7 +287,6 @@ export class SupportService {
       },
     });
 
-    // If admin responds to an open ticket, change status to in_progress
     if (isAdmin && ticket.status === 'open') {
       await this.prisma.supportTicket.update({
         where: { id: ticketId },
@@ -278,7 +297,6 @@ export class SupportService {
     return this.findOne(ticketId, senderId, userRole);
   }
 
-  // Delete ticket (admin only)
   async remove(ticketId: number, userId: number, userRole: string) {
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
@@ -301,7 +319,6 @@ export class SupportService {
     return { success: true, message: 'Ticket deleted successfully' };
   }
 
-  // Get ticket statistics (admin only)
   async getStats() {
     const [total, open, inProgress, resolved, closed] = await Promise.all([
       this.prisma.supportTicket.count(),

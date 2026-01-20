@@ -9,19 +9,21 @@ import {
   Query,
   UseGuards,
   Request,
+  Res,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SupportService } from './support.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
   AddMessageDto,
-  TicketFilterDto,
 } from './dto/support.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { setPaginationHeaders } from '../common/pagination.util';
 
 @ApiTags('support')
 @Controller('support')
@@ -37,23 +39,50 @@ export class SupportController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all support tickets' })
-  findAll(
+  @ApiOperation({ summary: 'Get all support tickets with optional filters and pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by subject, description, or ticket number' })
+  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
+  @ApiQuery({ name: 'category', required: false, type: String, description: 'Filter by category' })
+  @ApiQuery({ name: 'priority', required: false, type: String, description: 'Filter by priority' })
+  @ApiQuery({ name: 'userId', required: false, type: String, description: 'Filter by user ID' })
+  @ApiQuery({ name: 'assignedToId', required: false, type: String, description: 'Filter by assigned user ID' })
+  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
+  async findAll(
     @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('category') category?: string,
     @Query('priority') priority?: string,
     @Query('userId') userId?: string,
     @Query('assignedToId') assignedToId?: string,
+    @Query('noPagination') noPagination?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
-    const filters: TicketFilterDto = {};
-    if (status) filters.status = status as any;
-    if (category) filters.category = category as any;
-    if (priority) filters.priority = priority as any;
-    if (userId) filters.userId = parseInt(userId);
-    if (assignedToId) filters.assignedToId = parseInt(assignedToId);
+    const result = await this.supportService.findAll(
+      {
+        page: page ? parseInt(page) : undefined,
+        limit: limit ? parseInt(limit) : undefined,
+        search,
+        status,
+        category,
+        priority,
+        userId: userId ? parseInt(userId) : undefined,
+        assignedToId: assignedToId ? parseInt(assignedToId) : undefined,
+        noPagination: noPagination === 'true',
+      },
+      req.user.role,
+      req.user.userId
+    );
 
-    return this.supportService.findAll(filters, req.user.role, req.user.userId);
+    if (res && result.pagination) {
+      setPaginationHeaders(res, result.pagination);
+    }
+
+    return result.data;
   }
 
   @Get('stats')

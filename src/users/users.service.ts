@@ -2,6 +2,17 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
+import {
+  PaginationParams,
+  PaginatedResponse,
+  getPaginationParams,
+  createPaginationMeta,
+} from '../common/pagination.util';
+
+export interface UserFilters extends PaginationParams {
+  role?: string;
+  status?: string;
+}
 
 @Injectable()
 export class UsersService {
@@ -36,13 +47,33 @@ export class UsersService {
     return code!;
   }
 
+  private formatUser(user: any) {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      bio: user.bio,
+      role: user.role?.code || 'member',
+      status: user.status,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
+      attendanceCode: user.attendanceCode,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
   async create(createUserDto: CreateUserDto): Promise<any> {
-    // Validate password is provided
     if (!createUserDto.password) {
       throw new BadRequestException('Password is required');
     }
 
-    // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
     });
@@ -51,7 +82,6 @@ export class UsersService {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Find the role lookup
     const roleCode = createUserDto.role || 'admin';
     const roleLookup = await this.prisma.lookup.findFirst({
       where: {
@@ -64,10 +94,8 @@ export class UsersService {
       throw new NotFoundException(`Role ${roleCode} not found`);
     }
 
-    // Generate unique attendance code
     const attendanceCode = await this.generateUniqueAttendanceCode();
 
-    // Create user
     const user = await this.prisma.user.create({
       data: {
         name: createUserDto.name,
@@ -92,63 +120,48 @@ export class UsersService {
       },
     });
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar,
-      bio: user.bio,
-      role: user.role?.code || 'member',
-      status: user.status,
-      dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
-      address: user.address,
-      city: user.city,
-      state: user.state,
-      zipCode: user.zipCode,
-      attendanceCode: user.attendanceCode,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+    return this.formatUser(user);
   }
 
-  async findAll(filters?: { role?: string; status?: string }): Promise<any[]> {
+  async findAll(filters: UserFilters = {}): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+
     const where: any = {};
 
-    if (filters?.role) {
+    if (filters.role && filters.role !== 'all') {
       where.role = { code: filters.role };
     }
-    if (filters?.status) {
+    if (filters.status && filters.status !== 'all') {
       where.status = filters.status;
     }
 
+    // Apply search filter
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+        { phone: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Get total count
+    const total = await this.prisma.user.count({ where });
+
+    // Get paginated data
     const users = await this.prisma.user.findMany({
       where,
       include: {
         role: true,
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
 
-    return users.map(user => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar,
-      bio: user.bio,
-      role: user.role?.code || 'member',
-      status: user.status,
-      dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
-      address: user.address,
-      city: user.city,
-      state: user.state,
-      zipCode: user.zipCode,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    }));
+    return {
+      data: users.map(user => this.formatUser(user)),
+      pagination: createPaginationMeta(total, page, limit, noPagination),
+    };
   }
 
   async findOne(id: number): Promise<any> {
@@ -163,34 +176,16 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar,
-      bio: user.bio,
-      role: user.role?.code || 'member',
-      status: user.status,
-      dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
-      address: user.address,
-      city: user.city,
-      state: user.state,
-      zipCode: user.zipCode,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+    return this.formatUser(user);
   }
 
-  async findByRole(role: string): Promise<any[]> {
-    return this.findAll({ role });
+  async findByRole(role: string): Promise<PaginatedResponse<any>> {
+    return this.findAll({ role, noPagination: true });
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<any> {
     await this.findOne(id);
 
-    // Extract role from DTO and handle separately
     const { role: roleCode, ...updateData } = updateUserDto;
 
     let roleId: number | undefined;
@@ -219,24 +214,7 @@ export class UsersService {
       },
     });
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar,
-      bio: user.bio,
-      role: user.role?.code || 'member',
-      status: user.status,
-      dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
-      address: user.address,
-      city: user.city,
-      state: user.state,
-      zipCode: user.zipCode,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+    return this.formatUser(user);
   }
 
   async remove(id: number): Promise<{ success: boolean }> {

@@ -1,18 +1,59 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
+import {
+  PaginationParams,
+  PaginatedResponse,
+  getPaginationParams,
+  createPaginationMeta,
+} from '../common/pagination.util';
+
+export interface GymFilters extends PaginationParams {
+  status?: string;
+  includeInactive?: boolean;
+}
 
 @Injectable()
 export class GymService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(includeInactive = false) {
-    const where = includeInactive ? {} : { isActive: true };
+  async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
 
-    return this.prisma.gym.findMany({
+    const where: any = {};
+
+    // Handle status filter
+    if (filters.status && filters.status !== 'all') {
+      where.isActive = filters.status === 'active';
+    } else if (!filters.includeInactive) {
+      where.isActive = true;
+    }
+
+    // Apply search filter
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+        { phone: { contains: filters.search, mode: 'insensitive' } },
+        { city: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Get total count
+    const total = await this.prisma.gym.count({ where });
+
+    // Get paginated data
+    const gyms = await this.prisma.gym.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
+
+    return {
+      data: gyms,
+      pagination: createPaginationMeta(total, page, limit, noPagination),
+    };
   }
 
   async findOne(id: number) {

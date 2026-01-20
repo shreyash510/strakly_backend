@@ -9,14 +9,17 @@ import {
   Headers,
   UseGuards,
   Request,
+  Res,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { setPaginationHeaders } from '../common/pagination.util';
 
 @ApiTags('users')
 @Controller('users')
@@ -28,12 +31,36 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get all users with optional filters' })
-  findAll(
+  @ApiOperation({ summary: 'Get all users with optional filters and pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or phone' })
+  @ApiQuery({ name: 'role', required: false, type: String, description: 'Filter by role' })
+  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
+  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
     @Query('role') role?: string,
     @Query('status') status?: string,
+    @Query('noPagination') noPagination?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
-    return this.usersService.findAll({ role, status });
+    const result = await this.usersService.findAll({
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      search,
+      role,
+      status,
+      noPagination: noPagination === 'true',
+    });
+
+    if (res && result.pagination) {
+      setPaginationHeaders(res, result.pagination);
+    }
+
+    return result.data;
   }
 
   @Post()
@@ -48,8 +75,17 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get users by role' })
-  findByRole(@Query('role') role: string) {
-    return this.usersService.findByRole(role);
+  async findByRole(
+    @Query('role') role: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const result = await this.usersService.findByRole(role);
+
+    if (res && result.pagination) {
+      setPaginationHeaders(res, result.pagination);
+    }
+
+    return result.data;
   }
 
   // ============ CURRENT USER ENDPOINTS ============
