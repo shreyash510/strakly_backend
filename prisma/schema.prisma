@@ -27,7 +27,7 @@ model User {
   zipCode      String?     @map("zip_code")
 
   // Lookup references
-  roleId         String      @map("role_id")
+  roleId         Int         @map("role_id")
   status         String      @default("active")
   gender         String?
   attendanceCode String?     @unique @map("attendance_code")
@@ -47,13 +47,15 @@ model User {
   memberships        Membership[]
   bodyMetrics        BodyMetrics?
   bodyMetricsHistory BodyMetricsHistory[]
+  attendances        Attendance[]
+  attendanceHistory  AttendanceHistory[]
 
   @@map("users")
 }
 
 // LookupType model - Categories for lookup values
 model LookupType {
-  id          String    @id @default(uuid())
+  id          Int       @id @default(autoincrement())
   code        String    @unique
   name        String
   description String?
@@ -71,8 +73,8 @@ model LookupType {
 
 // Lookup model - Actual lookup values
 model Lookup {
-  id            String     @id @default(uuid())
-  lookupTypeId  String     @map("lookup_type_id")
+  id            Int        @id @default(autoincrement())
+  lookupTypeId  Int        @map("lookup_type_id")
   code          String
   name          String
   value         String?
@@ -94,7 +96,7 @@ model Lookup {
 
 // Permission model - Defines all available permissions
 model Permission {
-  id          String           @id @default(uuid())
+  id          Int              @id @default(autoincrement())
   code        String           @unique  // e.g., "users.create", "users.read", "attendance.mark"
   name        String                    // e.g., "Create Users", "Read Users"
   module      String                    // e.g., "users", "attendance", "lookups"
@@ -114,9 +116,9 @@ model Permission {
 
 // RolePermission model - Links roles to permissions
 model RolePermission {
-  id           String     @id @default(uuid())
+  id           Int        @id @default(autoincrement())
   role         String     // Role code from lookup (e.g., "admin", "manager")
-  permissionId String     @map("permission_id")
+  permissionId Int        @map("permission_id")
 
   // Timestamps
   createdAt    DateTime   @default(now()) @map("created_at")
@@ -132,57 +134,48 @@ model RolePermission {
 
 // Attendance model - Active check-in sessions
 model Attendance {
-  id              String    @id @default(uuid())
-  odooEmployeeId  String?   @map("odoo_employee_id")
-  odooUserId      String?   @map("odoo_user_id")
-  userId          String    @map("user_id")
-  userName        String    @map("user_name")
-  userEmail       String    @map("user_email")
-  attendanceCode  String    @map("attendance_code")
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("user_id")
   checkInTime     DateTime  @map("check_in_time")
   checkOutTime    DateTime? @map("check_out_time")
   date            String    // YYYY-MM-DD format
-  markedBy        String    @map("marked_by")
-  markedByName    String    @map("marked_by_name")
+  markedById      Int       @map("marked_by_id")
   status          String    @default("present") // present, checked_out
 
   // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, date])
   @@index([date, status])
-  @@index([attendanceCode])
   @@map("attendance")
 }
 
 // AttendanceHistory model - Completed attendance records
 model AttendanceHistory {
-  id                String    @id @default(uuid())
-  odooEmployeeId    String?   @map("odoo_employee_id")
-  odooUserId        String?   @map("odoo_user_id")
-  userId            String    @map("user_id")
-  userName          String    @map("user_name")
-  userEmail         String    @map("user_email")
-  attendanceCode    String    @map("attendance_code")
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
   checkInTime       DateTime  @map("check_in_time")
   checkOutTime      DateTime  @map("check_out_time")
   date              String    // YYYY-MM-DD format
   duration          Int?      // Duration in minutes
-  markedBy          String    @map("marked_by")
-  markedByName      String    @map("marked_by_name")
-  checkedOutBy      String?   @map("checked_out_by")
-  checkedOutByName  String?   @map("checked_out_by_name")
+  markedById        Int       @map("marked_by_id")
+  checkedOutById    Int?      @map("checked_out_by_id")
   status            String    @default("checked_out")
 
   // Timestamps
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, date])
   @@index([date])
   @@index([userId, checkInTime])
-  @@index([attendanceCode, date])
   @@map("attendance_history")
 }
 
@@ -192,7 +185,7 @@ model AttendanceHistory {
 
 // Plan model - Membership plans available
 model Plan {
-  id              String       @id @default(uuid())
+  id              Int          @id @default(autoincrement())
   code            String       @unique                    // e.g., "basic", "premium", "vip"
   name            String                                  // e.g., "Basic Plan", "Premium Plan"
   description     String?
@@ -227,7 +220,7 @@ model Plan {
 
 // Offer model - Discounts and promotions
 model Offer {
-  id                String       @id @default(uuid())
+  id                Int          @id @default(autoincrement())
   code              String       @unique                  // e.g., "SUMMER20", "NEWYEAR50"
   name              String                                // e.g., "Summer Sale", "New Year Offer"
   description       String?
@@ -267,9 +260,9 @@ model Offer {
 
 // PlanOffer model - Many-to-many: which offers apply to which plans
 model PlanOffer {
-  id        String   @id @default(uuid())
-  planId    String   @map("plan_id")
-  offerId   String   @map("offer_id")
+  id        Int      @id @default(autoincrement())
+  planId    Int      @map("plan_id")
+  offerId   Int      @map("offer_id")
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -284,16 +277,16 @@ model PlanOffer {
 
 // Membership model - User's subscription/membership record
 model Membership {
-  id              String    @id @default(uuid())
+  id              Int       @id @default(autoincrement())
 
   // User reference
   userId          Int       @map("user_id")
 
   // Plan reference
-  planId          String    @map("plan_id")
+  planId          Int       @map("plan_id")
 
   // Offer reference (optional - if discount was applied)
-  offerId         String?   @map("offer_id")
+  offerId         Int?      @map("offer_id")
 
   // Membership period
   startDate       DateTime  @map("start_date")
@@ -342,7 +335,7 @@ model Membership {
 
 // BodyMetrics model - Current/latest body metrics for a user
 model BodyMetrics {
-  id              String    @id @default(uuid())
+  id              Int       @id @default(autoincrement())
   userId          Int       @unique @map("user_id")
 
   // Basic measurements
@@ -394,7 +387,7 @@ model BodyMetrics {
 
 // BodyMetricsHistory model - Historical body metrics records
 model BodyMetricsHistory {
-  id              String    @id @default(uuid())
+  id              Int       @id @default(autoincrement())
   userId          Int       @map("user_id")
 
   // Measurement date
@@ -439,4 +432,47 @@ model BodyMetricsHistory {
   @@index([userId, measuredAt])
   @@index([userId, createdAt])
   @@map("body_metrics_history")
+}
+
+// ============================================
+// GYM MANAGEMENT MODEL
+// ============================================
+
+// Gym model - Gym/Branch details
+model Gym {
+  id              Int       @id @default(autoincrement())
+
+  // Basic info
+  name            String
+  description     String?
+  logo            String?
+
+  // Contact
+  phone           String?
+  email           String?
+  website         String?
+
+  // Address
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?   @map("zip_code")
+  country         String?   @default("India")
+
+  // Operating hours (stored as HH:MM format)
+  openingTime     String?   @map("opening_time")
+  closingTime     String?   @map("closing_time")
+
+  // Capacity and facilities
+  capacity        Int?
+  amenities       Json?     // Array of amenities like ["Parking", "AC", "Locker", "Shower"]
+
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("gyms")
 }

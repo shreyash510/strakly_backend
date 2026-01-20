@@ -266,7 +266,7 @@ export class BodyMetricsService {
   }
 
   // Delete a history record
-  async deleteHistoryRecord(id: string, userId: number) {
+  async deleteHistoryRecord(id: number, userId: number) {
     const record = await this.prisma.bodyMetricsHistory.findUnique({
       where: { id },
     });

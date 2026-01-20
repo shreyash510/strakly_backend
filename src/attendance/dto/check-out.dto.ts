@@ -1,11 +1,9 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsNumber, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CheckOutDto {
-  @IsString()
+  @IsNumber()
   @IsOptional()
-  staffId?: string;
-
-  @IsString()
-  @IsOptional()
-  staffName?: string;
+  @Type(() => Number)
+  staffId?: number;
 }

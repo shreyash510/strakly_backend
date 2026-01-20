@@ -14,6 +14,7 @@ import { PlansModule } from './plans/plans.module';
 import { OffersModule } from './offers/offers.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { BodyMetricsModule } from './body-metrics/body-metrics.module';
+import { GymModule } from './gym/gym.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { BodyMetricsModule } from './body-metrics/body-metrics.module';
     OffersModule,
     MembershipsModule,
     BodyMetricsModule,
+    GymModule,
   ],
   controllers: [AppController],
   providers: [AppService],

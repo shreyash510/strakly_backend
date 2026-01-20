@@ -48,8 +48,9 @@ export class CreateOfferDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  planIds?: string[];  // Plan IDs this offer applies to (if not applicableToAll)
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  planIds?: number[];  // Plan IDs this offer applies to (if not applicableToAll)
 }
 
 export class UpdateOfferDto {
@@ -106,6 +107,7 @@ export class UpdateOfferDto {
 
 export class AssignOfferToPlansDto {
   @IsArray()
-  @IsString({ each: true })
-  planIds: string[];
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  planIds: number[];
 }

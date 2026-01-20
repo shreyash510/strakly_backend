@@ -18,7 +18,7 @@ export class MembershipsService {
     private readonly offersService: OffersService,
   ) {}
 
-  async findAll(filters?: { status?: string; userId?: number; planId?: string }) {
+  async findAll(filters?: { status?: string; userId?: number; planId?: number }) {
     const where: any = {};
 
     if (filters?.status) {
@@ -44,7 +44,7 @@ export class MembershipsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: number) {
     const membership = await this.prisma.membership.findUnique({
       where: { id },
       include: {
@@ -175,7 +175,7 @@ export class MembershipsService {
     return membership;
   }
 
-  async update(id: string, dto: UpdateMembershipDto) {
+  async update(id: number, dto: UpdateMembershipDto) {
     await this.findOne(id);
 
     const updateData: any = { ...dto };
@@ -197,7 +197,7 @@ export class MembershipsService {
     });
   }
 
-  async recordPayment(id: string, dto: RecordPaymentDto) {
+  async recordPayment(id: number, dto: RecordPaymentDto) {
     const membership = await this.findOne(id);
 
     if (membership.paymentStatus === 'paid') {
@@ -223,7 +223,7 @@ export class MembershipsService {
     });
   }
 
-  async activate(id: string) {
+  async activate(id: number) {
     const membership = await this.findOne(id);
 
     if (membership.status === 'active') {
@@ -240,7 +240,7 @@ export class MembershipsService {
     });
   }
 
-  async cancel(id: string, dto: CancelMembershipDto) {
+  async cancel(id: number, dto: CancelMembershipDto) {
     const membership = await this.findOne(id);
 
     if (membership.status === 'cancelled') {
@@ -257,7 +257,7 @@ export class MembershipsService {
     });
   }
 
-  async pause(id: string) {
+  async pause(id: number) {
     const membership = await this.findOne(id);
 
     if (membership.status !== 'active') {
@@ -270,7 +270,7 @@ export class MembershipsService {
     });
   }
 
-  async resume(id: string) {
+  async resume(id: number) {
     const membership = await this.findOne(id);
 
     if (membership.status !== 'paused') {

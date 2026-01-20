@@ -1,4 +1,5 @@
-import { IsString, IsNotEmpty, Length } from 'class-validator';
+import { IsString, IsNotEmpty, Length, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class MarkAttendanceDto {
   @IsString()
@@ -6,11 +7,8 @@ export class MarkAttendanceDto {
   @Length(4, 4)
   code: string;
 
-  @IsString()
+  @IsNumber()
   @IsNotEmpty()
-  staffId: string;
-
-  @IsString()
-  @IsNotEmpty()
-  staffName: string;
+  @Type(() => Number)
+  staffId: number;
 }

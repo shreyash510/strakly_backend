@@ -8,11 +8,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private pool: Pool;
 
   constructor() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const env = process.env.ENVIRONMENT || 'dev';
+
+    // Select database URL based on ENVIRONMENT
+    let databaseUrl: string | undefined;
+    if (env === 'prod') {
+      databaseUrl = process.env.DATABASE_URL_PROD || process.env.DATABASE_URL;
+    } else {
+      databaseUrl = process.env.DATABASE_URL_DEV || process.env.DATABASE_URL;
+    }
+
+    if (!databaseUrl) {
+      throw new Error(`Database URL not configured for environment: ${env}. Set DATABASE_URL_${env === 'prod' ? 'PROD' : 'DEV'} or DATABASE_URL`);
+    }
+
+    console.log(`Connecting to ${env} database...`);
+
+    const pool = new Pool({ connectionString: databaseUrl });
     const adapter = new PrismaPg(pool);
     super({
       adapter,
-      log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+      log: env === 'dev' ? ['query', 'info', 'warn', 'error'] : ['error'],
     });
     this.pool = pool;
   }

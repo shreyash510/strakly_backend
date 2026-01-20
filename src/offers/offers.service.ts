@@ -46,7 +46,7 @@ export class OffersService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: number) {
     const offer = await this.prisma.offer.findUnique({
       where: { id },
       include: {
@@ -86,7 +86,7 @@ export class OffersService {
     return offer;
   }
 
-  async validateOfferCode(code: string, planId?: string) {
+  async validateOfferCode(code: string, planId?: number) {
     const offer = await this.prisma.offer.findUnique({
       where: { code },
     });
@@ -173,7 +173,7 @@ export class OffersService {
     return this.findOne(offer.id);
   }
 
-  async update(id: string, dto: UpdateOfferDto) {
+  async update(id: number, dto: UpdateOfferDto) {
     await this.findOne(id);
 
     const updateData: any = { ...dto };
@@ -191,7 +191,7 @@ export class OffersService {
     });
   }
 
-  async delete(id: string) {
+  async delete(id: number) {
     await this.findOne(id);
 
     return this.prisma.offer.update({
@@ -200,7 +200,7 @@ export class OffersService {
     });
   }
 
-  async assignToPlans(offerId: string, dto: AssignOfferToPlansDto) {
+  async assignToPlans(offerId: number, dto: AssignOfferToPlansDto) {
     await this.findOne(offerId);
 
     // Delete existing associations
@@ -228,7 +228,7 @@ export class OffersService {
     return this.findOne(offerId);
   }
 
-  async addToPlan(offerId: string, planId: string) {
+  async addToPlan(offerId: number, planId: number) {
     await this.findOne(offerId);
 
     // Verify plan exists
@@ -258,7 +258,7 @@ export class OffersService {
     });
   }
 
-  async removeFromPlan(offerId: string, planId: string) {
+  async removeFromPlan(offerId: number, planId: number) {
     const existing = await this.prisma.planOffer.findUnique({
       where: {
         planId_offerId: { planId, offerId },
@@ -278,7 +278,7 @@ export class OffersService {
     return { success: true };
   }
 
-  async incrementUsage(offerId: string) {
+  async incrementUsage(offerId: number) {
     return this.prisma.offer.update({
       where: { id: offerId },
       data: { usedCount: { increment: 1 } },

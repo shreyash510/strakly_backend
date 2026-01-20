@@ -10,6 +10,7 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
@@ -46,7 +47,7 @@ export class MembershipsController {
     return this.membershipsService.findAll({
       status,
       userId: userId ? parseInt(userId) : undefined,
-      planId
+      planId: planId ? parseInt(planId) : undefined,
     });
   }
 
@@ -147,7 +148,7 @@ export class MembershipsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get membership by ID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseIntPipe) id: number) {
     return this.membershipsService.findOne(id);
   }
 
@@ -163,7 +164,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update a membership' })
-  update(@Param('id') id: string, @Body() dto: UpdateMembershipDto) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMembershipDto) {
     return this.membershipsService.update(id, dto);
   }
 
@@ -171,7 +172,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
-  recordPayment(@Param('id') id: string, @Body() dto: RecordPaymentDto) {
+  recordPayment(@Param('id', ParseIntPipe) id: number, @Body() dto: RecordPaymentDto) {
     return this.membershipsService.recordPayment(id, dto);
   }
 
@@ -179,7 +180,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Activate a membership' })
-  activate(@Param('id') id: string) {
+  activate(@Param('id', ParseIntPipe) id: number) {
     return this.membershipsService.activate(id);
   }
 
@@ -187,7 +188,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Cancel a membership' })
-  cancel(@Param('id') id: string, @Body() dto: CancelMembershipDto) {
+  cancel(@Param('id', ParseIntPipe) id: number, @Body() dto: CancelMembershipDto) {
     return this.membershipsService.cancel(id, dto);
   }
 
@@ -195,7 +196,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Pause a membership' })
-  pause(@Param('id') id: string) {
+  pause(@Param('id', ParseIntPipe) id: number) {
     return this.membershipsService.pause(id);
   }
 
@@ -203,7 +204,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Resume a paused membership' })
-  resume(@Param('id') id: string) {
+  resume(@Param('id', ParseIntPipe) id: number) {
     return this.membershipsService.resume(id);
   }
 }
