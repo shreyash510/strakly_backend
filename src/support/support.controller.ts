@@ -12,7 +12,7 @@ import {
   Res,
   ParseIntPipe,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SupportService } from './support.service';
 import {

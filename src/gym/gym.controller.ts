@@ -11,7 +11,7 @@ import {
   Res,
   ParseIntPipe,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { GymService } from './gym.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';

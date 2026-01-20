@@ -5,14 +5,16 @@ import {
   Patch,
   Delete,
   Body,
+  Param,
   Query,
   Headers,
   UseGuards,
   Request,
   Res,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
@@ -71,23 +73,6 @@ export class UsersController {
     return this.usersService.create(createUserDto);
   }
 
-  @Get('role/:role')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get users by role' })
-  async findByRole(
-    @Query('role') role: string,
-    @Res({ passthrough: true }) res?: Response,
-  ) {
-    const result = await this.usersService.findByRole(role);
-
-    if (res && result.pagination) {
-      setPaginationHeaders(res, result.pagination);
-    }
-
-    return result.data;
-  }
-
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
@@ -107,9 +92,9 @@ export class UsersController {
   @Get('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get single user by ID' })
+  @ApiOperation({ summary: 'Get single user by ID (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  findOne(@Headers('x-user-id') userId: string) {
+  findOneByHeader(@Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.usersService.findOne(parseInt(userId));
   }
@@ -117,9 +102,9 @@ export class UsersController {
   @Patch('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
-  @ApiOperation({ summary: 'Update user' })
+  @ApiOperation({ summary: 'Update user (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  update(@Headers('x-user-id') userId: string, @Body() updateUserDto: UpdateUserDto) {
+  updateByHeader(@Headers('x-user-id') userId: string, @Body() updateUserDto: UpdateUserDto) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.usersService.update(parseInt(userId), updateUserDto);
   }
@@ -127,9 +112,9 @@ export class UsersController {
   @Delete('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
-  @ApiOperation({ summary: 'Delete user' })
+  @ApiOperation({ summary: 'Delete user (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  remove(@Headers('x-user-id') userId: string) {
+  removeByHeader(@Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.usersService.remove(parseInt(userId));
   }
@@ -137,10 +122,56 @@ export class UsersController {
   @Patch('user/status')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
-  @ApiOperation({ summary: 'Update user status' })
+  @ApiOperation({ summary: 'Update user status (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  updateStatus(@Headers('x-user-id') userId: string, @Body() body: { status: string }) {
+  updateStatusByHeader(@Headers('x-user-id') userId: string, @Body() body: { status: string }) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.usersService.updateStatus(parseInt(userId), body.status);
+  }
+
+  @Get('role/:role')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get users by role' })
+  async findByRole(
+    @Param('role') role: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const result = await this.usersService.findByRole(role);
+
+    if (res && result.pagination) {
+      setPaginationHeaders(res, result.pagination);
+    }
+
+    return result.data;
+  }
+
+  // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============
+
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get user by ID' })
+  findById(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Update user by ID' })
+  updateById(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.update(id, updateUserDto);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Delete user by ID' })
+  removeById(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.remove(id);
   }
 }

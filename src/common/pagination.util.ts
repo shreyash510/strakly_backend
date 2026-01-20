@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import type { Response } from 'express';
 
 export interface PaginationParams {
   page?: number;
@@ -23,7 +23,7 @@ export function getPaginationParams(query: any): {
   page: number;
   limit: number;
   skip: number;
-  take: number;
+  take: number | undefined;
   noPagination: boolean;
 } {
   const page = Math.max(1, parseInt(query.page) || 1);
