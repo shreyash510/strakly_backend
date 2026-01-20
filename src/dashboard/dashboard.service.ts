@@ -6,6 +6,10 @@ import {
   RecentGymDto,
   RecentUserDto,
   RecentTicketDto,
+  AdminDashboardDto,
+  AdminDashboardStatsDto,
+  RecentMemberDto,
+  RecentAttendanceDto,
 } from './dto/dashboard.dto';
 
 @Injectable()
@@ -207,6 +211,338 @@ export class DashboardService {
 
   private async getRecentTickets(limit = 5): Promise<RecentTicketDto[]> {
     const tickets = await this.prisma.supportTicket.findMany({
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        ticketNumber: true,
+        subject: true,
+        category: true,
+        priority: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return tickets;
+  }
+
+  // Admin Dashboard Methods
+  async getAdminDashboard(userId: number): Promise<AdminDashboardDto> {
+    // Get admin's gym IDs
+    const gymIds = await this.getAdminGymIds(userId);
+
+    const [stats, recentMembers, recentAttendance, recentTickets] =
+      await Promise.all([
+        this.getAdminStats(gymIds),
+        this.getRecentMembers(gymIds),
+        this.getRecentAttendance(gymIds),
+        this.getRecentTicketsForGyms(gymIds),
+      ]);
+
+    return {
+      stats,
+      recentMembers,
+      recentAttendance,
+      recentTickets,
+    };
+  }
+
+  private async getAdminGymIds(userId: number): Promise<number[]> {
+    const gymXrefs = await this.prisma.userGymXref.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+      select: {
+        gymId: true,
+      },
+    });
+
+    return gymXrefs.map((xref) => xref.gymId);
+  }
+
+  private async getAdminStats(gymIds: number[]): Promise<AdminDashboardStatsDto> {
+    if (gymIds.length === 0) {
+      return {
+        totalMembers: 0,
+        activeMembers: 0,
+        totalTrainers: 0,
+        activeMemberships: 0,
+        totalRevenue: 0,
+        monthlyRevenue: 0,
+        monthlyGrowth: 0,
+        presentToday: 0,
+        openTickets: 0,
+        expiringThisWeek: 0,
+      };
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const today = now.toISOString().split('T')[0];
+    const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // Get role lookups
+    const [trainerRole, memberRole] = await Promise.all([
+      this.prisma.lookup.findFirst({
+        where: {
+          code: 'trainer',
+          lookupType: { code: 'USER_ROLE' },
+        },
+      }),
+      this.prisma.lookup.findFirst({
+        where: {
+          code: 'member',
+          lookupType: { code: 'USER_ROLE' },
+        },
+      }),
+    ]);
+
+    // Get user IDs in admin's gyms
+    const gymUserXrefs = await this.prisma.userGymXref.findMany({
+      where: {
+        gymId: { in: gymIds },
+        isActive: true,
+      },
+      select: {
+        userId: true,
+      },
+    });
+    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
+
+    // Execute all queries in parallel
+    const [
+      totalMembers,
+      activeMembers,
+      totalTrainers,
+      activeMemberships,
+      revenueData,
+      lastMonthRevenue,
+      thisMonthRevenue,
+      presentToday,
+      openTickets,
+      expiringThisWeek,
+    ] = await Promise.all([
+      // Total members in gym
+      memberRole
+        ? this.prisma.user.count({
+            where: {
+              id: { in: userIdsInGyms },
+              roleId: memberRole.id,
+            },
+          })
+        : 0,
+      // Active members
+      memberRole
+        ? this.prisma.user.count({
+            where: {
+              id: { in: userIdsInGyms },
+              roleId: memberRole.id,
+              status: 'active',
+            },
+          })
+        : 0,
+      // Total trainers in gym
+      trainerRole
+        ? this.prisma.user.count({
+            where: {
+              id: { in: userIdsInGyms },
+              roleId: trainerRole.id,
+            },
+          })
+        : 0,
+      // Active memberships in gym
+      this.prisma.membership.count({
+        where: {
+          gymId: { in: gymIds },
+          status: 'active',
+        },
+      }),
+      // Total revenue
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          gymId: { in: gymIds },
+          paymentStatus: 'paid',
+        },
+      }),
+      // Last month revenue
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          gymId: { in: gymIds },
+          paymentStatus: 'paid',
+          paidAt: {
+            gte: startOfLastMonth,
+            lte: endOfLastMonth,
+          },
+        },
+      }),
+      // This month revenue
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          gymId: { in: gymIds },
+          paymentStatus: 'paid',
+          paidAt: {
+            gte: startOfMonth,
+          },
+        },
+      }),
+      // Present today
+      this.prisma.attendance.count({
+        where: {
+          gymId: { in: gymIds },
+          date: today,
+          status: 'present',
+        },
+      }),
+      // Open tickets
+      this.prisma.supportTicket.count({
+        where: {
+          gymId: { in: gymIds },
+          status: { in: ['open', 'in_progress'] },
+        },
+      }),
+      // Expiring this week
+      this.prisma.membership.count({
+        where: {
+          gymId: { in: gymIds },
+          status: 'active',
+          endDate: {
+            gte: now,
+            lte: endOfWeek,
+          },
+        },
+      }),
+    ]);
+
+    // Calculate revenue values
+    const totalRevenue = Number(revenueData._sum.finalAmount) || 0;
+    const monthlyRevenue = Number(thisMonthRevenue._sum.finalAmount) || 0;
+    const lastMonthRevenueValue = Number(lastMonthRevenue._sum.finalAmount) || 0;
+
+    // Calculate monthly growth
+    let monthlyGrowth = 0;
+    if (lastMonthRevenueValue > 0) {
+      monthlyGrowth =
+        ((monthlyRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100;
+    } else if (monthlyRevenue > 0) {
+      monthlyGrowth = 100;
+    }
+
+    return {
+      totalMembers: typeof totalMembers === 'number' ? totalMembers : 0,
+      activeMembers: typeof activeMembers === 'number' ? activeMembers : 0,
+      totalTrainers: typeof totalTrainers === 'number' ? totalTrainers : 0,
+      activeMemberships,
+      totalRevenue,
+      monthlyRevenue,
+      monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
+      presentToday,
+      openTickets,
+      expiringThisWeek,
+    };
+  }
+
+  private async getRecentMembers(
+    gymIds: number[],
+    limit = 5,
+  ): Promise<RecentMemberDto[]> {
+    if (gymIds.length === 0) return [];
+
+    const memberRole = await this.prisma.lookup.findFirst({
+      where: {
+        code: 'member',
+        lookupType: { code: 'USER_ROLE' },
+      },
+    });
+
+    if (!memberRole) return [];
+
+    // Get user IDs in admin's gyms
+    const gymUserXrefs = await this.prisma.userGymXref.findMany({
+      where: {
+        gymId: { in: gymIds },
+        isActive: true,
+      },
+      select: {
+        userId: true,
+      },
+    });
+    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
+
+    const members = await this.prisma.user.findMany({
+      where: {
+        id: { in: userIdsInGyms },
+        roleId: memberRole.id,
+      },
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      avatar: member.avatar || undefined,
+      status: member.status,
+      createdAt: member.createdAt,
+    }));
+  }
+
+  private async getRecentAttendance(
+    gymIds: number[],
+    limit = 5,
+  ): Promise<RecentAttendanceDto[]> {
+    if (gymIds.length === 0) return [];
+
+    const attendance = await this.prisma.attendance.findMany({
+      where: {
+        gymId: { in: gymIds },
+      },
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    return attendance.map((record) => ({
+      id: record.id,
+      userName: record.user.name,
+      date: record.date,
+      checkIn: record.checkIn,
+      checkOut: record.checkOut || undefined,
+      status: record.status,
+    }));
+  }
+
+  private async getRecentTicketsForGyms(
+    gymIds: number[],
+    limit = 5,
+  ): Promise<RecentTicketDto[]> {
+    if (gymIds.length === 0) return [];
+
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: {
+        gymId: { in: gymIds },
+      },
       take: limit,
       orderBy: { createdAt: 'desc' },
       select: {

@@ -117,3 +117,89 @@ export class SuperadminDashboardDto {
   @ApiProperty({ type: [RecentTicketDto] })
   recentTickets: RecentTicketDto[];
 }
+
+export class AdminDashboardStatsDto {
+  @ApiProperty({ description: 'Total number of members in gym' })
+  totalMembers: number;
+
+  @ApiProperty({ description: 'Number of active members' })
+  activeMembers: number;
+
+  @ApiProperty({ description: 'Total number of trainers in gym' })
+  totalTrainers: number;
+
+  @ApiProperty({ description: 'Total number of active memberships' })
+  activeMemberships: number;
+
+  @ApiProperty({ description: 'Total revenue from paid memberships' })
+  totalRevenue: number;
+
+  @ApiProperty({ description: 'Revenue this month' })
+  monthlyRevenue: number;
+
+  @ApiProperty({ description: 'Monthly revenue growth percentage' })
+  monthlyGrowth: number;
+
+  @ApiProperty({ description: 'Members present today' })
+  presentToday: number;
+
+  @ApiProperty({ description: 'Open support tickets' })
+  openTickets: number;
+
+  @ApiProperty({ description: 'Memberships expiring this week' })
+  expiringThisWeek: number;
+}
+
+export class RecentMemberDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty()
+  email: string;
+
+  @ApiProperty({ required: false })
+  avatar?: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
+  createdAt: Date;
+}
+
+export class RecentAttendanceDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  userName: string;
+
+  @ApiProperty()
+  date: string;
+
+  @ApiProperty()
+  checkIn: string;
+
+  @ApiProperty({ required: false })
+  checkOut?: string;
+
+  @ApiProperty()
+  status: string;
+}
+
+export class AdminDashboardDto {
+  @ApiProperty({ type: AdminDashboardStatsDto })
+  stats: AdminDashboardStatsDto;
+
+  @ApiProperty({ type: [RecentMemberDto] })
+  recentMembers: RecentMemberDto[];
+
+  @ApiProperty({ type: [RecentAttendanceDto] })
+  recentAttendance: RecentAttendanceDto[];
+
+  @ApiProperty({ type: [RecentTicketDto] })
+  recentTickets: RecentTicketDto[];
+}
