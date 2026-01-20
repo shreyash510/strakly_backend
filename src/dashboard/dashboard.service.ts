@@ -357,7 +357,7 @@ export class DashboardService {
       // Active memberships in gym
       this.prisma.membership.count({
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           status: 'active',
         },
       }),
@@ -365,7 +365,7 @@ export class DashboardService {
       this.prisma.membership.aggregate({
         _sum: { finalAmount: true },
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           paymentStatus: 'paid',
         },
       }),
@@ -373,7 +373,7 @@ export class DashboardService {
       this.prisma.membership.aggregate({
         _sum: { finalAmount: true },
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           paymentStatus: 'paid',
           paidAt: {
             gte: startOfLastMonth,
@@ -385,7 +385,7 @@ export class DashboardService {
       this.prisma.membership.aggregate({
         _sum: { finalAmount: true },
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           paymentStatus: 'paid',
           paidAt: {
             gte: startOfMonth,
@@ -395,7 +395,7 @@ export class DashboardService {
       // Present today
       this.prisma.attendance.count({
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           date: today,
           status: 'present',
         },
@@ -403,14 +403,14 @@ export class DashboardService {
       // Open tickets
       this.prisma.supportTicket.count({
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           status: { in: ['open', 'in_progress'] },
         },
       }),
       // Expiring this week
       this.prisma.membership.count({
         where: {
-          gymId: { in: gymIds },
+          userId: { in: userIdsInGyms },
           status: 'active',
           endDate: {
             gte: now,
@@ -421,9 +421,9 @@ export class DashboardService {
     ]);
 
     // Calculate revenue values
-    const totalRevenue = Number(revenueData._sum.finalAmount) || 0;
-    const monthlyRevenue = Number(thisMonthRevenue._sum.finalAmount) || 0;
-    const lastMonthRevenueValue = Number(lastMonthRevenue._sum.finalAmount) || 0;
+    const totalRevenue = Number(revenueData?._sum?.finalAmount ?? 0) || 0;
+    const monthlyRevenue = Number(thisMonthRevenue?._sum?.finalAmount ?? 0) || 0;
+    const lastMonthRevenueValue = Number(lastMonthRevenue?._sum?.finalAmount ?? 0) || 0;
 
     // Calculate monthly growth
     let monthlyGrowth = 0;
@@ -508,9 +508,21 @@ export class DashboardService {
   ): Promise<RecentAttendanceDto[]> {
     if (gymIds.length === 0) return [];
 
-    const attendance = await this.prisma.attendance.findMany({
+    // Get user IDs in admin's gyms
+    const gymUserXrefs = await this.prisma.userGymXref.findMany({
       where: {
         gymId: { in: gymIds },
+        isActive: true,
+      },
+      select: {
+        userId: true,
+      },
+    });
+    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
+
+    const attendance = await this.prisma.attendance.findMany({
+      where: {
+        userId: { in: userIdsInGyms },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -527,8 +539,18 @@ export class DashboardService {
       id: record.id,
       userName: record.user.name,
       date: record.date,
-      checkIn: record.checkIn,
-      checkOut: record.checkOut || undefined,
+      checkIn: record.checkInTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      checkOut: record.checkOutTime
+        ? record.checkOutTime.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : undefined,
       status: record.status,
     }));
   }
@@ -539,9 +561,21 @@ export class DashboardService {
   ): Promise<RecentTicketDto[]> {
     if (gymIds.length === 0) return [];
 
-    const tickets = await this.prisma.supportTicket.findMany({
+    // Get user IDs in admin's gyms
+    const gymUserXrefs = await this.prisma.userGymXref.findMany({
       where: {
         gymId: { in: gymIds },
+        isActive: true,
+      },
+      select: {
+        userId: true,
+      },
+    });
+    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
+
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: {
+        userId: { in: userIdsInGyms },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },

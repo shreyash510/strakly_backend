@@ -26,7 +26,7 @@ export class DashboardController {
   }
 
   @Get('admin')
-  @Roles('admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Get admin dashboard data for their gym(s)' })
   @ApiResponse({
     status: 200,

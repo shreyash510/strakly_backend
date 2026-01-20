@@ -9,6 +9,14 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 
+export interface GymInfo {
+  id: number;
+  name: string;
+  logo?: string;
+  city?: string;
+  state?: string;
+}
+
 export interface UserResponse {
   id: number;
   name: string;
@@ -18,6 +26,7 @@ export interface UserResponse {
   status?: string;
   phone?: string;
   attendanceCode?: string;
+  gym?: GymInfo;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -191,6 +200,38 @@ export class AuthService {
     });
 
     const user = this.toUserResponse(userData);
+
+    // Fetch gym info for admin users
+    if (user.role === 'admin') {
+      const gymXref = await this.prisma.userGymXref.findFirst({
+        where: {
+          userId: userData.id,
+          isActive: true,
+        },
+        include: {
+          gym: {
+            select: {
+              id: true,
+              name: true,
+              logo: true,
+              city: true,
+              state: true,
+            },
+          },
+        },
+      });
+
+      if (gymXref?.gym) {
+        user.gym = {
+          id: gymXref.gym.id,
+          name: gymXref.gym.name,
+          logo: gymXref.gym.logo || undefined,
+          city: gymXref.gym.city || undefined,
+          state: gymXref.gym.state || undefined,
+        };
+      }
+    }
+
     const accessToken = this.generateToken(user);
 
     return {
