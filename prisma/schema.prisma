@@ -137,10 +137,13 @@ model RolePermission {
 model Attendance {
   id              Int       @id @default(autoincrement())
   userId          Int       @map("user_id")
+  gymId           Int       @map("gym_id")
+  membershipId    Int?      @map("membership_id")
   checkInTime     DateTime  @map("check_in_time")
   checkOutTime    DateTime? @map("check_out_time")
   date            String    // YYYY-MM-DD format
   markedById      Int       @map("marked_by_id")
+  checkInMethod   String    @default("code") @map("check_in_method") // code, qr, manual, self
   status          String    @default("present") // present, checked_out
 
   // Timestamps
@@ -149,8 +152,11 @@ model Attendance {
 
   // Relations
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  membership      Membership? @relation(fields: [membershipId], references: [id])
 
   @@index([userId, date])
+  @@index([gymId, date])
   @@index([date, status])
   @@map("attendance")
 }
@@ -159,12 +165,15 @@ model Attendance {
 model AttendanceHistory {
   id                Int       @id @default(autoincrement())
   userId            Int       @map("user_id")
+  gymId             Int       @map("gym_id")
+  membershipId      Int?      @map("membership_id")
   checkInTime       DateTime  @map("check_in_time")
   checkOutTime      DateTime  @map("check_out_time")
   date              String    // YYYY-MM-DD format
   duration          Int?      // Duration in minutes
   markedById        Int       @map("marked_by_id")
   checkedOutById    Int?      @map("checked_out_by_id")
+  checkInMethod     String    @default("code") @map("check_in_method") // code, qr, manual, self
   status            String    @default("checked_out")
 
   // Timestamps
@@ -173,8 +182,11 @@ model AttendanceHistory {
 
   // Relations
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym               Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  membership        Membership? @relation(fields: [membershipId], references: [id])
 
   @@index([userId, date])
+  @@index([gymId, date])
   @@index([date])
   @@index([userId, checkInTime])
   @@map("attendance_history")
@@ -283,6 +295,9 @@ model Membership {
   // User reference
   userId          Int       @map("user_id")
 
+  // Gym reference - membership is valid at this gym
+  gymId           Int       @map("gym_id")
+
   // Plan reference
   planId          Int       @map("plan_id")
 
@@ -320,11 +335,15 @@ model Membership {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan            Plan      @relation(fields: [planId], references: [id])
-  offer           Offer?    @relation(fields: [offerId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym               Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan              Plan      @relation(fields: [planId], references: [id])
+  offer             Offer?    @relation(fields: [offerId], references: [id])
+  attendances       Attendance[]
+  attendanceHistory AttendanceHistory[]
 
   @@index([userId, status])
+  @@index([gymId, status])
   @@index([status, endDate])
   @@index([planId])
   @@map("memberships")
@@ -476,7 +495,10 @@ model Gym {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  gymUsers        UserGymXref[]
+  gymUsers          UserGymXref[]
+  memberships       Membership[]
+  attendances       Attendance[]
+  attendanceHistory AttendanceHistory[]
 
   @@map("gyms")
 }

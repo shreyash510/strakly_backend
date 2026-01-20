@@ -145,6 +145,7 @@ export class MembershipsService {
     const membership = await this.prisma.membership.create({
       data: {
         userId: dto.userId,
+        gymId: dto.gymId,
         planId: dto.planId,
         offerId: offer?.id || null,
         startDate,
@@ -307,6 +308,7 @@ export class MembershipsService {
 
     return this.create({
       userId,
+      gymId: dto.gymId,
       planId,
       offerCode: dto.offerCode,
       startDate: startDate.toISOString(),
