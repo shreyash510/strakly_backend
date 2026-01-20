@@ -476,3 +476,75 @@ model Gym {
 
   @@map("gyms")
 }
+
+// ============================================
+// SUPPORT TICKET MODEL
+// ============================================
+
+// SupportTicket model - Support tickets from users
+model SupportTicket {
+  id              Int       @id @default(autoincrement())
+
+  // Ticket info
+  ticketNumber    String    @unique @map("ticket_number")  // Auto-generated unique ticket number
+  subject         String
+  description     String
+  category        String    @default("general")  // general, technical, billing, feedback, complaint
+
+  // Priority: low, medium, high, urgent
+  priority        String    @default("medium")
+
+  // Status: open, in_progress, resolved, closed
+  status          String    @default("open")
+
+  // User who created the ticket
+  userId          Int       @map("user_id")
+
+  // Admin/Staff assigned to handle the ticket
+  assignedToId    Int?      @map("assigned_to_id")
+
+  // Resolution
+  resolution      String?
+  resolvedAt      DateTime? @map("resolved_at")
+  closedAt        DateTime? @map("closed_at")
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  messages        SupportTicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([priority, status])
+  @@map("support_tickets")
+}
+
+// SupportTicketMessage model - Messages/comments on support tickets
+model SupportTicketMessage {
+  id              Int       @id @default(autoincrement())
+
+  // Ticket reference
+  ticketId        Int       @map("ticket_id")
+
+  // Message content
+  message         String
+
+  // Who sent the message
+  senderId        Int       @map("sender_id")
+  senderType      String    @map("sender_type")  // user, admin, system
+
+  // Attachment (optional)
+  attachment      String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  ticket          SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}

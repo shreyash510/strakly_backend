@@ -15,6 +15,7 @@ import { OffersModule } from './offers/offers.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { BodyMetricsModule } from './body-metrics/body-metrics.module';
 import { GymModule } from './gym/gym.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { GymModule } from './gym/gym.module';
     MembershipsModule,
     BodyMetricsModule,
     GymModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
