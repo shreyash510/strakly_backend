@@ -1,7 +1,12 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateGymDto {
+  @ApiProperty({ description: 'Owner/Admin user ID' })
+  @IsInt()
+  @IsNotEmpty()
+  userId: number;
+
   @ApiProperty({ description: 'Gym name' })
   @IsString()
   name: string;

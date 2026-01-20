@@ -49,6 +49,7 @@ model User {
   bodyMetricsHistory BodyMetricsHistory[]
   attendances        Attendance[]
   attendanceHistory  AttendanceHistory[]
+  userGyms           UserGymXref[]
 
   @@map("users")
 }
@@ -474,7 +475,28 @@ model Gym {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  // Relations
+  gymUsers        UserGymXref[]
+
   @@map("gyms")
+}
+
+// UserGymXref model - Cross reference table for User-Gym relationship
+model UserGymXref {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  gymId     Int      @map("gym_id")
+  role      String   @default("admin")  // admin, manager, trainer, etc.
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym       Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gymId])
+  @@map("user_gym_xref")
 }
 
 // ============================================
