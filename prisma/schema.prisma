@@ -32,8 +32,14 @@ model User {
   gender         String?
   attendanceCode String?     @unique @map("attendance_code")
 
+  // Gym reference - null for superadmin, set for all other roles
+  gymId          Int?        @map("gym_id")
+
   // Role relation
   role           Lookup      @relation(fields: [roleId], references: [id])
+
+  // Gym relation
+  gym            Gym?        @relation(fields: [gymId], references: [id], onDelete: SetNull)
 
   // Tracking
   joinDate     String?     @map("join_date")
@@ -51,6 +57,7 @@ model User {
   attendanceHistory  AttendanceHistory[]
   userGyms           UserGymXref[]
 
+  @@index([gymId])
   @@map("users")
 }
 
@@ -495,6 +502,7 @@ model Gym {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  users             User[]            // All users belonging to this gym
   gymUsers          UserGymXref[]
   memberships       Membership[]
   attendances       Attendance[]

@@ -12,6 +12,7 @@ import {
 export interface UserFilters extends PaginationParams {
   role?: string;
   status?: string;
+  gymId?: number;
 }
 
 @Injectable()
@@ -25,7 +26,7 @@ export class UsersService {
   }
 
   private async generateUniqueAttendanceCode(): Promise<string> {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const characters = '0123456789';
     let code: string;
     let isUnique = false;
 
@@ -64,6 +65,14 @@ export class UsersService {
       state: user.state,
       zipCode: user.zipCode,
       attendanceCode: user.attendanceCode,
+      gymId: user.gymId,
+      gym: user.gym ? {
+        id: user.gym.id,
+        name: user.gym.name,
+        logo: user.gym.logo,
+        city: user.gym.city,
+        state: user.gym.state,
+      } : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -114,9 +123,11 @@ export class UsersService {
         zipCode: createUserDto.zipCode,
         joinDate: new Date().toISOString().split('T')[0],
         attendanceCode,
+        gymId: createUserDto.gymId,
       },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -133,6 +144,9 @@ export class UsersService {
     }
     if (filters.status && filters.status !== 'all') {
       where.status = filters.status;
+    }
+    if (filters.gymId) {
+      where.gymId = filters.gymId;
     }
 
     // Apply search filter
@@ -152,6 +166,7 @@ export class UsersService {
       where,
       include: {
         role: true,
+        gym: true,
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -169,6 +184,7 @@ export class UsersService {
       where: { id },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -211,6 +227,7 @@ export class UsersService {
       },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -225,5 +242,34 @@ export class UsersService {
 
   async updateStatus(userId: number, status: string): Promise<any> {
     return this.update(userId, { status } as UpdateUserDto);
+  }
+
+  async resetPassword(
+    userId: number,
+    newPassword: string,
+  ): Promise<{ success: boolean }> {
+    await this.findOne(userId);
+
+    const passwordHash = await this.hashPassword(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { success: true };
+  }
+
+  async regenerateAttendanceCode(userId: number): Promise<{ success: boolean; attendanceCode: string }> {
+    await this.findOne(userId);
+
+    const attendanceCode = await this.generateUniqueAttendanceCode();
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { attendanceCode },
+    });
+
+    return { success: true, attendanceCode };
   }
 }

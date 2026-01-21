@@ -10,6 +10,11 @@ import {
   AdminDashboardStatsDto,
   RecentMemberDto,
   RecentAttendanceDto,
+  MemberDashboardDto,
+  MemberSubscriptionDto,
+  MemberAttendanceStatsDto,
+  MemberRecentAttendanceDto,
+  ActiveOfferDto,
 } from './dto/dashboard.dto';
 
 @Injectable()
@@ -591,5 +596,267 @@ export class DashboardService {
     });
 
     return tickets;
+  }
+
+  // Member Dashboard Methods
+  async getMemberDashboard(userId: number): Promise<MemberDashboardDto> {
+    const [user, subscription, attendanceStats, recentAttendance, activeOffers] =
+      await Promise.all([
+        this.getMemberUser(userId),
+        this.getMemberSubscription(userId),
+        this.getMemberAttendanceStats(userId),
+        this.getMemberRecentAttendance(userId),
+        this.getMemberActiveOffers(userId),
+      ]);
+
+    return {
+      attendanceCode: user?.attendanceCode || '----',
+      subscription,
+      attendanceStats,
+      recentAttendance,
+      activeOffers,
+    };
+  }
+
+  private async getMemberUser(userId: number) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        attendanceCode: true,
+      },
+    });
+  }
+
+  private async getMemberSubscription(
+    userId: number,
+  ): Promise<MemberSubscriptionDto | undefined> {
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId,
+        status: 'active',
+      },
+      include: {
+        plan: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!membership) return undefined;
+
+    const now = new Date();
+    const startDate = new Date(membership.startDate);
+    const endDate = new Date(membership.endDate);
+
+    // Calculate days remaining
+    const diffTime = endDate.getTime() - now.getTime();
+    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+    // Calculate progress percentage
+    let progress = 0;
+    if (now >= endDate) {
+      progress = 100;
+    } else if (now <= startDate) {
+      progress = 0;
+    } else {
+      const total = endDate.getTime() - startDate.getTime();
+      const elapsed = now.getTime() - startDate.getTime();
+      progress = Math.round((elapsed / total) * 100);
+    }
+
+    // Check if ending soon (within 14 days)
+    const isEndingSoon = daysRemaining > 0 && daysRemaining <= 14;
+
+    return {
+      id: membership.id,
+      planName: membership.plan?.name || 'Unknown Plan',
+      status: membership.status,
+      startDate: membership.startDate.toISOString().split('T')[0],
+      endDate: membership.endDate.toISOString().split('T')[0],
+      daysRemaining,
+      progress,
+      isEndingSoon,
+    };
+  }
+
+  private async getMemberAttendanceStats(
+    userId: number,
+  ): Promise<MemberAttendanceStatsDto> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    const [thisMonth, thisWeek, total] = await Promise.all([
+      this.prisma.attendance.count({
+        where: {
+          userId,
+          date: { gte: startOfMonthStr },
+          status: 'present',
+        },
+      }),
+      this.prisma.attendance.count({
+        where: {
+          userId,
+          date: { gte: startOfWeekStr },
+          status: 'present',
+        },
+      }),
+      this.prisma.attendance.count({
+        where: {
+          userId,
+          status: 'present',
+        },
+      }),
+    ]);
+
+    // Calculate current streak
+    const currentStreak = await this.calculateCurrentStreak(userId);
+
+    return {
+      thisMonth,
+      thisWeek,
+      total,
+      currentStreak,
+    };
+  }
+
+  private async calculateCurrentStreak(userId: number): Promise<number> {
+    // Get all attendance records sorted by date descending
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        userId,
+        status: 'present',
+      },
+      orderBy: { date: 'desc' },
+      select: { date: true },
+      take: 60, // Check last 60 records max
+    });
+
+    if (attendanceRecords.length === 0) return 0;
+
+    let streak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Check if there's attendance today or yesterday to start counting
+    const lastAttendanceDate = attendanceRecords[0].date;
+    const lastDate = new Date(lastAttendanceDate);
+    lastDate.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.floor(
+      (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    // If last attendance was more than 1 day ago, streak is 0
+    if (diffDays > 1) return 0;
+
+    // Count consecutive days
+    const uniqueDates = [...new Set(attendanceRecords.map((r) => r.date))];
+    let expectedDate = new Date(uniqueDates[0]);
+
+    for (const dateStr of uniqueDates) {
+      const currentDate = new Date(dateStr);
+      currentDate.setHours(0, 0, 0, 0);
+      expectedDate.setHours(0, 0, 0, 0);
+
+      const dayDiff = Math.floor(
+        (expectedDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      if (dayDiff <= 1) {
+        streak++;
+        expectedDate = new Date(currentDate);
+        expectedDate.setDate(expectedDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  private async getMemberRecentAttendance(
+    userId: number,
+    limit = 5,
+  ): Promise<MemberRecentAttendanceDto[]> {
+    const attendance = await this.prisma.attendance.findMany({
+      where: { userId },
+      take: limit,
+      orderBy: { date: 'desc' },
+      select: {
+        id: true,
+        date: true,
+        checkInTime: true,
+        checkOutTime: true,
+        status: true,
+      },
+    });
+
+    return attendance.map((record) => ({
+      id: record.id,
+      date: record.date,
+      checkIn: record.checkInTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      checkOut: record.checkOutTime
+        ? record.checkOutTime.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : undefined,
+      status: record.status,
+    }));
+  }
+
+  private async getMemberActiveOffers(
+    userId: number,
+    limit = 3,
+  ): Promise<ActiveOfferDto[]> {
+    const now = new Date();
+
+    // Get active offers
+    const offers = await this.prisma.offer.findMany({
+      where: {
+        isActive: true,
+        validFrom: { lte: now },
+        validTo: { gte: now },
+      },
+      take: limit,
+      orderBy: { validTo: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        discountType: true,
+        discountValue: true,
+        code: true,
+        validTo: true,
+      },
+    });
+
+    return offers.map((offer) => ({
+      id: offer.id,
+      title: offer.name,
+      description: offer.description || undefined,
+      discountPercentage:
+        offer.discountType === 'percentage'
+          ? Number(offer.discountValue)
+          : 0,
+      code: offer.code || undefined,
+      endDate: offer.validTo.toISOString().split('T')[0],
+    }));
   }
 }

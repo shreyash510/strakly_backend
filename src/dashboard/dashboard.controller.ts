@@ -4,7 +4,7 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { SuperadminDashboardDto, AdminDashboardDto } from './dto/dashboard.dto';
+import { SuperadminDashboardDto, AdminDashboardDto, MemberDashboardDto } from './dto/dashboard.dto';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -36,5 +36,18 @@ export class DashboardController {
   async getAdminDashboard(@Req() req: any): Promise<AdminDashboardDto> {
     const userId = req.user?.id || req.headers['x-user-id'];
     return this.dashboardService.getAdminDashboard(Number(userId));
+  }
+
+  @Get('member')
+  @Roles('superadmin', 'admin', 'manager', 'trainer', 'member')
+  @ApiOperation({ summary: 'Get member dashboard data' })
+  @ApiResponse({
+    status: 200,
+    description: 'Member dashboard data retrieved successfully',
+    type: MemberDashboardDto,
+  })
+  async getMemberDashboard(@Req() req: any): Promise<MemberDashboardDto> {
+    const userId = req.user?.id || req.headers['x-user-id'];
+    return this.dashboardService.getMemberDashboard(Number(userId));
   }
 }

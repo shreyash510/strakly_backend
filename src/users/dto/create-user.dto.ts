@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum, IsInt } from 'class-validator';
 import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
 import type { UserRole, UserStatus, Gender } from '../../constants';
 
@@ -60,12 +60,12 @@ export class CreateUserDto {
   zipCode?: string;
 
   @IsOptional()
-  @IsString()
-  gymId?: string;
+  @IsInt()
+  gymId?: number;
 
   @IsOptional()
-  @IsString()
-  trainerId?: string;
+  @IsInt()
+  trainerId?: number;
 }
 
 export class UpdateUserDto {
@@ -122,10 +122,15 @@ export class UpdateUserDto {
   zipCode?: string;
 
   @IsOptional()
-  @IsString()
-  gymId?: string;
+  @IsInt()
+  gymId?: number;
 
   @IsOptional()
+  @IsInt()
+  trainerId?: number;
+}
+
+export class ResetPasswordDto {
   @IsString()
-  trainerId?: string;
+  newPassword: string;
 }

@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -67,8 +67,8 @@ export class UsersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Create a new user (superadmin only)' })
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Create a new user' })
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
@@ -127,6 +127,19 @@ export class UsersController {
   updateStatusByHeader(@Headers('x-user-id') userId: string, @Body() body: { status: string }) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.usersService.updateStatus(parseInt(userId), body.status);
+  }
+
+  @Post('user/reset-password')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Reset user password (admin)' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  resetPasswordByHeader(
+    @Headers('x-user-id') userId: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.usersService.resetPassword(parseInt(userId), dto.newPassword);
   }
 
   @Get('role/:role')
