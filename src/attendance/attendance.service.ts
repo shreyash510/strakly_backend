@@ -67,15 +67,12 @@ export class AttendanceService {
 
   async markAttendance(
     user: {
-      id: string;
-      odooEmployeeId?: string;
-      odooUserId?: string;
+      id: number;
       name: string;
       email: string;
-      attendanceCode: string;
+      attendanceCode?: string | null;
     },
-    staffId: string,
-    staffName: string,
+    staffId: number,
   ): Promise<any> {
     const today = this.getTodayDate();
 
@@ -94,17 +91,16 @@ export class AttendanceService {
 
     const attendance = await this.prisma.attendance.create({
       data: {
-        odooEmployeeId: user.odooEmployeeId || null,
-        odooUserId: user.odooUserId || null,
         userId: user.id,
-        userName: user.name,
-        userEmail: user.email,
-        attendanceCode: user.attendanceCode,
         checkInTime: new Date(),
         date: today,
-        markedBy: staffId,
-        markedByName: staffName,
+        markedById: staffId,
         status: 'present',
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, attendanceCode: true },
+        },
       },
     });
 
@@ -116,9 +112,8 @@ export class AttendanceService {
   // =====================
 
   async checkOut(
-    attendanceId: string,
-    staffId?: string,
-    staffName?: string,
+    attendanceId: number,
+    staffId?: number,
   ): Promise<any> {
     const attendance = await this.prisma.attendance.findUnique({
       where: { id: attendanceId },
@@ -139,21 +134,19 @@ export class AttendanceService {
     // Create history record
     const historyRecord = await this.prisma.attendanceHistory.create({
       data: {
-        odooEmployeeId: attendance.odooEmployeeId,
-        odooUserId: attendance.odooUserId,
         userId: attendance.userId,
-        userName: attendance.userName,
-        userEmail: attendance.userEmail,
-        attendanceCode: attendance.attendanceCode,
         checkInTime: attendance.checkInTime,
         checkOutTime,
         date: attendance.date,
         duration,
-        markedBy: attendance.markedBy,
-        markedByName: attendance.markedByName,
-        checkedOutBy: staffId || attendance.markedBy,
-        checkedOutByName: staffName || attendance.markedByName,
+        markedById: attendance.markedById,
+        checkedOutById: staffId || attendance.markedById,
         status: 'checked_out',
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, attendanceCode: true },
+        },
       },
     });
 
@@ -211,7 +204,7 @@ export class AttendanceService {
   }
 
   // Get attendance history for a specific user
-  async getUserAttendance(userId: string, limit: number = 50): Promise<any[]> {
+  async getUserAttendance(userId: number, limit: number = 50): Promise<any[]> {
     const [activeRecords, historyRecords] = await Promise.all([
       this.prisma.attendance.findMany({
         where: { userId },
@@ -314,7 +307,7 @@ export class AttendanceService {
   }
 
   // Delete attendance record (admin only)
-  async deleteAttendance(attendanceId: string): Promise<boolean> {
+  async deleteAttendance(attendanceId: number): Promise<boolean> {
     try {
       await this.prisma.attendance.delete({ where: { id: attendanceId } });
       return true;

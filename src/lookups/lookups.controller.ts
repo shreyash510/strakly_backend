@@ -68,7 +68,7 @@ export class LookupsController {
   @Get('value/:id')
   @ApiOperation({ summary: 'Get a single lookup value by ID' })
   findById(@Param('id') id: string) {
-    return this.lookupsService.findLookupById(id);
+    return this.lookupsService.findLookupById(parseInt(id));
   }
 
   @Post(':typeCode')
@@ -92,7 +92,7 @@ export class LookupsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup value' })
   update(@Param('id') id: string, @Body() dto: UpdateLookupDto) {
-    return this.lookupsService.updateLookup(id, dto);
+    return this.lookupsService.updateLookup(parseInt(id), dto);
   }
 
   @Delete('value/:id')
@@ -100,6 +100,6 @@ export class LookupsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup value (soft delete)' })
   delete(@Param('id') id: string) {
-    return this.lookupsService.deleteLookup(id);
+    return this.lookupsService.deleteLookup(parseInt(id));
   }
 }

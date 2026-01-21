@@ -6,8 +6,9 @@ export class CreateMembershipDto {
   @Type(() => Number)
   userId: number;
 
-  @IsString()
-  planId: string;
+  @IsNumber()
+  @Type(() => Number)
+  planId: number;
 
   @IsOptional()
   @IsString()
@@ -58,8 +59,9 @@ export class CancelMembershipDto {
 
 export class RenewMembershipDto {
   @IsOptional()
-  @IsString()
-  planId?: string;
+  @IsNumber()
+  @Type(() => Number)
+  planId?: number;
 
   @IsOptional()
   @IsString()

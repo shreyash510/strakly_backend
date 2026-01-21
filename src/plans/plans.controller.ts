@@ -37,7 +37,7 @@ export class PlansController {
   @Get(':id')
   @ApiOperation({ summary: 'Get plan by ID' })
   findOne(@Param('id') id: string) {
-    return this.plansService.findOne(id);
+    return this.plansService.findOne(parseInt(id));
   }
 
   @Get('code/:code')
@@ -49,7 +49,7 @@ export class PlansController {
   @Get(':id/offers')
   @ApiOperation({ summary: 'Get active offers for a plan' })
   getActiveOffers(@Param('id') id: string) {
-    return this.plansService.getActiveOffers(id);
+    return this.plansService.getActiveOffers(parseInt(id));
   }
 
   @Get(':id/price')
@@ -59,7 +59,7 @@ export class PlansController {
     @Param('id') id: string,
     @Query('offerCode') offerCode?: string,
   ) {
-    return this.plansService.calculatePriceWithOffer(id, offerCode);
+    return this.plansService.calculatePriceWithOffer(parseInt(id), offerCode);
   }
 
   @Post()
@@ -77,7 +77,7 @@ export class PlansController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a plan' })
   update(@Param('id') id: string, @Body() dto: UpdatePlanDto) {
-    return this.plansService.update(id, dto);
+    return this.plansService.update(parseInt(id), dto);
   }
 
   @Delete(':id')
@@ -86,6 +86,6 @@ export class PlansController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
   delete(@Param('id') id: string) {
-    return this.plansService.delete(id);
+    return this.plansService.delete(parseInt(id));
   }
 }

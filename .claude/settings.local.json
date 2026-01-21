@@ -3,7 +3,10 @@
     "allow": [
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx prisma generate)",
+      "Bash(npx prisma db push)"
     ]
   }
 }

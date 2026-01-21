@@ -23,9 +23,10 @@ export class PlansService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: number | string) {
+    const numId = typeof id === 'string' ? parseInt(id) : id;
     const plan = await this.prisma.plan.findUnique({
-      where: { id },
+      where: { id: numId },
       include: {
         planOffers: {
           include: {
@@ -95,30 +96,33 @@ export class PlansService {
     });
   }
 
-  async update(id: string, dto: UpdatePlanDto) {
-    await this.findOne(id);
+  async update(id: number | string, dto: UpdatePlanDto) {
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    await this.findOne(numId);
 
     return this.prisma.plan.update({
-      where: { id },
+      where: { id: numId },
       data: dto,
     });
   }
 
-  async delete(id: string) {
-    await this.findOne(id);
+  async delete(id: number | string) {
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    await this.findOne(numId);
 
     // Soft delete
     return this.prisma.plan.update({
-      where: { id },
+      where: { id: numId },
       data: { isActive: false },
     });
   }
 
-  async getActiveOffers(planId: string) {
+  async getActiveOffers(planId: number | string) {
+    const numPlanId = typeof planId === 'string' ? parseInt(planId) : planId;
     const now = new Date();
 
     const planOffers = await this.prisma.planOffer.findMany({
-      where: { planId },
+      where: { planId: numPlanId },
       include: {
         offer: true,
       },
@@ -142,8 +146,9 @@ export class PlansService {
     return [...planSpecificOffers, ...globalOffers];
   }
 
-  async calculatePriceWithOffer(planId: string, offerCode?: string) {
-    const plan = await this.findOne(planId);
+  async calculatePriceWithOffer(planId: number | string, offerCode?: string) {
+    const numPlanId = typeof planId === 'string' ? parseInt(planId) : planId;
+    const plan = await this.findOne(numPlanId);
 
     let discount = 0;
     let validOffer: Offer | null = null;
@@ -163,7 +168,7 @@ export class PlansService {
             const planOffer = await this.prisma.planOffer.findUnique({
               where: {
                 planId_offerId: {
-                  planId,
+                  planId: numPlanId,
                   offerId: offer.id,
                 },
               },

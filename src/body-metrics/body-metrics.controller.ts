@@ -91,7 +91,7 @@ export class BodyMetricsController {
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
   deleteMyHistoryRecord(@Request() req: any, @Param('id') id: string) {
-    return this.bodyMetricsService.deleteHistoryRecord(id, req.user.userId);
+    return this.bodyMetricsService.deleteHistoryRecord(parseInt(id), req.user.userId);
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============

@@ -58,14 +58,11 @@ export class AttendanceController {
     return this.attendanceService.markAttendance(
       {
         id: user.id,
-        odooEmployeeId: user.odooEmployeeId || undefined,
-        odooUserId: user.odooUserId || undefined,
         name: user.name,
         email: user.email,
         attendanceCode: user.attendanceCode,
       },
       body.staffId,
-      body.staffName,
     );
   }
 
@@ -82,9 +79,8 @@ export class AttendanceController {
     @Body() body?: CheckOutDto,
   ) {
     return this.attendanceService.checkOut(
-      attendanceId,
+      parseInt(attendanceId),
       body?.staffId,
-      body?.staffName,
     );
   }
 
@@ -131,7 +127,7 @@ export class AttendanceController {
     @Query('limit') limit?: number,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.attendanceService.getUserAttendance(userId, limit || 50);  // userId is stored as string in attendance
+    return this.attendanceService.getUserAttendance(parseInt(userId), limit || 50);
   }
 
   // =====================
@@ -182,7 +178,7 @@ export class AttendanceController {
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an attendance record' })
   async deleteAttendance(@Param('id') attendanceId: string) {
-    const result = await this.attendanceService.deleteAttendance(attendanceId);
+    const result = await this.attendanceService.deleteAttendance(parseInt(attendanceId));
     return { success: result };
   }
 }

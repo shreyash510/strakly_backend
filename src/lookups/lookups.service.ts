@@ -87,7 +87,7 @@ export class LookupsService {
     });
   }
 
-  async findLookupById(id: string) {
+  async findLookupById(id: number) {
     const lookup = await this.prisma.lookup.findUnique({
       where: { id },
       include: { lookupType: true },
@@ -127,7 +127,7 @@ export class LookupsService {
     });
   }
 
-  async updateLookup(id: string, dto: UpdateLookupDto) {
+  async updateLookup(id: number, dto: UpdateLookupDto) {
     await this.findLookupById(id);
 
     return this.prisma.lookup.update({
@@ -136,7 +136,7 @@ export class LookupsService {
     });
   }
 
-  async deleteLookup(id: string) {
+  async deleteLookup(id: number) {
     await this.findLookupById(id);
 
     // Soft delete by setting isActive to false
