@@ -25,6 +25,7 @@ export class MembershipsService {
     search?: string;
     page?: number;
     limit?: number;
+    gymId?: number;
   }) {
     const where: any = {};
 
@@ -36,6 +37,9 @@ export class MembershipsService {
     }
     if (filters?.planId) {
       where.planId = filters.planId;
+    }
+    if (filters?.gymId) {
+      where.gymId = filters.gymId;
     }
 
     // Search by user name or email
@@ -336,7 +340,14 @@ export class MembershipsService {
   }
 
   async delete(id: number) {
-    await this.findOne(id); // Verify it exists
+    const membership = await this.findOne(id);
+
+    // Only allow deletion of cancelled or expired memberships
+    if (membership.status === 'active' || membership.status === 'pending') {
+      throw new BadRequestException(
+        'Cannot delete active or pending memberships. Please cancel the membership first.',
+      );
+    }
 
     await this.prisma.membership.delete({
       where: { id },
@@ -404,19 +415,25 @@ export class MembershipsService {
     });
   }
 
-  async getExpiringSoon(days = 7) {
+  async getExpiringSoon(days = 7, gymId?: number) {
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + days);
 
-    return this.prisma.membership.findMany({
-      where: {
-        status: 'active',
-        endDate: {
-          gte: now,
-          lte: futureDate,
-        },
+    const where: any = {
+      status: 'active',
+      endDate: {
+        gte: now,
+        lte: futureDate,
       },
+    };
+
+    if (gymId) {
+      where.gymId = gymId;
+    }
+
+    return this.prisma.membership.findMany({
+      where,
       include: {
         user: {
           select: { id: true, name: true, email: true, phone: true },
@@ -427,14 +444,20 @@ export class MembershipsService {
     });
   }
 
-  async getExpired() {
+  async getExpired(gymId?: number) {
     const now = new Date();
 
+    const where: any = {
+      status: 'active',
+      endDate: { lt: now },
+    };
+
+    if (gymId) {
+      where.gymId = gymId;
+    }
+
     return this.prisma.membership.findMany({
-      where: {
-        status: 'active',
-        endDate: { lt: now },
-      },
+      where,
       include: {
         user: {
           select: { id: true, name: true, email: true, phone: true },
@@ -458,10 +481,13 @@ export class MembershipsService {
     return { updated: result.count };
   }
 
-  async getStats() {
+  async getStats(gymId?: number) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    /* Build base where clause with optional gymId filter */
+    const baseWhere = gymId ? { gymId } : {};
 
     const [
       totalActiveMembers,
@@ -469,18 +495,20 @@ export class MembershipsService {
       endingThisMonth,
       totalRevenue,
     ] = await Promise.all([
-      // Total active members (memberships with status 'active')
+      /* Total active members (memberships with status 'active') */
       this.prisma.membership.count({
         where: {
+          ...baseWhere,
           status: 'active',
           endDate: { gte: now },
         },
       }),
 
-      // This month revenue (paid memberships this month)
+      /* This month revenue (paid memberships this month) */
       this.prisma.membership.aggregate({
         _sum: { finalAmount: true },
         where: {
+          ...baseWhere,
           paymentStatus: 'paid',
           paidAt: {
             gte: startOfMonth,
@@ -489,9 +517,10 @@ export class MembershipsService {
         },
       }),
 
-      // Memberships ending this month
+      /* Memberships ending this month */
       this.prisma.membership.count({
         where: {
+          ...baseWhere,
           status: 'active',
           endDate: {
             gte: now,
@@ -500,10 +529,11 @@ export class MembershipsService {
         },
       }),
 
-      // Total revenue (all paid memberships)
+      /* Total revenue (all paid memberships) */
       this.prisma.membership.aggregate({
         _sum: { finalAmount: true },
         where: {
+          ...baseWhere,
           paymentStatus: 'paid',
         },
       }),

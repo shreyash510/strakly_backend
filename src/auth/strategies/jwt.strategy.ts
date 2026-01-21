@@ -9,6 +9,7 @@ export interface JwtPayload {
   email: string;
   name: string;
   role?: string;
+  gymId?: number | null;
 }
 
 @Injectable()
@@ -43,12 +44,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const userRole = user.role?.code || 'member';
+    /* Use gymId from token or fall back to user's gymId from database */
+    const gymId = payload.gymId ?? user.gymId ?? null;
 
     return {
       userId: userId,
       email: payload.email,
       name: payload.name,
       role: payload.role || userRole,
+      gymId: gymId,
     };
   }
 }

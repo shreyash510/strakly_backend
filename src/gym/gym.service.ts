@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
@@ -164,7 +164,41 @@ export class GymService {
   }
 
   async remove(id: number) {
-    await this.findOne(id);
+    // Check if gym has any linked users
+    const usersCount = await this.prisma.user.count({
+      where: { gymId: id },
+    });
+
+    if (usersCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete gym. ${usersCount} user(s) are linked to this gym. Please reassign or remove users first.`,
+      );
+    }
+
+    // Check if gym has any active memberships
+    const activeMemberships = await this.prisma.membership.count({
+      where: {
+        gymId: id,
+        status: { in: ['active', 'pending'] },
+      },
+    });
+
+    if (activeMemberships > 0) {
+      throw new BadRequestException(
+        `Cannot delete gym. ${activeMemberships} active membership(s) exist at this gym.`,
+      );
+    }
+
+    // Check if gym has any user-gym associations
+    const gymAssociations = await this.prisma.userGymXref.count({
+      where: { gymId: id, isActive: true },
+    });
+
+    if (gymAssociations > 0) {
+      throw new BadRequestException(
+        `Cannot delete gym. ${gymAssociations} user(s) are associated with this gym. Please remove associations first.`,
+      );
+    }
 
     await this.prisma.gym.delete({
       where: { id },

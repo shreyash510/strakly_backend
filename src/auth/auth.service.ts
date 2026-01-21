@@ -91,6 +91,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role || 'member',
+      gymId: user.gymId || null,
     };
     return this.jwtService.sign(payload);
   }
@@ -299,6 +300,7 @@ export class AuthService {
     currentUserId: number,
     page: number = 1,
     limit: number = 20,
+    gymId?: number,
   ): Promise<{ users: UserResponse[]; hasMore: boolean; page: number; total?: number }> {
     if (!query || query.length < 2) {
       return { users: [], hasMore: false, page: 1 };
@@ -306,18 +308,25 @@ export class AuthService {
 
     const skip = (page - 1) * limit;
 
+    /* Build where clause with optional gymId filter */
+    const whereConditions: any[] = [
+      { id: { not: currentUserId } },
+      {
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+    ];
+
+    if (gymId) {
+      whereConditions.push({ gymId });
+    }
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where: {
-          AND: [
-            { id: { not: currentUserId } },
-            {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { email: { contains: query, mode: 'insensitive' } },
-              ],
-            },
-          ],
+          AND: whereConditions,
         },
         skip,
         take: limit,
@@ -327,15 +336,7 @@ export class AuthService {
       }),
       this.prisma.user.count({
         where: {
-          AND: [
-            { id: { not: currentUserId } },
-            {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { email: { contains: query, mode: 'insensitive' } },
-              ],
-            },
-          ],
+          AND: whereConditions,
         },
       }),
     ]);

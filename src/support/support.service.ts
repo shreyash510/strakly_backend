@@ -319,23 +319,37 @@ export class SupportService {
     return { success: true, message: 'Ticket deleted successfully' };
   }
 
-  async getStats() {
+  async getStats(gymId?: number) {
+    /* For gym-specific stats, first get user IDs belonging to the gym */
+    let userFilter: { userId?: { in: number[] } } = {};
+
+    if (gymId) {
+      const gymUsers = await this.prisma.user.findMany({
+        where: { gymId },
+        select: { id: true },
+      });
+      const userIds = gymUsers.map(u => u.id);
+      userFilter = { userId: { in: userIds } };
+    }
+
     const [total, open, inProgress, resolved, closed] = await Promise.all([
-      this.prisma.supportTicket.count(),
-      this.prisma.supportTicket.count({ where: { status: 'open' } }),
-      this.prisma.supportTicket.count({ where: { status: 'in_progress' } }),
-      this.prisma.supportTicket.count({ where: { status: 'resolved' } }),
-      this.prisma.supportTicket.count({ where: { status: 'closed' } }),
+      this.prisma.supportTicket.count({ where: userFilter }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'open' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'in_progress' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'resolved' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'closed' } }),
     ]);
 
     const byCategory = await this.prisma.supportTicket.groupBy({
       by: ['category'],
-      _count: { id: true },
+      where: userFilter,
+      _count: { _all: true },
     });
 
     const byPriority = await this.prisma.supportTicket.groupBy({
       by: ['priority'],
-      _count: { id: true },
+      where: userFilter,
+      _count: { _all: true },
     });
 
     return {
@@ -343,14 +357,14 @@ export class SupportService {
       byStatus: { open, inProgress, resolved, closed },
       byCategory: byCategory.reduce(
         (acc, item) => {
-          acc[item.category] = item._count.id;
+          acc[item.category] = item._count._all;
           return acc;
         },
         {} as Record<string, number>,
       ),
       byPriority: byPriority.reduce(
         (acc, item) => {
-          acc[item.priority] = item._count.id;
+          acc[item.priority] = item._count._all;
           return acc;
         },
         {} as Record<string, number>,

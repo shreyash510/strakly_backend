@@ -215,8 +215,8 @@ export class UsersService {
     return this.formatUser(user);
   }
 
-  async findByRole(role: string): Promise<PaginatedResponse<any>> {
-    return this.findAll({ role, noPagination: true });
+  async findByRole(role: string, gymId?: number): Promise<PaginatedResponse<any>> {
+    return this.findAll({ role, gymId, noPagination: true });
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<any> {
@@ -255,7 +255,33 @@ export class UsersService {
   }
 
   async remove(id: number): Promise<{ success: boolean }> {
-    await this.findOne(id);
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        role: true,
+        userGyms: { where: { isActive: true } },
+        memberships: { where: { status: { in: ['active', 'pending'] } } },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    // Block deletion if user is linked to a gym (admin/manager)
+    if (user.userGyms && user.userGyms.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete user. User is linked to a gym. Please remove the gym association first.',
+      );
+    }
+
+    // Block deletion if user has active or pending memberships
+    if (user.memberships && user.memberships.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete user. User has active or pending memberships. Please cancel the memberships first.',
+      );
+    }
+
     await this.prisma.user.delete({ where: { id } });
     return { success: true };
   }
