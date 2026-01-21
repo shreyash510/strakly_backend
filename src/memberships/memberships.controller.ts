@@ -38,16 +38,25 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by user name or email' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiHeader({ name: 'x-user-id', required: false, description: 'Filter by user ID' })
   findAll(
     @Query('status') status?: string,
     @Headers('x-user-id') userId?: string,
     @Query('planId') planId?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.membershipsService.findAll({
       status,
       userId: userId ? parseInt(userId) : undefined,
       planId: planId ? parseInt(planId) : undefined,
+      search,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
     });
   }
 

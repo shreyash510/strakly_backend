@@ -26,34 +26,49 @@ export interface AttendanceRecord {
   status: string;
 }
 
+export interface SearchUserResult {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  avatar: string | null;
+  role: string;
+  status: string;
+  attendanceCode: string | null;
+  joinDate: Date;
+}
+
 @Injectable()
 export class AttendanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Helper to get today's date in YYYY-MM-DD format
+  // Helper to get today's date in YYYY-MM-DD format (local timezone)
   private getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    // Using toLocaleDateString with 'en-CA' locale to get YYYY-MM-DD format in local timezone
+    return new Date().toLocaleDateString('en-CA');
   }
 
-  // Helper to get week start date
+  // Helper to get week start date (local timezone)
   private getWeekStartDate(): string {
     const today = new Date();
     const day = today.getDay();
     const diff = today.getDate() - day;
-    return new Date(today.setDate(diff)).toISOString().split('T')[0];
+    const weekStart = new Date(today.getFullYear(), today.getMonth(), diff);
+    return weekStart.toLocaleDateString('en-CA');
   }
 
-  // Helper to get month start date
+  // Helper to get month start date (local timezone)
   private getMonthStartDate(): string {
     const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+    return monthStart.toLocaleDateString('en-CA');
   }
 
   // =====================
   // SEARCH USER BY CODE
   // =====================
 
-  async searchUserByCode(code: string): Promise<any | null> {
+  async searchUserByCode(code: string): Promise<SearchUserResult | null> {
     const user = await this.prisma.user.findUnique({
       where: { attendanceCode: code },
       select: {
@@ -74,7 +89,14 @@ export class AttendanceService {
     }
 
     return {
-      ...user,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      role: user.role,
+      status: user.status,
+      attendanceCode: user.attendanceCode,
       joinDate: user.createdAt,
     };
   }

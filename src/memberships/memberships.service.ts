@@ -18,7 +18,14 @@ export class MembershipsService {
     private readonly offersService: OffersService,
   ) {}
 
-  async findAll(filters?: { status?: string; userId?: number; planId?: number }) {
+  async findAll(filters?: {
+    status?: string;
+    userId?: number;
+    planId?: number;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
     const where: any = {};
 
     if (filters?.status) {
@@ -31,17 +38,47 @@ export class MembershipsService {
       where.planId = filters.planId;
     }
 
-    return this.prisma.membership.findMany({
-      where,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, phone: true },
+    // Search by user name or email
+    if (filters?.search) {
+      where.user = {
+        OR: [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { email: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    // Pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 15;
+    const skip = (page - 1) * limit;
+
+    const [memberships, total] = await Promise.all([
+      this.prisma.membership.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+          plan: true,
+          offer: true,
         },
-        plan: true,
-        offer: true,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.membership.count({ where }),
+    ]);
+
+    return {
+      data: memberships,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    };
   }
 
   async findOne(id: number) {
