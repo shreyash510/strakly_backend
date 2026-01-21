@@ -6,6 +6,11 @@ export class CreateMembershipDto {
   @Type(() => Number)
   userId: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  gymId?: number;
+
   @IsNumber()
   @Type(() => Number)
   planId: number;
@@ -58,6 +63,10 @@ export class CancelMembershipDto {
 }
 
 export class RenewMembershipDto {
+  @IsNumber()
+  @Type(() => Number)
+  gymId: number;
+
   @IsOptional()
   @IsNumber()
   @Type(() => Number)

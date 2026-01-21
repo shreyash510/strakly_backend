@@ -131,7 +131,13 @@ export class GymService {
         },
       });
 
-      // Create the user-gym relationship
+      // Update the admin user's gymId
+      await tx.user.update({
+        where: { id: dto.userId },
+        data: { gymId: gym.id },
+      });
+
+      // Create the user-gym relationship (keeping for backward compatibility)
       await tx.userGymXref.create({
         data: {
           userId: dto.userId,

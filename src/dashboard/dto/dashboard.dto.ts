@@ -203,3 +203,99 @@ export class AdminDashboardDto {
   @ApiProperty({ type: [RecentTicketDto] })
   recentTickets: RecentTicketDto[];
 }
+
+// Member Dashboard DTOs
+
+export class MemberSubscriptionDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  planName: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
+  startDate: string;
+
+  @ApiProperty()
+  endDate: string;
+
+  @ApiProperty()
+  daysRemaining: number;
+
+  @ApiProperty()
+  progress: number;
+
+  @ApiProperty()
+  isEndingSoon: boolean;
+}
+
+export class MemberAttendanceStatsDto {
+  @ApiProperty({ description: 'Total attendance this month' })
+  thisMonth: number;
+
+  @ApiProperty({ description: 'Total attendance this week' })
+  thisWeek: number;
+
+  @ApiProperty({ description: 'Total attendance all time' })
+  total: number;
+
+  @ApiProperty({ description: 'Current streak in days' })
+  currentStreak: number;
+}
+
+export class MemberRecentAttendanceDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  date: string;
+
+  @ApiProperty()
+  checkIn: string;
+
+  @ApiProperty({ required: false })
+  checkOut?: string;
+
+  @ApiProperty()
+  status: string;
+}
+
+export class ActiveOfferDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  title: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty()
+  discountPercentage: number;
+
+  @ApiProperty({ required: false })
+  code?: string;
+
+  @ApiProperty()
+  endDate: string;
+}
+
+export class MemberDashboardDto {
+  @ApiProperty()
+  attendanceCode: string;
+
+  @ApiProperty({ type: MemberSubscriptionDto, required: false })
+  subscription?: MemberSubscriptionDto;
+
+  @ApiProperty({ type: MemberAttendanceStatsDto })
+  attendanceStats: MemberAttendanceStatsDto;
+
+  @ApiProperty({ type: [MemberRecentAttendanceDto] })
+  recentAttendance: MemberRecentAttendanceDto[];
+
+  @ApiProperty({ type: [ActiveOfferDto] })
+  activeOffers: ActiveOfferDto[];
+}

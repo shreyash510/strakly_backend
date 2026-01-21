@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -67,10 +67,10 @@ export class UsersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Create a new user (superadmin only)' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Create a new user' })
+  create(@Request() req: any, @Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto, req.user.userId);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -129,6 +129,29 @@ export class UsersController {
     return this.usersService.updateStatus(parseInt(userId), body.status);
   }
 
+  @Post('user/reset-password')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Reset user password (admin)' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  resetPasswordByHeader(
+    @Headers('x-user-id') userId: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.usersService.resetPassword(parseInt(userId), dto.newPassword);
+  }
+
+  @Post('user/regenerate-attendance-code')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Regenerate attendance code for user' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  regenerateAttendanceCode(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.usersService.regenerateAttendanceCode(parseInt(userId));
+  }
+
   @Get('role/:role')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -144,6 +167,27 @@ export class UsersController {
     }
 
     return result.data;
+  }
+
+  // ============ REQUEST APPROVAL ENDPOINTS ============
+
+  @Patch(':id/approve')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Approve a pending registration request' })
+  approveRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { role: string },
+  ) {
+    return this.usersService.approveRequest(id, body.role);
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Reject a pending registration request' })
+  rejectRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.rejectRequest(id);
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============

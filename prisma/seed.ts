@@ -35,6 +35,8 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
     { code: 'active', name: 'Active', value: 'active', displayOrder: 1 },
     { code: 'inactive', name: 'Inactive', value: 'inactive', displayOrder: 2 },
     { code: 'suspended', name: 'Suspended', value: 'suspended', displayOrder: 3 },
+    { code: 'pending', name: 'Pending', value: 'pending', displayOrder: 4 },
+    { code: 'rejected', name: 'Rejected', value: 'rejected', displayOrder: 5 },
   ],
   GENDER: [
     { code: 'male', name: 'Male', value: 'male', displayOrder: 1 },
@@ -72,6 +74,10 @@ const permissions = [
   // Trainers module
   { code: 'trainers.view', name: 'View Trainers', module: 'trainers', description: 'View trainer list' },
   { code: 'trainers.manage', name: 'Manage Trainers', module: 'trainers', description: 'Create/edit/delete trainers' },
+
+  // Requests module (pending user registrations)
+  { code: 'requests.view', name: 'View Requests', module: 'requests', description: 'View pending registration requests' },
+  { code: 'requests.manage', name: 'Manage Requests', module: 'requests', description: 'Approve/reject registration requests' },
 
   // Clients module (trainer's clients)
   { code: 'clients.view', name: 'View Clients', module: 'clients', description: 'View assigned clients' },
@@ -150,6 +156,9 @@ const rolePermissions: Record<string, string[]> = {
     // Manager Management
     'managers.view',
     'managers.manage',
+    // Requests Management
+    'requests.view',
+    'requests.manage',
     // Reports & Analytics
     'reports.view',
     'analytics.view',
@@ -175,6 +184,9 @@ const rolePermissions: Record<string, string[]> = {
     // Trainer Management
     'trainers.view',
     'trainers.manage',
+    // Requests Management
+    'requests.view',
+    'requests.manage',
     // Reports & Analytics
     'reports.view',
     'analytics.view',

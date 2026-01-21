@@ -26,6 +26,7 @@ export interface UserResponse {
   status?: string;
   phone?: string;
   attendanceCode?: string;
+  gymId?: number;
   gym?: GymInfo;
   createdAt?: Date;
   updatedAt?: Date;
@@ -56,12 +57,12 @@ export class AuthService {
   }
 
   private async generateUniqueAttendanceCode(): Promise<string> {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const characters = '0123456789';
     let code: string;
     let isUnique = false;
 
     while (!isUnique) {
-      // Generate 4-character alphanumeric code
+      // Generate 4-digit numeric code
       code = '';
       for (let i = 0; i < 4; i++) {
         code += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -107,6 +108,14 @@ export class AuthService {
       status: user.status || 'active',
       phone: user.phone,
       attendanceCode: user.attendanceCode,
+      gymId: user.gymId,
+      gym: user.gym ? {
+        id: user.gym.id,
+        name: user.gym.name,
+        logo: user.gym.logo || undefined,
+        city: user.gym.city || undefined,
+        state: user.gym.state || undefined,
+      } : undefined,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -171,6 +180,7 @@ export class AuthService {
       where: { email: loginDto.email },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -200,38 +210,6 @@ export class AuthService {
     });
 
     const user = this.toUserResponse(userData);
-
-    // Fetch gym info for admin users
-    if (user.role === 'admin') {
-      const gymXref = await this.prisma.userGymXref.findFirst({
-        where: {
-          userId: userData.id,
-          isActive: true,
-        },
-        include: {
-          gym: {
-            select: {
-              id: true,
-              name: true,
-              logo: true,
-              city: true,
-              state: true,
-            },
-          },
-        },
-      });
-
-      if (gymXref?.gym) {
-        user.gym = {
-          id: gymXref.gym.id,
-          name: gymXref.gym.name,
-          logo: gymXref.gym.logo || undefined,
-          city: gymXref.gym.city || undefined,
-          state: gymXref.gym.state || undefined,
-        };
-      }
-    }
-
     const accessToken = this.generateToken(user);
 
     return {
@@ -250,6 +228,7 @@ export class AuthService {
       where: { id: userId },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -269,6 +248,7 @@ export class AuthService {
       data,
       include: {
         role: true,
+        gym: true,
       },
     });
 

@@ -12,6 +12,7 @@ import {
 export interface UserFilters extends PaginationParams {
   role?: string;
   status?: string;
+  gymId?: number;
 }
 
 @Injectable()
@@ -25,7 +26,7 @@ export class UsersService {
   }
 
   private async generateUniqueAttendanceCode(): Promise<string> {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const characters = '0123456789';
     let code: string;
     let isUnique = false;
 
@@ -64,12 +65,20 @@ export class UsersService {
       state: user.state,
       zipCode: user.zipCode,
       attendanceCode: user.attendanceCode,
+      gymId: user.gymId,
+      gym: user.gym ? {
+        id: user.gym.id,
+        name: user.gym.name,
+        logo: user.gym.logo,
+        city: user.gym.city,
+        state: user.gym.state,
+      } : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
   }
 
-  async create(createUserDto: CreateUserDto): Promise<any> {
+  async create(createUserDto: CreateUserDto, creatorId?: number): Promise<any> {
     if (!createUserDto.password) {
       throw new BadRequestException('Password is required');
     }
@@ -96,6 +105,26 @@ export class UsersService {
 
     const attendanceCode = await this.generateUniqueAttendanceCode();
 
+    // Auto-assign gym: use provided gymId, or inherit from creator's gym
+    let gymId = createUserDto.gymId;
+    if (!gymId && creatorId) {
+      // First check if creator has gymId directly assigned
+      const creator = await this.prisma.user.findUnique({
+        where: { id: creatorId },
+        select: { gymId: true },
+      });
+      gymId = creator?.gymId || undefined;
+
+      // If not, check UserGymXref table for creator's gym association
+      if (!gymId) {
+        const gymAssociation = await this.prisma.userGymXref.findFirst({
+          where: { userId: creatorId, isActive: true },
+          select: { gymId: true },
+        });
+        gymId = gymAssociation?.gymId || undefined;
+      }
+    }
+
     const user = await this.prisma.user.create({
       data: {
         name: createUserDto.name,
@@ -114,9 +143,11 @@ export class UsersService {
         zipCode: createUserDto.zipCode,
         joinDate: new Date().toISOString().split('T')[0],
         attendanceCode,
+        gymId,
       },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -133,6 +164,9 @@ export class UsersService {
     }
     if (filters.status && filters.status !== 'all') {
       where.status = filters.status;
+    }
+    if (filters.gymId) {
+      where.gymId = filters.gymId;
     }
 
     // Apply search filter
@@ -152,6 +186,7 @@ export class UsersService {
       where,
       include: {
         role: true,
+        gym: true,
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -169,6 +204,7 @@ export class UsersService {
       where: { id },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -211,6 +247,7 @@ export class UsersService {
       },
       include: {
         role: true,
+        gym: true,
       },
     });
 
@@ -225,5 +262,105 @@ export class UsersService {
 
   async updateStatus(userId: number, status: string): Promise<any> {
     return this.update(userId, { status } as UpdateUserDto);
+  }
+
+  async resetPassword(
+    userId: number,
+    newPassword: string,
+  ): Promise<{ success: boolean }> {
+    await this.findOne(userId);
+
+    const passwordHash = await this.hashPassword(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { success: true };
+  }
+
+  async regenerateAttendanceCode(userId: number): Promise<{ success: boolean; attendanceCode: string }> {
+    await this.findOne(userId);
+
+    const attendanceCode = await this.generateUniqueAttendanceCode();
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { attendanceCode },
+    });
+
+    return { success: true, attendanceCode };
+  }
+
+  /* Approve a pending registration request */
+  async approveRequest(userId: number, role: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.status !== 'pending') {
+      throw new BadRequestException('Only pending requests can be approved');
+    }
+
+    /* Find the role lookup */
+    const roleLookup = await this.prisma.lookup.findFirst({
+      where: {
+        lookupType: { code: 'USER_ROLE' },
+        code: role,
+      },
+    });
+
+    if (!roleLookup) {
+      throw new NotFoundException(`Role ${role} not found`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: 'active',
+        roleId: roleLookup.id,
+      },
+      include: {
+        role: true,
+        gym: true,
+      },
+    });
+
+    return this.formatUser(updatedUser);
+  }
+
+  /* Reject a pending registration request */
+  async rejectRequest(userId: number): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.status !== 'pending') {
+      throw new BadRequestException('Only pending requests can be rejected');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: 'rejected',
+      },
+      include: {
+        role: true,
+        gym: true,
+      },
+    });
+
+    return this.formatUser(updatedUser);
   }
 }
