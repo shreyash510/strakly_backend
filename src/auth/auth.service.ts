@@ -57,28 +57,36 @@ export class AuthService {
   }
 
   private async generateUniqueAttendanceCode(): Promise<string> {
-    const characters = '0123456789';
-    let code: string;
-    let isUnique = false;
+    /* Generate batch of candidate codes and check in single query for efficiency */
+    const batchSize = 10;
+    const maxAttempts = 5;
 
-    while (!isUnique) {
-      // Generate 4-digit numeric code
-      code = '';
-      for (let i = 0; i < 4; i++) {
-        code += characters.charAt(Math.floor(Math.random() * characters.length));
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      /* Generate batch of random 4-digit codes */
+      const candidates: string[] = [];
+      for (let i = 0; i < batchSize; i++) {
+        const code = String(Math.floor(1000 + Math.random() * 9000));
+        candidates.push(code);
       }
 
-      // Check if code already exists
-      const existing = await this.prisma.user.findUnique({
-        where: { attendanceCode: code },
+      /* Check which codes already exist in single query */
+      const existing = await this.prisma.user.findMany({
+        where: { attendanceCode: { in: candidates } },
+        select: { attendanceCode: true },
       });
 
-      if (!existing) {
-        isUnique = true;
+      const existingCodes = new Set(existing.map(u => u.attendanceCode));
+
+      /* Return first available code */
+      for (const code of candidates) {
+        if (!existingCodes.has(code)) {
+          return code;
+        }
       }
     }
 
-    return code!;
+    /* Fallback: generate 6-digit code if 4-digit space is exhausted */
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   private async comparePassword(password: string, hash: string): Promise<boolean> {

@@ -58,6 +58,8 @@ model User {
   userGyms           UserGymXref[]
 
   @@index([gymId])
+  @@index([roleId, gymId])
+  @@index([status, gymId])
   @@map("users")
 }
 
@@ -353,6 +355,8 @@ model Membership {
   @@index([gymId, status])
   @@index([status, endDate])
   @@index([planId])
+  @@index([paymentStatus, paidAt])
+  @@index([gymId, paymentStatus])
   @@map("memberships")
 }
 

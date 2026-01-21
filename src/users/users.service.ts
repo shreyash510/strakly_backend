@@ -26,26 +26,36 @@ export class UsersService {
   }
 
   private async generateUniqueAttendanceCode(): Promise<string> {
-    const characters = '0123456789';
-    let code: string;
-    let isUnique = false;
+    /* Generate batch of candidate codes and check in single query for efficiency */
+    const batchSize = 10;
+    const maxAttempts = 5;
 
-    while (!isUnique) {
-      code = '';
-      for (let i = 0; i < 4; i++) {
-        code += characters.charAt(Math.floor(Math.random() * characters.length));
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      /* Generate batch of random 4-digit codes */
+      const candidates: string[] = [];
+      for (let i = 0; i < batchSize; i++) {
+        const code = String(Math.floor(1000 + Math.random() * 9000));
+        candidates.push(code);
       }
 
-      const existing = await this.prisma.user.findUnique({
-        where: { attendanceCode: code },
+      /* Check which codes already exist in single query */
+      const existing = await this.prisma.user.findMany({
+        where: { attendanceCode: { in: candidates } },
+        select: { attendanceCode: true },
       });
 
-      if (!existing) {
-        isUnique = true;
+      const existingCodes = new Set(existing.map(u => u.attendanceCode));
+
+      /* Return first available code */
+      for (const code of candidates) {
+        if (!existingCodes.has(code)) {
+          return code;
+        }
       }
     }
 
-    return code!;
+    /* Fallback: generate 6-digit code if 4-digit space is exhausted */
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   private formatUser(user: any) {
@@ -83,53 +93,55 @@ export class UsersService {
       throw new BadRequestException('Password is required');
     }
 
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: createUserDto.email },
-    });
+    const roleCode = createUserDto.role || 'admin';
+
+    /* Parallelize initial queries for better performance */
+    const [existingUser, roleLookup, attendanceCode, creator, gymAssociation, passwordHash] = await Promise.all([
+      /* Check if email already exists */
+      this.prisma.user.findUnique({
+        where: { email: createUserDto.email },
+        select: { id: true },
+      }),
+      /* Find role lookup */
+      this.prisma.lookup.findFirst({
+        where: {
+          lookupType: { code: 'USER_ROLE' },
+          code: roleCode,
+        },
+        select: { id: true },
+      }),
+      /* Generate unique attendance code */
+      this.generateUniqueAttendanceCode(),
+      /* Get creator's gym (if creatorId provided) */
+      creatorId ? this.prisma.user.findUnique({
+        where: { id: creatorId },
+        select: { gymId: true },
+      }) : null,
+      /* Get creator's gym association */
+      creatorId ? this.prisma.userGymXref.findFirst({
+        where: { userId: creatorId, isActive: true },
+        select: { gymId: true },
+      }) : null,
+      /* Hash password in parallel */
+      this.hashPassword(createUserDto.password),
+    ]);
 
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
-    const roleCode = createUserDto.role || 'admin';
-    const roleLookup = await this.prisma.lookup.findFirst({
-      where: {
-        lookupType: { code: 'USER_ROLE' },
-        code: roleCode,
-      },
-    });
-
     if (!roleLookup) {
       throw new NotFoundException(`Role ${roleCode} not found`);
     }
 
-    const attendanceCode = await this.generateUniqueAttendanceCode();
-
-    // Auto-assign gym: use provided gymId, or inherit from creator's gym
-    let gymId = createUserDto.gymId;
-    if (!gymId && creatorId) {
-      // First check if creator has gymId directly assigned
-      const creator = await this.prisma.user.findUnique({
-        where: { id: creatorId },
-        select: { gymId: true },
-      });
-      gymId = creator?.gymId || undefined;
-
-      // If not, check UserGymXref table for creator's gym association
-      if (!gymId) {
-        const gymAssociation = await this.prisma.userGymXref.findFirst({
-          where: { userId: creatorId, isActive: true },
-          select: { gymId: true },
-        });
-        gymId = gymAssociation?.gymId || undefined;
-      }
-    }
+    /* Determine gymId: provided > creator's gym > creator's gym association */
+    const gymId = createUserDto.gymId || creator?.gymId || gymAssociation?.gymId || undefined;
 
     const user = await this.prisma.user.create({
       data: {
         name: createUserDto.name,
         email: createUserDto.email,
-        passwordHash: await this.hashPassword(createUserDto.password),
+        passwordHash,
         phone: createUserDto.phone,
         avatar: createUserDto.avatar,
         bio: createUserDto.bio,

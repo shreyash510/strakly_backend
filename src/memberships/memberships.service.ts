@@ -156,64 +156,53 @@ export class MembershipsService {
   }
 
   async create(dto: CreateMembershipDto, creatorId?: number) {
-    // Verify user exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-      select: { id: true, gymId: true },
-    });
+    /* Parallelize initial queries for better performance */
+    const [user, userGymAssoc, creator, creatorGymAssoc, activeMembership, priceCalculation] = await Promise.all([
+      /* Verify user exists */
+      this.prisma.user.findUnique({
+        where: { id: dto.userId },
+        select: { id: true, gymId: true },
+      }),
+      /* User's gym association (needed if user.gymId is null) */
+      this.prisma.userGymXref.findFirst({
+        where: { userId: dto.userId, isActive: true },
+        select: { gymId: true },
+      }),
+      /* Creator info (if creatorId provided) */
+      creatorId ? this.prisma.user.findUnique({
+        where: { id: creatorId },
+        select: { gymId: true },
+      }) : null,
+      /* Creator's gym association */
+      creatorId ? this.prisma.userGymXref.findFirst({
+        where: { userId: creatorId, isActive: true },
+        select: { gymId: true },
+      }) : null,
+      /* Check active membership */
+      this.getActiveMembership(dto.userId),
+      /* Calculate price with optional offer */
+      this.plansService.calculatePriceWithOffer(dto.planId, dto.offerCode),
+    ]);
+
     if (!user) {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
 
-    // Auto-assign gymId: use provided > user's gym > user's gym association > creator's gym
-    let gymId = dto.gymId;
-    if (!gymId) {
-      // Try user's direct gymId
-      gymId = user.gymId || undefined;
-
-      // Try user's gym association
-      if (!gymId) {
-        const userGymAssoc = await this.prisma.userGymXref.findFirst({
-          where: { userId: dto.userId, isActive: true },
-          select: { gymId: true },
-        });
-        gymId = userGymAssoc?.gymId || undefined;
-      }
-
-      // Fallback: try creator's gym
-      if (!gymId && creatorId) {
-        const creator = await this.prisma.user.findUnique({
-          where: { id: creatorId },
-          select: { gymId: true },
-        });
-        gymId = creator?.gymId || undefined;
-
-        // Try creator's gym association
-        if (!gymId) {
-          const creatorGymAssoc = await this.prisma.userGymXref.findFirst({
-            where: { userId: creatorId, isActive: true },
-            select: { gymId: true },
-          });
-          gymId = creatorGymAssoc?.gymId || undefined;
-        }
-      }
-    }
-
-    if (!gymId) {
-      throw new BadRequestException('Unable to determine gym for membership. Please specify gymId.');
-    }
-
-    // Check if user already has active membership
-    const activeMembership = await this.getActiveMembership(dto.userId);
     if (activeMembership) {
       throw new ConflictException('User already has an active membership');
     }
 
-    // Calculate price with optional offer
-    const priceCalculation = await this.plansService.calculatePriceWithOffer(
-      dto.planId,
-      dto.offerCode,
-    );
+    /* Determine gymId: provided > user's gym > user's gym association > creator's gym */
+    let gymId = dto.gymId
+      || user.gymId
+      || userGymAssoc?.gymId
+      || creator?.gymId
+      || creatorGymAssoc?.gymId
+      || undefined;
+
+    if (!gymId) {
+      throw new BadRequestException('Unable to determine gym for membership. Please specify gymId.');
+    }
 
     const plan = priceCalculation.plan;
     const offer = priceCalculation.offer;
@@ -257,32 +246,51 @@ export class MembershipsService {
     return membership;
   }
 
-  async update(id: number, dto: UpdateMembershipDto) {
-    await this.findOne(id);
+  /* Lightweight check for status validation - avoids loading full relations */
+  private async getMembershipStatus(id: number): Promise<{ status: string; paymentStatus: string }> {
+    const membership = await this.prisma.membership.findUnique({
+      where: { id },
+      select: { status: true, paymentStatus: true },
+    });
 
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+
+    return membership;
+  }
+
+  async update(id: number, dto: UpdateMembershipDto) {
     const updateData: any = { ...dto };
 
     if (dto.paidAt) {
       updateData.paidAt = new Date(dto.paidAt);
     }
 
-    return this.prisma.membership.update({
-      where: { id },
-      data: updateData,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
+    try {
+      return await this.prisma.membership.update({
+        where: { id },
+        data: updateData,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+          plan: true,
+          offer: true,
         },
-        plan: true,
-        offer: true,
-      },
-    });
+      });
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Membership with ID ${id} not found`);
+      }
+      throw error;
+    }
   }
 
   async recordPayment(id: number, dto: RecordPaymentDto) {
-    const membership = await this.findOne(id);
+    const { paymentStatus } = await this.getMembershipStatus(id);
 
-    if (membership.paymentStatus === 'paid') {
+    if (paymentStatus === 'paid') {
       throw new BadRequestException('Payment already recorded for this membership');
     }
 
@@ -306,13 +314,13 @@ export class MembershipsService {
   }
 
   async activate(id: number) {
-    const membership = await this.findOne(id);
+    const { status, paymentStatus } = await this.getMembershipStatus(id);
 
-    if (membership.status === 'active') {
+    if (status === 'active') {
       throw new BadRequestException('Membership is already active');
     }
 
-    if (membership.paymentStatus !== 'paid') {
+    if (paymentStatus !== 'paid') {
       throw new BadRequestException('Cannot activate membership without payment');
     }
 
@@ -323,9 +331,9 @@ export class MembershipsService {
   }
 
   async cancel(id: number, dto: CancelMembershipDto) {
-    const membership = await this.findOne(id);
+    const { status } = await this.getMembershipStatus(id);
 
-    if (membership.status === 'cancelled') {
+    if (status === 'cancelled') {
       throw new BadRequestException('Membership is already cancelled');
     }
 
@@ -340,10 +348,10 @@ export class MembershipsService {
   }
 
   async delete(id: number) {
-    const membership = await this.findOne(id);
+    const { status } = await this.getMembershipStatus(id);
 
-    // Only allow deletion of cancelled or expired memberships
-    if (membership.status === 'active' || membership.status === 'pending') {
+    /* Only allow deletion of cancelled or expired memberships */
+    if (status === 'active' || status === 'pending') {
       throw new BadRequestException(
         'Cannot delete active or pending memberships. Please cancel the membership first.',
       );
@@ -357,9 +365,9 @@ export class MembershipsService {
   }
 
   async pause(id: number) {
-    const membership = await this.findOne(id);
+    const { status } = await this.getMembershipStatus(id);
 
-    if (membership.status !== 'active') {
+    if (status !== 'active') {
       throw new BadRequestException('Only active memberships can be paused');
     }
 
@@ -370,9 +378,9 @@ export class MembershipsService {
   }
 
   async resume(id: number) {
-    const membership = await this.findOne(id);
+    const { status } = await this.getMembershipStatus(id);
 
-    if (membership.status !== 'paused') {
+    if (status !== 'paused') {
       throw new BadRequestException('Only paused memberships can be resumed');
     }
 
