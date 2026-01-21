@@ -241,7 +241,8 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a membership' })
-  delete(@Param('id', ParseIntPipe) id: number) {
-    return this.membershipsService.delete(id);
+  @ApiQuery({ name: 'force', required: false, type: Boolean, description: 'Force delete active/pending memberships' })
+  delete(@Param('id', ParseIntPipe) id: number, @Query('force') force?: string) {
+    return this.membershipsService.delete(id, force === 'true');
   }
 }

@@ -11,6 +11,7 @@ import {
 export interface GymFilters extends PaginationParams {
   status?: string;
   includeInactive?: boolean;
+  gymId?: number;
 }
 
 @Injectable()
@@ -21,6 +22,11 @@ export class GymService {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
 
     const where: any = {};
+
+    /* Filter by gymId if provided (non-superadmin users only see their own gym) */
+    if (filters.gymId) {
+      where.id = filters.gymId;
+    }
 
     // Handle status filter
     if (filters.status && filters.status !== 'all') {
@@ -164,7 +170,7 @@ export class GymService {
   }
 
   async remove(id: number) {
-    // Check if gym has any linked users
+    // Check if gym has any linked users (users with gymId set to this gym)
     const usersCount = await this.prisma.user.count({
       where: { gymId: id },
     });
@@ -189,19 +195,17 @@ export class GymService {
       );
     }
 
-    // Check if gym has any user-gym associations
-    const gymAssociations = await this.prisma.userGymXref.count({
-      where: { gymId: id, isActive: true },
-    });
+    // Use transaction to delete gym and its associations
+    await this.prisma.$transaction(async (tx) => {
+      // Delete user-gym associations (these are just linking records)
+      await tx.userGymXref.deleteMany({
+        where: { gymId: id },
+      });
 
-    if (gymAssociations > 0) {
-      throw new BadRequestException(
-        `Cannot delete gym. ${gymAssociations} user(s) are associated with this gym. Please remove associations first.`,
-      );
-    }
-
-    await this.prisma.gym.delete({
-      where: { id },
+      // Delete the gym
+      await tx.gym.delete({
+        where: { id },
+      });
     });
 
     return { success: true, message: 'Gym deleted successfully' };

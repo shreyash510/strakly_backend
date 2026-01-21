@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Res,
+  Request,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -37,6 +38,7 @@ export class GymController {
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean, description: 'Include inactive gyms' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
   async findAll(
+    @Request() req: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -45,6 +47,9 @@ export class GymController {
     @Query('noPagination') noPagination?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
+    /* Superadmin can see all gyms, others only see their own gym */
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+
     const result = await this.gymService.findAll({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
@@ -52,6 +57,7 @@ export class GymController {
       status,
       includeInactive: includeInactive === 'true',
       noPagination: noPagination === 'true',
+      gymId,
     });
 
     if (res && result.pagination) {

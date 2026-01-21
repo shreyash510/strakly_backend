@@ -347,14 +347,26 @@ export class MembershipsService {
     });
   }
 
-  async delete(id: number) {
+  async delete(id: number, force: boolean = false) {
     const { status } = await this.getMembershipStatus(id);
 
-    /* Only allow deletion of cancelled or expired memberships */
+    /* If force delete is enabled, auto-cancel active/pending memberships first */
     if (status === 'active' || status === 'pending') {
-      throw new BadRequestException(
-        'Cannot delete active or pending memberships. Please cancel the membership first.',
-      );
+      if (force) {
+        /* Auto-cancel before deleting */
+        await this.prisma.membership.update({
+          where: { id },
+          data: {
+            status: 'cancelled',
+            cancelledAt: new Date(),
+            cancelReason: 'Force deleted by admin',
+          },
+        });
+      } else {
+        throw new BadRequestException(
+          'Cannot delete active or pending memberships. Please cancel the membership first or use force delete.',
+        );
+      }
     }
 
     await this.prisma.membership.delete({

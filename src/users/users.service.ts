@@ -83,6 +83,8 @@ export class UsersService {
         city: user.gym.city,
         state: user.gym.state,
       } : null,
+      bodyMetrics: user.bodyMetrics || null,
+      bodyMetricsHistory: user.bodyMetricsHistory || [],
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -217,6 +219,11 @@ export class UsersService {
       include: {
         role: true,
         gym: true,
+        bodyMetrics: true,
+        bodyMetricsHistory: {
+          orderBy: { measuredAt: 'desc' },
+          take: 50,
+        },
       },
     });
 
@@ -271,20 +278,12 @@ export class UsersService {
       where: { id },
       include: {
         role: true,
-        userGyms: { where: { isActive: true } },
         memberships: { where: { status: { in: ['active', 'pending'] } } },
       },
     });
 
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    // Block deletion if user is linked to a gym (admin/manager)
-    if (user.userGyms && user.userGyms.length > 0) {
-      throw new BadRequestException(
-        'Cannot delete user. User is linked to a gym. Please remove the gym association first.',
-      );
     }
 
     // Block deletion if user has active or pending memberships
@@ -294,7 +293,17 @@ export class UsersService {
       );
     }
 
-    await this.prisma.user.delete({ where: { id } });
+    // Use transaction to delete user and their associations
+    await this.prisma.$transaction(async (tx) => {
+      // Delete user-gym associations (these are just linking records)
+      await tx.userGymXref.deleteMany({
+        where: { userId: id },
+      });
+
+      // Delete the user
+      await tx.user.delete({ where: { id } });
+    });
+
     return { success: true };
   }
 
