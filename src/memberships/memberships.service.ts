@@ -151,13 +151,52 @@ export class MembershipsService {
     };
   }
 
-  async create(dto: CreateMembershipDto) {
+  async create(dto: CreateMembershipDto, creatorId?: number) {
     // Verify user exists
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
+      select: { id: true, gymId: true },
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
+    }
+
+    // Auto-assign gymId: use provided > user's gym > user's gym association > creator's gym
+    let gymId = dto.gymId;
+    if (!gymId) {
+      // Try user's direct gymId
+      gymId = user.gymId || undefined;
+
+      // Try user's gym association
+      if (!gymId) {
+        const userGymAssoc = await this.prisma.userGymXref.findFirst({
+          where: { userId: dto.userId, isActive: true },
+          select: { gymId: true },
+        });
+        gymId = userGymAssoc?.gymId || undefined;
+      }
+
+      // Fallback: try creator's gym
+      if (!gymId && creatorId) {
+        const creator = await this.prisma.user.findUnique({
+          where: { id: creatorId },
+          select: { gymId: true },
+        });
+        gymId = creator?.gymId || undefined;
+
+        // Try creator's gym association
+        if (!gymId) {
+          const creatorGymAssoc = await this.prisma.userGymXref.findFirst({
+            where: { userId: creatorId, isActive: true },
+            select: { gymId: true },
+          });
+          gymId = creatorGymAssoc?.gymId || undefined;
+        }
+      }
+    }
+
+    if (!gymId) {
+      throw new BadRequestException('Unable to determine gym for membership. Please specify gymId.');
     }
 
     // Check if user already has active membership
@@ -182,18 +221,19 @@ export class MembershipsService {
     const membership = await this.prisma.membership.create({
       data: {
         userId: dto.userId,
-        gymId: dto.gymId,
+        gymId: gymId,
         planId: dto.planId,
         offerId: offer?.id || null,
         startDate,
         endDate,
-        status: 'pending',
+        status: 'active',
         originalAmount: priceCalculation.originalAmount,
         discountAmount: priceCalculation.discountAmount,
         finalAmount: priceCalculation.finalAmount,
         currency: priceCalculation.currency,
-        paymentStatus: 'pending',
-        paymentMethod: dto.paymentMethod,
+        paymentStatus: 'paid',
+        paymentMethod: dto.paymentMethod || 'cash',
+        paidAt: new Date(),
         notes: dto.notes,
       },
       include: {
@@ -293,6 +333,16 @@ export class MembershipsService {
         cancelReason: dto.reason,
       },
     });
+  }
+
+  async delete(id: number) {
+    await this.findOne(id); // Verify it exists
+
+    await this.prisma.membership.delete({
+      where: { id },
+    });
+
+    return { id, deleted: true };
   }
 
   async pause(id: number) {
@@ -406,6 +456,65 @@ export class MembershipsService {
     });
 
     return { updated: result.count };
+  }
+
+  async getStats() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const [
+      totalActiveMembers,
+      thisMonthRevenue,
+      endingThisMonth,
+      totalRevenue,
+    ] = await Promise.all([
+      // Total active members (memberships with status 'active')
+      this.prisma.membership.count({
+        where: {
+          status: 'active',
+          endDate: { gte: now },
+        },
+      }),
+
+      // This month revenue (paid memberships this month)
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          paymentStatus: 'paid',
+          paidAt: {
+            gte: startOfMonth,
+            lte: now,
+          },
+        },
+      }),
+
+      // Memberships ending this month
+      this.prisma.membership.count({
+        where: {
+          status: 'active',
+          endDate: {
+            gte: now,
+            lte: endOfMonth,
+          },
+        },
+      }),
+
+      // Total revenue (all paid memberships)
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          paymentStatus: 'paid',
+        },
+      }),
+    ]);
+
+    return {
+      totalActiveMembers,
+      thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
+      endingThisMonth,
+      totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
+    };
   }
 
   private calculateEndDate(startDate: Date, durationValue: number, durationType: string): Date {

@@ -69,8 +69,8 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Create a new user' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  create(@Request() req: any, @Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto, req.user.userId);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -142,6 +142,16 @@ export class UsersController {
     return this.usersService.resetPassword(parseInt(userId), dto.newPassword);
   }
 
+  @Post('user/regenerate-attendance-code')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Regenerate attendance code for user' })
+  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  regenerateAttendanceCode(@Headers('x-user-id') userId: string) {
+    if (!userId) throw new BadRequestException('x-user-id header is required');
+    return this.usersService.regenerateAttendanceCode(parseInt(userId));
+  }
+
   @Get('role/:role')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -157,6 +167,27 @@ export class UsersController {
     }
 
     return result.data;
+  }
+
+  // ============ REQUEST APPROVAL ENDPOINTS ============
+
+  @Patch(':id/approve')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Approve a pending registration request' })
+  approveRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { role: string },
+  ) {
+    return this.usersService.approveRequest(id, body.role);
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Reject a pending registration request' })
+  rejectRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.rejectRequest(id);
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============

@@ -6,9 +6,10 @@ export class CreateMembershipDto {
   @Type(() => Number)
   userId: number;
 
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  gymId: number;
+  gymId?: number;
 
   @IsNumber()
   @Type(() => Number)

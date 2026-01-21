@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -58,6 +59,14 @@ export class MembershipsController {
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
     });
+  }
+
+  @Get('stats')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get membership statistics' })
+  getStats() {
+    return this.membershipsService.getStats();
   }
 
   @Get('expiring')
@@ -165,8 +174,8 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Create a new membership' })
-  create(@Body() dto: CreateMembershipDto) {
-    return this.membershipsService.create(dto);
+  create(@Request() req: any, @Body() dto: CreateMembershipDto) {
+    return this.membershipsService.create(dto, req.user.userId);
   }
 
   @Patch(':id')
@@ -215,5 +224,13 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Resume a paused membership' })
   resume(@Param('id', ParseIntPipe) id: number) {
     return this.membershipsService.resume(id);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Delete a membership' })
+  delete(@Param('id', ParseIntPipe) id: number) {
+    return this.membershipsService.delete(id);
   }
 }

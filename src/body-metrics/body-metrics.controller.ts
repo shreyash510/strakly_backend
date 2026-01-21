@@ -31,7 +31,7 @@ export class BodyMetricsController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user body metrics' })
   getMyMetrics(@Request() req: any) {
-    return this.bodyMetricsService.getMetrics(req.user.userId);
+    return this.bodyMetricsService.getOrCreateMetrics(req.user.userId);
   }
 
   @Patch('me')
@@ -104,7 +104,7 @@ export class BodyMetricsController {
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   getUserMetrics(@Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getMetrics(parseInt(userId));
+    return this.bodyMetricsService.getOrCreateMetrics(parseInt(userId));
   }
 
   @Patch('user')
@@ -141,18 +141,19 @@ export class BodyMetricsController {
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  getUserHistory(
+  async getUserHistory(
     @Headers('x-user-id') userId: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getHistory(parseInt(userId), {
+    const history = await this.bodyMetricsService.getHistory(parseInt(userId), {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       limit: limit ? parseInt(limit) : undefined,
     });
+    return history;
   }
 
   @Get('user/progress')
