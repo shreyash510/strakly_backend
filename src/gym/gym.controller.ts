@@ -23,7 +23,7 @@ import { setPaginationHeaders } from '../common/pagination.util';
 @ApiTags('gyms')
 @Controller('gyms')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('superadmin')
+@Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class GymController {
   constructor(private readonly gymService: GymService) {}
