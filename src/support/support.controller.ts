@@ -89,8 +89,10 @@ export class SupportController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Get support ticket statistics (admin only)' })
-  getStats() {
-    return this.supportService.getStats();
+  getStats(@Request() req: any) {
+    /* Superadmin can see all stats, others only see their gym's stats */
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    return this.supportService.getStats(gymId);
   }
 
   @Get(':id')

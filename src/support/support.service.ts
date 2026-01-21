@@ -102,7 +102,7 @@ export class SupportService {
     // Get total count
     const total = await this.prisma.supportTicket.count({ where });
 
-    // Get paginated data
+    /* Get paginated data with user relations included to avoid N+1 queries */
     const tickets = await this.prisma.supportTicket.findMany({
       where,
       orderBy: [
@@ -110,40 +110,58 @@ export class SupportService {
         { priority: 'desc' },
         { createdAt: 'desc' },
       ],
-      include: {
+      select: {
+        id: true,
+        ticketNumber: true,
+        subject: true,
+        description: true,
+        category: true,
+        priority: true,
+        status: true,
+        userId: true,
+        assignedToId: true,
+        resolution: true,
+        resolvedAt: true,
+        closedAt: true,
+        createdAt: true,
+        updatedAt: true,
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
+          select: {
+            id: true,
+            message: true,
+            senderId: true,
+            senderType: true,
+            createdAt: true,
+          },
         },
       },
       skip,
       take,
     });
 
-    const ticketsWithUserInfo = await Promise.all(
-      tickets.map(async (ticket) => {
-        const user = await this.prisma.user.findUnique({
-          where: { id: ticket.userId },
-          select: { id: true, name: true, email: true },
-        });
+    /* Batch fetch all users in one query instead of N+1 */
+    const userIds = new Set<number>();
+    tickets.forEach(ticket => {
+      userIds.add(ticket.userId);
+      if (ticket.assignedToId) userIds.add(ticket.assignedToId);
+    });
 
-        let assignedTo: { id: number; name: string; email: string } | null = null;
-        if (ticket.assignedToId) {
-          assignedTo = await this.prisma.user.findUnique({
-            where: { id: ticket.assignedToId },
-            select: { id: true, name: true, email: true },
-          });
-        }
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: Array.from(userIds) } },
+      select: { id: true, name: true, email: true },
+    });
 
-        return {
-          ...ticket,
-          user,
-          assignedTo,
-          lastMessage: ticket.messages[0] || null,
-          messages: undefined,
-        };
-      }),
-    );
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    const ticketsWithUserInfo = tickets.map(ticket => ({
+      ...ticket,
+      user: userMap.get(ticket.userId) || null,
+      assignedTo: ticket.assignedToId ? userMap.get(ticket.assignedToId) || null : null,
+      lastMessage: ticket.messages[0] || null,
+      messages: undefined,
+    }));
 
     return {
       data: ticketsWithUserInfo,
@@ -170,36 +188,28 @@ export class SupportService {
       throw new ForbiddenException('You can only view your own tickets');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: ticket.userId },
+    /* Batch fetch all users (ticket owner, assignee, message senders) in one query */
+    const userIds = new Set<number>();
+    userIds.add(ticket.userId);
+    if (ticket.assignedToId) userIds.add(ticket.assignedToId);
+    ticket.messages.forEach(m => userIds.add(m.senderId));
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: Array.from(userIds) } },
       select: { id: true, name: true, email: true },
     });
 
-    let assignedTo: { id: number; name: string; email: string } | null = null;
-    if (ticket.assignedToId) {
-      assignedTo = await this.prisma.user.findUnique({
-        where: { id: ticket.assignedToId },
-        select: { id: true, name: true, email: true },
-      });
-    }
+    const userMap = new Map(users.map(u => [u.id, u]));
 
-    const messagesWithSenderInfo = await Promise.all(
-      ticket.messages.map(async (message) => {
-        const sender = await this.prisma.user.findUnique({
-          where: { id: message.senderId },
-          select: { id: true, name: true, email: true },
-        });
-        return {
-          ...message,
-          sender,
-        };
-      }),
-    );
+    const messagesWithSenderInfo = ticket.messages.map(message => ({
+      ...message,
+      sender: userMap.get(message.senderId) || null,
+    }));
 
     return {
       ...ticket,
-      user,
-      assignedTo,
+      user: userMap.get(ticket.userId) || null,
+      assignedTo: ticket.assignedToId ? userMap.get(ticket.assignedToId) || null : null,
       messages: messagesWithSenderInfo,
     };
   }
@@ -319,23 +329,37 @@ export class SupportService {
     return { success: true, message: 'Ticket deleted successfully' };
   }
 
-  async getStats() {
+  async getStats(gymId?: number) {
+    /* For gym-specific stats, first get user IDs belonging to the gym */
+    let userFilter: { userId?: { in: number[] } } = {};
+
+    if (gymId) {
+      const gymUsers = await this.prisma.user.findMany({
+        where: { gymId },
+        select: { id: true },
+      });
+      const userIds = gymUsers.map(u => u.id);
+      userFilter = { userId: { in: userIds } };
+    }
+
     const [total, open, inProgress, resolved, closed] = await Promise.all([
-      this.prisma.supportTicket.count(),
-      this.prisma.supportTicket.count({ where: { status: 'open' } }),
-      this.prisma.supportTicket.count({ where: { status: 'in_progress' } }),
-      this.prisma.supportTicket.count({ where: { status: 'resolved' } }),
-      this.prisma.supportTicket.count({ where: { status: 'closed' } }),
+      this.prisma.supportTicket.count({ where: userFilter }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'open' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'in_progress' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'resolved' } }),
+      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'closed' } }),
     ]);
 
     const byCategory = await this.prisma.supportTicket.groupBy({
       by: ['category'],
-      _count: { id: true },
+      where: userFilter,
+      _count: { _all: true },
     });
 
     const byPriority = await this.prisma.supportTicket.groupBy({
       by: ['priority'],
-      _count: { id: true },
+      where: userFilter,
+      _count: { _all: true },
     });
 
     return {
@@ -343,14 +367,14 @@ export class SupportService {
       byStatus: { open, inProgress, resolved, closed },
       byCategory: byCategory.reduce(
         (acc, item) => {
-          acc[item.category] = item._count.id;
+          acc[item.category] = item._count._all;
           return acc;
         },
         {} as Record<string, number>,
       ),
       byPriority: byPriority.reduce(
         (acc, item) => {
-          acc[item.priority] = item._count.id;
+          acc[item.priority] = item._count._all;
           return acc;
         },
         {} as Record<string, number>,

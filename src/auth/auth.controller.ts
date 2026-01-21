@@ -88,7 +88,9 @@ export class AuthController {
     @Query('limit') limit?: string,
   ) {
     const pageNum = parseInt(page || '1', 10) || 1;
-    const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50); // Max 50 per page
-    return this.authService.searchUsers(query, req.user.userId, pageNum, limitNum);
+    const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50);
+    /* Superadmin can search all users, others only see their gym's users */
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    return this.authService.searchUsers(query, req.user.userId, pageNum, limitNum, gymId);
   }
 }

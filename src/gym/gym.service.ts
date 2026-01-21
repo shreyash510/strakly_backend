@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
@@ -11,6 +11,7 @@ import {
 export interface GymFilters extends PaginationParams {
   status?: string;
   includeInactive?: boolean;
+  gymId?: number;
 }
 
 @Injectable()
@@ -21,6 +22,11 @@ export class GymService {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
 
     const where: any = {};
+
+    /* Filter by gymId if provided (non-superadmin users only see their own gym) */
+    if (filters.gymId) {
+      where.id = filters.gymId;
+    }
 
     // Handle status filter
     if (filters.status && filters.status !== 'all') {
@@ -164,10 +170,42 @@ export class GymService {
   }
 
   async remove(id: number) {
-    await this.findOne(id);
+    // Check if gym has any linked users (users with gymId set to this gym)
+    const usersCount = await this.prisma.user.count({
+      where: { gymId: id },
+    });
 
-    await this.prisma.gym.delete({
-      where: { id },
+    if (usersCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete gym. ${usersCount} user(s) are linked to this gym. Please reassign or remove users first.`,
+      );
+    }
+
+    // Check if gym has any active memberships
+    const activeMemberships = await this.prisma.membership.count({
+      where: {
+        gymId: id,
+        status: { in: ['active', 'pending'] },
+      },
+    });
+
+    if (activeMemberships > 0) {
+      throw new BadRequestException(
+        `Cannot delete gym. ${activeMemberships} active membership(s) exist at this gym.`,
+      );
+    }
+
+    // Use transaction to delete gym and its associations
+    await this.prisma.$transaction(async (tx) => {
+      // Delete user-gym associations (these are just linking records)
+      await tx.userGymXref.deleteMany({
+        where: { gymId: id },
+      });
+
+      // Delete the gym
+      await tx.gym.delete({
+        where: { id },
+      });
     });
 
     return { success: true, message: 'Gym deleted successfully' };

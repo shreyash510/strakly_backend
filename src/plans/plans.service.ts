@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
 import type { Offer } from '@prisma/client';
@@ -109,6 +109,20 @@ export class PlansService {
   async delete(id: number | string) {
     const numId = typeof id === 'string' ? parseInt(id) : id;
     await this.findOne(numId);
+
+    // Check for active memberships using this plan
+    const activeMemberships = await this.prisma.membership.count({
+      where: {
+        planId: numId,
+        status: { in: ['active', 'pending'] },
+      },
+    });
+
+    if (activeMemberships > 0) {
+      throw new BadRequestException(
+        `Cannot delete plan. ${activeMemberships} active membership(s) are using this plan.`,
+      );
+    }
 
     // Soft delete
     return this.prisma.plan.update({

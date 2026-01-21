@@ -41,6 +41,7 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
   async findAll(
+    @Request() req: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -49,12 +50,16 @@ export class UsersController {
     @Query('noPagination') noPagination?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
+    /* Superadmin can see all users, others only see users from their gym */
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       search,
       role,
       status,
+      gymId,
       noPagination: noPagination === 'true',
     });
 
@@ -157,10 +162,13 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get users by role' })
   async findByRole(
+    @Request() req: any,
     @Param('role') role: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
-    const result = await this.usersService.findByRole(role);
+    /* Superadmin can see all users, others only see users from their gym */
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    const result = await this.usersService.findByRole(role, gymId);
 
     if (res && result.pagination) {
       setPaginationHeaders(res, result.pagination);
