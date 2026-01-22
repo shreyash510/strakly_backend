@@ -112,6 +112,9 @@ const permissions = [
   // Profile module
   { code: 'profile.view', name: 'View Profile', module: 'profile', description: 'View own profile' },
 
+  // Share App module
+  { code: 'share_app.view', name: 'View Share App', module: 'share_app', description: 'Access share app QR code' },
+
   // Lookups module
   { code: 'lookups.read', name: 'Read Lookups', module: 'lookups', description: 'View lookup values' },
   { code: 'lookups.manage', name: 'Manage Lookups', module: 'lookups', description: 'Manage lookup values' },
@@ -142,6 +145,8 @@ const rolePermissions: Record<string, string[]> = {
     // Support (can manage all tickets)
     'support.view',
     'support.manage',
+    // Share App
+    'share_app.view',
   ],
 
   admin: [
@@ -173,6 +178,8 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Support (view only)
     'support.view',
+    // Share App
+    'share_app.view',
   ],
 
   manager: [
@@ -197,6 +204,8 @@ const rolePermissions: Record<string, string[]> = {
     'settings.manage',
     // Profile
     'profile.view',
+    // Share App
+    'share_app.view',
   ],
 
   trainer: [
@@ -212,6 +221,8 @@ const rolePermissions: Record<string, string[]> = {
     'settings.view',
     // Profile
     'profile.view',
+    // Share App
+    'share_app.view',
   ],
 
   member: [
@@ -227,6 +238,8 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Settings (own profile)
     'settings.view',
+    // Share App
+    'share_app.view',
   ],
 };
 

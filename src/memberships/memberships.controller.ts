@@ -35,7 +35,7 @@ export class MembershipsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
@@ -52,8 +52,8 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    /* Superadmin can see all memberships, others only see their gym's memberships */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    /* Filter by admin's gym (tenant isolation) */
+    const gymId = req.user.gymId;
 
     return this.membershipsService.findAll({
       status,
@@ -68,38 +68,35 @@ export class MembershipsController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   getStats(@Request() req: any) {
-    /* Superadmin can see all stats, others only see their gym's stats */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
-    return this.membershipsService.getStats(gymId);
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.getStats(req.user.gymId);
   }
 
   @Get('expiring')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   getExpiringSoon(@Request() req: any, @Query('days') days?: string) {
-    /* Superadmin can see all, others only see their gym's data */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
-    return this.membershipsService.getExpiringSoon(days ? parseInt(days) : 7, gymId);
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.getExpiringSoon(days ? parseInt(days) : 7, req.user.gymId);
   }
 
   @Get('expired')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get expired memberships' })
   getExpired(@Request() req: any) {
-    /* Superadmin can see all, others only see their gym's data */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
-    return this.membershipsService.getExpired(gymId);
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.getExpired(req.user.gymId);
   }
 
   @Post('mark-expired')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Mark all expired memberships' })
   markExpired() {
     return this.membershipsService.markExpiredMemberships();
@@ -135,55 +132,63 @@ export class MembershipsController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  findByUser(@Headers('x-user-id') userId: string) {
+  findByUser(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.findByUser(parseInt(userId));
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.findByUser(parseInt(userId), req.user.gymId);
   }
 
   @Get('user/active')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get active membership for a user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getActiveMembership(@Headers('x-user-id') userId: string) {
+  getActiveMembership(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.getActiveMembership(parseInt(userId));
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.getActiveMembership(parseInt(userId), req.user.gymId);
   }
 
   @Get('user/status')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Check membership status for a user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  checkStatus(@Headers('x-user-id') userId: string) {
+  checkStatus(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.checkMembershipStatus(parseInt(userId));
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.checkMembershipStatus(parseInt(userId), req.user.gymId);
   }
 
   @Post('user/renew')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Renew membership for a user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  renew(@Headers('x-user-id') userId: string, @Body() dto: RenewMembershipDto) {
+  renew(@Request() req: any, @Headers('x-user-id') userId: string, @Body() dto: RenewMembershipDto) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    /* Use admin's gym for renewal */
+    dto.gymId = req.user.gymId;
     return this.membershipsService.renew(parseInt(userId), dto);
   }
 
   // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
 
   @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.membershipsService.findOne(id);
+  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    /* Filter by admin's gym (tenant isolation) */
+    return this.membershipsService.findOne(id, req.user.gymId);
   }
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a new membership' })
   create(@Request() req: any, @Body() dto: CreateMembershipDto) {
     return this.membershipsService.create(dto, req.user.userId);
@@ -191,58 +196,72 @@ export class MembershipsController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a membership' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMembershipDto) {
+  async update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMembershipDto) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.update(id, dto);
   }
 
   @Post(':id/payment')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
-  recordPayment(@Param('id', ParseIntPipe) id: number, @Body() dto: RecordPaymentDto) {
+  async recordPayment(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: RecordPaymentDto) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.recordPayment(id, dto);
   }
 
   @Post(':id/activate')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Activate a membership' })
-  activate(@Param('id', ParseIntPipe) id: number) {
+  async activate(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.activate(id);
   }
 
   @Post(':id/cancel')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Cancel a membership' })
-  cancel(@Param('id', ParseIntPipe) id: number, @Body() dto: CancelMembershipDto) {
+  async cancel(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CancelMembershipDto) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.cancel(id, dto);
   }
 
   @Post(':id/pause')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Pause a membership' })
-  pause(@Param('id', ParseIntPipe) id: number) {
+  async pause(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.pause(id);
   }
 
   @Post(':id/resume')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Resume a paused membership' })
-  resume(@Param('id', ParseIntPipe) id: number) {
+  async resume(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.resume(id);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete a membership' })
   @ApiQuery({ name: 'force', required: false, type: Boolean, description: 'Force delete active/pending memberships' })
-  delete(@Param('id', ParseIntPipe) id: number, @Query('force') force?: string) {
+  async delete(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('force') force?: string) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
     return this.membershipsService.delete(id, force === 'true');
   }
 }

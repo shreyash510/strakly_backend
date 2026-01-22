@@ -511,6 +511,7 @@ model Gym {
   memberships       Membership[]
   attendances       Attendance[]
   attendanceHistory AttendanceHistory[]
+  supportTickets    SupportTicket[]   // Support tickets from this gym's users
 
   @@map("gyms")
 }
@@ -556,6 +557,9 @@ model SupportTicket {
   // User who created the ticket
   userId          Int       @map("user_id")
 
+  // Gym/Tenant the ticket belongs to (for multi-tenancy)
+  gymId           Int?      @map("gym_id")
+
   // Admin/Staff assigned to handle the ticket
   assignedToId    Int?      @map("assigned_to_id")
 
@@ -570,8 +574,10 @@ model SupportTicket {
 
   // Relations
   messages        SupportTicketMessage[]
+  gym             Gym?      @relation(fields: [gymId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([gymId])
   @@index([status])
   @@index([assignedToId])
   @@index([priority, status])
