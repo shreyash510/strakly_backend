@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import * as bcrypt from 'bcrypt';
 
 export interface GymInfo {
@@ -171,6 +172,137 @@ export class AuthService {
     });
 
     const user = this.toUserResponse(createdUser);
+    const accessToken = this.generateToken(user);
+
+    return {
+      user,
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
+    };
+  }
+
+  async registerAdmin(createUserDto: CreateUserDto): Promise<AuthResponse> {
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: createUserDto.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Find the 'admin' role from Lookup table
+    const adminRole = await this.prisma.lookup.findFirst({
+      where: {
+        lookupType: { code: 'USER_ROLE' },
+        code: 'admin',
+      },
+    });
+
+    if (!adminRole) {
+      throw new Error('Admin role not found in lookup table');
+    }
+
+    // Generate unique attendance code for the new user
+    const attendanceCode = await this.generateUniqueAttendanceCode();
+
+    const createdUser = await this.prisma.user.create({
+      data: {
+        name: createUserDto.name,
+        email: createUserDto.email,
+        passwordHash: await this.hashPassword(createUserDto.password),
+        roleId: adminRole.id,
+        status: 'active',
+        joinDate: new Date().toISOString().split('T')[0],
+        attendanceCode,
+      },
+      include: {
+        role: true,
+      },
+    });
+
+    const user = this.toUserResponse(createdUser);
+    const accessToken = this.generateToken(user);
+
+    return {
+      user,
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
+    };
+  }
+
+  async registerAdminWithGym(dto: RegisterAdminWithGymDto): Promise<AuthResponse> {
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.user.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Find the 'admin' role from Lookup table
+    const adminRole = await this.prisma.lookup.findFirst({
+      where: {
+        lookupType: { code: 'USER_ROLE' },
+        code: 'admin',
+      },
+    });
+
+    if (!adminRole) {
+      throw new Error('Admin role not found in lookup table');
+    }
+
+    // Generate unique attendance code for the new user
+    const attendanceCode = await this.generateUniqueAttendanceCode();
+
+    // Use transaction to create both user and gym
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // Create the gym first
+      const gym = await prisma.gym.create({
+        data: {
+          name: dto.gym.name,
+          phone: dto.gym.phone,
+          email: dto.gym.email,
+          address: dto.gym.address,
+          city: dto.gym.city,
+          state: dto.gym.state,
+          zipCode: dto.gym.zipCode,
+          country: dto.gym.country,
+          isActive: true,
+        },
+      });
+
+      // Create the admin user and associate with the gym
+      const createdUser = await prisma.user.create({
+        data: {
+          name: dto.user.name,
+          email: dto.user.email,
+          passwordHash: await this.hashPassword(dto.user.password),
+          roleId: adminRole.id,
+          status: 'active',
+          joinDate: new Date().toISOString().split('T')[0],
+          attendanceCode,
+          gymId: gym.id,
+        },
+        include: {
+          role: true,
+          gym: true,
+        },
+      });
+
+      return createdUser;
+    });
+
+    const user = this.toUserResponse(result);
     const accessToken = this.generateToken(user);
 
     return {

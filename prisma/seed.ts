@@ -94,6 +94,10 @@ const permissions = [
   { code: 'gym.view', name: 'View Gym', module: 'gym', description: 'View gym details' },
   { code: 'gym.manage', name: 'Manage Gym', module: 'gym', description: 'Manage gym settings' },
 
+  // Contact Requests module (superadmin)
+  { code: 'contact_requests.view', name: 'View Contact Requests', module: 'contact_requests', description: 'View contact form submissions' },
+  { code: 'contact_requests.manage', name: 'Manage Contact Requests', module: 'contact_requests', description: 'Manage contact form submissions' },
+
   // Health & Fitness module
   { code: 'health.view', name: 'View Health & Fitness', module: 'health', description: 'View health data' },
 
@@ -134,6 +138,9 @@ const rolePermissions: Record<string, string[]> = {
     // User Management (all users)
     'users.view',
     'users.manage',
+    // Contact Requests
+    'contact_requests.view',
+    'contact_requests.manage',
     // Reports & Analytics
     'reports.view',
     'analytics.view',
