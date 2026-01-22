@@ -48,6 +48,7 @@ export class SupportController {
   @ApiQuery({ name: 'priority', required: false, type: String, description: 'Filter by priority' })
   @ApiQuery({ name: 'userId', required: false, type: String, description: 'Filter by user ID' })
   @ApiQuery({ name: 'assignedToId', required: false, type: String, description: 'Filter by assigned user ID' })
+  @ApiQuery({ name: 'gymId', required: false, type: String, description: 'Filter by gym ID (superadmin only)' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
   async findAll(
     @Request() req: any,
@@ -59,6 +60,7 @@ export class SupportController {
     @Query('priority') priority?: string,
     @Query('userId') userId?: string,
     @Query('assignedToId') assignedToId?: string,
+    @Query('gymId') gymId?: string,
     @Query('noPagination') noPagination?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
@@ -72,10 +74,12 @@ export class SupportController {
         priority,
         userId: userId ? parseInt(userId) : undefined,
         assignedToId: assignedToId ? parseInt(assignedToId) : undefined,
+        gymId: gymId ? parseInt(gymId) : undefined,
         noPagination: noPagination === 'true',
       },
       req.user.role,
-      req.user.userId
+      req.user.userId,
+      req.user.gymId
     );
 
     if (res && result.pagination) {
@@ -98,7 +102,7 @@ export class SupportController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single support ticket' })
   findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.supportService.findOne(id, req.user.userId, req.user.role);
+    return this.supportService.findOne(id, req.user.userId, req.user.role, req.user.gymId);
   }
 
   @Patch(':id')
@@ -113,6 +117,7 @@ export class SupportController {
       updateTicketDto,
       req.user.userId,
       req.user.role,
+      req.user.gymId,
     );
   }
 
@@ -128,6 +133,7 @@ export class SupportController {
       addMessageDto,
       req.user.userId,
       req.user.role,
+      req.user.gymId,
     );
   }
 
@@ -136,6 +142,6 @@ export class SupportController {
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a support ticket (admin only)' })
   remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.supportService.remove(id, req.user.userId, req.user.role);
+    return this.supportService.remove(id, req.user.userId, req.user.role, req.user.gymId);
   }
 }

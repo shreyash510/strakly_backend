@@ -19,6 +19,7 @@ export interface SupportFilters extends PaginationParams {
   priority?: string;
   userId?: number;
   assignedToId?: number;
+  gymId?: number;
 }
 
 @Injectable()
@@ -34,6 +35,12 @@ export class SupportService {
   async create(userId: number, createTicketDto: CreateTicketDto) {
     const ticketNumber = this.generateTicketNumber();
 
+    // Get user's gymId for multi-tenancy
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { gymId: true },
+    });
+
     const ticket = await this.prisma.supportTicket.create({
       data: {
         ticketNumber,
@@ -42,6 +49,7 @@ export class SupportService {
         category: createTicketDto.category || 'general',
         priority: createTicketDto.priority || 'medium',
         userId,
+        gymId: user?.gymId || null,
         status: 'open',
       },
     });
@@ -61,16 +69,32 @@ export class SupportService {
   async findAll(
     filters: SupportFilters,
     userRole: string,
-    userId?: number
+    userId?: number,
+    userGymId?: number
   ): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+    const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
     const where: any = {};
 
-    if (!isAdmin) {
+    // Multi-tenancy: Filter by gym
+    if (isSuperadmin) {
+      // Superadmin can see all tickets, optionally filter by gymId
+      if (filters.gymId) {
+        where.gymId = filters.gymId;
+      }
+    } else if (isAdmin) {
+      // Admin can only see tickets from their gym
+      if (userGymId) {
+        where.gymId = userGymId;
+      }
+    } else {
+      // Regular users can only see their own tickets
       where.userId = userId;
-    } else if (filters.userId) {
+    }
+
+    if (filters.userId) {
       where.userId = filters.userId;
     }
 
@@ -102,7 +126,7 @@ export class SupportService {
     // Get total count
     const total = await this.prisma.supportTicket.count({ where });
 
-    /* Get paginated data with user relations included to avoid N+1 queries */
+    /* Get paginated data with user and gym relations included to avoid N+1 queries */
     const tickets = await this.prisma.supportTicket.findMany({
       where,
       orderBy: [
@@ -119,12 +143,19 @@ export class SupportService {
         priority: true,
         status: true,
         userId: true,
+        gymId: true,
         assignedToId: true,
         resolution: true,
         resolvedAt: true,
         closedAt: true,
         createdAt: true,
         updatedAt: true,
+        gym: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -169,12 +200,18 @@ export class SupportService {
     };
   }
 
-  async findOne(ticketId: number, userId?: number, userRole?: string) {
+  async findOne(ticketId: number, userId?: number, userRole?: string, userGymId?: number) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
+        },
+        gym: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
     });
@@ -183,7 +220,14 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
+    const isSuperadmin = userRole === 'superadmin';
     const isAdmin = userRole && ['superadmin', 'admin'].includes(userRole);
+
+    // Multi-tenancy access control
+    if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
+      throw new ForbiddenException('You can only view tickets from your gym');
+    }
+
     if (!isAdmin && userId && ticket.userId !== userId) {
       throw new ForbiddenException('You can only view your own tickets');
     }
@@ -219,6 +263,7 @@ export class SupportService {
     updateTicketDto: UpdateTicketDto,
     userId: number,
     userRole: string,
+    userGymId?: number,
   ) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
@@ -228,7 +273,13 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
+    const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
+
+    // Multi-tenancy access control
+    if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
+      throw new ForbiddenException('You can only update tickets from your gym');
+    }
 
     if (!isAdmin) {
       if (ticket.userId !== userId) {
@@ -262,7 +313,7 @@ export class SupportService {
       data: updateData,
     });
 
-    return this.findOne(updatedTicket.id, userId, userRole);
+    return this.findOne(updatedTicket.id, userId, userRole, userGymId);
   }
 
   async addMessage(
@@ -270,6 +321,7 @@ export class SupportService {
     addMessageDto: AddMessageDto,
     senderId: number,
     userRole: string,
+    userGymId?: number,
   ) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
@@ -279,7 +331,13 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
+    const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
+
+    // Multi-tenancy access control
+    if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
+      throw new ForbiddenException('You can only add messages to tickets from your gym');
+    }
 
     if (!isAdmin && ticket.userId !== senderId) {
       throw new ForbiddenException('You can only add messages to your own tickets');
@@ -304,10 +362,11 @@ export class SupportService {
       });
     }
 
-    return this.findOne(ticketId, senderId, userRole);
+    return this.findOne(ticketId, senderId, userRole, userGymId);
   }
 
-  async remove(ticketId: number, userId: number, userRole: string) {
+  async remove(ticketId: number, userId: number, userRole: string, userGymId?: number) {
+    const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
     if (!isAdmin) {
@@ -320,6 +379,11 @@ export class SupportService {
 
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
+    }
+
+    // Multi-tenancy access control
+    if (!isSuperadmin && userGymId && ticket.gymId !== userGymId) {
+      throw new ForbiddenException('You can only delete tickets from your gym');
     }
 
     await this.prisma.supportTicket.delete({
