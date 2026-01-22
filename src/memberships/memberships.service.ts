@@ -85,9 +85,16 @@ export class MembershipsService {
     };
   }
 
-  async findOne(id: number) {
-    const membership = await this.prisma.membership.findUnique({
-      where: { id },
+  async findOne(id: number, gymId?: number) {
+    const where: any = { id };
+
+    /* Add gym filter for tenant isolation */
+    if (gymId) {
+      where.gymId = gymId;
+    }
+
+    const membership = await this.prisma.membership.findFirst({
+      where,
       include: {
         user: {
           select: { id: true, name: true, email: true, phone: true, avatar: true },
@@ -104,9 +111,36 @@ export class MembershipsService {
     return membership;
   }
 
-  async findByUser(userId: number) {
+  /* Validate that a user belongs to a specific gym (for tenant isolation) */
+  async validateUserBelongsToGym(userId: number, gymId: number): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { gymId: true },
+    });
+
+    if (!user) return false;
+
+    /* Check direct gym assignment */
+    if (user.gymId === gymId) return true;
+
+    /* Check gym association via xref table */
+    const gymAssoc = await this.prisma.userGymXref.findFirst({
+      where: { userId, gymId, isActive: true },
+    });
+
+    return !!gymAssoc;
+  }
+
+  async findByUser(userId: number, gymId?: number) {
+    const where: any = { userId };
+
+    /* Add gym filter for tenant isolation */
+    if (gymId) {
+      where.gymId = gymId;
+    }
+
     return this.prisma.membership.findMany({
-      where: { userId },
+      where,
       include: {
         plan: true,
         offer: true,
@@ -115,16 +149,23 @@ export class MembershipsService {
     });
   }
 
-  async getActiveMembership(userId: number) {
+  async getActiveMembership(userId: number, gymId?: number) {
     const now = new Date();
 
+    const where: any = {
+      userId,
+      status: 'active',
+      startDate: { lte: now },
+      endDate: { gte: now },
+    };
+
+    /* Add gym filter for tenant isolation */
+    if (gymId) {
+      where.gymId = gymId;
+    }
+
     return this.prisma.membership.findFirst({
-      where: {
-        userId,
-        status: 'active',
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
+      where,
       include: {
         plan: true,
         offer: true,
@@ -132,8 +173,8 @@ export class MembershipsService {
     });
   }
 
-  async checkMembershipStatus(userId: number) {
-    const active = await this.getActiveMembership(userId);
+  async checkMembershipStatus(userId: number, gymId?: number) {
+    const active = await this.getActiveMembership(userId, gymId);
 
     if (!active) {
       return {
