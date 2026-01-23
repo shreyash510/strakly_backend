@@ -137,8 +137,14 @@ export class AdminDashboardStatsDto {
   @ApiProperty({ description: 'Total revenue from paid memberships' })
   totalRevenue: number;
 
+  @ApiProperty({ description: 'Total cash revenue from paid memberships' })
+  totalCashRevenue: number;
+
   @ApiProperty({ description: 'Revenue this month' })
   monthlyRevenue: number;
+
+  @ApiProperty({ description: 'Revenue last month' })
+  lastMonthRevenue: number;
 
   @ApiProperty({ description: 'Monthly revenue growth percentage' })
   monthlyGrowth: number;

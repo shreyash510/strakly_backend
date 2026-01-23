@@ -74,11 +74,11 @@ export class PublicService {
       throw new ConflictException('A user with this email already exists');
     }
 
-    /* Find the 'member' role from Lookup table */
+    /* Find the 'client' role from Lookup table */
     const memberRole = await this.prisma.lookup.findFirst({
       where: {
         lookupType: { code: 'USER_ROLE' },
-        code: 'member',
+        code: 'client',
       },
     });
 

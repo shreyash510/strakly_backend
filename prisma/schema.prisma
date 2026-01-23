@@ -674,6 +674,53 @@ model ContactRequest {
 }
 
 // ============================================
+// STAFF SALARY MODEL
+// ============================================
+
+// StaffSalary model - Salary payments to staff (trainers, managers)
+model StaffSalary {
+  id              Int       @id @default(autoincrement())
+
+  // Staff reference (trainer, manager)
+  staffId         Int       @map("staff_id")
+
+  // Gym reference - tenant isolation
+  gymId           Int       @map("gym_id")
+
+  // Salary period
+  month           Int                             // 1-12
+  year            Int                             // e.g., 2025
+
+  // Salary breakdown
+  baseSalary      Decimal   @map("base_salary") @db.Decimal(10, 2)
+  bonus           Decimal   @default(0) @db.Decimal(10, 2)
+  deductions      Decimal   @default(0) @db.Decimal(10, 2)
+  netAmount       Decimal   @map("net_amount") @db.Decimal(10, 2)
+  currency        String    @default("INR")
+
+  // Payment details
+  paymentStatus   String    @default("pending") @map("payment_status")  // pending, paid
+  paymentMethod   String?   @map("payment_method")  // cash, bank_transfer, upi
+  paymentRef      String?   @map("payment_ref")     // Transaction reference
+  paidAt          DateTime? @map("paid_at")
+  paidById        Int?      @map("paid_by_id")      // Admin who processed payment
+
+  // Notes
+  notes           String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([staffId, gymId, month, year])
+  @@index([gymId, month, year])
+  @@index([staffId])
+  @@index([paymentStatus])
+  @@index([gymId, paymentStatus])
+  @@map("staff_salaries")
+}
+
+// ============================================
 // SAAS SUBSCRIPTION MODELS (Platform subscriptions for gyms)
 // ============================================
 

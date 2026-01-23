@@ -38,15 +38,15 @@ export class DashboardController {
     return this.dashboardService.getAdminDashboard(Number(userId));
   }
 
-  @Get('member')
-  @Roles('superadmin', 'admin', 'manager', 'trainer', 'member')
-  @ApiOperation({ summary: 'Get member dashboard data' })
+  @Get('client')
+  @Roles('superadmin', 'admin', 'manager', 'trainer', 'client')
+  @ApiOperation({ summary: 'Get client dashboard data' })
   @ApiResponse({
     status: 200,
-    description: 'Member dashboard data retrieved successfully',
+    description: 'Client dashboard data retrieved successfully',
     type: MemberDashboardDto,
   })
-  async getMemberDashboard(@Req() req: any): Promise<MemberDashboardDto> {
+  async getClientDashboard(@Req() req: any): Promise<MemberDashboardDto> {
     const userId = req.user?.userId || req.headers['x-user-id'];
     return this.dashboardService.getMemberDashboard(Number(userId));
   }

@@ -20,6 +20,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { PublicModule } from './public/public.module';
 import { ContactRequestsModule } from './contact-requests/contact-requests.module';
 import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions.module';
+import { SalaryModule } from './salary/salary.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions
     PublicModule,
     ContactRequestsModule,
     SaasSubscriptionsModule,
+    SalaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

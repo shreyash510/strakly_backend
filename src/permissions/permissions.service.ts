@@ -206,7 +206,7 @@ export class PermissionsService {
     }
 
     // Get role code from the lookup relation
-    const roleCode = user.role?.code || 'member';
+    const roleCode = user.role?.code || 'client';
     return this.getPermissionsByRole(roleCode);
   }
 
