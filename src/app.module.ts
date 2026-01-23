@@ -18,6 +18,8 @@ import { GymModule } from './gym/gym.module';
 import { SupportModule } from './support/support.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PublicModule } from './public/public.module';
+import { ContactRequestsModule } from './contact-requests/contact-requests.module';
+import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { PublicModule } from './public/public.module';
     SupportModule,
     DashboardModule,
     PublicModule,
+    ContactRequestsModule,
+    SaasSubscriptionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

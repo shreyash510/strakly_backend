@@ -57,6 +57,7 @@ export class DashboardService {
       revenueData,
       lastMonthRevenue,
       presentToday,
+      totalTickets,
       openTickets,
     ] = await Promise.all([
       // Total gyms
@@ -106,6 +107,8 @@ export class DashboardService {
           status: 'present',
         },
       }),
+      // Total support tickets
+      this.prisma.supportTicket.count(),
       // Open support tickets
       this.prisma.supportTicket.count({
         where: {
@@ -161,6 +164,7 @@ export class DashboardService {
       monthlyRevenue,
       monthlyGrowth: Math.round(monthlyGrowth * 10) / 10, // Round to 1 decimal
       presentToday,
+      totalTickets,
       openTickets,
     };
   }
@@ -254,17 +258,29 @@ export class DashboardService {
   }
 
   private async getAdminGymIds(userId: number): Promise<number[]> {
-    const gymXrefs = await this.prisma.userGymXref.findMany({
-      where: {
-        userId,
-        isActive: true,
-      },
-      select: {
-        gymId: true,
-      },
-    });
+    // Get gyms from both userGymXref and direct gymId field
+    const [gymXrefs, user] = await Promise.all([
+      this.prisma.userGymXref.findMany({
+        where: {
+          userId,
+          isActive: true,
+        },
+        select: {
+          gymId: true,
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { gymId: true },
+      }),
+    ]);
 
-    return gymXrefs.map((xref) => xref.gymId);
+    const gymIds = new Set(gymXrefs.map((xref) => xref.gymId));
+    if (user?.gymId) {
+      gymIds.add(user.gymId);
+    }
+
+    return [...gymIds];
   }
 
   private async getAdminStats(gymIds: number[]): Promise<AdminDashboardStatsDto> {
@@ -306,17 +322,30 @@ export class DashboardService {
       }),
     ]);
 
-    // Get user IDs in admin's gyms
-    const gymUserXrefs = await this.prisma.userGymXref.findMany({
-      where: {
-        gymId: { in: gymIds },
-        isActive: true,
-      },
-      select: {
-        userId: true,
-      },
-    });
-    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
+    // Get user IDs in admin's gyms (from both userGymXref and direct gymId field)
+    const [gymUserXrefs, directGymUsers] = await Promise.all([
+      this.prisma.userGymXref.findMany({
+        where: {
+          gymId: { in: gymIds },
+          isActive: true,
+        },
+        select: {
+          userId: true,
+        },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          gymId: { in: gymIds },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    ]);
+    const userIdsInGyms = [...new Set([
+      ...gymUserXrefs.map((x) => x.userId),
+      ...directGymUsers.map((u) => u.id),
+    ])];
 
     // Execute all queries in parallel
     const [
@@ -468,21 +497,10 @@ export class DashboardService {
 
     if (!memberRole) return [];
 
-    // Get user IDs in admin's gyms
-    const gymUserXrefs = await this.prisma.userGymXref.findMany({
-      where: {
-        gymId: { in: gymIds },
-        isActive: true,
-      },
-      select: {
-        userId: true,
-      },
-    });
-    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
-
+    // Get members directly associated with the gym via gymId field
     const members = await this.prisma.user.findMany({
       where: {
-        id: { in: userIdsInGyms },
+        gymId: { in: gymIds },
         roleId: memberRole.id,
       },
       take: limit,
@@ -513,21 +531,10 @@ export class DashboardService {
   ): Promise<RecentAttendanceDto[]> {
     if (gymIds.length === 0) return [];
 
-    // Get user IDs in admin's gyms
-    const gymUserXrefs = await this.prisma.userGymXref.findMany({
-      where: {
-        gymId: { in: gymIds },
-        isActive: true,
-      },
-      select: {
-        userId: true,
-      },
-    });
-    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
-
+    // Get attendance for admin's gyms (via direct gymId field on attendance)
     const attendance = await this.prisma.attendance.findMany({
       where: {
-        userId: { in: userIdsInGyms },
+        gymId: { in: gymIds },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -566,21 +573,10 @@ export class DashboardService {
   ): Promise<RecentTicketDto[]> {
     if (gymIds.length === 0) return [];
 
-    // Get user IDs in admin's gyms
-    const gymUserXrefs = await this.prisma.userGymXref.findMany({
-      where: {
-        gymId: { in: gymIds },
-        isActive: true,
-      },
-      select: {
-        userId: true,
-      },
-    });
-    const userIdsInGyms = [...new Set(gymUserXrefs.map((x) => x.userId))];
-
+    // Get tickets for admin's gyms (via direct gymId field on ticket)
     const tickets = await this.prisma.supportTicket.findMany({
       where: {
-        userId: { in: userIdsInGyms },
+        gymId: { in: gymIds },
       },
       take: limit,
       orderBy: { createdAt: 'desc' },

@@ -34,6 +34,9 @@ export class DashboardStatsDto {
   @ApiProperty({ description: 'Users present today' })
   presentToday: number;
 
+  @ApiProperty({ description: 'Total support tickets' })
+  totalTickets: number;
+
   @ApiProperty({ description: 'Open support tickets' })
   openTickets: number;
 }

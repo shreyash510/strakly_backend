@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
@@ -25,6 +26,18 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() createUserDto: CreateUserDto) {
     return this.authService.register(createUserDto);
+  }
+
+  @Post('register-admin')
+  @ApiOperation({ summary: 'Register a new admin user' })
+  registerAdmin(@Body() createUserDto: CreateUserDto) {
+    return this.authService.registerAdmin(createUserDto);
+  }
+
+  @Post('register-admin-with-gym')
+  @ApiOperation({ summary: 'Register a new admin user with gym' })
+  registerAdminWithGym(@Body() dto: RegisterAdminWithGymDto) {
+    return this.authService.registerAdminWithGym(dto);
   }
 
   @Post('login')

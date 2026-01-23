@@ -542,6 +542,115 @@ export class MembershipsService {
     return { updated: result.count };
   }
 
+  /**
+   * Get all overview data in a single query for better performance
+   */
+  async getOverview(gymId?: number) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const expiringDate = new Date();
+    expiringDate.setDate(expiringDate.getDate() + 14);
+
+    const baseWhere = gymId ? { gymId } : {};
+
+    const [
+      totalActiveMembers,
+      thisMonthRevenue,
+      endingThisMonth,
+      totalRevenue,
+      expiringSoon,
+      recentSubscriptions,
+      plans,
+      planDistribution,
+    ] = await Promise.all([
+      /* Stats: Total active members */
+      this.prisma.membership.count({
+        where: { ...baseWhere, status: 'active', endDate: { gte: now } },
+      }),
+
+      /* Stats: This month revenue */
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          ...baseWhere,
+          paymentStatus: 'paid',
+          paidAt: { gte: startOfMonth, lte: now },
+        },
+      }),
+
+      /* Stats: Ending this month */
+      this.prisma.membership.count({
+        where: {
+          ...baseWhere,
+          status: 'active',
+          endDate: { gte: now, lte: endOfMonth },
+        },
+      }),
+
+      /* Stats: Total revenue */
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: { ...baseWhere, paymentStatus: 'paid' },
+      }),
+
+      /* Expiring soon (14 days) */
+      this.prisma.membership.findMany({
+        where: {
+          ...baseWhere,
+          status: 'active',
+          endDate: { gte: now, lte: expiringDate },
+        },
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          plan: true,
+        },
+        orderBy: { endDate: 'asc' },
+        take: 10,
+      }),
+
+      /* Recent subscriptions (last 5) */
+      this.prisma.membership.findMany({
+        where: baseWhere,
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          plan: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+
+      /* Plans for distribution chart */
+      this.prisma.plan.findMany({
+        where: { isActive: true },
+        select: { id: true, code: true, name: true },
+      }),
+
+      /* Plan distribution (count per plan) */
+      this.prisma.membership.groupBy({
+        by: ['planId'],
+        _count: { id: true },
+        where: { ...baseWhere, status: 'active', endDate: { gte: now } },
+      }),
+    ]);
+
+    return {
+      stats: {
+        totalActiveMembers,
+        thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
+        endingThisMonth,
+        totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
+      },
+      expiringSoon,
+      recentSubscriptions,
+      plans,
+      planDistribution: planDistribution.map((p) => ({
+        planId: p.planId,
+        count: p._count.id,
+      })),
+    };
+  }
+
   async getStats(gymId?: number) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

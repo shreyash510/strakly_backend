@@ -52,8 +52,8 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    /* Filter by admin's gym (tenant isolation) */
-    const gymId = req.user.gymId;
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
 
     return this.membershipsService.findAll({
       status,
@@ -66,13 +66,24 @@ export class MembershipsController {
     });
   }
 
+  @Get('overview')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Get all overview data in a single call (stats, expiring, recent, plans)' })
+  getOverview(@Request() req: any) {
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+    return this.membershipsService.getOverview(gymId);
+  }
+
   @Get('stats')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   getStats(@Request() req: any) {
-    /* Filter by admin's gym (tenant isolation) */
-    return this.membershipsService.getStats(req.user.gymId);
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+    return this.membershipsService.getStats(gymId);
   }
 
   @Get('expiring')
@@ -81,8 +92,9 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   getExpiringSoon(@Request() req: any, @Query('days') days?: string) {
-    /* Filter by admin's gym (tenant isolation) */
-    return this.membershipsService.getExpiringSoon(days ? parseInt(days) : 7, req.user.gymId);
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+    return this.membershipsService.getExpiringSoon(days ? parseInt(days) : 7, gymId);
   }
 
   @Get('expired')
@@ -90,8 +102,9 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get expired memberships' })
   getExpired(@Request() req: any) {
-    /* Filter by admin's gym (tenant isolation) */
-    return this.membershipsService.getExpired(req.user.gymId);
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+    return this.membershipsService.getExpired(gymId);
   }
 
   @Post('mark-expired')
