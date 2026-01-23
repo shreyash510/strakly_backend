@@ -233,12 +233,12 @@ export class MembershipsService {
       throw new ConflictException('User already has an active membership');
     }
 
-    /* Determine gymId: provided > user's gym > user's gym association > creator's gym */
+    /* Determine gymId: provided > creator's gym (admin enrolling) > user's gym (client) */
     let gymId = dto.gymId
-      || user.gymId
-      || userGymAssoc?.gymId
       || creator?.gymId
       || creatorGymAssoc?.gymId
+      || user.gymId
+      || userGymAssoc?.gymId
       || undefined;
 
     if (!gymId) {
@@ -714,6 +714,163 @@ export class MembershipsService {
       thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
       endingThisMonth,
       totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
+    };
+  }
+
+  /**
+   * Move a membership to history and delete from active memberships
+   */
+  async membershipMoveToHistory(id: number, reason: string = 'manual') {
+    const membership = await this.prisma.membership.findUnique({
+      where: { id },
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+
+    /* Create history record and delete membership in a transaction */
+    const [historyRecord] = await this.prisma.$transaction([
+      this.prisma.membershipHistory.create({
+        data: {
+          originalId: membership.id,
+          userId: membership.userId,
+          gymId: membership.gymId,
+          planId: membership.planId,
+          offerId: membership.offerId,
+          startDate: membership.startDate,
+          endDate: membership.endDate,
+          status: membership.status,
+          originalAmount: membership.originalAmount,
+          discountAmount: membership.discountAmount,
+          finalAmount: membership.finalAmount,
+          currency: membership.currency,
+          paymentStatus: membership.paymentStatus,
+          paymentMethod: membership.paymentMethod,
+          paymentRef: membership.paymentRef,
+          paidAt: membership.paidAt,
+          cancelledAt: membership.cancelledAt,
+          cancelReason: membership.cancelReason,
+          notes: membership.notes,
+          archiveReason: reason,
+          originalCreatedAt: membership.createdAt,
+        },
+      }),
+      this.prisma.membership.delete({
+        where: { id },
+      }),
+    ]);
+
+    return historyRecord;
+  }
+
+  /**
+   * Get membership history for a user
+   */
+  async getHistory(filters?: {
+    userId?: number;
+    gymId?: number;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: any = {};
+
+    if (filters?.userId) {
+      where.userId = filters.userId;
+    }
+    if (filters?.gymId) {
+      where.gymId = filters.gymId;
+    }
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 15;
+    const skip = (page - 1) * limit;
+
+    const [history, total] = await Promise.all([
+      this.prisma.membershipHistory.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+          plan: true,
+          offer: true,
+        },
+        orderBy: { archivedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.membershipHistory.count({ where }),
+    ]);
+
+    return {
+      data: history,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get membership history for current user
+   */
+  async getMyHistory(userId: number) {
+    return this.prisma.membershipHistory.findMany({
+      where: { userId },
+      include: {
+        plan: true,
+        offer: true,
+      },
+      orderBy: { archivedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Fix memberships with NULL or mismatched gymId by setting them to the user's gymId
+   */
+  async fixMembershipGymIds() {
+    /* Get all memberships with their user's gymId */
+    const memberships = await this.prisma.membership.findMany({
+      include: {
+        user: {
+          select: { id: true, gymId: true },
+        },
+      },
+    });
+
+    let fixedCount = 0;
+    const issues: string[] = [];
+
+    for (const membership of memberships) {
+      const userGymId = membership.user?.gymId;
+
+      /* Skip if user has no gymId */
+      if (!userGymId) {
+        issues.push(`Membership ${membership.id}: user ${membership.userId} has no gymId`);
+        continue;
+      }
+
+      /* Fix if membership gymId is null or different from user's gymId */
+      if (!membership.gymId || membership.gymId !== userGymId) {
+        await this.prisma.membership.update({
+          where: { id: membership.id },
+          data: { gymId: userGymId },
+        });
+        fixedCount++;
+      }
+    }
+
+    return {
+      total: memberships.length,
+      fixed: fixedCount,
+      issues,
     };
   }
 

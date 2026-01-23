@@ -622,6 +622,16 @@ export class DashboardService {
 
     return {
       attendanceCode: user?.attendanceCode || '----',
+      gym: user?.gym ? {
+        id: user.gym.id,
+        name: user.gym.name,
+        logo: user.gym.logo || undefined,
+        phone: user.gym.phone || undefined,
+        email: user.gym.email || undefined,
+        address: user.gym.address || undefined,
+        city: user.gym.city || undefined,
+        state: user.gym.state || undefined,
+      } : undefined,
       subscription,
       attendanceStats,
       recentAttendance,
@@ -635,6 +645,18 @@ export class DashboardService {
       select: {
         id: true,
         attendanceCode: true,
+        gym: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            phone: true,
+            email: true,
+            address: true,
+            city: true,
+            state: true,
+          },
+        },
       },
     });
   }
