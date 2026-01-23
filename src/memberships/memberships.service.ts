@@ -233,12 +233,12 @@ export class MembershipsService {
       throw new ConflictException('User already has an active membership');
     }
 
-    /* Determine gymId: provided > user's gym > user's gym association > creator's gym */
+    /* Determine gymId: provided > creator's gym (admin enrolling) > user's gym (client) */
     let gymId = dto.gymId
-      || user.gymId
-      || userGymAssoc?.gymId
       || creator?.gymId
       || creatorGymAssoc?.gymId
+      || user.gymId
+      || userGymAssoc?.gymId
       || undefined;
 
     if (!gymId) {
@@ -714,6 +714,48 @@ export class MembershipsService {
       thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
       endingThisMonth,
       totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
+    };
+  }
+
+  /**
+   * Fix memberships with NULL or mismatched gymId by setting them to the user's gymId
+   */
+  async fixMembershipGymIds() {
+    /* Get all memberships with their user's gymId */
+    const memberships = await this.prisma.membership.findMany({
+      include: {
+        user: {
+          select: { id: true, gymId: true },
+        },
+      },
+    });
+
+    let fixedCount = 0;
+    const issues: string[] = [];
+
+    for (const membership of memberships) {
+      const userGymId = membership.user?.gymId;
+
+      /* Skip if user has no gymId */
+      if (!userGymId) {
+        issues.push(`Membership ${membership.id}: user ${membership.userId} has no gymId`);
+        continue;
+      }
+
+      /* Fix if membership gymId is null or different from user's gymId */
+      if (!membership.gymId || membership.gymId !== userGymId) {
+        await this.prisma.membership.update({
+          where: { id: membership.id },
+          data: { gymId: userGymId },
+        });
+        fixedCount++;
+      }
+    }
+
+    return {
+      total: memberships.length,
+      fixed: fixedCount,
+      issues,
     };
   }
 

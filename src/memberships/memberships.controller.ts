@@ -115,6 +115,14 @@ export class MembershipsController {
     return this.membershipsService.markExpiredMemberships();
   }
 
+  @Post('fix-gym-ids')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Fix memberships with NULL or mismatched gymId' })
+  fixGymIds() {
+    return this.membershipsService.fixMembershipGymIds();
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
