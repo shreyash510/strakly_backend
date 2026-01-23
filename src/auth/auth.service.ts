@@ -163,7 +163,7 @@ export class AuthService {
         passwordHash: await this.hashPassword(createUserDto.password),
         roleId: memberRole.id,
         status: 'active',
-        joinDate: new Date().toISOString().split('T')[0],
+        joinDate: new Date(),
         attendanceCode,
       },
       include: {
@@ -217,7 +217,7 @@ export class AuthService {
         passwordHash: await this.hashPassword(createUserDto.password),
         roleId: adminRole.id,
         status: 'active',
-        joinDate: new Date().toISOString().split('T')[0],
+        joinDate: new Date(),
         attendanceCode,
       },
       include: {
@@ -292,7 +292,7 @@ export class AuthService {
           passwordHash,
           roleId: adminRole.id,
           status: 'active',
-          joinDate: new Date().toISOString().split('T')[0],
+          joinDate: new Date(),
           attendanceCode,
           gymId: gym.id,
         },
@@ -360,7 +360,7 @@ export class AuthService {
     // Update last login time
     await this.prisma.user.update({
       where: { id: userData.id },
-      data: { lastLoginAt: new Date().toISOString() },
+      data: { lastLoginAt: new Date() },
     });
 
     const user = this.toUserResponse(userData);

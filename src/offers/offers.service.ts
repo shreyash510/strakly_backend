@@ -114,7 +114,7 @@ export class OffersService {
 
     // Check if offer applies to the plan
     if (planId && !offer.applicableToAll) {
-      const planOffer = await this.prisma.planOffer.findUnique({
+      const planOffer = await this.prisma.planOfferXref.findUnique({
         where: {
           planId_offerId: {
             planId,
@@ -161,7 +161,7 @@ export class OffersService {
 
     // Create plan associations if provided
     if (planIds && planIds.length > 0 && !dto.applicableToAll) {
-      await this.prisma.planOffer.createMany({
+      await this.prisma.planOfferXref.createMany({
         data: planIds.map(planId => ({
           planId,
           offerId: offer.id,
@@ -204,13 +204,13 @@ export class OffersService {
     await this.findOne(offerId);
 
     // Delete existing associations
-    await this.prisma.planOffer.deleteMany({
+    await this.prisma.planOfferXref.deleteMany({
       where: { offerId },
     });
 
     // Create new associations
     if (dto.planIds.length > 0) {
-      await this.prisma.planOffer.createMany({
+      await this.prisma.planOfferXref.createMany({
         data: dto.planIds.map(planId => ({
           planId,
           offerId,
@@ -239,7 +239,7 @@ export class OffersService {
       throw new NotFoundException(`Plan with ID ${planId} not found`);
     }
 
-    const existing = await this.prisma.planOffer.findUnique({
+    const existing = await this.prisma.planOfferXref.findUnique({
       where: {
         planId_offerId: { planId, offerId },
       },
@@ -249,7 +249,7 @@ export class OffersService {
       throw new ConflictException('Offer is already assigned to this plan');
     }
 
-    return this.prisma.planOffer.create({
+    return this.prisma.planOfferXref.create({
       data: { planId, offerId },
       include: {
         plan: true,
@@ -259,7 +259,7 @@ export class OffersService {
   }
 
   async removeFromPlan(offerId: number, planId: number) {
-    const existing = await this.prisma.planOffer.findUnique({
+    const existing = await this.prisma.planOfferXref.findUnique({
       where: {
         planId_offerId: { planId, offerId },
       },
@@ -269,7 +269,7 @@ export class OffersService {
       throw new NotFoundException('Offer is not assigned to this plan');
     }
 
-    await this.prisma.planOffer.delete({
+    await this.prisma.planOfferXref.delete({
       where: {
         planId_offerId: { planId, offerId },
       },

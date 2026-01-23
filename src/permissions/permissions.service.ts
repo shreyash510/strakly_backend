@@ -69,7 +69,7 @@ export class PermissionsService {
   // ============ ROLE PERMISSIONS ============
 
   async getPermissionsByRole(role: string) {
-    const rolePermissions = await this.prisma.rolePermission.findMany({
+    const rolePermissions = await this.prisma.rolePermissionXref.findMany({
       where: { role },
       include: {
         permission: true,
@@ -85,7 +85,7 @@ export class PermissionsService {
   }
 
   async getAllRolesWithPermissions() {
-    const rolePermissions = await this.prisma.rolePermission.findMany({
+    const rolePermissions = await this.prisma.rolePermissionXref.findMany({
       include: {
         permission: true,
       },
@@ -108,7 +108,7 @@ export class PermissionsService {
     const { role, permissionCodes } = dto;
 
     // Delete existing role permissions
-    await this.prisma.rolePermission.deleteMany({
+    await this.prisma.rolePermissionXref.deleteMany({
       where: { role },
     });
 
@@ -123,7 +123,7 @@ export class PermissionsService {
         continue;
       }
 
-      const created = await this.prisma.rolePermission.create({
+      const created = await this.prisma.rolePermissionXref.create({
         data: {
           role,
           permissionId: permission.id,
@@ -141,7 +141,7 @@ export class PermissionsService {
   async addPermissionToRole(role: string, permissionCode: string) {
     const permission = await this.findPermissionByCode(permissionCode);
 
-    const existing = await this.prisma.rolePermission.findUnique({
+    const existing = await this.prisma.rolePermissionXref.findUnique({
       where: {
         role_permissionId: {
           role,
@@ -154,7 +154,7 @@ export class PermissionsService {
       throw new ConflictException(`Role ${role} already has permission ${permissionCode}`);
     }
 
-    return this.prisma.rolePermission.create({
+    return this.prisma.rolePermissionXref.create({
       data: {
         role,
         permissionId: permission.id,
@@ -168,7 +168,7 @@ export class PermissionsService {
   async removePermissionFromRole(role: string, permissionCode: string) {
     const permission = await this.findPermissionByCode(permissionCode);
 
-    const existing = await this.prisma.rolePermission.findUnique({
+    const existing = await this.prisma.rolePermissionXref.findUnique({
       where: {
         role_permissionId: {
           role,
@@ -181,7 +181,7 @@ export class PermissionsService {
       throw new NotFoundException(`Role ${role} does not have permission ${permissionCode}`);
     }
 
-    await this.prisma.rolePermission.delete({
+    await this.prisma.rolePermissionXref.delete({
       where: {
         role_permissionId: {
           role,

@@ -99,7 +99,7 @@ export class PublicService {
         roleId: memberRole.id,
         gymId: dto.gymId,
         status: 'pending',
-        joinDate: new Date().toISOString().split('T')[0],
+        joinDate: new Date(),
         attendanceCode,
       },
       select: {
