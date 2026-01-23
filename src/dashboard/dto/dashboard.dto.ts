@@ -292,9 +292,38 @@ export class ActiveOfferDto {
   endDate: string;
 }
 
+export class MemberGymDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ required: false })
+  logo?: string;
+
+  @ApiProperty({ required: false })
+  phone?: string;
+
+  @ApiProperty({ required: false })
+  email?: string;
+
+  @ApiProperty({ required: false })
+  address?: string;
+
+  @ApiProperty({ required: false })
+  city?: string;
+
+  @ApiProperty({ required: false })
+  state?: string;
+}
+
 export class MemberDashboardDto {
   @ApiProperty()
   attendanceCode: string;
+
+  @ApiProperty({ type: MemberGymDto, required: false })
+  gym?: MemberGymDto;
 
   @ApiProperty({ type: MemberSubscriptionDto, required: false })
   subscription?: MemberSubscriptionDto;
