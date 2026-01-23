@@ -66,6 +66,16 @@ export class MembershipsController {
     });
   }
 
+  @Get('overview')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Get all overview data in a single call (stats, expiring, recent, plans)' })
+  getOverview(@Request() req: any) {
+    /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+    return this.membershipsService.getOverview(gymId);
+  }
+
   @Get('stats')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')

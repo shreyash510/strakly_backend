@@ -98,6 +98,10 @@ const permissions = [
   { code: 'contact_requests.view', name: 'View Contact Requests', module: 'contact_requests', description: 'View contact form submissions' },
   { code: 'contact_requests.manage', name: 'Manage Contact Requests', module: 'contact_requests', description: 'Manage contact form submissions' },
 
+  // SaaS Subscriptions module (superadmin)
+  { code: 'saas_subscriptions.view', name: 'View SaaS Subscriptions', module: 'saas_subscriptions', description: 'View gym subscriptions' },
+  { code: 'saas_subscriptions.manage', name: 'Manage SaaS Subscriptions', module: 'saas_subscriptions', description: 'Manage gym subscriptions' },
+
   // Health & Fitness module
   { code: 'health.view', name: 'View Health & Fitness', module: 'health', description: 'View health data' },
 
@@ -141,6 +145,9 @@ const rolePermissions: Record<string, string[]> = {
     // Contact Requests
     'contact_requests.view',
     'contact_requests.manage',
+    // SaaS Subscriptions
+    'saas_subscriptions.view',
+    'saas_subscriptions.manage',
     // Reports & Analytics
     'reports.view',
     'analytics.view',

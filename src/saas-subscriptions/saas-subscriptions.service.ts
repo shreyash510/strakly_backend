@@ -188,6 +188,20 @@ export class SaasSubscriptionsService {
               logo: true,
               email: true,
               city: true,
+              users: {
+                where: {
+                  role: {
+                    code: 'admin',
+                  },
+                },
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatar: true,
+                },
+                take: 1,
+              },
             },
           },
           plan: {

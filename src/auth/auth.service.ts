@@ -264,7 +264,10 @@ export class AuthService {
     // Generate unique attendance code for the new user
     const attendanceCode = await this.generateUniqueAttendanceCode();
 
-    // Use transaction to create both user and gym
+    // Hash password before transaction
+    const passwordHash = await this.hashPassword(dto.user.password);
+
+    // Use transaction to create gym, user, and UserGymXref
     const result = await this.prisma.$transaction(async (prisma) => {
       // Create the gym first
       const gym = await prisma.gym.create({
@@ -276,7 +279,7 @@ export class AuthService {
           city: dto.gym.city,
           state: dto.gym.state,
           zipCode: dto.gym.zipCode,
-          country: dto.gym.country,
+          country: dto.gym.country || 'India',
           isActive: true,
         },
       });
@@ -286,7 +289,7 @@ export class AuthService {
         data: {
           name: dto.user.name,
           email: dto.user.email,
-          passwordHash: await this.hashPassword(dto.user.password),
+          passwordHash,
           roleId: adminRole.id,
           status: 'active',
           joinDate: new Date().toISOString().split('T')[0],
@@ -296,6 +299,16 @@ export class AuthService {
         include: {
           role: true,
           gym: true,
+        },
+      });
+
+      // Create UserGymXref to link user to gym with admin role
+      await prisma.userGymXref.create({
+        data: {
+          userId: createdUser.id,
+          gymId: gym.id,
+          role: 'admin',
+          isActive: true,
         },
       });
 
