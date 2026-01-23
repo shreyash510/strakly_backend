@@ -43,7 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Your account has been suspended');
     }
 
-    const userRole = user.role?.code || 'member';
+    const userRole = user.role?.code || 'client';
     /* Use gymId from token or fall back to user's gymId from database */
     const gymId = payload.gymId ?? user.gymId ?? null;
 

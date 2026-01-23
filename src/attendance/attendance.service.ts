@@ -94,7 +94,7 @@ export class AttendanceService {
       email: user.email,
       phone: user.phone,
       avatar: user.avatar,
-      role: user.role?.name || 'member',
+      role: user.role?.name || 'client',
       status: user.status || 'active',
       attendanceCode: user.attendanceCode,
       joinDate: user.createdAt,

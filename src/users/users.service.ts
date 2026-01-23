@@ -66,7 +66,7 @@ export class UsersService {
       phone: user.phone,
       avatar: user.avatar,
       bio: user.bio,
-      role: user.role?.code || 'member',
+      role: user.role?.code || 'client',
       status: user.status,
       dateOfBirth: user.dateOfBirth,
       gender: user.gender,

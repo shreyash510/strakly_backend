@@ -29,7 +29,7 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
     { code: 'admin', name: 'Admin', value: 'admin', displayOrder: 2 },
     { code: 'manager', name: 'Manager', value: 'manager', displayOrder: 3 },
     { code: 'trainer', name: 'Trainer', value: 'trainer', displayOrder: 4 },
-    { code: 'member', name: 'Member', value: 'member', displayOrder: 5 },
+    { code: 'client', name: 'Client', value: 'client', displayOrder: 5 },
   ],
   USER_STATUS: [
     { code: 'active', name: 'Active', value: 'active', displayOrder: 1 },
@@ -129,6 +129,13 @@ const permissions = [
 
   // Permissions module
   { code: 'permissions.manage', name: 'Manage Permissions', module: 'permissions', description: 'Manage role permissions' },
+
+  // Salary module (admin only)
+  { code: 'salary.view', name: 'View Salary', module: 'salary', description: 'View staff salary records' },
+  { code: 'salary.manage', name: 'Manage Salary', module: 'salary', description: 'Manage staff salary records' },
+
+  // Role Permissions module (superadmin only)
+  { code: 'role_permissions.manage', name: 'Manage Role Permissions', module: 'role_permissions', description: 'Manage role permissions' },
 ];
 
 // Role permissions mapping - which permissions each role has
@@ -161,6 +168,8 @@ const rolePermissions: Record<string, string[]> = {
     'support.manage',
     // Share App
     'share_app.view',
+    // Role Permissions
+    'role_permissions.manage',
   ],
 
   admin: [
@@ -194,6 +203,9 @@ const rolePermissions: Record<string, string[]> = {
     'support.view',
     // Share App
     'share_app.view',
+    // Salary
+    'salary.view',
+    'salary.manage',
   ],
 
   manager: [
@@ -239,7 +251,7 @@ const rolePermissions: Record<string, string[]> = {
     'share_app.view',
   ],
 
-  member: [
+  client: [
     // Dashboard
     'dashboard.view',
     // Subscription (view own subscription)
@@ -252,6 +264,8 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Settings (own profile)
     'settings.view',
+    // Support
+    'support.view',
     // Share App
     'share_app.view',
   ],
@@ -395,7 +409,7 @@ async function seedUsers() {
     { name: 'Admin User', email: 'admin@test.com', password: 'password123', roleCode: 'admin' },
     { name: 'Manager User', email: 'manager@test.com', password: 'password123', roleCode: 'manager' },
     { name: 'Trainer User', email: 'trainer@test.com', password: 'password123', roleCode: 'trainer' },
-    { name: 'Test Member', email: 'member@test.com', password: 'password123', roleCode: 'member' },
+    { name: 'Test Client', email: 'client@test.com', password: 'password123', roleCode: 'client' },
   ];
 
   for (const userData of testUsers) {

@@ -99,7 +99,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: user.role || 'member',
+      role: user.role || 'client',
       gymId: user.gymId || null,
     };
     return this.jwtService.sign(payload);
@@ -107,7 +107,7 @@ export class AuthService {
 
   private toUserResponse(user: any): UserResponse {
     // Handle role - can be a relation object or undefined
-    const roleCode = user.role?.code || 'member';
+    const roleCode = user.role?.code || 'client';
 
     return {
       id: user.id,
@@ -141,11 +141,11 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Find the 'member' role from Lookup table
+    // Find the 'client' role from Lookup table
     const memberRole = await this.prisma.lookup.findFirst({
       where: {
         lookupType: { code: 'USER_ROLE' },
-        code: 'member',
+        code: 'client',
       },
     });
 
@@ -499,7 +499,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role?.code || 'member',
+        role: user.role?.code || 'client',
         avatar: user.avatar ?? undefined,
       })),
       hasMore: skip + users.length < total,

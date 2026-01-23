@@ -78,7 +78,7 @@ export class DashboardService {
       // Get member role lookup
       this.prisma.lookup.findFirst({
         where: {
-          code: 'member',
+          code: 'client',
           lookupType: { code: 'USER_ROLE' },
         },
       }),
@@ -212,7 +212,7 @@ export class DashboardService {
       name: user.name,
       email: user.email,
       avatar: user.avatar || undefined,
-      role: user.role?.code || 'member',
+      role: user.role?.code || 'client',
       status: user.status,
       createdAt: user.createdAt,
     }));
@@ -318,7 +318,7 @@ export class DashboardService {
       }),
       this.prisma.lookup.findFirst({
         where: {
-          code: 'member',
+          code: 'client',
           lookupType: { code: 'USER_ROLE' },
         },
       }),
@@ -505,7 +505,7 @@ export class DashboardService {
 
     const memberRole = await this.prisma.lookup.findFirst({
       where: {
-        code: 'member',
+        code: 'client',
         lookupType: { code: 'USER_ROLE' },
       },
     });
