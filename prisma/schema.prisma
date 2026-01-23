@@ -50,12 +50,13 @@ model User {
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
   // Relations
-  memberships        Membership[]
-  bodyMetrics        BodyMetrics?
-  bodyMetricsHistory BodyMetricsHistory[]
-  attendances        Attendance[]
-  attendanceHistory  AttendanceHistory[]
-  userGyms           UserGymXref[]
+  memberships          Membership[]
+  membershipHistory    MembershipHistory[]
+  bodyMetrics          BodyMetrics?
+  bodyMetricsHistory   BodyMetricsHistory[]
+  attendances          Attendance[]
+  attendanceHistory    AttendanceHistory[]
+  userGyms             UserGymXref[]
 
   @@index([gymId])
   @@index([roleId, gymId])
@@ -236,9 +237,10 @@ model Plan {
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  gym             Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  planOffers      PlanOfferXref[]
-  memberships     Membership[]
+  gym               Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  planOffers        PlanOfferXref[]
+  memberships       Membership[]
+  membershipHistory MembershipHistory[]
 
   @@index([gymId])
   @@index([isActive, displayOrder])
@@ -283,6 +285,7 @@ model Offer {
   gym               Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
   planOffers        PlanOfferXref[]
   memberships       Membership[]
+  membershipHistory MembershipHistory[]
 
   @@index([gymId])
   @@index([isActive, validFrom, validTo])
@@ -371,6 +374,75 @@ model Membership {
   @@index([paymentStatus, paidAt])
   @@index([gymId, paymentStatus])
   @@map("memberships")
+}
+
+// MembershipHistory model - Past memberships (expired, cancelled, completed)
+model MembershipHistory {
+  id              Int       @id @default(autoincrement())
+
+  // Original membership ID (for reference/tracking)
+  originalId      Int       @map("original_id")
+
+  // User reference
+  userId          Int       @map("user_id")
+
+  // Gym reference
+  gymId           Int       @map("gym_id")
+
+  // Plan reference
+  planId          Int       @map("plan_id")
+
+  // Offer reference (optional)
+  offerId         Int?      @map("offer_id")
+
+  // Membership period
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime  @map("end_date")
+
+  // Final status when archived: expired, cancelled, completed
+  status          String
+
+  // Payment details
+  originalAmount  Decimal   @map("original_amount") @db.Decimal(10, 2)
+  discountAmount  Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount     Decimal   @map("final_amount") @db.Decimal(10, 2)
+  currency        String    @default("INR")
+
+  // Payment status
+  paymentStatus   String    @map("payment_status")
+  paymentMethod   String?   @map("payment_method")
+  paymentRef      String?   @map("payment_ref")
+  paidAt          DateTime? @map("paid_at")
+
+  // Cancellation info (if cancelled)
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelReason    String?   @map("cancel_reason")
+
+  // Notes
+  notes           String?
+
+  // Archive info
+  archivedAt      DateTime  @default(now()) @map("archived_at")
+  archiveReason   String?   @map("archive_reason")  // expired, cancelled, manual
+
+  // Original timestamps preserved
+  originalCreatedAt DateTime @map("original_created_at")
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Restrict)
+  plan            Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  offer           Offer?    @relation(fields: [offerId], references: [id])
+
+  @@index([userId])
+  @@index([gymId])
+  @@index([status])
+  @@index([archivedAt])
+  @@index([originalId])
+  @@map("membership_history")
 }
 
 // ============================================
@@ -524,6 +596,7 @@ model Gym {
   plans             Plan[]            // Gym-specific membership plans
   offers            Offer[]           // Gym-specific offers
   memberships       Membership[]
+  membershipHistory MembershipHistory[]
   attendances       Attendance[]
   attendanceHistory AttendanceHistory[]
   supportTickets    SupportTicket[]   // Support tickets from this gym's users

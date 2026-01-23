@@ -39,14 +39,14 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
+  @ApiQuery({ name: 'clientId', required: false, type: Number, description: 'Filter by client ID' })
   @ApiQuery({ name: 'search', required: false, description: 'Search by user name or email' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiHeader({ name: 'x-user-id', required: false, description: 'Filter by user ID' })
   findAll(
     @Request() req: any,
     @Query('status') status?: string,
-    @Headers('x-user-id') userId?: string,
+    @Query('clientId') clientId?: string,
     @Query('planId') planId?: string,
     @Query('search') search?: string,
     @Query('page') page?: string,
@@ -54,10 +54,9 @@ export class MembershipsController {
   ) {
     /* Filter by admin's gym (tenant isolation) - superadmin or admins without gymId see all */
     const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
-
     return this.membershipsService.findAll({
       status,
-      userId: userId ? parseInt(userId) : undefined,
+      userId: clientId ? parseInt(clientId) : undefined,
       planId: planId ? parseInt(planId) : undefined,
       search,
       page: page ? parseInt(page) : undefined,
@@ -123,6 +122,45 @@ export class MembershipsController {
     return this.membershipsService.fixMembershipGymIds();
   }
 
+  // ============ MEMBERSHIP HISTORY ENDPOINTS ============
+
+  @Get('history')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Get membership history' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'clientId', required: false, type: Number, description: 'Filter by client ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getHistory(
+    @Request() req: any,
+    @Query('status') status?: string,
+    @Query('clientId') clientId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    /* Filter by admin's gym (tenant isolation) */
+    const gymId = (req.user.role === 'superadmin' || !req.user.gymId) ? undefined : req.user.gymId;
+
+    return this.membershipsService.getHistory({
+      status,
+      userId: clientId ? parseInt(clientId) : undefined,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      gymId,
+    });
+  }
+
+  @Post(':id/archive')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'Move membership to history' })
+  async membershipMoveToHistory(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    /* Verify membership belongs to admin's gym (tenant isolation) */
+    await this.membershipsService.findOne(id, req.user.gymId);
+    return this.membershipsService.membershipMoveToHistory(id, 'manual');
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
@@ -147,6 +185,12 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Renew current user membership' })
   renewMyMembership(@Request() req: any, @Body() dto: RenewMembershipDto) {
     return this.membershipsService.renew(req.user.userId, dto);
+  }
+
+  @Get('me/history')
+  @ApiOperation({ summary: 'Get current user membership history' })
+  getMyHistory(@Request() req: any) {
+    return this.membershipsService.getMyHistory(req.user.userId);
   }
 
   // ============ USER-SPECIFIC ENDPOINTS (admin - userId from header) ============

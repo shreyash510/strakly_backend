@@ -718,6 +718,121 @@ export class MembershipsService {
   }
 
   /**
+   * Move a membership to history and delete from active memberships
+   */
+  async membershipMoveToHistory(id: number, reason: string = 'manual') {
+    const membership = await this.prisma.membership.findUnique({
+      where: { id },
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+
+    /* Create history record and delete membership in a transaction */
+    const [historyRecord] = await this.prisma.$transaction([
+      this.prisma.membershipHistory.create({
+        data: {
+          originalId: membership.id,
+          userId: membership.userId,
+          gymId: membership.gymId,
+          planId: membership.planId,
+          offerId: membership.offerId,
+          startDate: membership.startDate,
+          endDate: membership.endDate,
+          status: membership.status,
+          originalAmount: membership.originalAmount,
+          discountAmount: membership.discountAmount,
+          finalAmount: membership.finalAmount,
+          currency: membership.currency,
+          paymentStatus: membership.paymentStatus,
+          paymentMethod: membership.paymentMethod,
+          paymentRef: membership.paymentRef,
+          paidAt: membership.paidAt,
+          cancelledAt: membership.cancelledAt,
+          cancelReason: membership.cancelReason,
+          notes: membership.notes,
+          archiveReason: reason,
+          originalCreatedAt: membership.createdAt,
+        },
+      }),
+      this.prisma.membership.delete({
+        where: { id },
+      }),
+    ]);
+
+    return historyRecord;
+  }
+
+  /**
+   * Get membership history for a user
+   */
+  async getHistory(filters?: {
+    userId?: number;
+    gymId?: number;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: any = {};
+
+    if (filters?.userId) {
+      where.userId = filters.userId;
+    }
+    if (filters?.gymId) {
+      where.gymId = filters.gymId;
+    }
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 15;
+    const skip = (page - 1) * limit;
+
+    const [history, total] = await Promise.all([
+      this.prisma.membershipHistory.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+          plan: true,
+          offer: true,
+        },
+        orderBy: { archivedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.membershipHistory.count({ where }),
+    ]);
+
+    return {
+      data: history,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get membership history for current user
+   */
+  async getMyHistory(userId: number) {
+    return this.prisma.membershipHistory.findMany({
+      where: { userId },
+      include: {
+        plan: true,
+        offer: true,
+      },
+      orderBy: { archivedAt: 'desc' },
+    });
+  }
+
+  /**
    * Fix memberships with NULL or mismatched gymId by setting them to the user's gymId
    */
   async fixMembershipGymIds() {
