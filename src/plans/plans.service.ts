@@ -135,7 +135,7 @@ export class PlansService {
     const numPlanId = typeof planId === 'string' ? parseInt(planId) : planId;
     const now = new Date();
 
-    const planOffers = await this.prisma.planOffer.findMany({
+    const planOffers = await this.prisma.planOfferXref.findMany({
       where: { planId: numPlanId },
       include: {
         offer: true,
@@ -179,7 +179,7 @@ export class PlansService {
 
           // Check if offer applies to this plan
           if (!offer.applicableToAll) {
-            const planOffer = await this.prisma.planOffer.findUnique({
+            const planOffer = await this.prisma.planOfferXref.findUnique({
               where: {
                 planId_offerId: {
                   planId: numPlanId,

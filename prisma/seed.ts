@@ -530,7 +530,7 @@ async function seedRolePermissions() {
         continue;
       }
 
-      const existing = await prisma.rolePermission.findUnique({
+      const existing = await prisma.rolePermissionXref.findUnique({
         where: {
           role_permissionId: {
             role,
@@ -543,7 +543,7 @@ async function seedRolePermissions() {
         continue;
       }
 
-      await prisma.rolePermission.create({
+      await prisma.rolePermissionXref.create({
         data: {
           role,
           permissionId: permission.id,
@@ -602,7 +602,7 @@ async function seedOffers() {
         });
 
         if (plan) {
-          await prisma.planOffer.create({
+          await prisma.planOfferXref.create({
             data: {
               planId: plan.id,
               offerId: offer.id,

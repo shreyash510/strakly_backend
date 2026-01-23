@@ -20,7 +20,7 @@ model User {
   phone        String?
   avatar       String?
   bio          String?
-  dateOfBirth  String?     @map("date_of_birth")
+  dateOfBirth  DateTime?   @map("date_of_birth")
   address      String?
   city         String?
   state        String?
@@ -42,8 +42,8 @@ model User {
   gym            Gym?        @relation(fields: [gymId], references: [id], onDelete: SetNull)
 
   // Tracking
-  joinDate     String?     @map("join_date")
-  lastLoginAt  String?     @map("last_login_at")
+  joinDate     DateTime?   @map("join_date")
+  lastLoginAt  DateTime?   @map("last_login_at")
 
   // Timestamps
   createdAt    DateTime    @default(now()) @map("created_at")
@@ -118,14 +118,14 @@ model Permission {
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
   // Relations
-  rolePermissions RolePermission[]
+  rolePermissions RolePermissionXref[]
 
   @@index([module])
   @@map("permissions")
 }
 
-// RolePermission model - Links roles to permissions
-model RolePermission {
+// RolePermissionXref model - Links roles to permissions
+model RolePermissionXref {
   id           Int        @id @default(autoincrement())
   role         String     // Role code from lookup (e.g., "admin", "manager")
   permissionId Int        @map("permission_id")
@@ -139,7 +139,7 @@ model RolePermission {
 
   @@unique([role, permissionId])
   @@index([role])
-  @@map("role_permissions")
+  @@map("role_permission_xref")
 }
 
 // Attendance model - Active check-in sessions
@@ -212,6 +212,9 @@ model Plan {
   name            String                                  // e.g., "Basic Plan", "Premium Plan"
   description     String?
 
+  // Gym reference - null for global plans, set for gym-specific plans
+  gymId           Int?         @map("gym_id")
+
   // Duration
   durationValue   Int          @map("duration_value")     // e.g., 1, 3, 6, 12
   durationType    String       @map("duration_type")      // day, month, year
@@ -233,9 +236,11 @@ model Plan {
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  planOffers      PlanOffer[]
+  gym             Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  planOffers      PlanOfferXref[]
   memberships     Membership[]
 
+  @@index([gymId])
   @@index([isActive, displayOrder])
   @@map("plans")
 }
@@ -246,6 +251,9 @@ model Offer {
   code              String       @unique                  // e.g., "SUMMER20", "NEWYEAR50"
   name              String                                // e.g., "Summer Sale", "New Year Offer"
   description       String?
+
+  // Gym reference - null for global offers, set for gym-specific offers
+  gymId             Int?         @map("gym_id")
 
   // Discount
   discountType      String       @map("discount_type")    // percentage, fixed
@@ -272,16 +280,18 @@ model Offer {
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  planOffers        PlanOffer[]
+  gym               Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  planOffers        PlanOfferXref[]
   memberships       Membership[]
 
+  @@index([gymId])
   @@index([isActive, validFrom, validTo])
   @@index([code])
   @@map("offers")
 }
 
-// PlanOffer model - Many-to-many: which offers apply to which plans
-model PlanOffer {
+// PlanOfferXref model - Many-to-many: which offers apply to which plans
+model PlanOfferXref {
   id        Int      @id @default(autoincrement())
   planId    Int      @map("plan_id")
   offerId   Int      @map("offer_id")
@@ -294,7 +304,7 @@ model PlanOffer {
   offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
 
   @@unique([planId, offerId])
-  @@map("plan_offers")
+  @@map("plan_offer_xref")
 }
 
 // Membership model - User's subscription/membership record
@@ -338,6 +348,9 @@ model Membership {
 
   // Additional info
   notes           String?
+
+  // Soft delete
+  isActive        Boolean   @default(true) @map("is_active")
 
   // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -508,6 +521,8 @@ model Gym {
   // Relations
   users             User[]            // All users belonging to this gym
   gymUsers          UserGymXref[]
+  plans             Plan[]            // Gym-specific membership plans
+  offers            Offer[]           // Gym-specific offers
   memberships       Membership[]
   attendances       Attendance[]
   attendanceHistory AttendanceHistory[]
@@ -568,6 +583,9 @@ model SupportTicket {
   resolution      String?
   resolvedAt      DateTime? @map("resolved_at")
   closedAt        DateTime? @map("closed_at")
+
+  // Soft delete
+  isActive        Boolean   @default(true) @map("is_active")
 
   // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -641,6 +659,9 @@ model ContactRequest {
   // Reply info
   repliedAt       DateTime? @map("replied_at")
   repliedBy       Int?      @map("replied_by")
+
+  // Soft delete
+  isActive        Boolean   @default(true) @map("is_active")
 
   // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -733,6 +754,9 @@ model GymSubscription {
 
   // Notes
   notes           String?
+
+  // Soft delete
+  isActive        Boolean   @default(true) @map("is_active")
 
   // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
