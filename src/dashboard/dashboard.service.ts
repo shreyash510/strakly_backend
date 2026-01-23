@@ -291,7 +291,9 @@ export class DashboardService {
         totalTrainers: 0,
         activeMemberships: 0,
         totalRevenue: 0,
+        totalCashRevenue: 0,
         monthlyRevenue: 0,
+        lastMonthRevenue: 0,
         monthlyGrowth: 0,
         presentToday: 0,
         openTickets: 0,
@@ -354,6 +356,7 @@ export class DashboardService {
       totalTrainers,
       activeMemberships,
       revenueData,
+      cashRevenueData,
       lastMonthRevenue,
       thisMonthRevenue,
       presentToday,
@@ -401,6 +404,15 @@ export class DashboardService {
         where: {
           userId: { in: userIdsInGyms },
           paymentStatus: 'paid',
+        },
+      }),
+      // Total cash revenue
+      this.prisma.membership.aggregate({
+        _sum: { finalAmount: true },
+        where: {
+          userId: { in: userIdsInGyms },
+          paymentStatus: 'paid',
+          paymentMethod: 'cash',
         },
       }),
       // Last month revenue
@@ -456,6 +468,7 @@ export class DashboardService {
 
     // Calculate revenue values
     const totalRevenue = Number(revenueData?._sum?.finalAmount ?? 0) || 0;
+    const totalCashRevenue = Number(cashRevenueData?._sum?.finalAmount ?? 0) || 0;
     const monthlyRevenue = Number(thisMonthRevenue?._sum?.finalAmount ?? 0) || 0;
     const lastMonthRevenueValue = Number(lastMonthRevenue?._sum?.finalAmount ?? 0) || 0;
 
@@ -474,7 +487,9 @@ export class DashboardService {
       totalTrainers: typeof totalTrainers === 'number' ? totalTrainers : 0,
       activeMemberships,
       totalRevenue,
+      totalCashRevenue,
       monthlyRevenue,
+      lastMonthRevenue: lastMonthRevenueValue,
       monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
       presentToday,
       openTickets,
