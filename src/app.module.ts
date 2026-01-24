@@ -5,6 +5,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { TenantModule } from './tenant/tenant.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { LookupsModule } from './lookups/lookups.module';
@@ -32,6 +33,7 @@ import { SalaryModule } from './salary/salary.module';
       exclude: ['/api/{*path}', '/docs/{*path}'],
     }),
     DatabaseModule,
+    TenantModule,
     AuthModule,
     UsersModule,
     LookupsModule,

@@ -2,21 +2,31 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../database/prisma.service';
+import { TenantService } from '../../tenant/tenant.service';
 
 export interface JwtPayload {
-  sub: number; // userId
+  sub: number; // userId (tenant user id)
   email: string;
   name: string;
   role?: string;
-  gymId?: number | null;
+  gymId: number;
+  tenantSchemaName: string;
+}
+
+export interface AuthenticatedUser {
+  userId: number;
+  email: string;
+  name: string;
+  role: string;
+  gymId: number;
+  tenantSchemaName: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -25,34 +35,43 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
+    const gymId = payload.gymId;
+    const tenantSchemaName = payload.tenantSchemaName;
 
-    // Verify user still exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { role: true },
+    if (!gymId || !tenantSchemaName) {
+      throw new UnauthorizedException('Invalid token: missing tenant information');
+    }
+
+    // Verify user still exists in tenant schema
+    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.status, l.code as role_code
+         FROM users u
+         LEFT JOIN public.lookups l ON l.id = u.role_id
+         WHERE u.id = $1`,
+        [userId]
+      );
+      return result.rows[0];
     });
 
-    if (!user) {
+    if (!userData) {
       throw new UnauthorizedException('User not found');
     }
 
     // Check if user is suspended
-    if (user.status === 'suspended') {
+    if (userData.status === 'suspended') {
       throw new UnauthorizedException('Your account has been suspended');
     }
-
-    const userRole = user.role?.code || 'client';
-    /* Use gymId from token or fall back to user's gymId from database */
-    const gymId = payload.gymId ?? user.gymId ?? null;
 
     return {
       userId: userId,
       email: payload.email,
       name: payload.name,
-      role: payload.role || userRole,
+      role: payload.role || userData.role_code || 'client',
       gymId: gymId,
+      tenantSchemaName: tenantSchemaName,
     };
   }
 }

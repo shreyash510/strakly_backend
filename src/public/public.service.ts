@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import { MemberRegistrationDto } from './dto/member-registration.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -12,13 +13,16 @@ import * as bcrypt from 'bcrypt';
 export class PublicService {
   private readonly SALT_ROUNDS = 10;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   private async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, this.SALT_ROUNDS);
   }
 
-  private async generateUniqueAttendanceCode(): Promise<string> {
+  private async generateUniqueAttendanceCode(gymId: number): Promise<string> {
     /* Generate batch of candidate codes and check in single query for efficiency */
     const batchSize = 10;
     const maxAttempts = 5;
@@ -31,13 +35,16 @@ export class PublicService {
         candidates.push(code);
       }
 
-      /* Check which codes already exist in single query */
-      const existing = await this.prisma.user.findMany({
-        where: { attendanceCode: { in: candidates } },
-        select: { attendanceCode: true },
+      /* Check which codes already exist in tenant schema */
+      const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const result = await client.query(
+          `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
+          [candidates]
+        );
+        return result.rows.map((r: any) => r.attendance_code);
       });
 
-      const existingCodes = new Set(existing.map((u) => u.attendanceCode));
+      const existingCodes = new Set(existing);
 
       /* Return first available code */
       for (const code of candidates) {
@@ -65,12 +72,12 @@ export class PublicService {
       throw new BadRequestException('This gym is not accepting new registrations');
     }
 
-    /* Check if email already exists */
-    const existingUser = await this.prisma.user.findUnique({
+    /* Check if email already exists in user_tenant_mappings */
+    const existingMapping = await this.prisma.userTenantMapping.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
 
-    if (existingUser) {
+    if (existingMapping) {
       throw new ConflictException('A user with this email already exists');
     }
 
@@ -87,27 +94,34 @@ export class PublicService {
     }
 
     /* Generate unique attendance code */
-    const attendanceCode = await this.generateUniqueAttendanceCode();
+    const attendanceCode = await this.generateUniqueAttendanceCode(dto.gymId);
 
-    /* Create the user with pending status */
-    const user = await this.prisma.user.create({
+    /* Create the user in tenant schema */
+    const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO users (name, email, password_hash, phone, role_id, status, join_date, attendance_code, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), $6, NOW(), NOW())
+         RETURNING id, name, email, status, created_at`,
+        [
+          dto.name,
+          dto.email.toLowerCase(),
+          await this.hashPassword(dto.password),
+          dto.phone || null,
+          memberRole.id,
+          attendanceCode,
+        ]
+      );
+      return result.rows[0];
+    });
+
+    /* Create user-tenant mapping */
+    await this.prisma.userTenantMapping.create({
       data: {
-        name: dto.name,
         email: dto.email.toLowerCase(),
-        passwordHash: await this.hashPassword(dto.password),
-        phone: dto.phone || null,
-        roleId: memberRole.id,
         gymId: dto.gymId,
-        status: 'pending',
-        joinDate: new Date(),
-        attendanceCode,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        status: true,
-        createdAt: true,
+        tenantUserId: user.id,
+        role: 'client',
+        isActive: true,
       },
     });
 

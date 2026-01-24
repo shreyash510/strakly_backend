@@ -134,7 +134,7 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permissions' })
   getMyPermissions(@Request() req: any) {
-    return this.permissionsService.getUserPermissions(req.user.userId);
+    return this.permissionsService.getUserPermissions(req.user.userId, req.user.gymId);
   }
 
   @Get('me/codes')
@@ -142,7 +142,7 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permission codes' })
   getMyPermissionCodes(@Request() req: any) {
-    return this.permissionsService.getUserPermissionCodes(req.user.userId);
+    return this.permissionsService.getUserPermissionCodes(req.user.userId, req.user.gymId);
   }
 
   // ============ USER PERMISSIONS (admin - userId from header) ============
@@ -153,9 +153,9 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permissions for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissions(@Headers('x-user-id') userId: string) {
+  getUserPermissions(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissions(userId);
+    return this.permissionsService.getUserPermissions(parseInt(userId), req.user.gymId);
   }
 
   @Get('user/codes')
@@ -164,8 +164,8 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permission codes for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissionCodes(@Headers('x-user-id') userId: string) {
+  getUserPermissionCodes(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissionCodes(userId);
+    return this.permissionsService.getUserPermissionCodes(parseInt(userId), req.user.gymId);
   }
 }

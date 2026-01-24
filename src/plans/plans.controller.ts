@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
@@ -18,74 +19,68 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('plans')
 @Controller('plans')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
   @Get()
   @ApiOperation({ summary: 'Get all active plans' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  findAll(@Query('includeInactive') includeInactive?: string) {
-    return this.plansService.findAll(includeInactive === 'true');
+  findAll(@Request() req: any, @Query('includeInactive') includeInactive?: string) {
+    return this.plansService.findAll(req.user.gymId, includeInactive === 'true');
   }
 
   @Get('featured')
   @ApiOperation({ summary: 'Get featured plans' })
-  findFeatured() {
-    return this.plansService.findFeatured();
+  findFeatured(@Request() req: any) {
+    return this.plansService.findFeatured(req.user.gymId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get plan by ID' })
-  findOne(@Param('id') id: string) {
-    return this.plansService.findOne(parseInt(id));
+  findOne(@Request() req: any, @Param('id') id: string) {
+    return this.plansService.findOne(parseInt(id), req.user.gymId);
   }
 
   @Get('code/:code')
   @ApiOperation({ summary: 'Get plan by code' })
-  findByCode(@Param('code') code: string) {
-    return this.plansService.findByCode(code);
-  }
-
-  @Get(':id/offers')
-  @ApiOperation({ summary: 'Get active offers for a plan' })
-  getActiveOffers(@Param('id') id: string) {
-    return this.plansService.getActiveOffers(parseInt(id));
+  findByCode(@Request() req: any, @Param('code') code: string) {
+    return this.plansService.findByCode(code, req.user.gymId);
   }
 
   @Get(':id/price')
   @ApiOperation({ summary: 'Calculate price with optional offer code' })
   @ApiQuery({ name: 'offerCode', required: false })
   calculatePrice(
+    @Request() req: any,
     @Param('id') id: string,
     @Query('offerCode') offerCode?: string,
   ) {
-    return this.plansService.calculatePriceWithOffer(parseInt(id), offerCode);
+    return this.plansService.calculatePriceWithOffer(parseInt(id), req.user.gymId, offerCode);
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new plan' })
-  create(@Body() dto: CreatePlanDto) {
-    return this.plansService.create(dto);
+  create(@Request() req: any, @Body() dto: CreatePlanDto) {
+    return this.plansService.create(dto, req.user.gymId);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a plan' })
-  update(@Param('id') id: string, @Body() dto: UpdatePlanDto) {
-    return this.plansService.update(parseInt(id), dto);
+  update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlanDto) {
+    return this.plansService.update(parseInt(id), req.user.gymId, dto);
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
-  delete(@Param('id') id: string) {
-    return this.plansService.delete(parseInt(id));
+  delete(@Request() req: any, @Param('id') id: string) {
+    return this.plansService.delete(parseInt(id), req.user.gymId);
   }
 }

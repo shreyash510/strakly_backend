@@ -34,8 +34,9 @@ export class DashboardController {
     type: AdminDashboardDto,
   })
   async getAdminDashboard(@Req() req: any): Promise<AdminDashboardDto> {
-    const userId = req.user?.userId || req.headers['x-user-id'];
-    return this.dashboardService.getAdminDashboard(Number(userId));
+    const userId = req.user?.userId;
+    const gymId = req.user?.gymId;
+    return this.dashboardService.getAdminDashboard(Number(userId), Number(gymId));
   }
 
   @Get('client')
@@ -47,7 +48,8 @@ export class DashboardController {
     type: MemberDashboardDto,
   })
   async getClientDashboard(@Req() req: any): Promise<MemberDashboardDto> {
-    const userId = req.user?.userId || req.headers['x-user-id'];
-    return this.dashboardService.getMemberDashboard(Number(userId));
+    const userId = req.user?.userId;
+    const gymId = req.user?.gymId;
+    return this.dashboardService.getMemberDashboard(Number(userId), Number(gymId));
   }
 }

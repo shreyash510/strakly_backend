@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import { CreatePermissionDto, UpdatePermissionDto, AssignRolePermissionsDto } from './dto/permission.dto';
 
 @Injectable()
 export class PermissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   // ============ PERMISSIONS ============
 
@@ -195,10 +199,16 @@ export class PermissionsService {
 
   // ============ USER PERMISSIONS (via role) ============
 
-  async getUserPermissions(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: parseInt(userId) },
-      include: { role: true },
+  async getUserPermissions(userId: number, gymId: number) {
+    // Get user's role from tenant schema
+    const user = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT u.id, l.code as role_code FROM users u
+         LEFT JOIN public.lookups l ON l.id = u.role_id
+         WHERE u.id = $1`,
+        [userId]
+      );
+      return result.rows[0];
     });
 
     if (!user) {
@@ -206,17 +216,17 @@ export class PermissionsService {
     }
 
     // Get role code from the lookup relation
-    const roleCode = user.role?.code || 'client';
+    const roleCode = user.role_code || 'client';
     return this.getPermissionsByRole(roleCode);
   }
 
-  async getUserPermissionCodes(userId: string) {
-    const permissions = await this.getUserPermissions(userId);
+  async getUserPermissionCodes(userId: number, gymId: number) {
+    const permissions = await this.getUserPermissions(userId, gymId);
     return permissions.map(p => p.code);
   }
 
-  async userHasPermission(userId: string, permissionCode: string): Promise<boolean> {
-    const permissionCodes = await this.getUserPermissionCodes(userId);
+  async userHasPermission(userId: number, gymId: number, permissionCode: string): Promise<boolean> {
+    const permissionCodes = await this.getUserPermissionCodes(userId, gymId);
     return permissionCodes.includes(permissionCode);
   }
 }

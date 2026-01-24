@@ -1,18 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
 
 const pool = new Pool({ connectionString: process.env.DIRECT_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
-
-const SALT_ROUNDS = 10;
-
-async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
 
 // Lookup Types data
 const lookupTypes = [
@@ -271,183 +264,81 @@ const rolePermissions: Record<string, string[]> = {
   ],
 };
 
-// Membership Plans
-const plans = [
+// SaaS Plans (Platform subscription plans for gyms)
+const saasPlans = [
   {
-    code: 'monthly-basic',
-    name: 'Monthly Basic',
-    description: 'Basic gym access for 1 month',
-    durationValue: 1,
-    durationType: 'month',
-    price: 1499,
+    code: 'free',
+    name: 'Free',
+    description: 'Perfect for trying out Strakly',
+    price: 0,
     currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'Basic Equipment'],
+    billingPeriod: 'monthly',
+    maxMembers: 50,
+    maxStaff: 1,
+    maxBranches: 1,
+    features: [
+      'Up to 50 members',
+      'Basic attendance tracking',
+      'Member management',
+      '1 admin account',
+      'Email support',
+      'Basic reports',
+    ],
     displayOrder: 1,
     isFeatured: false,
+    badge: null,
   },
   {
-    code: 'monthly-premium',
-    name: 'Monthly Premium',
-    description: 'Premium gym access with personal trainer for 1 month',
-    durationValue: 1,
-    durationType: 'month',
-    price: 2999,
+    code: 'pro',
+    name: 'Pro',
+    description: 'For growing gyms and fitness centers',
+    price: 499,
     currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (2 sessions)', 'Diet Consultation'],
+    billingPeriod: 'monthly',
+    maxMembers: 500,
+    maxStaff: 5,
+    maxBranches: 1,
+    features: [
+      'Up to 500 members',
+      'Advanced attendance tracking',
+      'Member management',
+      '5 staff accounts',
+      'Priority email support',
+      'Advanced reports & analytics',
+      'QR code check-in',
+      'Custom branding',
+    ],
     displayOrder: 2,
     isFeatured: true,
+    badge: 'Most Popular',
   },
   {
-    code: 'quarterly-basic',
-    name: 'Quarterly Basic',
-    description: 'Basic gym access for 3 months',
-    durationValue: 3,
-    durationType: 'month',
-    price: 3999,
+    code: 'enterprise',
+    name: 'Enterprise',
+    description: 'For large fitness chains and franchises',
+    price: 999,
     currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'Basic Equipment'],
+    billingPeriod: 'monthly',
+    maxMembers: -1, // unlimited
+    maxStaff: -1, // unlimited
+    maxBranches: -1, // unlimited
+    features: [
+      'Unlimited members',
+      'Advanced attendance tracking',
+      'Member management',
+      'Unlimited staff accounts',
+      '24/7 phone & email support',
+      'Advanced reports & analytics',
+      'QR code check-in',
+      'Custom branding',
+      'Multiple branches',
+      'API access',
+    ],
     displayOrder: 3,
     isFeatured: false,
-  },
-  {
-    code: 'quarterly-premium',
-    name: 'Quarterly Premium',
-    description: 'Premium gym access with personal trainer for 3 months',
-    durationValue: 3,
-    durationType: 'month',
-    price: 7999,
-    currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (8 sessions)', 'Diet Plan', 'Progress Tracking'],
-    displayOrder: 4,
-    isFeatured: true,
-  },
-  {
-    code: 'annual-basic',
-    name: 'Annual Basic',
-    description: 'Basic gym access for 12 months',
-    durationValue: 12,
-    durationType: 'month',
-    price: 12999,
-    currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'Basic Equipment', '1 Month Free'],
-    displayOrder: 5,
-    isFeatured: false,
-  },
-  {
-    code: 'annual-premium',
-    name: 'Annual Premium',
-    description: 'Premium gym access with personal trainer for 12 months',
-    durationValue: 12,
-    durationType: 'month',
-    price: 24999,
-    currency: 'INR',
-    features: ['Gym Access', 'Locker Room', 'All Equipment', 'Personal Trainer (24 sessions)', 'Diet Plan', 'Progress Tracking', 'Nutrition Supplements', '2 Months Free'],
-    displayOrder: 6,
-    isFeatured: true,
+    badge: 'Best Value',
   },
 ];
-
-// Promotional Offers
-const offers = [
-  {
-    code: 'WELCOME10',
-    name: 'Welcome Offer',
-    description: '10% off for new members',
-    discountType: 'percentage',
-    discountValue: 10,
-    validFrom: new Date(),
-    validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
-    maxUsageCount: null,
-    maxUsagePerUser: 1,
-    minPurchaseAmount: null,
-    applicableToAll: true,
-  },
-  {
-    code: 'SUMMER25',
-    name: 'Summer Sale',
-    description: '25% off on quarterly and annual plans',
-    discountType: 'percentage',
-    discountValue: 25,
-    validFrom: new Date(),
-    validTo: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
-    maxUsageCount: 100,
-    maxUsagePerUser: 1,
-    minPurchaseAmount: 3000,
-    applicableToAll: false, // Will be linked to specific plans
-    planCodes: ['quarterly-basic', 'quarterly-premium', 'annual-basic', 'annual-premium'],
-  },
-  {
-    code: 'FLAT500',
-    name: 'Flat ₹500 Off',
-    description: 'Flat ₹500 off on all plans',
-    discountType: 'fixed',
-    discountValue: 500,
-    validFrom: new Date(),
-    validTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-    maxUsageCount: 50,
-    maxUsagePerUser: 1,
-    minPurchaseAmount: 2000,
-    applicableToAll: true,
-  },
-];
-
-async function seedUsers() {
-  console.log('Seeding users...');
-
-  // Get USER_ROLE lookup type
-  const userRoleType = await prisma.lookupType.findUnique({
-    where: { code: 'USER_ROLE' },
-  });
-
-  if (!userRoleType) {
-    console.log('  USER_ROLE lookup type not found, skipping users...');
-    return;
-  }
-
-  const testUsers = [
-    { name: 'Super Admin', email: 'superadmin@test.com', password: 'password123', roleCode: 'superadmin' },
-    { name: 'Admin User', email: 'admin@test.com', password: 'password123', roleCode: 'admin' },
-    { name: 'Manager User', email: 'manager@test.com', password: 'password123', roleCode: 'manager' },
-    { name: 'Trainer User', email: 'trainer@test.com', password: 'password123', roleCode: 'trainer' },
-    { name: 'Test Client', email: 'client@test.com', password: 'password123', roleCode: 'client' },
-  ];
-
-  for (const userData of testUsers) {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: userData.email },
-    });
-
-    if (existingUser) {
-      console.log(`  User ${userData.email} already exists, skipping...`);
-      continue;
-    }
-
-    // Find the role lookup
-    const roleLookup = await prisma.lookup.findFirst({
-      where: {
-        lookupTypeId: userRoleType.id,
-        code: userData.roleCode,
-      },
-    });
-
-    if (!roleLookup) {
-      console.log(`  Role ${userData.roleCode} not found, skipping user ${userData.email}...`);
-      continue;
-    }
-
-    const passwordHash = await hashPassword(userData.password);
-    const user = await prisma.user.create({
-      data: {
-        name: userData.name,
-        email: userData.email,
-        passwordHash,
-        roleId: roleLookup.id,
-        status: 'active',
-      },
-    });
-    console.log(`  Created user: ${user.email} with role: ${userData.roleCode}`);
-  }
-}
 
 async function seedLookupTypes() {
   console.log('Seeding lookup types...');
@@ -568,69 +459,30 @@ async function seedRolePermissions() {
   }
 }
 
-async function seedPlans() {
-  console.log('Seeding plans...');
+async function seedSaasPlans() {
+  console.log('Seeding SaaS plans...');
 
-  for (const planData of plans) {
-    const existing = await prisma.plan.findUnique({
+  for (const planData of saasPlans) {
+    const existing = await prisma.saasPlan.findUnique({
       where: { code: planData.code },
     });
 
     if (existing) {
-      console.log(`  Plan ${planData.code} already exists, skipping...`);
+      console.log(`  SaaS plan ${planData.code} already exists, skipping...`);
       continue;
     }
 
-    await prisma.plan.create({
+    await prisma.saasPlan.create({
       data: planData,
     });
-    console.log(`  Created plan: ${planData.code}`);
-  }
-}
-
-async function seedOffers() {
-  console.log('Seeding offers...');
-
-  for (const offerData of offers) {
-    const existing = await prisma.offer.findUnique({
-      where: { code: offerData.code },
-    });
-
-    if (existing) {
-      console.log(`  Offer ${offerData.code} already exists, skipping...`);
-      continue;
-    }
-
-    const { planCodes, ...offerCreateData } = offerData as any;
-
-    const offer = await prisma.offer.create({
-      data: offerCreateData,
-    });
-    console.log(`  Created offer: ${offer.code}`);
-
-    // Link to specific plans if not applicable to all
-    if (planCodes && planCodes.length > 0) {
-      for (const planCode of planCodes) {
-        const plan = await prisma.plan.findUnique({
-          where: { code: planCode },
-        });
-
-        if (plan) {
-          await prisma.planOfferXref.create({
-            data: {
-              planId: plan.id,
-              offerId: offer.id,
-            },
-          });
-        }
-      }
-      console.log(`    Linked to ${planCodes.length} plans`);
-    }
+    console.log(`  Created SaaS plan: ${planData.code}`);
   }
 }
 
 async function main() {
   console.log('Starting seed...\n');
+  console.log('NOTE: This seeds PUBLIC schema tables only.');
+  console.log('Gyms and users are created via the signup flow.\n');
 
   await seedLookupTypes();
   console.log('');
@@ -640,13 +492,10 @@ async function main() {
   console.log('');
   await seedRolePermissions();
   console.log('');
-  await seedPlans();
-  console.log('');
-  await seedOffers();
-  console.log('');
-  await seedUsers();
+  await seedSaasPlans();
 
   console.log('\nSeed completed!');
+  console.log('\nTo create a gym with admin user, use the signup flow at /signup');
 }
 
 main()

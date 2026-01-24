@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import {
   CreateSaasPlanDto,
   UpdateSaasPlanDto,
@@ -27,7 +28,10 @@ export interface SubscriptionFilters extends PaginationParams {
 
 @Injectable()
 export class SaasSubscriptionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   // ============================================
   // SaaS Plans
@@ -188,20 +192,6 @@ export class SaasSubscriptionsService {
               logo: true,
               email: true,
               city: true,
-              users: {
-                where: {
-                  role: {
-                    code: 'admin',
-                  },
-                },
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  avatar: true,
-                },
-                take: 1,
-              },
             },
           },
           plan: {
@@ -220,8 +210,53 @@ export class SaasSubscriptionsService {
       this.prisma.gymSubscription.count({ where }),
     ]);
 
+    // Get admin owners for each gym from user_tenant_mappings
+    const gymIds = subscriptions.map(s => s.gym.id);
+    const adminMappings = await this.prisma.userTenantMapping.findMany({
+      where: {
+        gymId: { in: gymIds },
+        role: 'admin',
+        isActive: true,
+      },
+    });
+
+    // Create a map of gymId -> admin info
+    const ownerMap = new Map<number, any>();
+    for (const mapping of adminMappings) {
+      if (!ownerMap.has(mapping.gymId)) {
+        try {
+          const adminUser = await this.tenantService.executeInTenant(mapping.gymId, async (client) => {
+            const result = await client.query(
+              `SELECT id, name, email, avatar FROM users WHERE id = $1`,
+              [mapping.tenantUserId]
+            );
+            return result.rows[0];
+          });
+          if (adminUser) {
+            ownerMap.set(mapping.gymId, {
+              id: adminUser.id,
+              name: adminUser.name,
+              email: adminUser.email,
+              avatar: adminUser.avatar,
+            });
+          }
+        } catch (e) {
+          // Tenant schema might not exist yet
+        }
+      }
+    }
+
+    // Format subscriptions with owner info
+    const formattedSubscriptions = subscriptions.map(sub => ({
+      ...sub,
+      gym: {
+        ...sub.gym,
+        owner: ownerMap.get(sub.gym.id) || null,
+      },
+    }));
+
     return {
-      data: subscriptions,
+      data: formattedSubscriptions,
       pagination: createPaginationMeta(total, page, limit),
     };
   }

@@ -31,19 +31,19 @@ export class BodyMetricsController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user body metrics' })
   getMyMetrics(@Request() req: any) {
-    return this.bodyMetricsService.getOrCreateMetrics(req.user.userId);
+    return this.bodyMetricsService.getOrCreateMetrics(req.user.userId, req.user.gymId);
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user body metrics' })
   updateMyMetrics(@Request() req: any, @Body() dto: UpdateBodyMetricsDto) {
-    return this.bodyMetricsService.updateMetrics(req.user.userId, dto);
+    return this.bodyMetricsService.updateMetrics(req.user.userId, req.user.gymId, dto);
   }
 
   @Post('me/record')
   @ApiOperation({ summary: 'Record body metrics and save to history' })
   recordMyMetrics(@Request() req: any, @Body() dto: RecordMetricsDto) {
-    return this.bodyMetricsService.recordMetrics(req.user.userId, dto);
+    return this.bodyMetricsService.recordMetrics(req.user.userId, req.user.gymId, dto);
   }
 
   @Get('me/history')
@@ -57,7 +57,7 @@ export class BodyMetricsController {
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.bodyMetricsService.getHistory(req.user.userId, {
+    return this.bodyMetricsService.getHistory(req.user.userId, req.user.gymId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       limit: limit ? parseInt(limit) : undefined,
@@ -67,31 +67,13 @@ export class BodyMetricsController {
   @Get('me/progress')
   @ApiOperation({ summary: 'Get current user progress' })
   getMyProgress(@Request() req: any) {
-    return this.bodyMetricsService.getProgress(req.user.userId);
-  }
-
-  @Get('me/chart/:field')
-  @ApiOperation({ summary: 'Get chart data for a specific field' })
-  @ApiQuery({ name: 'startDate', required: false })
-  @ApiQuery({ name: 'endDate', required: false })
-  getMyChart(
-    @Request() req: any,
-    @Param('field') field: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    return this.bodyMetricsService.getMetricsChart(
-      req.user.userId,
-      field,
-      startDate ? new Date(startDate) : undefined,
-      endDate ? new Date(endDate) : undefined,
-    );
+    return this.bodyMetricsService.getProgress(req.user.userId, req.user.gymId);
   }
 
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
   deleteMyHistoryRecord(@Request() req: any, @Param('id') id: string) {
-    return this.bodyMetricsService.deleteHistoryRecord(parseInt(id), req.user.userId);
+    return this.bodyMetricsService.deleteHistoryRecord(parseInt(id), req.user.userId, req.user.gymId);
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============
@@ -102,9 +84,9 @@ export class BodyMetricsController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get body metrics for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserMetrics(@Headers('x-user-id') userId: string) {
+  getUserMetrics(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getOrCreateMetrics(parseInt(userId));
+    return this.bodyMetricsService.getOrCreateMetrics(parseInt(userId), req.user.gymId);
   }
 
   @Patch('user')
@@ -113,11 +95,12 @@ export class BodyMetricsController {
   @ApiOperation({ summary: 'Update body metrics for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   updateUserMetrics(
+    @Request() req: any,
     @Headers('x-user-id') userId: string,
     @Body() dto: UpdateBodyMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.updateMetrics(parseInt(userId), dto);
+    return this.bodyMetricsService.updateMetrics(parseInt(userId), req.user.gymId, dto);
   }
 
   @Post('user/record')
@@ -126,11 +109,12 @@ export class BodyMetricsController {
   @ApiOperation({ summary: 'Record body metrics for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   recordUserMetrics(
+    @Request() req: any,
     @Headers('x-user-id') userId: string,
     @Body() dto: RecordMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.recordMetrics(parseInt(userId), dto);
+    return this.bodyMetricsService.recordMetrics(parseInt(userId), req.user.gymId, dto);
   }
 
   @Get('user/history')
@@ -142,13 +126,14 @@ export class BodyMetricsController {
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getUserHistory(
+    @Request() req: any,
     @Headers('x-user-id') userId: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const history = await this.bodyMetricsService.getHistory(parseInt(userId), {
+    const history = await this.bodyMetricsService.getHistory(parseInt(userId), req.user.gymId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       limit: limit ? parseInt(limit) : undefined,
@@ -161,30 +146,8 @@ export class BodyMetricsController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get progress for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserProgress(@Headers('x-user-id') userId: string) {
+  getUserProgress(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getProgress(parseInt(userId));
-  }
-
-  @Get('user/chart/:field')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get chart data for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'startDate', required: false })
-  @ApiQuery({ name: 'endDate', required: false })
-  getUserChart(
-    @Headers('x-user-id') userId: string,
-    @Param('field') field: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getMetricsChart(
-      parseInt(userId),
-      field,
-      startDate ? new Date(startDate) : undefined,
-      endDate ? new Date(endDate) : undefined,
-    );
+    return this.bodyMetricsService.getProgress(parseInt(userId), req.user.gymId);
   }
 }

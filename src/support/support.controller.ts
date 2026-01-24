@@ -35,7 +35,13 @@ export class SupportController {
   @Post()
   @ApiOperation({ summary: 'Create a new support ticket' })
   create(@Request() req: any, @Body() createTicketDto: CreateTicketDto) {
-    return this.supportService.create(req.user.userId, createTicketDto);
+    return this.supportService.create(
+      req.user.userId,
+      req.user.gymId,
+      req.user.name,
+      req.user.email,
+      createTicketDto
+    );
   }
 
   @Get()
@@ -46,7 +52,7 @@ export class SupportController {
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
   @ApiQuery({ name: 'category', required: false, type: String, description: 'Filter by category' })
   @ApiQuery({ name: 'priority', required: false, type: String, description: 'Filter by priority' })
-  @ApiQuery({ name: 'userId', required: false, type: String, description: 'Filter by user ID' })
+  @ApiQuery({ name: 'tenantUserId', required: false, type: String, description: 'Filter by tenant user ID' })
   @ApiQuery({ name: 'assignedToId', required: false, type: String, description: 'Filter by assigned user ID' })
   @ApiQuery({ name: 'gymId', required: false, type: String, description: 'Filter by gym ID (superadmin only)' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
@@ -58,7 +64,7 @@ export class SupportController {
     @Query('status') status?: string,
     @Query('category') category?: string,
     @Query('priority') priority?: string,
-    @Query('userId') userId?: string,
+    @Query('tenantUserId') tenantUserId?: string,
     @Query('assignedToId') assignedToId?: string,
     @Query('gymId') gymId?: string,
     @Query('noPagination') noPagination?: string,
@@ -72,7 +78,7 @@ export class SupportController {
         status,
         category,
         priority,
-        userId: userId ? parseInt(userId) : undefined,
+        tenantUserId: tenantUserId ? parseInt(tenantUserId) : undefined,
         assignedToId: assignedToId ? parseInt(assignedToId) : undefined,
         gymId: gymId ? parseInt(gymId) : undefined,
         noPagination: noPagination === 'true',
@@ -132,6 +138,7 @@ export class SupportController {
       id,
       addMessageDto,
       req.user.userId,
+      req.user.name,
       req.user.role,
       req.user.gymId,
     );

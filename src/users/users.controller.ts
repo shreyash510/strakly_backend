@@ -22,6 +22,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+
+interface AuthenticatedRequest extends Request {
+  user: AuthenticatedUser;
+}
 
 @ApiTags('users')
 @Controller('users')
@@ -41,7 +46,7 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
   async findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -50,16 +55,13 @@ export class UsersController {
     @Query('noPagination') noPagination?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
-    /* Superadmin can see all users, others only see users from their gym */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
-
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       search,
       role,
       status,
-      gymId,
+      gymId: req.user.gymId,
       noPagination: noPagination === 'true',
     });
 
@@ -74,22 +76,22 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Create a new user' })
-  create(@Request() req: any, @Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto, req.user.userId);
+  create(@Request() req: AuthenticatedRequest, @Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto, req.user.gymId, req.user.userId);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
-  getMe(@Request() req: any) {
-    return this.usersService.findOne(req.user.userId);
+  getMe(@Request() req: AuthenticatedRequest) {
+    return this.usersService.findOne(req.user.userId, req.user.gymId);
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user profile' })
-  updateMe(@Request() req: any, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(req.user.userId, updateUserDto);
+  updateMe(@Request() req: AuthenticatedRequest, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(req.user.userId, req.user.gymId, updateUserDto);
   }
 
   // ============ ADMIN ENDPOINTS (userId from header) ============
@@ -99,9 +101,9 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get single user by ID (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  findOneByHeader(@Headers('x-user-id') userId: string) {
+  findOneByHeader(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.findOne(parseInt(userId));
+    return this.usersService.findOne(parseInt(userId), req.user.gymId);
   }
 
   @Patch('user')
@@ -109,9 +111,13 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  updateByHeader(@Headers('x-user-id') userId: string, @Body() updateUserDto: UpdateUserDto) {
+  updateByHeader(
+    @Request() req: AuthenticatedRequest,
+    @Headers('x-user-id') userId: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.update(parseInt(userId), updateUserDto);
+    return this.usersService.update(parseInt(userId), req.user.gymId, updateUserDto);
   }
 
   @Delete('user')
@@ -119,9 +125,9 @@ export class UsersController {
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete user (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  removeByHeader(@Headers('x-user-id') userId: string) {
+  removeByHeader(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.remove(parseInt(userId));
+    return this.usersService.remove(parseInt(userId), req.user.gymId);
   }
 
   @Patch('user/status')
@@ -129,9 +135,13 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user status (header)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  updateStatusByHeader(@Headers('x-user-id') userId: string, @Body() body: { status: string }) {
+  updateStatusByHeader(
+    @Request() req: AuthenticatedRequest,
+    @Headers('x-user-id') userId: string,
+    @Body() body: { status: string },
+  ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.updateStatus(parseInt(userId), body.status);
+    return this.usersService.updateStatus(parseInt(userId), req.user.gymId, body.status);
   }
 
   @Post('user/reset-password')
@@ -140,11 +150,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Reset user password (admin)' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   resetPasswordByHeader(
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: ResetPasswordDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.resetPassword(parseInt(userId), dto.newPassword);
+    return this.usersService.resetPassword(parseInt(userId), req.user.gymId, dto.newPassword);
   }
 
   @Post('user/regenerate-attendance-code')
@@ -152,9 +163,9 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Regenerate attendance code for user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  regenerateAttendanceCode(@Headers('x-user-id') userId: string) {
+  regenerateAttendanceCode(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.usersService.regenerateAttendanceCode(parseInt(userId));
+    return this.usersService.regenerateAttendanceCode(parseInt(userId), req.user.gymId);
   }
 
   @Get('role/:role')
@@ -162,13 +173,11 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get users by role' })
   async findByRole(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('role') role: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
-    /* Superadmin can see all users, others only see users from their gym */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
-    const result = await this.usersService.findByRole(role, gymId);
+    const result = await this.usersService.findByRole(role, req.user.gymId);
 
     if (res && result.pagination) {
       setPaginationHeaders(res, result.pagination);
@@ -184,18 +193,19 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Approve a pending registration request' })
   approveRequest(
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { role: string },
   ) {
-    return this.usersService.approveRequest(id, body.role);
+    return this.usersService.approveRequest(id, req.user.gymId, body.role);
   }
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Reject a pending registration request' })
-  rejectRequest(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.rejectRequest(id);
+  rejectRequest(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.usersService.rejectRequest(id, req.user.gymId);
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============
@@ -204,8 +214,8 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get user by ID' })
-  findById(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.findOne(id);
+  findById(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id, req.user.gymId);
   }
 
   @Patch(':id')
@@ -213,17 +223,18 @@ export class UsersController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user by ID' })
   updateById(
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(id, req.user.gymId, updateUserDto);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete user by ID' })
-  removeById(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.remove(id);
+  removeById(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.usersService.remove(id, req.user.gymId);
   }
 }
