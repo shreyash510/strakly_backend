@@ -53,11 +53,11 @@ export class TenantService implements OnModuleInit {
 
   /**
    * Create all tenant-specific tables in the schema
-   * Note: Only CLIENTS are stored in tenant schema
-   * Staff (admin, manager, trainer) are in public.users
+   * Note: Staff (manager, trainer) and Clients are stored in tenant schema
+   * Only Admin (gym owner) is in public.users
    */
   private async createTenantTables(client: any, schemaName: string): Promise<void> {
-    // Users table (CLIENTS ONLY - members of the gym)
+    // Users table (STAFF: manager, trainer + CLIENTS: members)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."users" (
         id SERIAL PRIMARY KEY,
@@ -67,6 +67,7 @@ export class TenantService implements OnModuleInit {
         phone VARCHAR(50),
         avatar TEXT,
         bio TEXT,
+        role VARCHAR(50) NOT NULL DEFAULT 'client',
         date_of_birth TIMESTAMP,
         gender VARCHAR(20),
         address TEXT,
@@ -320,6 +321,7 @@ export class TenantService implements OnModuleInit {
   private async createTenantIndexes(client: any, schemaName: string): Promise<void> {
     // Users indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_email" ON "${schemaName}"."users"(email)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`);
 

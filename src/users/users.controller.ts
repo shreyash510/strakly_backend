@@ -229,30 +229,30 @@ export class UsersController {
 
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Approve a pending registration request' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   approveRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
-    @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.approveRequest(id, gymId);
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.approveRequest(id, user.gymId);
   }
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Reject a pending registration request' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   rejectRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
-    @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.rejectRequest(id, gymId);
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.rejectRequest(id, user.gymId);
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============

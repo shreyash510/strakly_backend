@@ -279,7 +279,8 @@ export class AuthService {
   }
 
   /**
-   * Login user - checks superadmin first, then staff (public.users), then clients (tenant.users)
+   * Login user - checks superadmin first, then admin (public.users), then staff/clients (tenant.users)
+   * Architecture: Admin in public.users, Staff (manager, trainer) + Clients in tenant.users
    */
   async login(loginDto: LoginDto): Promise<AuthResponse> {
     // First, check if this is a superadmin login
@@ -338,8 +339,8 @@ export class AuthService {
       };
     }
 
-    // Check staff login (admin, manager, trainer) in public.users
-    const staffUser = await this.prisma.user.findUnique({
+    // Check admin login in public.users (only admins are in public.users now)
+    const adminUser = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
       include: {
         gymAssignments: {
@@ -351,23 +352,23 @@ export class AuthService {
       },
     });
 
-    if (staffUser) {
-      // Staff login flow
-      if (staffUser.isDeleted) {
+    if (adminUser) {
+      // Admin login flow
+      if (adminUser.isDeleted) {
         throw new UnauthorizedException('Your account has been deleted');
       }
 
-      if (staffUser.status === 'suspended') {
+      if (adminUser.status === 'suspended') {
         throw new UnauthorizedException('Your account has been suspended');
       }
 
-      if (staffUser.status === 'inactive') {
+      if (adminUser.status === 'inactive') {
         throw new UnauthorizedException('Your account is inactive');
       }
 
       const isPasswordValid = await this.comparePassword(
         loginDto.password,
-        staffUser.passwordHash,
+        adminUser.passwordHash,
       );
 
       if (!isPasswordValid) {
@@ -376,12 +377,12 @@ export class AuthService {
 
       // Update last login time
       await this.prisma.user.update({
-        where: { id: staffUser.id },
+        where: { id: adminUser.id },
         data: { lastLoginAt: new Date() },
       });
 
       // Build gym assignments list
-      const gymAssignments: GymAssignment[] = staffUser.gymAssignments.map((assignment) => ({
+      const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
         gymId: assignment.gymId,
         role: assignment.role,
         isPrimary: assignment.isPrimary,
@@ -404,7 +405,7 @@ export class AuthService {
       const hasMultipleGyms = gymAssignments.length > 1;
 
       const user = this.toUserResponse(
-        { ...staffUser, role: primaryAssignment.role },
+        { ...adminUser, role: primaryAssignment.role },
         primaryAssignment.gym,
         gymAssignments
       );
@@ -423,8 +424,7 @@ export class AuthService {
       };
     }
 
-    // Check client login in all tenant schemas
-    // This is a fallback - clients typically login via mobile app with gym code
+    // Check staff (manager, trainer) and client login in all tenant schemas
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
     });
@@ -434,7 +434,7 @@ export class AuthService {
         const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
         if (!schemaExists) continue;
 
-        const clientData = await this.tenantService.executeInTenant(gym.id, async (client) => {
+        const tenantUser = await this.tenantService.executeInTenant(gym.id, async (client) => {
           const result = await client.query(
             `SELECT * FROM users WHERE email = $1`,
             [loginDto.email]
@@ -442,16 +442,24 @@ export class AuthService {
           return result.rows[0];
         });
 
-        if (clientData) {
-          // Check client status
-          if (clientData.status === 'suspended') {
+        if (tenantUser) {
+          // Check user status
+          if (tenantUser.status === 'suspended') {
             throw new UnauthorizedException('Your account has been suspended');
+          }
+
+          if (tenantUser.status === 'inactive') {
+            throw new UnauthorizedException('Your account is inactive');
+          }
+
+          if (tenantUser.status === 'pending') {
+            throw new UnauthorizedException('Your account is pending approval');
           }
 
           // Check password
           const isPasswordValid = await this.comparePassword(
             loginDto.password,
-            clientData.password_hash,
+            tenantUser.password_hash,
           );
 
           if (!isPasswordValid) {
@@ -462,14 +470,17 @@ export class AuthService {
           await this.tenantService.executeInTenant(gym.id, async (client) => {
             await client.query(
               `UPDATE users SET last_login_at = NOW() WHERE id = $1`,
-              [clientData.id]
+              [tenantUser.id]
             );
           });
 
-          const user = this.toUserResponse({ ...clientData, role: 'client' }, gym);
+          // Get user's role from tenant schema (could be manager, trainer, or client)
+          const userRole = tenantUser.role || 'client';
+
+          const user = this.toUserResponse({ ...tenantUser, role: userRole }, gym);
           const accessToken = this.generateToken(user, {
             gymId: gym.id,
-            role: 'client',
+            role: userRole,
             isPrimary: true,
             gym: {
               id: gym.id,
@@ -561,11 +572,12 @@ export class AuthService {
   }
 
   /**
-   * Get user profile - handles both staff (public.users) and clients (tenant.users)
+   * Get user profile - handles admin (public.users) and tenant users (manager/trainer/client in tenant.users)
+   * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
-  async getProfile(userId: number, gymId?: number, isClient: boolean = false): Promise<UserResponse> {
-    if (isClient && gymId) {
-      // Client profile from tenant schema
+  async getProfile(userId: number, gymId?: number, isTenantUser: boolean = false): Promise<UserResponse> {
+    if (isTenantUser && gymId) {
+      // Tenant user profile (manager, trainer, or client) from tenant schema
       const gym = await this.prisma.gym.findUnique({
         where: { id: gymId },
       });
@@ -574,7 +586,7 @@ export class AuthService {
         throw new UnauthorizedException('Gym not found');
       }
 
-      const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
           `SELECT * FROM users WHERE id = $1`,
           [userId]
@@ -582,15 +594,18 @@ export class AuthService {
         return result.rows[0];
       });
 
-      if (!clientData) {
+      if (!tenantUser) {
         throw new UnauthorizedException('User not found');
       }
 
-      return this.toUserResponse({ ...clientData, role: 'client' }, gym);
+      // Get role from tenant user (could be manager, trainer, or client)
+      const userRole = tenantUser.role || 'client';
+
+      return this.toUserResponse({ ...tenantUser, role: userRole }, gym);
     }
 
-    // Staff profile from public.users
-    const staffUser = await this.prisma.user.findUnique({
+    // Admin profile from public.users
+    const adminUser = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
         gymAssignments: {
@@ -600,11 +615,11 @@ export class AuthService {
       },
     });
 
-    if (!staffUser) {
+    if (!adminUser) {
       throw new UnauthorizedException('User not found');
     }
 
-    const gymAssignments: GymAssignment[] = staffUser.gymAssignments.map((assignment) => ({
+    const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
       gymId: assignment.gymId,
       role: assignment.role,
       isPrimary: assignment.isPrimary,
@@ -624,23 +639,24 @@ export class AuthService {
       : gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
 
     return this.toUserResponse(
-      { ...staffUser, role: currentAssignment?.role || 'staff' },
+      { ...adminUser, role: currentAssignment?.role || 'admin' },
       currentAssignment?.gym,
       gymAssignments
     );
   }
 
   /**
-   * Update user profile - handles both staff and clients
+   * Update user profile - handles admin (public.users) and tenant users (tenant.users)
+   * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
   async updateProfile(
     userId: number,
     gymId: number | undefined,
     data: { name?: string; bio?: string; avatar?: string; phone?: string },
-    isClient: boolean = false,
+    isTenantUser: boolean = false,
   ): Promise<UserResponse> {
-    if (isClient && gymId) {
-      // Update client in tenant schema
+    if (isTenantUser && gymId) {
+      // Update tenant user (manager, trainer, or client) in tenant schema
       const gym = await this.prisma.gym.findUnique({
         where: { id: gymId },
       });
@@ -673,7 +689,7 @@ export class AuthService {
       updates.push(`updated_at = NOW()`);
       values.push(userId);
 
-      const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
         await client.query(
           `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
           values
@@ -686,10 +702,11 @@ export class AuthService {
         return result.rows[0];
       });
 
-      return this.toUserResponse({ ...clientData, role: 'client' }, gym);
+      const userRole = tenantUser.role || 'client';
+      return this.toUserResponse({ ...tenantUser, role: userRole }, gym);
     }
 
-    // Update staff in public.users
+    // Update admin in public.users
     const updateData: any = {};
     if (data.name) updateData.name = data.name;
     if (data.bio !== undefined) updateData.bio = data.bio;
@@ -726,25 +743,26 @@ export class AuthService {
       : gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
 
     return this.toUserResponse(
-      { ...updatedUser, role: currentAssignment?.role || 'staff' },
+      { ...updatedUser, role: currentAssignment?.role || 'admin' },
       currentAssignment?.gym,
       gymAssignments
     );
   }
 
   /**
-   * Change password - handles both staff and clients
+   * Change password - handles admin (public.users) and tenant users (tenant.users)
+   * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
   async changePassword(
     userId: number,
     gymId: number | undefined,
     currentPassword: string,
     newPassword: string,
-    isClient: boolean = false,
+    isTenantUser: boolean = false,
   ): Promise<{ success: boolean }> {
-    if (isClient && gymId) {
-      // Change password for client in tenant schema
-      const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
+    if (isTenantUser && gymId) {
+      // Change password for tenant user (manager, trainer, or client) in tenant schema
+      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
           `SELECT * FROM users WHERE id = $1`,
           [userId]
@@ -752,13 +770,13 @@ export class AuthService {
         return result.rows[0];
       });
 
-      if (!clientData) {
+      if (!tenantUser) {
         throw new UnauthorizedException('User not found');
       }
 
       const isPasswordValid = await this.comparePassword(
         currentPassword,
-        clientData.password_hash,
+        tenantUser.password_hash,
       );
 
       if (!isPasswordValid) {
@@ -776,18 +794,18 @@ export class AuthService {
       return { success: true };
     }
 
-    // Change password for staff in public.users
-    const staffUser = await this.prisma.user.findUnique({
+    // Change password for admin in public.users
+    const adminUser = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
-    if (!staffUser) {
+    if (!adminUser) {
       throw new UnauthorizedException('User not found');
     }
 
     const isPasswordValid = await this.comparePassword(
       currentPassword,
-      staffUser.passwordHash,
+      adminUser.passwordHash,
     );
 
     if (!isPasswordValid) {
@@ -806,8 +824,8 @@ export class AuthService {
   /**
    * Refresh token
    */
-  async refreshToken(userId: number, gymId?: number, isClient: boolean = false): Promise<{ accessToken: string }> {
-    const user = await this.getProfile(userId, gymId, isClient);
+  async refreshToken(userId: number, gymId?: number, isTenantUser: boolean = false): Promise<{ accessToken: string }> {
+    const user = await this.getProfile(userId, gymId, isTenantUser);
 
     const gymAssignment = gymId && user.gyms
       ? user.gyms.find((g) => g.gymId === gymId)
@@ -819,7 +837,8 @@ export class AuthService {
   }
 
   /**
-   * Search staff users within public.users (for a specific gym)
+   * Search staff users - searches admins (public.users) and staff (tenant.users) for a specific gym
+   * Architecture: admin in public.users, manager/trainer in tenant.users
    */
   async searchStaff(
     query: string,
@@ -832,57 +851,71 @@ export class AuthService {
       return { users: [], hasMore: false, page: 1 };
     }
 
-    const offset = (page - 1) * limit;
     const searchPattern = `%${query}%`;
 
-    const [users, totalResult] = await Promise.all([
-      this.prisma.user.findMany({
-        where: {
-          id: { not: currentUserId },
-          isDeleted: false,
-          OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { email: { contains: query, mode: 'insensitive' } },
-          ],
-          gymAssignments: {
-            some: { gymId, isActive: true },
-          },
+    // Search admins in public.users
+    const admins = await this.prisma.user.findMany({
+      where: {
+        id: { not: currentUserId },
+        isDeleted: false,
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+        gymAssignments: {
+          some: { gymId, isActive: true, role: 'admin' },
         },
-        include: {
-          gymAssignments: {
-            where: { gymId, isActive: true },
-          },
+      },
+      include: {
+        gymAssignments: {
+          where: { gymId, isActive: true },
         },
-        skip: offset,
-        take: limit,
-        orderBy: { name: 'asc' },
-      }),
-      this.prisma.user.count({
-        where: {
-          id: { not: currentUserId },
-          isDeleted: false,
-          OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { email: { contains: query, mode: 'insensitive' } },
-          ],
-          gymAssignments: {
-            some: { gymId, isActive: true },
-          },
-        },
-      }),
-    ]);
+      },
+      orderBy: { name: 'asc' },
+    });
 
-    return {
-      users: users.map((user) => ({
+    // Search staff (manager/trainer) in tenant.users
+    const tenantStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM users
+         WHERE id != $1
+         AND role IN ('manager', 'trainer')
+         AND (name ILIKE $2 OR email ILIKE $2)
+         ORDER BY name ASC`,
+        [currentUserId, searchPattern]
+      );
+      return result.rows;
+    });
+
+    // Combine results
+    const allUsers: UserResponse[] = [
+      ...admins.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.gymAssignments[0]?.role || 'staff',
+        role: user.gymAssignments[0]?.role || 'admin',
         avatar: user.avatar ?? undefined,
       })),
-      hasMore: offset + users.length < totalResult,
+      ...tenantStaff.map((user: any) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role || 'staff',
+        avatar: user.avatar ?? undefined,
+      })),
+    ];
+
+    // Sort and paginate
+    allUsers.sort((a, b) => a.name.localeCompare(b.name));
+    const total = allUsers.length;
+    const offset = (page - 1) * limit;
+    const paginatedUsers = allUsers.slice(offset, offset + limit);
+
+    return {
+      users: paginatedUsers,
+      hasMore: offset + paginatedUsers.length < total,
       page,
-      total: totalResult,
+      total,
     };
   }
 
@@ -899,23 +932,24 @@ export class AuthService {
 
   /**
    * Forgot password - reset password by email
+   * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
   async forgotPassword(email: string, newPassword: string): Promise<{ success: boolean }> {
-    // First check public.users (staff)
-    const staffUser = await this.prisma.user.findUnique({
+    // First check public.users (admin)
+    const adminUser = await this.prisma.user.findUnique({
       where: { email },
     });
 
-    if (staffUser) {
+    if (adminUser) {
       const newPasswordHash = await this.hashPassword(newPassword);
       await this.prisma.user.update({
-        where: { id: staffUser.id },
+        where: { id: adminUser.id },
         data: { passwordHash: newPasswordHash },
       });
       return { success: true };
     }
 
-    // Check all tenant schemas for clients
+    // Check all tenant schemas for staff and clients
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
     });

@@ -62,7 +62,7 @@ export class UsersService {
     return String(Math.floor(100000 + Math.random() * 900000));
   }
 
-  private formatStaffUser(user: any, gymAssignments?: any[]) {
+  private formatAdminUser(user: any, gymAssignments?: any[]) {
     const primaryAssignment = gymAssignments?.find((a) => a.isPrimary) || gymAssignments?.[0];
     return {
       id: user.id,
@@ -71,7 +71,7 @@ export class UsersService {
       phone: user.phone,
       avatar: user.avatar,
       bio: user.bio,
-      role: primaryAssignment?.role || 'staff',
+      role: primaryAssignment?.role || 'admin',
       status: user.status,
       dateOfBirth: user.dateOfBirth,
       gender: user.gender,
@@ -79,7 +79,7 @@ export class UsersService {
       city: user.city,
       state: user.state,
       zipCode: user.zipCode,
-      userType: 'staff',
+      userType: 'admin',
       gyms: gymAssignments?.map((a) => ({
         gymId: a.gymId,
         gymName: a.gym?.name,
@@ -91,7 +91,8 @@ export class UsersService {
     };
   }
 
-  private formatClientUser(user: any, gym?: any) {
+  private formatTenantUser(user: any, gym?: any) {
+    const role = user.role || 'client';
     return {
       id: user.id,
       name: user.name,
@@ -99,7 +100,7 @@ export class UsersService {
       phone: user.phone,
       avatar: user.avatar,
       bio: user.bio,
-      role: 'client',
+      role: role,
       status: user.status,
       dateOfBirth: user.date_of_birth || user.dateOfBirth,
       gender: user.gender,
@@ -107,8 +108,10 @@ export class UsersService {
       city: user.city,
       state: user.state,
       zipCode: user.zip_code || user.zipCode,
-      attendanceCode: user.attendance_code || user.attendanceCode,
-      userType: 'client',
+      attendanceCode: role === 'client' ? (user.attendance_code || user.attendanceCode) : undefined,
+      emergencyContactName: user.emergency_contact_name || user.emergencyContactName,
+      emergencyContactPhone: user.emergency_contact_phone || user.emergencyContactPhone,
+      userType: role === 'client' ? 'client' : 'staff',
       gymId: gym?.id,
       gym: gym ? {
         id: gym.id,
@@ -125,13 +128,18 @@ export class UsersService {
   }
 
   // ============================================
-  // STAFF OPERATIONS (public.users)
+  // ADMIN OPERATIONS (public.users - only for gym owners)
   // ============================================
 
   /**
-   * Create a new staff member (admin, manager, trainer) in public.users
+   * Create a new admin (gym owner) in public.users
+   * Note: This is typically done via registerAdminWithGym in auth service
    */
-  async createStaff(dto: CreateStaffDto, gymId: number): Promise<any> {
+  async createAdmin(dto: CreateStaffDto, gymId: number): Promise<any> {
+    if (dto.role !== 'admin') {
+      throw new BadRequestException('This method is only for creating admins. Use createStaff for manager/trainer.');
+    }
+
     if (!dto.password) {
       throw new BadRequestException('Password is required');
     }
@@ -154,9 +162,19 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
+    // Check if email exists in tenant schema
+    const existingTenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT id FROM users WHERE email = $1`, [dto.email]);
+      return result.rows[0];
+    });
+
+    if (existingTenantUser) {
+      throw new ConflictException('Email already exists in this gym');
+    }
+
     const passwordHash = await this.hashPassword(dto.password);
 
-    // Create user in public.users
+    // Create admin in public.users
     const createdUser = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -180,44 +198,33 @@ export class UsersService {
       data: {
         userId: createdUser.id,
         gymId,
-        role: dto.role || 'trainer',
-        isPrimary: true,
+        role: 'admin',
+        isPrimary: false, // Only the first admin is primary
         isActive: true,
       },
       include: { gym: true },
     });
 
-    return this.formatStaffUser(createdUser, [assignment]);
+    return this.formatAdminUser(createdUser, [assignment]);
   }
 
   /**
-   * Get all staff members for a gym
+   * Get all admins for a gym
    */
-  async findAllStaff(filters: UserFilters): Promise<PaginatedResponse<any>> {
+  async findAllAdmins(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
     const gymId = filters.gymId;
 
     const where: any = {
       isDeleted: false,
-    };
-
-    // Filter by gym if provided
-    if (gymId) {
-      where.gymAssignments = {
-        some: { gymId, isActive: true },
-      };
-    }
-
-    // Filter by role
-    if (filters.role && filters.role !== 'all') {
-      where.gymAssignments = {
-        ...where.gymAssignments,
+      gymAssignments: {
         some: {
-          ...where.gymAssignments?.some,
-          role: filters.role,
+          ...(gymId && { gymId }),
+          role: 'admin',
+          isActive: true,
         },
-      };
-    }
+      },
+    };
 
     // Filter by status
     if (filters.status && filters.status !== 'all') {
@@ -249,15 +256,15 @@ export class UsersService {
     });
 
     return {
-      data: users.map((user) => this.formatStaffUser(user, user.gymAssignments)),
+      data: users.map((user) => this.formatAdminUser(user, user.gymAssignments)),
       pagination: createPaginationMeta(total, page, limit, noPagination),
     };
   }
 
   /**
-   * Get a single staff member
+   * Get a single admin
    */
-  async findOneStaff(id: number, gymId?: number): Promise<any> {
+  async findOneAdmin(id: number, gymId?: number): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
       include: {
@@ -269,28 +276,28 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException(`Staff member with ID ${id} not found`);
+      throw new NotFoundException(`Admin with ID ${id} not found`);
     }
 
-    return this.formatStaffUser(user, user.gymAssignments);
+    return this.formatAdminUser(user, user.gymAssignments);
   }
 
   /**
-   * Update a staff member
+   * Update an admin
    */
-  async updateStaff(id: number, gymId: number, updateDto: UpdateUserDto): Promise<any> {
+  async updateAdmin(id: number, gymId: number, updateDto: UpdateUserDto): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
 
     if (!user) {
-      throw new NotFoundException(`Staff member with ID ${id} not found`);
+      throw new NotFoundException(`Admin with ID ${id} not found`);
     }
 
     const { role, ...updateData } = updateDto;
 
     // Update user data
-    const updatedUser = await this.prisma.user.update({
+    await this.prisma.user.update({
       where: { id },
       data: {
         ...(updateData.name && { name: updateData.name }),
@@ -307,23 +314,9 @@ export class UsersService {
         ...(updateData.state !== undefined && { state: updateData.state }),
         ...(updateData.zipCode !== undefined && { zipCode: updateData.zipCode }),
       },
-      include: {
-        gymAssignments: {
-          where: { gymId, isActive: true },
-          include: { gym: true },
-        },
-      },
     });
 
-    // Update role if provided
-    if (role) {
-      await this.prisma.userGymXref.updateMany({
-        where: { userId: id, gymId },
-        data: { role },
-      });
-    }
-
-    // Refresh gym assignments
+    // Refresh user with gym assignments
     const refreshedUser = await this.prisma.user.findUnique({
       where: { id },
       include: {
@@ -334,19 +327,19 @@ export class UsersService {
       },
     });
 
-    return this.formatStaffUser(refreshedUser!, refreshedUser!.gymAssignments);
+    return this.formatAdminUser(refreshedUser!, refreshedUser!.gymAssignments);
   }
 
   /**
-   * Soft delete a staff member
+   * Soft delete an admin
    */
-  async removeStaff(id: number): Promise<{ success: boolean }> {
+  async removeAdmin(id: number): Promise<{ success: boolean }> {
     const user = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
 
     if (!user) {
-      throw new NotFoundException(`Staff member with ID ${id} not found`);
+      throw new NotFoundException(`Admin with ID ${id} not found`);
     }
 
     // Check if user is primary admin of any gym
@@ -370,6 +363,283 @@ export class UsersService {
     await this.prisma.userGymXref.updateMany({
       where: { userId: id },
       data: { isActive: false },
+    });
+
+    return { success: true };
+  }
+
+  // ============================================
+  // STAFF OPERATIONS (tenant.users - manager, trainer)
+  // ============================================
+
+  /**
+   * Create a new staff member (manager, trainer) in tenant.users
+   */
+  async createStaff(dto: CreateStaffDto, gymId: number): Promise<any> {
+    if (!dto.password) {
+      throw new BadRequestException('Password is required');
+    }
+
+    const role = dto.role || 'trainer';
+    if (role === 'admin') {
+      return this.createAdmin(dto, gymId);
+    }
+
+    if (!['manager', 'trainer'].includes(role)) {
+      throw new BadRequestException('Invalid role. Staff role must be manager or trainer.');
+    }
+
+    // Check if email already exists in public.users
+    const existingAdmin = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingAdmin) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Check system_users
+    const existingSystemUser = await this.prisma.systemUser.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingSystemUser) {
+      throw new ConflictException('Email already exists as a system user');
+    }
+
+    // Check if email already exists in this tenant
+    const existingTenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM users WHERE email = $1`,
+        [dto.email]
+      );
+      return result.rows[0];
+    });
+
+    if (existingTenantUser) {
+      throw new ConflictException('User with this email already exists in this gym');
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+
+    // Create staff in tenant schema
+    const createdStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO users (
+          name, email, password_hash, phone, avatar, bio, role, status,
+          date_of_birth, gender, address, city, state, zip_code,
+          join_date, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+        RETURNING *`,
+        [
+          dto.name,
+          dto.email,
+          passwordHash,
+          dto.phone || null,
+          dto.avatar || null,
+          dto.bio || null,
+          role,
+          dto.status || 'active',
+          dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          dto.gender || null,
+          dto.address || null,
+          dto.city || null,
+          dto.state || null,
+          dto.zipCode || null,
+          new Date(),
+        ]
+      );
+      return result.rows[0];
+    });
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    return this.formatTenantUser(createdStaff, gym);
+  }
+
+  /**
+   * Get all staff members (manager, trainer) for a gym from tenant schema
+   */
+  async findAllStaff(filters: UserFilters): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+    const gymId = filters.gymId;
+
+    if (!gymId) {
+      throw new BadRequestException('gymId is required for fetching staff');
+    }
+
+    const { users, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ["role IN ('manager', 'trainer')"];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (filters.role && filters.role !== 'all' && ['manager', 'trainer'].includes(filters.role)) {
+        conditions.push(`role = $${paramIndex++}`);
+        values.push(filters.role);
+      }
+
+      if (filters.status && filters.status !== 'all') {
+        conditions.push(`status = $${paramIndex++}`);
+        values.push(filters.status);
+      }
+
+      if (filters.search) {
+        conditions.push(`(name ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
+        values.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const [usersResult, countResult] = await Promise.all([
+        client.query(
+          `SELECT * FROM users
+           WHERE ${whereClause}
+           ORDER BY created_at DESC
+           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+          [...values, take, skip]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM users WHERE ${whereClause}`,
+          values
+        ),
+      ]);
+
+      return {
+        users: usersResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+      };
+    });
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+
+    return {
+      data: users.map((user: any) => this.formatTenantUser(user, gym)),
+      pagination: createPaginationMeta(total, page, limit, noPagination),
+    };
+  }
+
+  /**
+   * Get a single staff member from tenant schema
+   */
+  async findOneStaff(id: number, gymId: number): Promise<any> {
+    const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer')`,
+        [id]
+      );
+      return result.rows[0];
+    });
+
+    if (!staffData) {
+      throw new NotFoundException(`Staff member with ID ${id} not found`);
+    }
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    return this.formatTenantUser(staffData, gym);
+  }
+
+  /**
+   * Update a staff member in tenant schema
+   */
+  async updateStaff(id: number, gymId: number, updateDto: UpdateUserDto): Promise<any> {
+    await this.findOneStaff(id, gymId);
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (updateDto.name) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(updateDto.name);
+    }
+    if (updateDto.phone !== undefined) {
+      updates.push(`phone = $${paramIndex++}`);
+      values.push(updateDto.phone);
+    }
+    if (updateDto.avatar !== undefined) {
+      updates.push(`avatar = $${paramIndex++}`);
+      values.push(updateDto.avatar);
+    }
+    if (updateDto.bio !== undefined) {
+      updates.push(`bio = $${paramIndex++}`);
+      values.push(updateDto.bio);
+    }
+    if (updateDto.status) {
+      updates.push(`status = $${paramIndex++}`);
+      values.push(updateDto.status);
+    }
+    if (updateDto.role && ['manager', 'trainer'].includes(updateDto.role)) {
+      updates.push(`role = $${paramIndex++}`);
+      values.push(updateDto.role);
+    }
+    if (updateDto.dateOfBirth !== undefined) {
+      updates.push(`date_of_birth = $${paramIndex++}`);
+      values.push(updateDto.dateOfBirth ? new Date(updateDto.dateOfBirth) : null);
+    }
+    if (updateDto.gender !== undefined) {
+      updates.push(`gender = $${paramIndex++}`);
+      values.push(updateDto.gender);
+    }
+    if (updateDto.address !== undefined) {
+      updates.push(`address = $${paramIndex++}`);
+      values.push(updateDto.address);
+    }
+    if (updateDto.city !== undefined) {
+      updates.push(`city = $${paramIndex++}`);
+      values.push(updateDto.city);
+    }
+    if (updateDto.state !== undefined) {
+      updates.push(`state = $${paramIndex++}`);
+      values.push(updateDto.state);
+    }
+    if (updateDto.zipCode !== undefined) {
+      updates.push(`zip_code = $${paramIndex++}`);
+      values.push(updateDto.zipCode);
+    }
+
+    if (updates.length === 0) {
+      return this.findOneStaff(id, gymId);
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const updatedStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+
+      const result = await client.query(
+        `SELECT * FROM users WHERE id = $1`,
+        [id]
+      );
+      return result.rows[0];
+    });
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    return this.formatTenantUser(updatedStaff, gym);
+  }
+
+  /**
+   * Delete a staff member from tenant schema
+   */
+  async removeStaff(id: number, gymId: number): Promise<{ success: boolean }> {
+    const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer')`,
+        [id]
+      );
+      return result.rows[0];
+    });
+
+    if (!staffData) {
+      throw new NotFoundException(`Staff member with ID ${id} not found`);
+    }
+
+    // Delete staff from tenant schema
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
     return { success: true };
@@ -422,15 +692,15 @@ export class UsersService {
       this.generateUniqueAttendanceCode(gymId),
     ]);
 
-    // Create client in tenant schema
+    // Create client in tenant schema with role='client'
     const createdClient = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO users (
-          name, email, password_hash, phone, avatar, bio, status,
+          name, email, password_hash, phone, avatar, bio, role, status,
           date_of_birth, gender, address, city, state, zip_code,
           emergency_contact_name, emergency_contact_phone,
           join_date, attendance_code, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
         RETURNING *`,
         [
           dto.name,
@@ -439,6 +709,7 @@ export class UsersService {
           dto.phone || null,
           dto.avatar || null,
           dto.bio || null,
+          'client', // role is always 'client' for clients
           dto.status || 'active',
           dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           dto.gender || null,
@@ -456,11 +727,11 @@ export class UsersService {
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatClientUser(createdClient, gym);
+    return this.formatTenantUser(createdClient, gym);
   }
 
   /**
-   * Get all clients for a gym
+   * Get all clients for a gym (role='client' in tenant schema)
    */
   async findAllClients(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
@@ -471,7 +742,7 @@ export class UsersService {
     }
 
     const { users, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['1=1'];
+      const conditions: string[] = ["role = 'client'"]; // Filter only clients
       const values: any[] = [];
       let paramIndex = 1;
 
@@ -511,18 +782,18 @@ export class UsersService {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     return {
-      data: users.map((user: any) => this.formatClientUser(user, gym)),
+      data: users.map((user: any) => this.formatTenantUser(user, gym)),
       pagination: createPaginationMeta(total, page, limit, noPagination),
     };
   }
 
   /**
-   * Get a single client
+   * Get a single client (role='client' in tenant schema)
    */
   async findOneClient(id: number, gymId: number): Promise<any> {
     const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM users WHERE id = $1`,
+        `SELECT * FROM users WHERE id = $1 AND role = 'client'`,
         [id]
       );
       return result.rows[0];
@@ -533,7 +804,7 @@ export class UsersService {
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatClientUser(clientData, gym);
+    return this.formatTenantUser(clientData, gym);
   }
 
   /**
@@ -596,7 +867,7 @@ export class UsersService {
 
     const updatedClient = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex} AND role = 'client'`,
         values
       );
 
@@ -608,16 +879,16 @@ export class UsersService {
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatClientUser(updatedClient, gym);
+    return this.formatTenantUser(updatedClient, gym);
   }
 
   /**
-   * Delete a client
+   * Delete a client (role='client' in tenant schema)
    */
   async removeClient(id: number, gymId: number): Promise<{ success: boolean }> {
     const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM users WHERE id = $1`,
+        `SELECT * FROM users WHERE id = $1 AND role = 'client'`,
         [id]
       );
       return result.rows[0];
@@ -652,6 +923,7 @@ export class UsersService {
 
   // ============================================
   // COMBINED OPERATIONS (for backward compatibility)
+  // Architecture: admin in public.users, manager/trainer/client in tenant.users
   // ============================================
 
   /**
@@ -660,27 +932,35 @@ export class UsersService {
   async create(createUserDto: CreateUserDto, gymId: number): Promise<any> {
     const role = createUserDto.role || 'client';
 
-    if (role === 'client') {
+    if (role === 'admin') {
+      return this.createAdmin(createUserDto as CreateStaffDto, gymId);
+    } else if (role === 'client') {
       return this.createClient(createUserDto as CreateClientDto, gymId);
     } else {
+      // manager or trainer
       return this.createStaff(createUserDto as CreateStaffDto, gymId);
     }
   }
 
   /**
-   * Find all users - combines staff and clients based on filters
+   * Find all users - combines admin (public), staff and clients (tenant) based on filters
    */
   async findAll(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const userType = filters.userType || 'all';
     const role = filters.role;
 
-    // If role is 'client', only get clients
+    // If role is 'admin', only get admins from public.users
+    if (role === 'admin') {
+      return this.findAllAdmins(filters);
+    }
+
+    // If role is 'client', only get clients from tenant.users
     if (role === 'client') {
       return this.findAllClients(filters);
     }
 
-    // If role is staff type, only get staff
-    if (role && ['admin', 'manager', 'trainer'].includes(role)) {
+    // If role is manager/trainer, only get staff from tenant.users
+    if (role && ['manager', 'trainer'].includes(role)) {
       return this.findAllStaff(filters);
     }
 
@@ -692,21 +972,21 @@ export class UsersService {
       return this.findAllClients(filters);
     }
 
-    // For 'all' type, combine both (but need gymId for clients)
+    // For 'all' type, combine all (but need gymId)
     if (!filters.gymId) {
-      // Without gymId, can only return staff
-      return this.findAllStaff(filters);
+      throw new BadRequestException('gymId is required for fetching all users');
     }
 
-    // Combine staff and clients
+    // Combine admin, staff and clients
     const { page, limit, noPagination } = getPaginationParams(filters);
 
-    const [staffResult, clientResult] = await Promise.all([
+    const [adminResult, staffResult, clientResult] = await Promise.all([
+      this.findAllAdmins({ ...filters, noPagination: true }),
       this.findAllStaff({ ...filters, noPagination: true }),
       this.findAllClients({ ...filters, noPagination: true }),
     ]);
 
-    const allUsers = [...staffResult.data, ...clientResult.data];
+    const allUsers = [...adminResult.data, ...staffResult.data, ...clientResult.data];
     const total = allUsers.length;
 
     // Sort by createdAt desc
@@ -723,10 +1003,13 @@ export class UsersService {
   }
 
   /**
-   * Find one user by ID
+   * Find one user by ID - checks admin (public) first, then tenant (staff/client)
    */
-  async findOne(id: number, gymId: number, userType?: 'staff' | 'client'): Promise<any> {
+  async findOne(id: number, gymId: number, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
     // If userType is specified, use that
+    if (userType === 'admin') {
+      return this.findOneAdmin(id, gymId);
+    }
     if (userType === 'staff') {
       return this.findOneStaff(id, gymId);
     }
@@ -734,22 +1017,35 @@ export class UsersService {
       return this.findOneClient(id, gymId);
     }
 
-    // Try to find in public.users first (staff)
+    // Try to find in public.users first (admin)
     try {
-      const staff = await this.findOneStaff(id, gymId);
-      return staff;
+      const admin = await this.findOneAdmin(id, gymId);
+      return admin;
     } catch (e) {
-      // Not found in staff, try clients
+      // Not found in admin, try tenant
     }
 
-    // Try to find in tenant schema (client)
-    return this.findOneClient(id, gymId);
+    // Try to find in tenant schema (staff or client)
+    const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM users WHERE id = $1`, [id]);
+      return result.rows[0];
+    });
+
+    if (tenantUser) {
+      const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+      return this.formatTenantUser(tenantUser, gym);
+    }
+
+    throw new NotFoundException(`User with ID ${id} not found`);
   }
 
   /**
-   * Update user
+   * Update user - determines location based on where user exists
    */
-  async update(id: number, gymId: number, updateUserDto: UpdateUserDto, userType?: 'staff' | 'client'): Promise<any> {
+  async update(id: number, gymId: number, updateUserDto: UpdateUserDto, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
+    if (userType === 'admin') {
+      return this.updateAdmin(id, gymId, updateUserDto);
+    }
     if (userType === 'staff') {
       return this.updateStaff(id, gymId, updateUserDto);
     }
@@ -757,53 +1053,85 @@ export class UsersService {
       return this.updateClient(id, gymId, updateUserDto);
     }
 
-    // Try to determine user type
-    const staff = await this.prisma.user.findUnique({
+    // Try to determine user type - check admin first (public.users)
+    const adminUser = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
 
-    if (staff) {
-      return this.updateStaff(id, gymId, updateUserDto);
+    if (adminUser) {
+      return this.updateAdmin(id, gymId, updateUserDto);
     }
 
-    return this.updateClient(id, gymId, updateUserDto);
+    // Check tenant schema
+    const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT role FROM users WHERE id = $1`, [id]);
+      return result.rows[0];
+    });
+
+    if (tenantUser) {
+      if (tenantUser.role === 'client') {
+        return this.updateClient(id, gymId, updateUserDto);
+      } else {
+        return this.updateStaff(id, gymId, updateUserDto);
+      }
+    }
+
+    throw new NotFoundException(`User with ID ${id} not found`);
   }
 
   /**
-   * Delete user
+   * Delete user - determines location based on where user exists
    */
-  async remove(id: number, gymId: number, userType?: 'staff' | 'client'): Promise<{ success: boolean }> {
+  async remove(id: number, gymId: number, userType?: 'admin' | 'staff' | 'client'): Promise<{ success: boolean }> {
+    if (userType === 'admin') {
+      return this.removeAdmin(id);
+    }
     if (userType === 'staff') {
-      return this.removeStaff(id);
+      return this.removeStaff(id, gymId);
     }
     if (userType === 'client') {
       return this.removeClient(id, gymId);
     }
 
-    // Try to determine user type
-    const staff = await this.prisma.user.findUnique({
+    // Try to determine user type - check admin first (public.users)
+    const adminUser = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
 
-    if (staff) {
-      return this.removeStaff(id);
+    if (adminUser) {
+      return this.removeAdmin(id);
     }
 
-    return this.removeClient(id, gymId);
+    // Check tenant schema
+    const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT role FROM users WHERE id = $1`, [id]);
+      return result.rows[0];
+    });
+
+    if (tenantUser) {
+      if (tenantUser.role === 'client') {
+        return this.removeClient(id, gymId);
+      } else {
+        return this.removeStaff(id, gymId);
+      }
+    }
+
+    throw new NotFoundException(`User with ID ${id} not found`);
   }
 
   // ============================================
   // HELPER METHODS
   // ============================================
 
-  async updateStatus(userId: number, gymId: number, status: string, userType?: 'staff' | 'client'): Promise<any> {
+  async updateStatus(userId: number, gymId: number, status: string, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
     return this.update(userId, gymId, { status } as UpdateUserDto, userType);
   }
 
-  async resetPassword(userId: number, gymId: number, newPassword: string, userType?: 'staff' | 'client'): Promise<{ success: boolean }> {
+  async resetPassword(userId: number, gymId: number, newPassword: string, userType?: 'admin' | 'staff' | 'client'): Promise<{ success: boolean }> {
     const passwordHash = await this.hashPassword(newPassword);
 
-    if (userType === 'staff') {
+    // Admin is in public.users
+    if (userType === 'admin') {
       await this.prisma.user.update({
         where: { id: userId },
         data: { passwordHash },
@@ -811,7 +1139,8 @@ export class UsersService {
       return { success: true };
     }
 
-    if (userType === 'client') {
+    // Staff and client are in tenant.users
+    if (userType === 'staff' || userType === 'client') {
       await this.tenantService.executeInTenant(gymId, async (client) => {
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
@@ -821,17 +1150,18 @@ export class UsersService {
       return { success: true };
     }
 
-    // Try to determine user type
-    const staff = await this.prisma.user.findUnique({
+    // Try to determine user type - check admin first (public.users)
+    const adminUser = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
     });
 
-    if (staff) {
+    if (adminUser) {
       await this.prisma.user.update({
         where: { id: userId },
         data: { passwordHash },
       });
     } else {
+      // Must be in tenant schema
       await this.tenantService.executeInTenant(gymId, async (client) => {
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
@@ -860,17 +1190,21 @@ export class UsersService {
   }
 
   async findByRole(role: string, gymId: number): Promise<PaginatedResponse<any>> {
+    if (role === 'admin') {
+      return this.findAllAdmins({ role, gymId, noPagination: true });
+    }
     if (role === 'client') {
       return this.findAllClients({ role, gymId, noPagination: true });
     }
+    // manager or trainer
     return this.findAllStaff({ role, gymId, noPagination: true });
   }
 
   /**
-   * Approve pending client request
+   * Approve pending user request (typically clients)
    */
   async approveRequest(userId: number, gymId: number): Promise<any> {
-    const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
+    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT * FROM users WHERE id = $1`,
         [userId]
@@ -878,15 +1212,15 @@ export class UsersService {
       return result.rows[0];
     });
 
-    if (!clientData) {
-      throw new NotFoundException(`Client with ID ${userId} not found`);
+    if (!userData) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (clientData.status !== 'pending') {
+    if (userData.status !== 'pending') {
       throw new BadRequestException('Only pending requests can be approved');
     }
 
-    const updatedClient = await this.tenantService.executeInTenant(gymId, async (client) => {
+    const updatedUser = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `UPDATE users SET status = 'active', updated_at = NOW() WHERE id = $1`,
         [userId]
@@ -900,14 +1234,14 @@ export class UsersService {
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatClientUser(updatedClient, gym);
+    return this.formatTenantUser(updatedUser, gym);
   }
 
   /**
-   * Reject pending client request
+   * Reject pending user request (typically clients)
    */
   async rejectRequest(userId: number, gymId: number): Promise<any> {
-    const clientData = await this.tenantService.executeInTenant(gymId, async (client) => {
+    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT * FROM users WHERE id = $1`,
         [userId]
@@ -915,15 +1249,15 @@ export class UsersService {
       return result.rows[0];
     });
 
-    if (!clientData) {
-      throw new NotFoundException(`Client with ID ${userId} not found`);
+    if (!userData) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (clientData.status !== 'pending') {
+    if (userData.status !== 'pending') {
       throw new BadRequestException('Only pending requests can be rejected');
     }
 
-    const updatedClient = await this.tenantService.executeInTenant(gymId, async (client) => {
+    const updatedUser = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `UPDATE users SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
         [userId]
@@ -937,6 +1271,6 @@ export class UsersService {
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatClientUser(updatedClient, gym);
+    return this.formatTenantUser(updatedUser, gym);
   }
 }
