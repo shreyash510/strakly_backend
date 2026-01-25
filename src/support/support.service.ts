@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -24,7 +25,10 @@ export interface SupportFilters extends PaginationParams {
 
 @Injectable()
 export class SupportService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tenantService: TenantService,
+  ) {}
 
   private generateTicketNumber(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -32,14 +36,8 @@ export class SupportService {
     return `TKT-${timestamp}-${random}`;
   }
 
-  async create(userId: number, createTicketDto: CreateTicketDto) {
+  async create(userId: number, gymId: number, userName: string, userEmail: string, userType: string, createTicketDto: CreateTicketDto) {
     const ticketNumber = this.generateTicketNumber();
-
-    // Get user's gymId for multi-tenancy
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { gymId: true },
-    });
 
     const ticket = await this.prisma.supportTicket.create({
       data: {
@@ -48,8 +46,11 @@ export class SupportService {
         description: createTicketDto.description,
         category: createTicketDto.category || 'general',
         priority: createTicketDto.priority || 'medium',
-        userId,
-        gymId: user?.gymId || null,
+        userId: userId,
+        userEmail: userEmail,
+        userName: userName,
+        userType: userType || 'client',
+        gymId: gymId,
         status: 'open',
       },
     });
@@ -59,11 +60,12 @@ export class SupportService {
         ticketId: ticket.id,
         message: createTicketDto.description,
         senderId: userId,
+        senderName: userName,
         senderType: 'user',
       },
     });
 
-    return this.findOne(ticket.id, userId);
+    return this.findOne(ticket.id, userId, undefined, gymId);
   }
 
   async findAll(
@@ -76,7 +78,7 @@ export class SupportService {
     const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
-    const where: any = {};
+    const where: any = { isActive: true };
 
     // Multi-tenancy: Filter by gym
     if (isSuperadmin) {
@@ -92,6 +94,7 @@ export class SupportService {
     } else {
       // Regular users can only see their own tickets
       where.userId = userId;
+      where.gymId = userGymId;
     }
 
     if (filters.userId) {
@@ -120,13 +123,15 @@ export class SupportService {
         { subject: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
         { ticketNumber: { contains: filters.search, mode: 'insensitive' } },
+        { userName: { contains: filters.search, mode: 'insensitive' } },
+        { userEmail: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
     // Get total count
     const total = await this.prisma.supportTicket.count({ where });
 
-    /* Get paginated data with user and gym relations included to avoid N+1 queries */
+    /* Get paginated data with gym relation included */
     const tickets = await this.prisma.supportTicket.findMany({
       where,
       orderBy: [
@@ -134,22 +139,7 @@ export class SupportService {
         { priority: 'desc' },
         { createdAt: 'desc' },
       ],
-      select: {
-        id: true,
-        ticketNumber: true,
-        subject: true,
-        description: true,
-        category: true,
-        priority: true,
-        status: true,
-        userId: true,
-        gymId: true,
-        assignedToId: true,
-        resolution: true,
-        resolvedAt: true,
-        closedAt: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
         gym: {
           select: {
             id: true,
@@ -163,6 +153,7 @@ export class SupportService {
             id: true,
             message: true,
             senderId: true,
+            senderName: true,
             senderType: true,
             createdAt: true,
           },
@@ -172,26 +163,28 @@ export class SupportService {
       take,
     });
 
-    /* Batch fetch all users in one query instead of N+1 */
-    const userIds = new Set<number>();
-    tickets.forEach(ticket => {
-      userIds.add(ticket.userId);
-      if (ticket.assignedToId) userIds.add(ticket.assignedToId);
-    });
-
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: Array.from(userIds) } },
-      select: { id: true, name: true, email: true },
-    });
-
-    const userMap = new Map(users.map(u => [u.id, u]));
-
     const ticketsWithUserInfo = tickets.map(ticket => ({
-      ...ticket,
-      user: userMap.get(ticket.userId) || null,
-      assignedTo: ticket.assignedToId ? userMap.get(ticket.assignedToId) || null : null,
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      description: ticket.description,
+      category: ticket.category,
+      priority: ticket.priority,
+      status: ticket.status,
+      gymId: ticket.gymId,
+      assignedToId: ticket.assignedToId,
+      resolution: ticket.resolution,
+      resolvedAt: ticket.resolvedAt,
+      closedAt: ticket.closedAt,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      gym: ticket.gym,
+      user: {
+        id: ticket.userId,
+        name: ticket.userName,
+        email: ticket.userEmail,
+      },
       lastMessage: ticket.messages[0] || null,
-      messages: undefined,
     }));
 
     return {
@@ -232,28 +225,37 @@ export class SupportService {
       throw new ForbiddenException('You can only view your own tickets');
     }
 
-    /* Batch fetch all users (ticket owner, assignee, message senders) in one query */
-    const userIds = new Set<number>();
-    userIds.add(ticket.userId);
-    if (ticket.assignedToId) userIds.add(ticket.assignedToId);
-    ticket.messages.forEach(m => userIds.add(m.senderId));
-
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: Array.from(userIds) } },
-      select: { id: true, name: true, email: true },
-    });
-
-    const userMap = new Map(users.map(u => [u.id, u]));
-
     const messagesWithSenderInfo = ticket.messages.map(message => ({
-      ...message,
-      sender: userMap.get(message.senderId) || null,
+      id: message.id,
+      message: message.message,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      senderType: message.senderType,
+      attachment: message.attachment,
+      createdAt: message.createdAt,
     }));
 
     return {
-      ...ticket,
-      user: userMap.get(ticket.userId) || null,
-      assignedTo: ticket.assignedToId ? userMap.get(ticket.assignedToId) || null : null,
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      description: ticket.description,
+      category: ticket.category,
+      priority: ticket.priority,
+      status: ticket.status,
+      gymId: ticket.gymId,
+      assignedToId: ticket.assignedToId,
+      resolution: ticket.resolution,
+      resolvedAt: ticket.resolvedAt,
+      closedAt: ticket.closedAt,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      gym: ticket.gym,
+      user: {
+        id: ticket.userId,
+        name: ticket.userName,
+        email: ticket.userEmail,
+      },
       messages: messagesWithSenderInfo,
     };
   }
@@ -320,6 +322,7 @@ export class SupportService {
     ticketId: number,
     addMessageDto: AddMessageDto,
     senderId: number,
+    senderName: string,
     userRole: string,
     userGymId?: number,
   ) {
@@ -350,6 +353,7 @@ export class SupportService {
         ticketId,
         message: addMessageDto.message,
         senderId,
+        senderName,
         senderType,
         attachment: addMessageDto.attachment,
       },
@@ -386,44 +390,40 @@ export class SupportService {
       throw new ForbiddenException('You can only delete tickets from your gym');
     }
 
-    await this.prisma.supportTicket.delete({
+    // Soft delete
+    await this.prisma.supportTicket.update({
       where: { id: ticketId },
+      data: { isActive: false },
     });
 
     return { success: true, message: 'Ticket deleted successfully' };
   }
 
   async getStats(gymId?: number) {
-    /* For gym-specific stats, first get user IDs belonging to the gym */
-    let userFilter: { userId?: { in: number[] } } = {};
+    const where: any = { isActive: true };
 
     if (gymId) {
-      const gymUsers = await this.prisma.user.findMany({
-        where: { gymId },
-        select: { id: true },
-      });
-      const userIds = gymUsers.map(u => u.id);
-      userFilter = { userId: { in: userIds } };
+      where.gymId = gymId;
     }
 
     const [total, open, inProgress, resolved, closed] = await Promise.all([
-      this.prisma.supportTicket.count({ where: userFilter }),
-      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'open' } }),
-      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'in_progress' } }),
-      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'resolved' } }),
-      this.prisma.supportTicket.count({ where: { ...userFilter, status: 'closed' } }),
+      this.prisma.supportTicket.count({ where }),
+      this.prisma.supportTicket.count({ where: { ...where, status: 'open' } }),
+      this.prisma.supportTicket.count({ where: { ...where, status: 'in_progress' } }),
+      this.prisma.supportTicket.count({ where: { ...where, status: 'resolved' } }),
+      this.prisma.supportTicket.count({ where: { ...where, status: 'closed' } }),
     ]);
 
     const byCategory = await this.prisma.supportTicket.groupBy({
       by: ['category'],
-      where: userFilter,
-      _count: { _all: true },
+      where,
+      _count: true,
     });
 
     const byPriority = await this.prisma.supportTicket.groupBy({
       by: ['priority'],
-      where: userFilter,
-      _count: { _all: true },
+      where,
+      _count: true,
     });
 
     return {
@@ -431,14 +431,14 @@ export class SupportService {
       byStatus: { open, inProgress, resolved, closed },
       byCategory: byCategory.reduce(
         (acc, item) => {
-          acc[item.category] = item._count._all;
+          acc[item.category] = item._count;
           return acc;
         },
         {} as Record<string, number>,
       ),
       byPriority: byPriority.reduce(
         (acc, item) => {
-          acc[item.priority] = item._count._all;
+          acc[item.priority] = item._count;
           return acc;
         },
         {} as Record<string, number>,

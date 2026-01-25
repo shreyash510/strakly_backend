@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 
 export interface AttendanceStats {
   totalPresent: number;
@@ -40,15 +41,15 @@ export interface SearchUserResult {
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
-  // Helper to get today's date in YYYY-MM-DD format (local timezone)
   private getTodayDate(): string {
-    // Using toLocaleDateString with 'en-CA' locale to get YYYY-MM-DD format in local timezone
     return new Date().toLocaleDateString('en-CA');
   }
 
-  // Helper to get week start date (local timezone)
   private getWeekStartDate(): string {
     const today = new Date();
     const day = today.getDay();
@@ -57,169 +58,133 @@ export class AttendanceService {
     return weekStart.toLocaleDateString('en-CA');
   }
 
-  // Helper to get month start date (local timezone)
   private getMonthStartDate(): string {
     const date = new Date();
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
     return monthStart.toLocaleDateString('en-CA');
   }
 
-  // =====================
-  // SEARCH USER BY CODE
-  // =====================
-
-  async searchUserByCode(code: string): Promise<SearchUserResult | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { attendanceCode: code },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        avatar: true,
-        role: { select: { name: true } },
-        status: true,
-        attendanceCode: true,
-        createdAt: true,
-      },
+  async searchUserByCode(code: string, gymId: number): Promise<SearchUserResult | null> {
+    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, email, phone, avatar, status, attendance_code, role, created_at
+         FROM users
+         WHERE attendance_code = $1`,
+        [code]
+      );
+      return result.rows[0];
     });
 
-    if (!user) {
+    if (!userData) {
       return null;
     }
 
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar,
-      role: user.role?.name || 'client',
-      status: user.status || 'active',
-      attendanceCode: user.attendanceCode,
-      joinDate: user.createdAt,
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      phone: userData.phone,
+      avatar: userData.avatar,
+      role: userData.role || 'client',
+      status: userData.status || 'active',
+      attendanceCode: userData.attendance_code,
+      joinDate: userData.created_at,
     };
   }
 
-  // =====================
-  // MARK ATTENDANCE (Check-In)
-  // =====================
-
   async markAttendance(
-    user: {
-      id: number;
-      name: string;
-      email: string;
-      attendanceCode?: string | null;
-    },
+    user: { id: number; name: string; email: string; attendanceCode?: string | null },
     staffId: number,
     gymId: number,
     checkInMethod: string = 'code',
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
 
-    // Validate gym exists
-    const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
-    });
-
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
     if (!gym) {
       throw new NotFoundException('Gym not found');
     }
 
-    // Check if user already checked in today at this gym and hasn't checked out
-    const existingRecord = await this.prisma.attendance.findFirst({
-      where: {
-        userId: user.id,
-        gymId: gymId,
-        date: today,
-        status: 'present',
-      },
+    const { existingRecord, activeMembership, staffName } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [existingResult, membershipResult, staffResult] = await Promise.all([
+        client.query(
+          `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
+          [user.id, today]
+        ),
+        client.query(
+          `SELECT id FROM memberships WHERE user_id = $1 AND status = 'active'
+           AND start_date <= $2 AND end_date >= $2`,
+          [user.id, new Date()]
+        ),
+        client.query(`SELECT name FROM users WHERE id = $1`, [staffId]),
+      ]);
+
+      return {
+        existingRecord: existingResult.rows[0],
+        activeMembership: membershipResult.rows[0],
+        staffName: staffResult.rows[0]?.name,
+      };
     });
 
     if (existingRecord) {
       throw new BadRequestException('User is already checked in at this gym today');
     }
 
-    // Validate user has active membership at this gym
-    const activeMembership = await this.prisma.membership.findFirst({
-      where: {
-        userId: user.id,
-        gymId: gymId,
-        status: 'active',
-        startDate: { lte: new Date() },
-        endDate: { gte: new Date() },
-      },
-    });
-
     if (!activeMembership) {
       throw new ForbiddenException('User does not have an active membership at this gym');
     }
 
-    // Get staff details for response
-    const staff = await this.prisma.user.findUnique({
-      where: { id: staffId },
-      select: { name: true },
-    });
-
-    const attendance = await this.prisma.attendance.create({
-      data: {
-        userId: user.id,
-        gymId: gymId,
-        membershipId: activeMembership.id,
-        checkInTime: new Date(),
-        date: today,
-        markedById: staffId,
-        checkInMethod: checkInMethod,
-        status: 'present',
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, attendanceCode: true },
-        },
-        gym: {
-          select: { id: true, name: true },
-        },
-      },
+    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO attendance (user_id, membership_id, check_in_time, date, marked_by_id, check_in_method, status, created_at, updated_at)
+         VALUES ($1, $2, NOW(), $3, $4, $5, 'present', NOW(), NOW())
+         RETURNING *`,
+        [user.id, activeMembership.id, today, staffId, checkInMethod]
+      );
+      return result.rows[0];
     });
 
     return {
       id: attendance.id,
-      userId: attendance.user.id,
-      userName: attendance.user.name,
-      userEmail: attendance.user.email,
-      attendanceCode: attendance.user.attendanceCode,
-      gymId: attendance.gym.id,
-      gymName: attendance.gym.name,
-      membershipId: attendance.membershipId,
-      checkInTime: attendance.checkInTime,
-      checkOutTime: attendance.checkOutTime,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      attendanceCode: user.attendanceCode || null,
+      gymId: gymId,
+      gymName: gym.name,
+      membershipId: attendance.membership_id,
+      checkInTime: attendance.check_in_time,
+      checkOutTime: attendance.check_out_time,
       date: attendance.date,
-      markedById: attendance.markedById,
-      markedByName: staff?.name,
-      checkInMethod: attendance.checkInMethod,
+      markedById: attendance.marked_by_id,
+      markedByName: staffName,
+      checkInMethod: attendance.check_in_method,
       status: attendance.status,
     };
   }
 
-  // =====================
-  // CHECK OUT
-  // =====================
+  async checkOut(attendanceId: number, gymId: number, staffId?: number): Promise<AttendanceRecord> {
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    if (!gym) {
+      throw new NotFoundException('Gym not found');
+    }
 
-  async checkOut(
-    attendanceId: number,
-    staffId?: number,
-  ): Promise<AttendanceRecord> {
-    const attendance = await this.prisma.attendance.findUnique({
-      where: { id: attendanceId },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, attendanceCode: true },
-        },
-        gym: {
-          select: { id: true, name: true },
-        },
-      },
+    const { attendance, user } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const attResult = await client.query(
+        `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+         FROM attendance a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.id = $1`,
+        [attendanceId]
+      );
+      return {
+        attendance: attResult.rows[0],
+        user: attResult.rows[0] ? {
+          name: attResult.rows[0].user_name,
+          email: attResult.rows[0].user_email,
+          attendanceCode: attResult.rows[0].attendance_code,
+        } : null,
+      };
     });
 
     if (!attendance) {
@@ -231,333 +196,281 @@ export class AttendanceService {
     }
 
     const checkOutTime = new Date();
-    const checkInTime = new Date(attendance.checkInTime).getTime();
-    const duration = Math.round((checkOutTime.getTime() - checkInTime) / (1000 * 60)); // in minutes
+    const checkInTime = new Date(attendance.check_in_time).getTime();
+    const duration = Math.round((checkOutTime.getTime() - checkInTime) / (1000 * 60));
+    const checkedOutById = staffId || attendance.marked_by_id;
 
-    const checkedOutById = staffId || attendance.markedById;
-
-    // Get staff details
-    const staff = await this.prisma.user.findUnique({
-      where: { id: checkedOutById },
-      select: { name: true },
+    const staffName = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT name FROM users WHERE id = $1`, [checkedOutById]);
+      return result.rows[0]?.name;
     });
 
-    // Create history record
-    await this.prisma.attendanceHistory.create({
-      data: {
-        userId: attendance.userId,
-        gymId: attendance.gymId,
-        membershipId: attendance.membershipId,
-        checkInTime: attendance.checkInTime,
-        checkOutTime,
-        date: attendance.date,
-        duration,
-        markedById: attendance.markedById,
-        checkedOutById: checkedOutById,
-        checkInMethod: attendance.checkInMethod,
-        status: 'checked_out',
-      },
-    });
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, duration, marked_by_id, checked_out_by_id, check_in_method, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'checked_out', NOW())`,
+        [attendance.user_id, attendance.membership_id, attendance.check_in_time, checkOutTime, attendance.date, duration, attendance.marked_by_id, checkedOutById, attendance.check_in_method]
+      );
 
-    // Update attendance record status
-    await this.prisma.attendance.update({
-      where: { id: attendanceId },
-      data: {
-        status: 'checked_out',
-        checkOutTime,
-      },
+      await client.query(
+        `UPDATE attendance SET status = 'checked_out', check_out_time = $1, updated_at = NOW() WHERE id = $2`,
+        [checkOutTime, attendanceId]
+      );
     });
 
     return {
       id: attendance.id,
-      userId: attendance.user.id,
-      userName: attendance.user.name,
-      userEmail: attendance.user.email,
-      attendanceCode: attendance.user.attendanceCode,
-      gymId: attendance.gym.id,
-      gymName: attendance.gym.name,
-      membershipId: attendance.membershipId,
-      checkInTime: attendance.checkInTime,
+      userId: attendance.user_id,
+      userName: user?.name || '',
+      userEmail: user?.email || '',
+      attendanceCode: user?.attendanceCode || null,
+      gymId: gymId,
+      gymName: gym.name,
+      membershipId: attendance.membership_id,
+      checkInTime: attendance.check_in_time,
       checkOutTime: checkOutTime,
       date: attendance.date,
-      markedById: attendance.markedById,
-      markedByName: staff?.name,
-      checkInMethod: attendance.checkInMethod,
+      markedById: attendance.marked_by_id,
+      markedByName: staffName,
+      checkInMethod: attendance.check_in_method,
       status: 'checked_out',
     };
   }
 
-  // =====================
-  // FETCH ATTENDANCE
-  // =====================
-
-  // Helper to format attendance record
-  private formatAttendanceRecord(record: any): AttendanceRecord {
+  private formatAttendanceRecord(record: any, gym: any): AttendanceRecord {
     return {
       id: record.id,
-      userId: record.user?.id || record.userId,
-      userName: record.user?.name || '',
-      userEmail: record.user?.email || '',
-      attendanceCode: record.user?.attendanceCode || null,
-      gymId: record.gym?.id || record.gymId,
-      gymName: record.gym?.name || '',
-      membershipId: record.membershipId,
-      checkInTime: record.checkInTime,
-      checkOutTime: record.checkOutTime,
+      userId: record.user_id,
+      userName: record.user_name || '',
+      userEmail: record.user_email || '',
+      attendanceCode: record.attendance_code || null,
+      gymId: gym?.id || record.gym_id,
+      gymName: gym?.name || '',
+      membershipId: record.membership_id,
+      checkInTime: record.check_in_time,
+      checkOutTime: record.check_out_time,
       date: record.date,
-      markedById: record.markedById,
-      checkInMethod: record.checkInMethod || 'code',
+      markedById: record.marked_by_id,
+      checkInMethod: record.check_in_method || 'code',
       status: record.status,
     };
   }
 
-  // Get today's attendance records (optionally filtered by gym)
-  async getTodayAttendance(gymId?: number): Promise<AttendanceRecord[]> {
+  async getTodayAttendance(gymId: number): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
-    const where: any = { date: today };
-    if (gymId) {
-      where.gymId = gymId;
-    }
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const records = await this.prisma.attendance.findMany({
-      where,
-      orderBy: { checkInTime: 'desc' },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, attendanceCode: true },
-        },
-        gym: {
-          select: { id: true, name: true },
-        },
-      },
+    const records = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+         FROM attendance a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.date = $1
+         ORDER BY a.check_in_time DESC`,
+        [today]
+      );
+      return result.rows;
     });
 
-    return records.map(this.formatAttendanceRecord);
+    return records.map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  // Get attendance by specific date (optionally filtered by gym)
-  async getAttendanceByDate(date: string, gymId?: number): Promise<AttendanceRecord[]> {
-    const where: any = { date };
-    if (gymId) {
-      where.gymId = gymId;
-    }
+  async getAttendanceByDate(date: string, gymId: number): Promise<AttendanceRecord[]> {
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    // Get both active and history records for the date
-    const [activeRecords, historyRecords] = await Promise.all([
-      this.prisma.attendance.findMany({
-        where,
-        orderBy: { checkInTime: 'desc' },
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, attendanceCode: true },
-          },
-          gym: {
-            select: { id: true, name: true },
-          },
-        },
-      }),
-      this.prisma.attendanceHistory.findMany({
-        where,
-        orderBy: { checkInTime: 'desc' },
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, attendanceCode: true },
-          },
-          gym: {
-            select: { id: true, name: true },
-          },
-        },
-      }),
-    ]);
+    const { activeRecords, historyRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [activeResult, historyResult] = await Promise.all([
+        client.query(
+          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+           FROM attendance a
+           JOIN users u ON u.id = a.user_id
+           WHERE a.date = $1
+           ORDER BY a.check_in_time DESC`,
+          [date]
+        ),
+        client.query(
+          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+           FROM attendance_history ah
+           JOIN users u ON u.id = ah.user_id
+           WHERE ah.date = $1
+           ORDER BY ah.check_in_time DESC`,
+          [date]
+        ),
+      ]);
+      return { activeRecords: activeResult.rows, historyRecords: historyResult.rows };
+    });
 
-    // Combine and deduplicate (prefer history if checked out)
     const allRecords = [...activeRecords, ...historyRecords];
     const uniqueMap = new Map();
 
     for (const record of allRecords) {
-      const key = `${record.userId}-${record.checkInTime.toISOString()}`;
+      const key = `${record.user_id}-${new Date(record.check_in_time).toISOString()}`;
       if (!uniqueMap.has(key) || record.status === 'checked_out') {
         uniqueMap.set(key, record);
       }
     }
 
-    return Array.from(uniqueMap.values()).map(this.formatAttendanceRecord);
+    return Array.from(uniqueMap.values()).map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  // Get attendance history for a specific user (optionally filtered by gym)
-  async getUserAttendance(userId: number, limit: number = 50, gymId?: number): Promise<AttendanceRecord[]> {
-    const where: any = { userId };
-    if (gymId) {
-      where.gymId = gymId;
-    }
+  async getUserAttendance(userId: number, gymId: number, limit: number = 50): Promise<AttendanceRecord[]> {
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const [activeRecords, historyRecords] = await Promise.all([
-      this.prisma.attendance.findMany({
-        where,
-        orderBy: { checkInTime: 'desc' },
-        take: limit,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, attendanceCode: true },
-          },
-          gym: {
-            select: { id: true, name: true },
-          },
-        },
-      }),
-      this.prisma.attendanceHistory.findMany({
-        where,
-        orderBy: { checkInTime: 'desc' },
-        take: limit,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, attendanceCode: true },
-          },
-          gym: {
-            select: { id: true, name: true },
-          },
-        },
-      }),
-    ]);
+    const { activeRecords, historyRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [activeResult, historyResult] = await Promise.all([
+        client.query(
+          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+           FROM attendance a
+           JOIN users u ON u.id = a.user_id
+           WHERE a.user_id = $1
+           ORDER BY a.check_in_time DESC
+           LIMIT $2`,
+          [userId, limit]
+        ),
+        client.query(
+          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+           FROM attendance_history ah
+           JOIN users u ON u.id = ah.user_id
+           WHERE ah.user_id = $1
+           ORDER BY ah.check_in_time DESC
+           LIMIT $2`,
+          [userId, limit]
+        ),
+      ]);
+      return { activeRecords: activeResult.rows, historyRecords: historyResult.rows };
+    });
 
-    // Combine, deduplicate, and sort
     const allRecords = [...activeRecords, ...historyRecords];
     const uniqueMap = new Map();
 
     for (const record of allRecords) {
-      const key = `${record.userId}-${record.checkInTime.toISOString()}`;
+      const key = `${record.user_id}-${new Date(record.check_in_time).toISOString()}`;
       if (!uniqueMap.has(key) || record.status === 'checked_out') {
         uniqueMap.set(key, record);
       }
     }
 
     return Array.from(uniqueMap.values())
-      .sort((a, b) => new Date(b.checkInTime).getTime() - new Date(a.checkInTime).getTime())
+      .sort((a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime())
       .slice(0, limit)
-      .map(this.formatAttendanceRecord);
+      .map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  // =====================
-  // STATS
-  // =====================
-
-  async getAttendanceStats(gymId?: number): Promise<AttendanceStats> {
+  async getAttendanceStats(gymId: number): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
     const monthStart = this.getMonthStartDate();
 
-    const historyWhere: any = gymId ? { gymId } : {};
-    const attendanceWhere: any = { date: today, status: 'present' };
-    if (gymId) {
-      attendanceWhere.gymId = gymId;
-    }
+    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [todayResult, weekResult, monthResult, totalResult, presentResult] = await Promise.all([
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date = $1`, [today]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1`, [weekStart]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1`, [monthStart]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history`),
+        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
+      ]);
 
-    const [todayCount, weekCount, monthCount, totalCount, currentlyPresent] = await Promise.all([
-      this.prisma.attendanceHistory.count({ where: { ...historyWhere, date: today } }),
-      this.prisma.attendanceHistory.count({ where: { ...historyWhere, date: { gte: weekStart } } }),
-      this.prisma.attendanceHistory.count({ where: { ...historyWhere, date: { gte: monthStart } } }),
-      this.prisma.attendanceHistory.count({ where: historyWhere }),
-      this.prisma.attendance.count({ where: attendanceWhere }),
-    ]);
+      return {
+        todayCount: parseInt(todayResult.rows[0].count, 10),
+        weekCount: parseInt(weekResult.rows[0].count, 10),
+        monthCount: parseInt(monthResult.rows[0].count, 10),
+        totalCount: parseInt(totalResult.rows[0].count, 10),
+        currentlyPresent: parseInt(presentResult.rows[0].count, 10),
+      };
+    });
 
     return {
-      totalPresent: totalCount,
-      todayPresent: todayCount + currentlyPresent,
-      thisWeekPresent: weekCount + currentlyPresent,
-      thisMonthPresent: monthCount + currentlyPresent,
+      totalPresent: stats.totalCount,
+      todayPresent: stats.todayCount + stats.currentlyPresent,
+      thisWeekPresent: stats.weekCount + stats.currentlyPresent,
+      thisMonthPresent: stats.monthCount + stats.currentlyPresent,
     };
   }
 
-  // Get currently present users count (optionally filtered by gym)
-  async getCurrentlyPresentCount(gymId?: number): Promise<number> {
+  async getCurrentlyPresentCount(gymId: number): Promise<number> {
     const today = this.getTodayDate();
-    const where: any = { date: today, status: 'present' };
-    if (gymId) {
-      where.gymId = gymId;
-    }
-    return this.prisma.attendance.count({ where });
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`,
+        [today]
+      );
+      return parseInt(result.rows[0].count, 10);
+    });
   }
 
-  // =====================
-  // ADMIN OPERATIONS
-  // =====================
-
-  // Get all attendance records with pagination (optionally filtered by gym)
   async getAllAttendance(
+    gymId: number,
     page: number = 1,
     limit: number = 50,
     startDate?: string,
     endDate?: string,
-    gymId?: number,
   ): Promise<{ records: AttendanceRecord[]; total: number; page: number; pages: number }> {
-    const where: any = {};
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    if (gymId) {
-      where.gymId = gymId;
-    }
+    const { records, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = '1=1';
+      const values: any[] = [];
+      let paramIndex = 1;
 
-    if (startDate && endDate) {
-      where.date = { gte: startDate, lte: endDate };
-    } else if (startDate) {
-      where.date = { gte: startDate };
-    } else if (endDate) {
-      where.date = { lte: endDate };
-    }
+      if (startDate && endDate) {
+        whereClause += ` AND ah.date >= $${paramIndex++} AND ah.date <= $${paramIndex++}`;
+        values.push(startDate, endDate);
+      } else if (startDate) {
+        whereClause += ` AND ah.date >= $${paramIndex++}`;
+        values.push(startDate);
+      } else if (endDate) {
+        whereClause += ` AND ah.date <= $${paramIndex++}`;
+        values.push(endDate);
+      }
 
-    const [records, total] = await Promise.all([
-      this.prisma.attendanceHistory.findMany({
-        where,
-        orderBy: { checkInTime: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, attendanceCode: true },
-          },
-          gym: {
-            select: { id: true, name: true },
-          },
-        },
-      }),
-      this.prisma.attendanceHistory.count({ where }),
-    ]);
+      const offset = (page - 1) * limit;
+
+      const [recordsResult, countResult] = await Promise.all([
+        client.query(
+          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+           FROM attendance_history ah
+           JOIN users u ON u.id = ah.user_id
+           WHERE ${whereClause}
+           ORDER BY ah.check_in_time DESC
+           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+          [...values, limit, offset]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM attendance_history ah WHERE ${whereClause}`,
+          values
+        ),
+      ]);
+
+      return {
+        records: recordsResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+      };
+    });
 
     return {
-      records: records.map(this.formatAttendanceRecord),
+      records: records.map((r: any) => this.formatAttendanceRecord(r, gym)),
       total,
       page,
       pages: Math.ceil(total / limit),
     };
   }
 
-  // Delete attendance record (admin only)
-  async deleteAttendance(attendanceId: number): Promise<boolean> {
+  async deleteAttendance(attendanceId: number, gymId: number): Promise<boolean> {
     try {
-      await this.prisma.attendance.delete({ where: { id: attendanceId } });
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        await client.query(`DELETE FROM attendance WHERE id = $1`, [attendanceId]);
+      });
       return true;
     } catch {
-      // Try deleting from history
       try {
-        await this.prisma.attendanceHistory.delete({ where: { id: attendanceId } });
+        await this.tenantService.executeInTenant(gymId, async (client) => {
+          await client.query(`DELETE FROM attendance_history WHERE id = $1`, [attendanceId]);
+        });
         return true;
       } catch {
         return false;
       }
     }
-  }
-
-  // =====================
-  // HELPER: Get user's gym (for managers)
-  // =====================
-
-  async getUserGymId(userId: number): Promise<number | null> {
-    const userGym = await this.prisma.userGymXref.findFirst({
-      where: {
-        userId,
-        isActive: true,
-      },
-      select: { gymId: true },
-    });
-    return userGym?.gymId || null;
   }
 }

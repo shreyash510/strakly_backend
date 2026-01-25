@@ -35,7 +35,16 @@ export class SupportController {
   @Post()
   @ApiOperation({ summary: 'Create a new support ticket' })
   create(@Request() req: any, @Body() createTicketDto: CreateTicketDto) {
-    return this.supportService.create(req.user.userId, createTicketDto);
+    // Determine user type: staff roles are 'staff', others are 'client'
+    const userType = ['admin', 'manager', 'trainer'].includes(req.user.role) ? 'staff' : 'client';
+    return this.supportService.create(
+      req.user.userId,
+      req.user.gymId,
+      req.user.name,
+      req.user.email,
+      userType,
+      createTicketDto
+    );
   }
 
   @Get()
@@ -58,7 +67,7 @@ export class SupportController {
     @Query('status') status?: string,
     @Query('category') category?: string,
     @Query('priority') priority?: string,
-    @Query('userId') userId?: string,
+    @Query('userId') filterUserId?: string,
     @Query('assignedToId') assignedToId?: string,
     @Query('gymId') gymId?: string,
     @Query('noPagination') noPagination?: string,
@@ -72,7 +81,7 @@ export class SupportController {
         status,
         category,
         priority,
-        userId: userId ? parseInt(userId) : undefined,
+        userId: filterUserId ? parseInt(filterUserId) : undefined,
         assignedToId: assignedToId ? parseInt(assignedToId) : undefined,
         gymId: gymId ? parseInt(gymId) : undefined,
         noPagination: noPagination === 'true',
@@ -132,6 +141,7 @@ export class SupportController {
       id,
       addMessageDto,
       req.user.userId,
+      req.user.name,
       req.user.role,
       req.user.gymId,
     );

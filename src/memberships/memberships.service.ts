@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { PlansService } from '../plans/plans.service';
-import { OffersService } from '../offers/offers.service';
+import { TenantService } from '../tenant/tenant.service';
 import {
   CreateMembershipDto,
   UpdateMembershipDto,
@@ -14,174 +13,186 @@ import {
 export class MembershipsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly plansService: PlansService,
-    private readonly offersService: OffersService,
+    private readonly tenantService: TenantService,
   ) {}
 
-  async findAll(filters?: {
+  async findAll(gymId: number, filters?: {
     status?: string;
     userId?: number;
     planId?: number;
     search?: string;
     page?: number;
     limit?: number;
-    gymId?: number;
   }) {
-    const where: any = {};
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-    if (filters?.userId) {
-      where.userId = filters.userId;
-    }
-    if (filters?.planId) {
-      where.planId = filters.planId;
-    }
-    if (filters?.gymId) {
-      where.gymId = filters.gymId;
-    }
-
-    // Search by user name or email
-    if (filters?.search) {
-      where.user = {
-        OR: [
-          { name: { contains: filters.search, mode: 'insensitive' } },
-          { email: { contains: filters.search, mode: 'insensitive' } },
-        ],
-      };
-    }
-
-    // Pagination
     const page = filters?.page || 1;
     const limit = filters?.limit || 15;
     const skip = (page - 1) * limit;
 
-    const [memberships, total] = await Promise.all([
-      this.prisma.membership.findMany({
-        where,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, phone: true },
-          },
-          plan: true,
-          offer: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.membership.count({ where }),
-    ]);
+    const { memberships, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = '1=1';
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (filters?.status) {
+        whereClause += ` AND m.status = $${paramIndex++}`;
+        values.push(filters.status);
+      }
+      if (filters?.userId) {
+        whereClause += ` AND m.user_id = $${paramIndex++}`;
+        values.push(filters.userId);
+      }
+      if (filters?.planId) {
+        whereClause += ` AND m.plan_id = $${paramIndex++}`;
+        values.push(filters.planId);
+      }
+      if (filters?.search) {
+        whereClause += ` AND (u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`;
+        values.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      const [membershipsResult, countResult] = await Promise.all([
+        client.query(
+          `SELECT m.*, u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                  p.id as plan_id, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                  o.id as offer_id, o.code as offer_code, o.name as offer_name
+           FROM memberships m
+           JOIN users u ON u.id = m.user_id
+           LEFT JOIN plans p ON p.id = m.plan_id
+           LEFT JOIN offers o ON o.id = m.offer_id
+           WHERE ${whereClause}
+           ORDER BY m.created_at DESC
+           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+          [...values, limit, skip]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM memberships m
+           JOIN users u ON u.id = m.user_id
+           WHERE ${whereClause}`,
+          values
+        ),
+      ]);
+
+      return {
+        memberships: membershipsResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+      };
+    });
 
     return {
-      data: memberships,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      data: memberships.map((m: any) => this.formatMembership(m)),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async findOne(id: number, gymId?: number) {
-    const where: any = { id };
+  private formatMembership(m: any) {
+    return {
+      id: m.id,
+      userId: m.user_id,
+      planId: m.plan_id,
+      offerId: m.offer_id,
+      startDate: m.start_date,
+      endDate: m.end_date,
+      status: m.status,
+      originalAmount: m.original_amount,
+      discountAmount: m.discount_amount,
+      finalAmount: m.final_amount,
+      currency: m.currency,
+      paymentStatus: m.payment_status,
+      paymentMethod: m.payment_method,
+      paymentRef: m.payment_ref,
+      paidAt: m.paid_at,
+      cancelledAt: m.cancelled_at,
+      cancelReason: m.cancel_reason,
+      notes: m.notes,
+      createdAt: m.created_at,
+      updatedAt: m.updated_at,
+      user: m.user_name ? {
+        id: m.user_id,
+        name: m.user_name,
+        email: m.user_email,
+        phone: m.user_phone,
+      } : undefined,
+      plan: m.plan_name ? {
+        id: m.plan_id,
+        name: m.plan_name,
+        code: m.plan_code,
+        price: m.plan_price,
+      } : undefined,
+      offer: m.offer_name ? {
+        id: m.offer_id,
+        code: m.offer_code,
+        name: m.offer_name,
+      } : undefined,
+    };
+  }
 
-    /* Add gym filter for tenant isolation */
-    if (gymId) {
-      where.gymId = gymId;
-    }
-
-    const membership = await this.prisma.membership.findFirst({
-      where,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, phone: true, avatar: true },
-        },
-        plan: true,
-        offer: true,
-      },
+  async findOne(id: number, gymId: number) {
+    const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar,
+                p.id as plan_id, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                o.id as offer_id, o.code as offer_code, o.name as offer_name
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN plans p ON p.id = m.plan_id
+         LEFT JOIN offers o ON o.id = m.offer_id
+         WHERE m.id = $1`,
+        [id]
+      );
+      return result.rows[0];
     });
 
     if (!membership) {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
 
-    return membership;
+    return this.formatMembership(membership);
   }
 
-  /* Validate that a user belongs to a specific gym (for tenant isolation) */
-  async validateUserBelongsToGym(userId: number, gymId: number): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { gymId: true },
+  async findByUser(userId: number, gymId: number) {
+    const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, p.id as plan_id, p.name as plan_name, p.code as plan_code,
+                o.id as offer_id, o.code as offer_code, o.name as offer_name
+         FROM memberships m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         LEFT JOIN offers o ON o.id = m.offer_id
+         WHERE m.user_id = $1
+         ORDER BY m.created_at DESC`,
+        [userId]
+      );
+      return result.rows;
     });
 
-    if (!user) return false;
-
-    /* Check direct gym assignment */
-    if (user.gymId === gymId) return true;
-
-    /* Check gym association via xref table */
-    const gymAssoc = await this.prisma.userGymXref.findFirst({
-      where: { userId, gymId, isActive: true },
-    });
-
-    return !!gymAssoc;
+    return memberships.map((m: any) => this.formatMembership(m));
   }
 
-  async findByUser(userId: number, gymId?: number) {
-    const where: any = { userId };
-
-    /* Add gym filter for tenant isolation */
-    if (gymId) {
-      where.gymId = gymId;
-    }
-
-    return this.prisma.membership.findMany({
-      where,
-      include: {
-        plan: true,
-        offer: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getActiveMembership(userId: number, gymId?: number) {
+  async getActiveMembership(userId: number, gymId: number) {
     const now = new Date();
 
-    const where: any = {
-      userId,
-      status: 'active',
-      startDate: { lte: now },
-      endDate: { gte: now },
-    };
-
-    /* Add gym filter for tenant isolation */
-    if (gymId) {
-      where.gymId = gymId;
-    }
-
-    return this.prisma.membership.findFirst({
-      where,
-      include: {
-        plan: true,
-        offer: true,
-      },
+    const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, p.id as plan_id, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                o.id as offer_id, o.code as offer_code, o.name as offer_name
+         FROM memberships m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         LEFT JOIN offers o ON o.id = m.offer_id
+         WHERE m.user_id = $1 AND m.status = 'active' AND m.start_date <= $2 AND m.end_date >= $2
+         LIMIT 1`,
+        [userId, now]
+      );
+      return result.rows[0];
     });
+
+    return membership ? this.formatMembership(membership) : null;
   }
 
-  async checkMembershipStatus(userId: number, gymId?: number) {
+  async checkMembershipStatus(userId: number, gymId: number) {
     const active = await this.getActiveMembership(userId, gymId);
 
     if (!active) {
-      return {
-        hasActiveMembership: false,
-        membership: null,
-        daysRemaining: 0,
-      };
+      return { hasActiveMembership: false, membership: null, daysRemaining: 0 };
     }
 
     const now = new Date();
@@ -196,682 +207,263 @@ export class MembershipsService {
     };
   }
 
-  async create(dto: CreateMembershipDto, creatorId?: number) {
-    /* Parallelize initial queries for better performance */
-    const [user, userGymAssoc, creator, creatorGymAssoc, activeMembership, priceCalculation] = await Promise.all([
-      /* Verify user exists */
-      this.prisma.user.findUnique({
-        where: { id: dto.userId },
-        select: { id: true, gymId: true },
-      }),
-      /* User's gym association (needed if user.gymId is null) */
-      this.prisma.userGymXref.findFirst({
-        where: { userId: dto.userId, isActive: true },
-        select: { gymId: true },
-      }),
-      /* Creator info (if creatorId provided) */
-      creatorId ? this.prisma.user.findUnique({
-        where: { id: creatorId },
-        select: { gymId: true },
-      }) : null,
-      /* Creator's gym association */
-      creatorId ? this.prisma.userGymXref.findFirst({
-        where: { userId: creatorId, isActive: true },
-        select: { gymId: true },
-      }) : null,
-      /* Check active membership */
-      this.getActiveMembership(dto.userId),
-      /* Calculate price with optional offer */
-      this.plansService.calculatePriceWithOffer(dto.planId, dto.offerCode),
-    ]);
+  async create(dto: CreateMembershipDto, gymId: number) {
+    // Verify user exists in tenant
+    const user = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT id FROM users WHERE id = $1`, [dto.userId]);
+      return result.rows[0];
+    });
 
     if (!user) {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
 
+    // Check for active membership
+    const activeMembership = await this.getActiveMembership(dto.userId, gymId);
     if (activeMembership) {
       throw new ConflictException('User already has an active membership');
     }
 
-    /* Determine gymId: provided > creator's gym (admin enrolling) > user's gym (client) */
-    let gymId = dto.gymId
-      || creator?.gymId
-      || creatorGymAssoc?.gymId
-      || user.gymId
-      || userGymAssoc?.gymId
-      || undefined;
-
-    if (!gymId) {
-      throw new BadRequestException('Unable to determine gym for membership. Please specify gymId.');
-    }
-
-    const plan = priceCalculation.plan;
-    const offer = priceCalculation.offer;
-
-    // Calculate end date based on plan duration
-    const startDate = new Date(dto.startDate);
-    const endDate = this.calculateEndDate(startDate, plan.durationValue, plan.durationType);
-
-    const membership = await this.prisma.membership.create({
-      data: {
-        userId: dto.userId,
-        gymId: gymId,
-        planId: dto.planId,
-        offerId: offer?.id || null,
-        startDate,
-        endDate,
-        status: 'active',
-        originalAmount: priceCalculation.originalAmount,
-        discountAmount: priceCalculation.discountAmount,
-        finalAmount: priceCalculation.finalAmount,
-        currency: priceCalculation.currency,
-        paymentStatus: 'paid',
-        paymentMethod: dto.paymentMethod || 'cash',
-        paidAt: new Date(),
-        notes: dto.notes,
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
-        },
-        plan: true,
-        offer: true,
-      },
+    // Get plan details
+    const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM plans WHERE id = $1 AND is_active = true`,
+        [dto.planId]
+      );
+      return result.rows[0];
     });
 
-    // Increment offer usage if used
-    if (offer) {
-      await this.offersService.incrementUsage(offer.id);
+    if (!plan) {
+      throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
     }
 
-    return membership;
-  }
-
-  /* Lightweight check for status validation - avoids loading full relations */
-  private async getMembershipStatus(id: number): Promise<{ status: string; paymentStatus: string }> {
-    const membership = await this.prisma.membership.findUnique({
-      where: { id },
-      select: { status: true, paymentStatus: true },
-    });
-
-    if (!membership) {
-      throw new NotFoundException(`Membership with ID ${id} not found`);
-    }
-
-    return membership;
-  }
-
-  async update(id: number, dto: UpdateMembershipDto) {
-    const updateData: any = { ...dto };
-
-    if (dto.paidAt) {
-      updateData.paidAt = new Date(dto.paidAt);
-    }
-
-    try {
-      return await this.prisma.membership.update({
-        where: { id },
-        data: updateData,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true },
-          },
-          plan: true,
-          offer: true,
-        },
+    // Get offer if provided
+    let offer: any = null;
+    let discountAmount = 0;
+    if (dto.offerCode) {
+      offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const result = await client.query(
+          `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`,
+          [dto.offerCode]
+        );
+        return result.rows[0];
       });
-    } catch (error: any) {
-      if (error.code === 'P2025') {
-        throw new NotFoundException(`Membership with ID ${id} not found`);
+
+      if (offer) {
+        if (offer.discount_type === 'percentage') {
+          discountAmount = (plan.price * offer.discount_value) / 100;
+        } else {
+          discountAmount = offer.discount_value;
+        }
       }
-      throw error;
     }
+
+    const originalAmount = plan.price;
+    const finalAmount = Math.max(0, originalAmount - discountAmount);
+
+    // Calculate end date
+    const startDate = new Date(dto.startDate);
+    const endDate = this.calculateEndDate(startDate, plan.duration_value, plan.duration_type);
+
+    // Create membership
+    const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
+          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8, $9, 'paid', $10, NOW(), $11, NOW(), NOW())
+         RETURNING *`,
+        [dto.userId, dto.planId, offer?.id || null, startDate, endDate, originalAmount, discountAmount, finalAmount, 'INR', dto.paymentMethod || 'cash', dto.notes || null]
+      );
+      return result.rows[0];
+    });
+
+    // Increment offer usage
+    if (offer) {
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        await client.query(`UPDATE offers SET current_usage = current_usage + 1 WHERE id = $1`, [offer.id]);
+      });
+    }
+
+    return this.findOne(membership.id, gymId);
   }
 
-  async recordPayment(id: number, dto: RecordPaymentDto) {
-    const { paymentStatus } = await this.getMembershipStatus(id);
+  async update(id: number, gymId: number, dto: UpdateMembershipDto) {
+    await this.findOne(id, gymId); // Verify exists
 
-    if (paymentStatus === 'paid') {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (dto.status) { updates.push(`status = $${paramIndex++}`); values.push(dto.status); }
+    if (dto.paymentStatus) { updates.push(`payment_status = $${paramIndex++}`); values.push(dto.paymentStatus); }
+    if (dto.paymentMethod) { updates.push(`payment_method = $${paramIndex++}`); values.push(dto.paymentMethod); }
+    if (dto.paymentRef) { updates.push(`payment_ref = $${paramIndex++}`); values.push(dto.paymentRef); }
+    if (dto.notes !== undefined) { updates.push(`notes = $${paramIndex++}`); values.push(dto.notes); }
+    if (dto.paidAt) { updates.push(`paid_at = $${paramIndex++}`); values.push(new Date(dto.paidAt)); }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE memberships SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    });
+
+    return this.findOne(id, gymId);
+  }
+
+  async recordPayment(id: number, gymId: number, dto: RecordPaymentDto) {
+    const membership = await this.findOne(id, gymId);
+
+    if (membership.paymentStatus === 'paid') {
       throw new BadRequestException('Payment already recorded for this membership');
     }
 
-    return this.prisma.membership.update({
-      where: { id },
-      data: {
-        paymentStatus: 'paid',
-        paymentMethod: dto.paymentMethod,
-        paymentRef: dto.paymentRef,
-        paidAt: new Date(),
-        status: 'active',
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
-        },
-        plan: true,
-        offer: true,
-      },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE memberships SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), status = 'active', updated_at = NOW() WHERE id = $3`,
+        [dto.paymentMethod, dto.paymentRef || null, id]
+      );
     });
+
+    return this.findOne(id, gymId);
   }
 
-  async activate(id: number) {
-    const { status, paymentStatus } = await this.getMembershipStatus(id);
+  async cancel(id: number, gymId: number, dto: CancelMembershipDto) {
+    const membership = await this.findOne(id, gymId);
 
-    if (status === 'active') {
-      throw new BadRequestException('Membership is already active');
-    }
-
-    if (paymentStatus !== 'paid') {
-      throw new BadRequestException('Cannot activate membership without payment');
-    }
-
-    return this.prisma.membership.update({
-      where: { id },
-      data: { status: 'active' },
-    });
-  }
-
-  async cancel(id: number, dto: CancelMembershipDto) {
-    const { status } = await this.getMembershipStatus(id);
-
-    if (status === 'cancelled') {
+    if (membership.status === 'cancelled') {
       throw new BadRequestException('Membership is already cancelled');
     }
 
-    return this.prisma.membership.update({
-      where: { id },
-      data: {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancelReason: dto.reason,
-      },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, updated_at = NOW() WHERE id = $2`,
+        [dto.reason || null, id]
+      );
     });
+
+    return this.findOne(id, gymId);
   }
 
-  async delete(id: number, force: boolean = false) {
-    const { status } = await this.getMembershipStatus(id);
+  async delete(id: number, gymId: number, force: boolean = false) {
+    const membership = await this.findOne(id, gymId);
 
-    /* If force delete is enabled, auto-cancel active/pending memberships first */
-    if (status === 'active' || status === 'pending') {
-      if (force) {
-        /* Auto-cancel before deleting */
-        await this.prisma.membership.update({
-          where: { id },
-          data: {
-            status: 'cancelled',
-            cancelledAt: new Date(),
-            cancelReason: 'Force deleted by admin',
-          },
-        });
-      } else {
-        throw new BadRequestException(
-          'Cannot delete active or pending memberships. Please cancel the membership first or use force delete.',
-        );
-      }
+    if ((membership.status === 'active' || membership.status === 'pending') && !force) {
+      throw new BadRequestException('Cannot delete active or pending memberships. Use force delete.');
     }
 
-    await this.prisma.membership.delete({
-      where: { id },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(`DELETE FROM memberships WHERE id = $1`, [id]);
     });
 
     return { id, deleted: true };
   }
 
-  async pause(id: number) {
-    const { status } = await this.getMembershipStatus(id);
+  async getExpiringSoon(gymId: number, days = 7) {
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + days);
 
-    if (status !== 'active') {
-      throw new BadRequestException('Only active memberships can be paused');
-    }
-
-    return this.prisma.membership.update({
-      where: { id },
-      data: { status: 'paused' },
+    const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                p.name as plan_name, p.code as plan_code
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE m.status = 'active' AND m.end_date >= $1 AND m.end_date <= $2
+         ORDER BY m.end_date ASC`,
+        [now, futureDate]
+      );
+      return result.rows;
     });
+
+    return memberships.map((m: any) => this.formatMembership(m));
   }
 
-  async resume(id: number) {
-    const { status } = await this.getMembershipStatus(id);
+  async getStats(gymId: number) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    if (status !== 'paused') {
-      throw new BadRequestException('Only paused memberships can be resumed');
-    }
+    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [activeResult, revenueResult, endingResult, totalRevenueResult] = await Promise.all([
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1`, [now]),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`, [startOfMonth, now]),
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2`, [now, endOfMonth]),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
+      ]);
 
-    return this.prisma.membership.update({
-      where: { id },
-      data: { status: 'active' },
+      return {
+        totalActiveMembers: parseInt(activeResult.rows[0].count, 10),
+        thisMonthRevenue: parseFloat(revenueResult.rows[0].sum),
+        endingThisMonth: parseInt(endingResult.rows[0].count, 10),
+        totalRevenue: parseFloat(totalRevenueResult.rows[0].sum),
+      };
     });
+
+    return stats;
   }
 
-  async renew(userId: number, dto: RenewMembershipDto) {
-    // Get current membership to determine renewal plan
-    const currentMembership = await this.getActiveMembership(userId);
+  async getOverview(gymId: number) {
+    const [stats, expiringSoon, recentSubscriptions] = await Promise.all([
+      this.getStats(gymId),
+      this.getExpiringSoon(gymId, 7),
+      this.getRecentSubscriptions(gymId, 10),
+    ]);
 
+    return {
+      stats,
+      expiringSoon,
+      recentSubscriptions,
+    };
+  }
+
+  private async getRecentSubscriptions(gymId: number, limit = 10) {
+    const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                p.name as plan_name, p.code as plan_code
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN plans p ON p.id = m.plan_id
+         ORDER BY m.created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
+    });
+
+    return memberships.map((m: any) => this.formatMembership(m));
+  }
+
+  async renew(userId: number, gymId: number, dto: RenewMembershipDto) {
+    const currentMembership = await this.getActiveMembership(userId, gymId);
     const planId = dto.planId || currentMembership?.planId;
 
     if (!planId) {
       throw new BadRequestException('Plan ID is required for renewal');
     }
 
-    // Calculate start date (after current membership ends, or now)
     let startDate: Date;
-    if (currentMembership && currentMembership.endDate > new Date()) {
+    if (currentMembership && new Date(currentMembership.endDate) > new Date()) {
       startDate = new Date(currentMembership.endDate);
       startDate.setDate(startDate.getDate() + 1);
     } else {
       startDate = new Date();
     }
 
-    // If there's an active membership, mark it for non-renewal
-    // New membership will start after current one ends
-
     return this.create({
       userId,
-      gymId: dto.gymId,
       planId,
       offerCode: dto.offerCode,
       startDate: startDate.toISOString(),
       paymentMethod: dto.paymentMethod,
       notes: dto.notes,
-    });
-  }
-
-  async getExpiringSoon(days = 7, gymId?: number) {
-    const now = new Date();
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + days);
-
-    const where: any = {
-      status: 'active',
-      endDate: {
-        gte: now,
-        lte: futureDate,
-      },
-    };
-
-    if (gymId) {
-      where.gymId = gymId;
-    }
-
-    return this.prisma.membership.findMany({
-      where,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, phone: true },
-        },
-        plan: true,
-      },
-      orderBy: { endDate: 'asc' },
-    });
-  }
-
-  async getExpired(gymId?: number) {
-    const now = new Date();
-
-    const where: any = {
-      status: 'active',
-      endDate: { lt: now },
-    };
-
-    if (gymId) {
-      where.gymId = gymId;
-    }
-
-    return this.prisma.membership.findMany({
-      where,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, phone: true },
-        },
-        plan: true,
-      },
-    });
-  }
-
-  async markExpiredMemberships() {
-    const now = new Date();
-
-    const result = await this.prisma.membership.updateMany({
-      where: {
-        status: 'active',
-        endDate: { lt: now },
-      },
-      data: { status: 'expired' },
-    });
-
-    return { updated: result.count };
-  }
-
-  /**
-   * Get all overview data in a single query for better performance
-   */
-  async getOverview(gymId?: number) {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const expiringDate = new Date();
-    expiringDate.setDate(expiringDate.getDate() + 14);
-
-    const baseWhere = gymId ? { gymId } : {};
-
-    const [
-      totalActiveMembers,
-      thisMonthRevenue,
-      endingThisMonth,
-      totalRevenue,
-      expiringSoon,
-      recentSubscriptions,
-      plans,
-      planDistribution,
-    ] = await Promise.all([
-      /* Stats: Total active members */
-      this.prisma.membership.count({
-        where: { ...baseWhere, status: 'active', endDate: { gte: now } },
-      }),
-
-      /* Stats: This month revenue */
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          ...baseWhere,
-          paymentStatus: 'paid',
-          paidAt: { gte: startOfMonth, lte: now },
-        },
-      }),
-
-      /* Stats: Ending this month */
-      this.prisma.membership.count({
-        where: {
-          ...baseWhere,
-          status: 'active',
-          endDate: { gte: now, lte: endOfMonth },
-        },
-      }),
-
-      /* Stats: Total revenue */
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: { ...baseWhere, paymentStatus: 'paid' },
-      }),
-
-      /* Expiring soon (14 days) */
-      this.prisma.membership.findMany({
-        where: {
-          ...baseWhere,
-          status: 'active',
-          endDate: { gte: now, lte: expiringDate },
-        },
-        include: {
-          user: { select: { id: true, name: true, email: true, phone: true } },
-          plan: true,
-        },
-        orderBy: { endDate: 'asc' },
-        take: 10,
-      }),
-
-      /* Recent subscriptions (last 5) */
-      this.prisma.membership.findMany({
-        where: baseWhere,
-        include: {
-          user: { select: { id: true, name: true, email: true, phone: true } },
-          plan: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-      }),
-
-      /* Plans for distribution chart */
-      this.prisma.plan.findMany({
-        where: { isActive: true },
-        select: { id: true, code: true, name: true },
-      }),
-
-      /* Plan distribution (count per plan) */
-      this.prisma.membership.groupBy({
-        by: ['planId'],
-        _count: { id: true },
-        where: { ...baseWhere, status: 'active', endDate: { gte: now } },
-      }),
-    ]);
-
-    return {
-      stats: {
-        totalActiveMembers,
-        thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
-        endingThisMonth,
-        totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
-      },
-      expiringSoon,
-      recentSubscriptions,
-      plans,
-      planDistribution: planDistribution.map((p) => ({
-        planId: p.planId,
-        count: p._count.id,
-      })),
-    };
-  }
-
-  async getStats(gymId?: number) {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    /* Build base where clause with optional gymId filter */
-    const baseWhere = gymId ? { gymId } : {};
-
-    const [
-      totalActiveMembers,
-      thisMonthRevenue,
-      endingThisMonth,
-      totalRevenue,
-    ] = await Promise.all([
-      /* Total active members (memberships with status 'active') */
-      this.prisma.membership.count({
-        where: {
-          ...baseWhere,
-          status: 'active',
-          endDate: { gte: now },
-        },
-      }),
-
-      /* This month revenue (paid memberships this month) */
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          ...baseWhere,
-          paymentStatus: 'paid',
-          paidAt: {
-            gte: startOfMonth,
-            lte: now,
-          },
-        },
-      }),
-
-      /* Memberships ending this month */
-      this.prisma.membership.count({
-        where: {
-          ...baseWhere,
-          status: 'active',
-          endDate: {
-            gte: now,
-            lte: endOfMonth,
-          },
-        },
-      }),
-
-      /* Total revenue (all paid memberships) */
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          ...baseWhere,
-          paymentStatus: 'paid',
-        },
-      }),
-    ]);
-
-    return {
-      totalActiveMembers,
-      thisMonthRevenue: Number(thisMonthRevenue._sum.finalAmount) || 0,
-      endingThisMonth,
-      totalRevenue: Number(totalRevenue._sum.finalAmount) || 0,
-    };
-  }
-
-  /**
-   * Move a membership to history and delete from active memberships
-   */
-  async membershipMoveToHistory(id: number, reason: string = 'manual') {
-    const membership = await this.prisma.membership.findUnique({
-      where: { id },
-    });
-
-    if (!membership) {
-      throw new NotFoundException(`Membership with ID ${id} not found`);
-    }
-
-    /* Create history record and delete membership in a transaction */
-    const [historyRecord] = await this.prisma.$transaction([
-      this.prisma.membershipHistory.create({
-        data: {
-          originalId: membership.id,
-          userId: membership.userId,
-          gymId: membership.gymId,
-          planId: membership.planId,
-          offerId: membership.offerId,
-          startDate: membership.startDate,
-          endDate: membership.endDate,
-          status: membership.status,
-          originalAmount: membership.originalAmount,
-          discountAmount: membership.discountAmount,
-          finalAmount: membership.finalAmount,
-          currency: membership.currency,
-          paymentStatus: membership.paymentStatus,
-          paymentMethod: membership.paymentMethod,
-          paymentRef: membership.paymentRef,
-          paidAt: membership.paidAt,
-          cancelledAt: membership.cancelledAt,
-          cancelReason: membership.cancelReason,
-          notes: membership.notes,
-          archiveReason: reason,
-          originalCreatedAt: membership.createdAt,
-        },
-      }),
-      this.prisma.membership.delete({
-        where: { id },
-      }),
-    ]);
-
-    return historyRecord;
-  }
-
-  /**
-   * Get membership history for a user
-   */
-  async getHistory(filters?: {
-    userId?: number;
-    gymId?: number;
-    status?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    const where: any = {};
-
-    if (filters?.userId) {
-      where.userId = filters.userId;
-    }
-    if (filters?.gymId) {
-      where.gymId = filters.gymId;
-    }
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 15;
-    const skip = (page - 1) * limit;
-
-    const [history, total] = await Promise.all([
-      this.prisma.membershipHistory.findMany({
-        where,
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, phone: true },
-          },
-          plan: true,
-          offer: true,
-        },
-        orderBy: { archivedAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.membershipHistory.count({ where }),
-    ]);
-
-    return {
-      data: history,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  /**
-   * Get membership history for current user
-   */
-  async getMyHistory(userId: number) {
-    return this.prisma.membershipHistory.findMany({
-      where: { userId },
-      include: {
-        plan: true,
-        offer: true,
-      },
-      orderBy: { archivedAt: 'desc' },
-    });
-  }
-
-  /**
-   * Fix memberships with NULL or mismatched gymId by setting them to the user's gymId
-   */
-  async fixMembershipGymIds() {
-    /* Get all memberships with their user's gymId */
-    const memberships = await this.prisma.membership.findMany({
-      include: {
-        user: {
-          select: { id: true, gymId: true },
-        },
-      },
-    });
-
-    let fixedCount = 0;
-    const issues: string[] = [];
-
-    for (const membership of memberships) {
-      const userGymId = membership.user?.gymId;
-
-      /* Skip if user has no gymId */
-      if (!userGymId) {
-        issues.push(`Membership ${membership.id}: user ${membership.userId} has no gymId`);
-        continue;
-      }
-
-      /* Fix if membership gymId is null or different from user's gymId */
-      if (!membership.gymId || membership.gymId !== userGymId) {
-        await this.prisma.membership.update({
-          where: { id: membership.id },
-          data: { gymId: userGymId },
-        });
-        fixedCount++;
-      }
-    }
-
-    return {
-      total: memberships.length,
-      fixed: fixedCount,
-      issues,
-    };
+    }, gymId);
   }
 
   private calculateEndDate(startDate: Date, durationValue: number, durationType: string): Date {

@@ -8,7 +8,6 @@ import {
   Param,
   Headers,
   UseGuards,
-  Request,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
@@ -16,7 +15,8 @@ import { PermissionsService } from './permissions.service';
 import { CreatePermissionDto, UpdatePermissionDto, AssignRolePermissionsDto } from './dto/permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
+import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('permissions')
 @Controller('permissions')
@@ -133,16 +133,16 @@ export class PermissionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permissions' })
-  getMyPermissions(@Request() req: any) {
-    return this.permissionsService.getUserPermissions(req.user.userId);
+  getMyPermissions(@CurrentUser() user: AuthenticatedUser) {
+    return this.permissionsService.getUserPermissions(user.userId, user.gymId, user.role);
   }
 
   @Get('me/codes')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permission codes' })
-  getMyPermissionCodes(@Request() req: any) {
-    return this.permissionsService.getUserPermissionCodes(req.user.userId);
+  getMyPermissionCodes(@CurrentUser() user: AuthenticatedUser) {
+    return this.permissionsService.getUserPermissionCodes(user.userId, user.gymId, user.role);
   }
 
   // ============ USER PERMISSIONS (admin - userId from header) ============
@@ -153,9 +153,9 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permissions for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissions(@Headers('x-user-id') userId: string) {
+  getUserPermissions(@CurrentUser() user: AuthenticatedUser, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissions(userId);
+    return this.permissionsService.getUserPermissions(parseInt(userId), user.gymId);
   }
 
   @Get('user/codes')
@@ -164,8 +164,8 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permission codes for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissionCodes(@Headers('x-user-id') userId: string) {
+  getUserPermissionCodes(@CurrentUser() user: AuthenticatedUser, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissionCodes(userId);
+    return this.permissionsService.getUserPermissionCodes(parseInt(userId), user.gymId);
   }
 }

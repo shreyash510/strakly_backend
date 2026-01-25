@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import {
   SuperadminDashboardDto,
   DashboardStatsDto,
@@ -8,18 +9,21 @@ import {
   RecentTicketDto,
   AdminDashboardDto,
   AdminDashboardStatsDto,
-  RecentMemberDto,
+  RecentClientDto,
   RecentAttendanceDto,
-  MemberDashboardDto,
-  MemberSubscriptionDto,
-  MemberAttendanceStatsDto,
-  MemberRecentAttendanceDto,
+  ClientDashboardDto,
+  ClientSubscriptionDto,
+  ClientAttendanceStatsDto,
+  ClientRecentAttendanceDto,
   ActiveOfferDto,
 } from './dto/dashboard.dto';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   async getSuperadminDashboard(): Promise<SuperadminDashboardDto> {
     const [stats, recentGyms, recentUsers, recentTickets] = await Promise.all([
@@ -43,73 +47,18 @@ export class DashboardService {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const today = now.toISOString().split('T')[0];
 
-    // Execute all queries in parallel for better performance
+    // Get stats from public schema (gyms, tickets)
     const [
       totalGyms,
       activeGyms,
-      totalUsers,
-      activeUsers,
-      trainerRole,
-      memberRole,
-      activeMemberships,
-      revenueData,
-      lastMonthRevenue,
-      presentToday,
       totalTickets,
       openTickets,
     ] = await Promise.all([
-      // Total gyms
       this.prisma.gym.count(),
-      // Active gyms
       this.prisma.gym.count({ where: { isActive: true } }),
-      // Total users
-      this.prisma.user.count(),
-      // Active users
-      this.prisma.user.count({ where: { status: 'active' } }),
-      // Get trainer role lookup
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'trainer',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-      // Get member role lookup
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'client',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-      // Active memberships
-      this.prisma.membership.count({ where: { status: 'active' } }),
-      // Total revenue and monthly revenue
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: { paymentStatus: 'paid' },
-      }),
-      // Last month revenue for growth calculation
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          paymentStatus: 'paid',
-          paidAt: {
-            gte: startOfLastMonth,
-            lte: endOfLastMonth,
-          },
-        },
-      }),
-      // Present today count
-      this.prisma.attendance.count({
-        where: {
-          date: today,
-          status: 'present',
-        },
-      }),
-      // Total support tickets
       this.prisma.supportTicket.count(),
-      // Open support tickets
       this.prisma.supportTicket.count({
         where: {
           status: { in: ['open', 'in_progress'] },
@@ -117,39 +66,89 @@ export class DashboardService {
       }),
     ]);
 
-    // Count trainers and members
-    const [totalTrainers, totalMembers] = await Promise.all([
-      trainerRole
-        ? this.prisma.user.count({ where: { roleId: trainerRole.id } })
-        : 0,
-      memberRole
-        ? this.prisma.user.count({ where: { roleId: memberRole.id } })
-        : 0,
-    ]);
-
-    // Get this month's revenue
-    const thisMonthRevenue = await this.prisma.membership.aggregate({
-      _sum: { finalAmount: true },
-      where: {
-        paymentStatus: 'paid',
-        paidAt: {
-          gte: startOfMonth,
-        },
-      },
+    // Get all active gyms to aggregate tenant data
+    const activeGymsList = await this.prisma.gym.findMany({
+      where: { isActive: true },
+      select: { id: true },
     });
 
-    // Calculate revenue values
-    const totalRevenue = Number(revenueData._sum.finalAmount) || 0;
-    const monthlyRevenue = Number(thisMonthRevenue._sum.finalAmount) || 0;
-    const lastMonthRevenueValue = Number(lastMonthRevenue._sum.finalAmount) || 0;
+    // Aggregate stats across all tenants
+    let totalUsers = 0;
+    let activeUsers = 0;
+    let totalTrainers = 0;
+    let totalMembers = 0;
+    let activeMemberships = 0;
+    let totalRevenue = 0;
+    let monthlyRevenue = 0;
+    let lastMonthRevenueValue = 0;
+    let presentToday = 0;
+
+    // Aggregate data from each tenant
+    for (const gym of activeGymsList) {
+      try {
+        const tenantStats = await this.tenantService.executeInTenant(gym.id, async (client) => {
+          const [
+            usersResult,
+            activeUsersResult,
+            trainersResult,
+            membersResult,
+            activeMembershipsResult,
+            revenueResult,
+            lastMonthRevenueResult,
+            thisMonthRevenueResult,
+            presentTodayResult,
+          ] = await Promise.all([
+            client.query(`SELECT COUNT(*) as count FROM users`),
+            client.query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`),
+            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
+            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
+            client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
+            client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
+            client.query(
+              `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`,
+              [startOfLastMonth, endOfLastMonth]
+            ),
+            client.query(
+              `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1`,
+              [startOfMonth]
+            ),
+            client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
+          ]);
+
+          return {
+            users: parseInt(usersResult.rows[0].count, 10),
+            activeUsers: parseInt(activeUsersResult.rows[0].count, 10),
+            trainers: parseInt(trainersResult.rows[0].count, 10),
+            members: parseInt(membersResult.rows[0].count, 10),
+            activeMemberships: parseInt(activeMembershipsResult.rows[0].count, 10),
+            revenue: parseFloat(revenueResult.rows[0].sum),
+            lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
+            thisMonthRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
+            presentToday: parseInt(presentTodayResult.rows[0].count, 10),
+          };
+        });
+
+        totalUsers += tenantStats.users;
+        activeUsers += tenantStats.activeUsers;
+        totalTrainers += tenantStats.trainers;
+        totalMembers += tenantStats.members;
+        activeMemberships += tenantStats.activeMemberships;
+        totalRevenue += tenantStats.revenue;
+        lastMonthRevenueValue += tenantStats.lastMonthRevenue;
+        monthlyRevenue += tenantStats.thisMonthRevenue;
+        presentToday += tenantStats.presentToday;
+      } catch (error) {
+        // Skip failed tenant queries (tenant schema might not exist yet)
+        console.error(`Failed to get stats for gym ${gym.id}:`, error);
+      }
+    }
 
     // Calculate monthly growth percentage
     let monthlyGrowth = 0;
     if (lastMonthRevenueValue > 0) {
-      monthlyGrowth =
-        ((monthlyRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100;
+      monthlyGrowth = ((monthlyRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100;
     } else if (monthlyRevenue > 0) {
-      monthlyGrowth = 100; // 100% growth if no revenue last month but have revenue this month
+      monthlyGrowth = 100;
     }
 
     return {
@@ -157,12 +156,12 @@ export class DashboardService {
       activeGyms,
       totalUsers,
       activeUsers,
-      totalTrainers: typeof totalTrainers === 'number' ? totalTrainers : 0,
-      totalMembers: typeof totalMembers === 'number' ? totalMembers : 0,
+      totalTrainers,
+      totalMembers,
       activeMemberships,
       totalRevenue,
       monthlyRevenue,
-      monthlyGrowth: Math.round(monthlyGrowth * 10) / 10, // Round to 1 decimal
+      monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
       presentToday,
       totalTickets,
       openTickets,
@@ -194,25 +193,32 @@ export class DashboardService {
   }
 
   private async getRecentUsers(limit = 5): Promise<RecentUserDto[]> {
-    const users = await this.prisma.user.findMany({
+    // Get recent staff users from public.users with their gym assignments
+    const recentStaff = await this.prisma.user.findMany({
       take: limit,
       orderBy: { createdAt: 'desc' },
-      include: {
-        role: {
-          select: {
-            code: true,
-            name: true,
-          },
+      where: { isDeleted: false },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        status: true,
+        createdAt: true,
+        gymAssignments: {
+          where: { isActive: true },
+          take: 1,
+          select: { role: true },
         },
       },
     });
 
-    return users.map((user) => ({
+    return recentStaff.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
       avatar: user.avatar || undefined,
-      role: user.role?.code || 'client',
+      role: user.gymAssignments[0]?.role || 'staff',
       status: user.status,
       createdAt: user.createdAt,
     }));
@@ -237,70 +243,23 @@ export class DashboardService {
   }
 
   // Admin Dashboard Methods
-  async getAdminDashboard(userId: number): Promise<AdminDashboardDto> {
-    // Get admin's gym IDs
-    const gymIds = await this.getAdminGymIds(userId);
-
-    const [stats, recentMembers, recentAttendance, recentTickets] =
-      await Promise.all([
-        this.getAdminStats(gymIds),
-        this.getRecentMembers(gymIds),
-        this.getRecentAttendance(gymIds),
-        this.getRecentTicketsForGyms(gymIds),
-      ]);
+  async getAdminDashboard(userId: number, gymId: number): Promise<AdminDashboardDto> {
+    const [stats, recentClients, recentAttendance, recentTickets] = await Promise.all([
+      this.getAdminStats(gymId),
+      this.getRecentClients(gymId),
+      this.getRecentAttendance(gymId),
+      this.getRecentTicketsForGym(gymId),
+    ]);
 
     return {
       stats,
-      recentMembers,
+      recentClients,
       recentAttendance,
       recentTickets,
     };
   }
 
-  private async getAdminGymIds(userId: number): Promise<number[]> {
-    // Get gyms from both userGymXref and direct gymId field
-    const [gymXrefs, user] = await Promise.all([
-      this.prisma.userGymXref.findMany({
-        where: {
-          userId,
-          isActive: true,
-        },
-        select: {
-          gymId: true,
-        },
-      }),
-      this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { gymId: true },
-      }),
-    ]);
-
-    const gymIds = new Set(gymXrefs.map((xref) => xref.gymId));
-    if (user?.gymId) {
-      gymIds.add(user.gymId);
-    }
-
-    return [...gymIds];
-  }
-
-  private async getAdminStats(gymIds: number[]): Promise<AdminDashboardStatsDto> {
-    if (gymIds.length === 0) {
-      return {
-        totalMembers: 0,
-        activeMembers: 0,
-        totalTrainers: 0,
-        activeMemberships: 0,
-        totalRevenue: 0,
-        totalCashRevenue: 0,
-        monthlyRevenue: 0,
-        lastMonthRevenue: 0,
-        monthlyGrowth: 0,
-        presentToday: 0,
-        openTickets: 0,
-        expiringThisWeek: 0,
-      };
-    }
-
+  private async getAdminStats(gymId: number): Promise<AdminDashboardStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -308,271 +267,128 @@ export class DashboardService {
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    // Get role lookups
-    const [trainerRole, memberRole] = await Promise.all([
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'trainer',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'client',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-    ]);
+    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [
+        totalMembersResult,
+        activeMembersResult,
+        totalTrainersResult,
+        activeMembershipsResult,
+        revenueResult,
+        cashRevenueResult,
+        lastMonthRevenueResult,
+        thisMonthRevenueResult,
+        presentTodayResult,
+        expiringThisWeekResult,
+      ] = await Promise.all([
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'`),
+        client.query(
+          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`,
+          [startOfLastMonth, endOfLastMonth]
+        ),
+        client.query(
+          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1`,
+          [startOfMonth]
+        ),
+        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
+        client.query(
+          `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2`,
+          [now, endOfWeek]
+        ),
+      ]);
 
-    // Get user IDs in admin's gyms (from both userGymXref and direct gymId field)
-    const [gymUserXrefs, directGymUsers] = await Promise.all([
-      this.prisma.userGymXref.findMany({
-        where: {
-          gymId: { in: gymIds },
-          isActive: true,
-        },
-        select: {
-          userId: true,
-        },
-      }),
-      this.prisma.user.findMany({
-        where: {
-          gymId: { in: gymIds },
-        },
-        select: {
-          id: true,
-        },
-      }),
-    ]);
-    const userIdsInGyms = [...new Set([
-      ...gymUserXrefs.map((x) => x.userId),
-      ...directGymUsers.map((u) => u.id),
-    ])];
+      return {
+        totalMembers: parseInt(totalMembersResult.rows[0].count, 10),
+        activeMembers: parseInt(activeMembersResult.rows[0].count, 10),
+        totalTrainers: parseInt(totalTrainersResult.rows[0].count, 10),
+        activeMemberships: parseInt(activeMembershipsResult.rows[0].count, 10),
+        totalRevenue: parseFloat(revenueResult.rows[0].sum),
+        totalCashRevenue: parseFloat(cashRevenueResult.rows[0].sum),
+        lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
+        monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
+        presentToday: parseInt(presentTodayResult.rows[0].count, 10),
+        expiringThisWeek: parseInt(expiringThisWeekResult.rows[0].count, 10),
+      };
+    });
 
-    // Execute all queries in parallel
-    const [
-      totalMembers,
-      activeMembers,
-      totalTrainers,
-      activeMemberships,
-      revenueData,
-      cashRevenueData,
-      lastMonthRevenue,
-      thisMonthRevenue,
-      presentToday,
-      openTickets,
-      expiringThisWeek,
-    ] = await Promise.all([
-      // Total members in gym
-      memberRole
-        ? this.prisma.user.count({
-            where: {
-              id: { in: userIdsInGyms },
-              roleId: memberRole.id,
-            },
-          })
-        : 0,
-      // Active members
-      memberRole
-        ? this.prisma.user.count({
-            where: {
-              id: { in: userIdsInGyms },
-              roleId: memberRole.id,
-              status: 'active',
-            },
-          })
-        : 0,
-      // Total trainers in gym
-      trainerRole
-        ? this.prisma.user.count({
-            where: {
-              id: { in: userIdsInGyms },
-              roleId: trainerRole.id,
-            },
-          })
-        : 0,
-      // Active memberships in gym
-      this.prisma.membership.count({
-        where: {
-          userId: { in: userIdsInGyms },
-          status: 'active',
-        },
-      }),
-      // Total revenue
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          userId: { in: userIdsInGyms },
-          paymentStatus: 'paid',
-        },
-      }),
-      // Total cash revenue
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          userId: { in: userIdsInGyms },
-          paymentStatus: 'paid',
-          paymentMethod: 'cash',
-        },
-      }),
-      // Last month revenue
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          userId: { in: userIdsInGyms },
-          paymentStatus: 'paid',
-          paidAt: {
-            gte: startOfLastMonth,
-            lte: endOfLastMonth,
-          },
-        },
-      }),
-      // This month revenue
-      this.prisma.membership.aggregate({
-        _sum: { finalAmount: true },
-        where: {
-          userId: { in: userIdsInGyms },
-          paymentStatus: 'paid',
-          paidAt: {
-            gte: startOfMonth,
-          },
-        },
-      }),
-      // Present today
-      this.prisma.attendance.count({
-        where: {
-          userId: { in: userIdsInGyms },
-          date: today,
-          status: 'present',
-        },
-      }),
-      // Open tickets
-      this.prisma.supportTicket.count({
-        where: {
-          userId: { in: userIdsInGyms },
-          status: { in: ['open', 'in_progress'] },
-        },
-      }),
-      // Expiring this week
-      this.prisma.membership.count({
-        where: {
-          userId: { in: userIdsInGyms },
-          status: 'active',
-          endDate: {
-            gte: now,
-            lte: endOfWeek,
-          },
-        },
-      }),
-    ]);
-
-    // Calculate revenue values
-    const totalRevenue = Number(revenueData?._sum?.finalAmount ?? 0) || 0;
-    const totalCashRevenue = Number(cashRevenueData?._sum?.finalAmount ?? 0) || 0;
-    const monthlyRevenue = Number(thisMonthRevenue?._sum?.finalAmount ?? 0) || 0;
-    const lastMonthRevenueValue = Number(lastMonthRevenue?._sum?.finalAmount ?? 0) || 0;
+    // Get open tickets count from public schema
+    const openTickets = await this.prisma.supportTicket.count({
+      where: {
+        gymId,
+        status: { in: ['open', 'in_progress'] },
+      },
+    });
 
     // Calculate monthly growth
     let monthlyGrowth = 0;
-    if (lastMonthRevenueValue > 0) {
-      monthlyGrowth =
-        ((monthlyRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100;
-    } else if (monthlyRevenue > 0) {
+    if (stats.lastMonthRevenue > 0) {
+      monthlyGrowth = ((stats.monthlyRevenue - stats.lastMonthRevenue) / stats.lastMonthRevenue) * 100;
+    } else if (stats.monthlyRevenue > 0) {
       monthlyGrowth = 100;
     }
 
     return {
-      totalMembers: typeof totalMembers === 'number' ? totalMembers : 0,
-      activeMembers: typeof activeMembers === 'number' ? activeMembers : 0,
-      totalTrainers: typeof totalTrainers === 'number' ? totalTrainers : 0,
-      activeMemberships,
-      totalRevenue,
-      totalCashRevenue,
-      monthlyRevenue,
-      lastMonthRevenue: lastMonthRevenueValue,
+      totalMembers: stats.totalMembers,
+      activeMembers: stats.activeMembers,
+      totalTrainers: stats.totalTrainers,
+      activeMemberships: stats.activeMemberships,
+      totalRevenue: stats.totalRevenue,
+      totalCashRevenue: stats.totalCashRevenue,
+      monthlyRevenue: stats.monthlyRevenue,
+      lastMonthRevenue: stats.lastMonthRevenue,
       monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
-      presentToday,
+      presentToday: stats.presentToday,
       openTickets,
-      expiringThisWeek,
+      expiringThisWeek: stats.expiringThisWeek,
     };
   }
 
-  private async getRecentMembers(
-    gymIds: number[],
-    limit = 5,
-  ): Promise<RecentMemberDto[]> {
-    if (gymIds.length === 0) return [];
-
-    const memberRole = await this.prisma.lookup.findFirst({
-      where: {
-        code: 'client',
-        lookupType: { code: 'USER_ROLE' },
-      },
+  private async getRecentClients(gymId: number, limit = 5): Promise<RecentClientDto[]> {
+    const clients = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
     });
 
-    if (!memberRole) return [];
-
-    // Get members directly associated with the gym via gymId field
-    const members = await this.prisma.user.findMany({
-      where: {
-        gymId: { in: gymIds },
-        roleId: memberRole.id,
-      },
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    return members.map((member) => ({
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      avatar: member.avatar || undefined,
-      status: member.status,
-      createdAt: member.createdAt,
+    return clients.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      avatar: c.avatar || undefined,
+      status: c.status,
+      createdAt: c.created_at,
     }));
   }
 
-  private async getRecentAttendance(
-    gymIds: number[],
-    limit = 5,
-  ): Promise<RecentAttendanceDto[]> {
-    if (gymIds.length === 0) return [];
-
-    // Get attendance for admin's gyms (via direct gymId field on attendance)
-    const attendance = await this.prisma.attendance.findMany({
-      where: {
-        gymId: { in: gymIds },
-      },
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            name: true,
-          },
-        },
-      },
+  private async getRecentAttendance(gymId: number, limit = 5): Promise<RecentAttendanceDto[]> {
+    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
+         FROM attendance a
+         JOIN users u ON u.id = a.user_id
+         ORDER BY a.created_at DESC LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
     });
 
-    return attendance.map((record) => ({
+    return attendance.map((record: any) => ({
       id: record.id,
-      userName: record.user.name,
+      userName: record.user_name,
       date: record.date,
-      checkIn: record.checkInTime.toLocaleTimeString('en-US', {
+      checkIn: new Date(record.check_in_time).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
       }),
-      checkOut: record.checkOutTime
-        ? record.checkOutTime.toLocaleTimeString('en-US', {
+      checkOut: record.check_out_time
+        ? new Date(record.check_out_time).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -582,17 +398,9 @@ export class DashboardService {
     }));
   }
 
-  private async getRecentTicketsForGyms(
-    gymIds: number[],
-    limit = 5,
-  ): Promise<RecentTicketDto[]> {
-    if (gymIds.length === 0) return [];
-
-    // Get tickets for admin's gyms (via direct gymId field on ticket)
+  private async getRecentTicketsForGym(gymId: number, limit = 5): Promise<RecentTicketDto[]> {
     const tickets = await this.prisma.supportTicket.findMany({
-      where: {
-        gymId: { in: gymIds },
-      },
+      where: { gymId },
       take: limit,
       orderBy: { createdAt: 'desc' },
       select: {
@@ -609,28 +417,42 @@ export class DashboardService {
     return tickets;
   }
 
-  // Member Dashboard Methods
-  async getMemberDashboard(userId: number): Promise<MemberDashboardDto> {
-    const [user, subscription, attendanceStats, recentAttendance, activeOffers] =
-      await Promise.all([
-        this.getMemberUser(userId),
-        this.getMemberSubscription(userId),
-        this.getMemberAttendanceStats(userId),
-        this.getMemberRecentAttendance(userId),
-        this.getMemberActiveOffers(userId),
-      ]);
+  // Client Dashboard Methods
+  async getClientDashboard(userId: number, gymId: number): Promise<ClientDashboardDto> {
+    const [user, subscription, attendanceStats, recentAttendance, activeOffers] = await Promise.all([
+      this.getClientUser(userId, gymId),
+      this.getClientSubscription(userId, gymId),
+      this.getClientAttendanceStats(userId, gymId),
+      this.getClientRecentAttendance(userId, gymId),
+      this.getClientActiveOffers(gymId),
+    ]);
+
+    // Get gym info from public schema
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: {
+        id: true,
+        name: true,
+        logo: true,
+        phone: true,
+        email: true,
+        address: true,
+        city: true,
+        state: true,
+      },
+    });
 
     return {
-      attendanceCode: user?.attendanceCode || '----',
-      gym: user?.gym ? {
-        id: user.gym.id,
-        name: user.gym.name,
-        logo: user.gym.logo || undefined,
-        phone: user.gym.phone || undefined,
-        email: user.gym.email || undefined,
-        address: user.gym.address || undefined,
-        city: user.gym.city || undefined,
-        state: user.gym.state || undefined,
+      attendanceCode: user?.attendance_code || '----',
+      gym: gym ? {
+        id: gym.id,
+        name: gym.name,
+        logo: gym.logo || undefined,
+        phone: gym.phone || undefined,
+        email: gym.email || undefined,
+        address: gym.address || undefined,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
       } : undefined,
       subscription,
       attendanceStats,
@@ -639,51 +461,34 @@ export class DashboardService {
     };
   }
 
-  private async getMemberUser(userId: number) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        attendanceCode: true,
-        gym: {
-          select: {
-            id: true,
-            name: true,
-            logo: true,
-            phone: true,
-            email: true,
-            address: true,
-            city: true,
-            state: true,
-          },
-        },
-      },
+  private async getClientUser(userId: number, gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, attendance_code FROM users WHERE id = $1`,
+        [userId]
+      );
+      return result.rows[0];
     });
   }
 
-  private async getMemberSubscription(
-    userId: number,
-  ): Promise<MemberSubscriptionDto | undefined> {
-    const membership = await this.prisma.membership.findFirst({
-      where: {
-        userId,
-        status: 'active',
-      },
-      include: {
-        plan: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
+  private async getClientSubscription(userId: number, gymId: number): Promise<ClientSubscriptionDto | undefined> {
+    const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, p.name as plan_name
+         FROM memberships m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE m.user_id = $1 AND m.status = 'active'
+         ORDER BY m.created_at DESC LIMIT 1`,
+        [userId]
+      );
+      return result.rows[0];
     });
 
     if (!membership) return undefined;
 
     const now = new Date();
-    const startDate = new Date(membership.startDate);
-    const endDate = new Date(membership.endDate);
+    const startDate = new Date(membership.start_date);
+    const endDate = new Date(membership.end_date);
 
     // Calculate days remaining
     const diffTime = endDate.getTime() - now.getTime();
@@ -706,19 +511,17 @@ export class DashboardService {
 
     return {
       id: membership.id,
-      planName: membership.plan?.name || 'Unknown Plan',
+      planName: membership.plan_name || 'Unknown Plan',
       status: membership.status,
-      startDate: membership.startDate.toISOString().split('T')[0],
-      endDate: membership.endDate.toISOString().split('T')[0],
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
       daysRemaining,
       progress,
       isEndingSoon,
     };
   }
 
-  private async getMemberAttendanceStats(
-    userId: number,
-  ): Promise<MemberAttendanceStatsDto> {
+  private async getClientAttendanceStats(userId: number, gymId: number): Promise<ClientAttendanceStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
@@ -728,50 +531,48 @@ export class DashboardService {
     const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
     const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
 
-    const [thisMonth, thisWeek, total] = await Promise.all([
-      this.prisma.attendance.count({
-        where: {
-          userId,
-          date: { gte: startOfMonthStr },
-          status: 'present',
-        },
-      }),
-      this.prisma.attendance.count({
-        where: {
-          userId,
-          date: { gte: startOfWeekStr },
-          status: 'present',
-        },
-      }),
-      this.prisma.attendance.count({
-        where: {
-          userId,
-          status: 'present',
-        },
-      }),
-    ]);
+    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [thisMonthResult, thisWeekResult, totalResult] = await Promise.all([
+        client.query(
+          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+          [userId, startOfMonthStr]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+          [userId, startOfWeekStr]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND status = 'present'`,
+          [userId]
+        ),
+      ]);
+
+      return {
+        thisMonth: parseInt(thisMonthResult.rows[0].count, 10),
+        thisWeek: parseInt(thisWeekResult.rows[0].count, 10),
+        total: parseInt(totalResult.rows[0].count, 10),
+      };
+    });
 
     // Calculate current streak
-    const currentStreak = await this.calculateCurrentStreak(userId);
+    const currentStreak = await this.calculateCurrentStreak(userId, gymId);
 
     return {
-      thisMonth,
-      thisWeek,
-      total,
+      thisMonth: stats.thisMonth,
+      thisWeek: stats.thisWeek,
+      total: stats.total,
       currentStreak,
     };
   }
 
-  private async calculateCurrentStreak(userId: number): Promise<number> {
+  private async calculateCurrentStreak(userId: number, gymId: number): Promise<number> {
     // Get all attendance records sorted by date descending
-    const attendanceRecords = await this.prisma.attendance.findMany({
-      where: {
-        userId,
-        status: 'present',
-      },
-      orderBy: { date: 'desc' },
-      select: { date: true },
-      take: 60, // Check last 60 records max
+    const attendanceRecords = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY date DESC LIMIT 60`,
+        [userId]
+      );
+      return result.rows;
     });
 
     if (attendanceRecords.length === 0) return 0;
@@ -779,7 +580,6 @@ export class DashboardService {
     let streak = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
 
     // Check if there's attendance today or yesterday to start counting
     const lastAttendanceDate = attendanceRecords[0].date;
@@ -794,11 +594,11 @@ export class DashboardService {
     if (diffDays > 1) return 0;
 
     // Count consecutive days
-    const uniqueDates = [...new Set(attendanceRecords.map((r) => r.date))];
+    const uniqueDates = [...new Set(attendanceRecords.map((r: any) => r.date))] as string[];
     let expectedDate = new Date(uniqueDates[0]);
 
     for (const dateStr of uniqueDates) {
-      const currentDate = new Date(dateStr);
+      const currentDate = new Date(dateStr as string);
       currentDate.setHours(0, 0, 0, 0);
       expectedDate.setHours(0, 0, 0, 0);
 
@@ -818,33 +618,25 @@ export class DashboardService {
     return streak;
   }
 
-  private async getMemberRecentAttendance(
-    userId: number,
-    limit = 5,
-  ): Promise<MemberRecentAttendanceDto[]> {
-    const attendance = await this.prisma.attendance.findMany({
-      where: { userId },
-      take: limit,
-      orderBy: { date: 'desc' },
-      select: {
-        id: true,
-        date: true,
-        checkInTime: true,
-        checkOutTime: true,
-        status: true,
-      },
+  private async getClientRecentAttendance(userId: number, gymId: number, limit = 5): Promise<ClientRecentAttendanceDto[]> {
+    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY date DESC LIMIT $2`,
+        [userId, limit]
+      );
+      return result.rows;
     });
 
-    return attendance.map((record) => ({
+    return attendance.map((record: any) => ({
       id: record.id,
       date: record.date,
-      checkIn: record.checkInTime.toLocaleTimeString('en-US', {
+      checkIn: new Date(record.check_in_time).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
       }),
-      checkOut: record.checkOutTime
-        ? record.checkOutTime.toLocaleTimeString('en-US', {
+      checkOut: record.check_out_time
+        ? new Date(record.check_out_time).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -854,42 +646,27 @@ export class DashboardService {
     }));
   }
 
-  private async getMemberActiveOffers(
-    userId: number,
-    limit = 3,
-  ): Promise<ActiveOfferDto[]> {
+  private async getClientActiveOffers(gymId: number, limit = 3): Promise<ActiveOfferDto[]> {
     const now = new Date();
 
-    // Get active offers
-    const offers = await this.prisma.offer.findMany({
-      where: {
-        isActive: true,
-        validFrom: { lte: now },
-        validTo: { gte: now },
-      },
-      take: limit,
-      orderBy: { validTo: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        discountType: true,
-        discountValue: true,
-        code: true,
-        validTo: true,
-      },
+    const offers = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, description, discount_type, discount_value, code, valid_to
+         FROM offers
+         WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1
+         ORDER BY valid_to ASC LIMIT $2`,
+        [now, limit]
+      );
+      return result.rows;
     });
 
-    return offers.map((offer) => ({
+    return offers.map((offer: any) => ({
       id: offer.id,
       title: offer.name,
       description: offer.description || undefined,
-      discountPercentage:
-        offer.discountType === 'percentage'
-          ? Number(offer.discountValue)
-          : 0,
+      discountPercentage: offer.discount_type === 'percentage' ? Number(offer.discount_value) : 0,
       code: offer.code || undefined,
-      endDate: offer.validTo.toISOString().split('T')[0],
+      endDate: new Date(offer.valid_to).toISOString().split('T')[0],
     }));
   }
 }

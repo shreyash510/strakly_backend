@@ -9,40 +9,15 @@ import {
   Query,
   Headers,
   UseGuards,
-  Request,
   BadRequestException,
-  ForbiddenException,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto, CheckOutDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-
-// Helper to get gymId based on user role
-// Managers are restricted to their own gym, admins can access all or specify
-async function resolveGymId(
-  service: AttendanceService,
-  userRole: string,
-  userId: number,
-  requestedGymId?: number,
-): Promise<number | undefined> {
-  if (userRole === 'manager') {
-    // Managers can only access their own gym
-    const managerGymId = await service.getUserGymId(userId);
-    if (!managerGymId) {
-      throw new ForbiddenException('Manager is not assigned to any gym');
-    }
-    // If they requested a specific gym, make sure it's their gym
-    if (requestedGymId && requestedGymId !== managerGymId) {
-      throw new ForbiddenException('You can only access attendance for your own gym');
-    }
-    return managerGymId;
-  }
-  // Admins and superadmins can access any gym or all gyms
-  return requestedGymId;
-}
+import { Roles, GymId, UserId } from '../auth/decorators';
 
 @ApiTags('attendance')
 @Controller('attendance')
@@ -51,43 +26,39 @@ async function resolveGymId(
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
-  // =====================
-  // SEARCH USER BY CODE
-  // =====================
+  private resolveGymId(req: any, queryGymId?: string): number {
+    if (req.user.role === 'superadmin') {
+      if (!queryGymId) {
+        throw new BadRequestException('gymId query parameter is required for superadmin');
+      }
+      return parseInt(queryGymId);
+    }
+    if (!req.user.gymId) {
+      throw new BadRequestException('Gym context is required');
+    }
+    return req.user.gymId;
+  }
 
   @Get('search/:code')
   @ApiOperation({ summary: 'Search user by attendance code' })
-  async searchUserByCode(@Param('code') code: string) {
-    const user = await this.attendanceService.searchUserByCode(code);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async searchUserByCode(@Request() req: any, @Param('code') code: string, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    const user = await this.attendanceService.searchUserByCode(code, gymId);
     if (!user) {
       return null;
     }
     return user;
   }
 
-  // =====================
-  // MARK ATTENDANCE (Check-In)
-  // =====================
-
   @Post('mark')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Mark attendance (check-in) for a user at a gym' })
-  async markAttendance(@Body() body: MarkAttendanceDto, @Request() req: any) {
-    // For managers, verify they can only mark attendance at their own gym
-    const gymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      body.gymId,
-    );
-
-    if (!gymId) {
-      throw new BadRequestException('Gym ID is required');
-    }
-
-    // Search for user by attendance code
-    const user = await this.attendanceService.searchUserByCode(body.code);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async markAttendance(@Request() req: any, @Body() body: MarkAttendanceDto, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    const user = await this.attendanceService.searchUserByCode(body.code, gymId);
     if (!user) {
       throw new BadRequestException('Invalid attendance code');
     }
@@ -105,170 +76,121 @@ export class AttendanceController {
     );
   }
 
-  // =====================
-  // CHECK OUT
-  // =====================
-
   @Patch('checkout/:id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Check out a user' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async checkOut(
+    @Request() req: any,
     @Param('id') attendanceId: string,
     @Body() body?: CheckOutDto,
+    @Query('gymId') queryGymId?: string,
   ) {
+    const gymId = this.resolveGymId(req, queryGymId);
     return this.attendanceService.checkOut(
       parseInt(attendanceId),
+      gymId,
       body?.staffId,
     );
   }
 
-  // =====================
-  // CURRENT USER ATTENDANCE
-  // =====================
-
   @Get('me')
   @ApiOperation({ summary: 'Get current user attendance history' })
   async getMyAttendance(
-    @Request() req: any,
+    @UserId() userId: number,
+    @GymId() gymId: number,
     @Query('limit') limit?: number,
   ) {
-    return this.attendanceService.getUserAttendance(req.user.userId, limit || 50);
+    return this.attendanceService.getUserAttendance(userId, gymId, limit || 50);
   }
-
-  // =====================
-  // FETCH ATTENDANCE
-  // =====================
 
   @Get('today')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: "Get today's attendance records (filtered by gym for managers)" })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
-  async getTodayAttendance(
-    @Request() req: any,
-    @Query('gymId') gymId?: string,
-  ) {
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
-    return this.attendanceService.getTodayAttendance(resolvedGymId);
+  @ApiOperation({ summary: "Get today's attendance records" })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async getTodayAttendance(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.attendanceService.getTodayAttendance(gymId);
   }
 
   @Get('date/:date')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get attendance records for a specific date (filtered by gym for managers)' })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
+  @ApiOperation({ summary: 'Get attendance records for a specific date' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async getAttendanceByDate(
-    @Param('date') date: string,
     @Request() req: any,
-    @Query('gymId') gymId?: string,
+    @Param('date') date: string,
+    @Query('gymId') queryGymId?: string,
   ) {
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
-    return this.attendanceService.getAttendanceByDate(date, resolvedGymId);
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.attendanceService.getAttendanceByDate(date, gymId);
   }
 
   @Get('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: "Get a user's attendance history (filtered by gym for managers)" })
+  @ApiOperation({ summary: "Get a user's attendance history" })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async getUserAttendance(
-    @Headers('x-user-id') userId: string,
     @Request() req: any,
+    @Headers('x-user-id') userId: string,
     @Query('limit') limit?: number,
-    @Query('gymId') gymId?: string,
+    @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
-    return this.attendanceService.getUserAttendance(parseInt(userId), limit || 50, resolvedGymId);
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.attendanceService.getUserAttendance(parseInt(userId), gymId, limit || 50);
   }
-
-  // =====================
-  // STATS
-  // =====================
 
   @Get('stats')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get attendance statistics (filtered by gym for managers)' })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
-  async getAttendanceStats(
-    @Request() req: any,
-    @Query('gymId') gymId?: string,
-  ) {
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
-    return this.attendanceService.getAttendanceStats(resolvedGymId);
+  @ApiOperation({ summary: 'Get attendance statistics' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async getAttendanceStats(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.attendanceService.getAttendanceStats(gymId);
   }
 
   @Get('present-count')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get currently present count (filtered by gym for managers)' })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
-  async getCurrentlyPresentCount(
-    @Request() req: any,
-    @Query('gymId') gymId?: string,
-  ) {
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
-    const count = await this.attendanceService.getCurrentlyPresentCount(resolvedGymId);
+  @ApiOperation({ summary: 'Get currently present count' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async getCurrentlyPresentCount(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    const count = await this.attendanceService.getCurrentlyPresentCount(gymId);
     return { count };
   }
-
-  // =====================
-  // ADMIN OPERATIONS
-  // =====================
 
   @Get('all')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
-  @ApiOperation({ summary: 'Get all attendance records with pagination (filtered by gym for managers)' })
-  @ApiQuery({ name: 'gymId', required: false, description: 'Filter by gym ID' })
+  @ApiOperation({ summary: 'Get all attendance records with pagination' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async getAllAttendance(
     @Request() req: any,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('gymId') gymId?: string,
+    @Query('gymId') queryGymId?: string,
   ) {
-    const resolvedGymId = await resolveGymId(
-      this.attendanceService,
-      req.user.role,
-      req.user.userId,
-      gymId ? parseInt(gymId) : undefined,
-    );
+    const gymId = this.resolveGymId(req, queryGymId);
     return this.attendanceService.getAllAttendance(
+      gymId,
       page || 1,
       limit || 50,
       startDate,
       endDate,
-      resolvedGymId,
     );
   }
 
@@ -276,8 +198,10 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an attendance record' })
-  async deleteAttendance(@Param('id') attendanceId: string) {
-    const result = await this.attendanceService.deleteAttendance(parseInt(attendanceId));
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  async deleteAttendance(@Request() req: any, @Param('id') attendanceId: string, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    const result = await this.attendanceService.deleteAttendance(parseInt(attendanceId), gymId);
     return { success: result };
   }
 }

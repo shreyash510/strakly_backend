@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TenantService } from '../tenant/tenant.service';
 import { CreateSalaryDto, UpdateSalaryDto, PaySalaryDto } from './dto/salary.dto';
 import {
   PaginationParams,
@@ -18,26 +19,47 @@ export interface SalaryFilters extends PaginationParams {
   month?: number;
   year?: number;
   paymentStatus?: string;
-  gymId?: number;
 }
 
 @Injectable()
 export class SalaryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tenantService: TenantService,
+  ) {}
+
+  private formatSalary(s: any, staff?: any, paidBy?: any) {
+    return {
+      id: s.id,
+      staffId: s.staff_id,
+      month: s.month,
+      year: s.year,
+      baseSalary: Number(s.base_salary),
+      bonus: Number(s.bonus || 0),
+      deductions: Number(s.deductions || 0),
+      netAmount: Number(s.net_amount),
+      paymentStatus: s.payment_status,
+      paymentMethod: s.payment_method,
+      paymentRef: s.payment_ref,
+      paidAt: s.paid_at,
+      paidById: s.paid_by_id,
+      notes: s.notes,
+      createdAt: s.created_at,
+      updatedAt: s.updated_at,
+      staff: staff || null,
+      paidBy: paidBy || null,
+    };
+  }
 
   async create(createSalaryDto: CreateSalaryDto, gymId: number, paidById: number) {
     // Verify staff belongs to the gym
-    const staff = await this.prisma.user.findFirst({
-      where: {
-        id: createSalaryDto.staffId,
-        gymId,
-        role: {
-          code: { in: ['trainer', 'manager'] },
-        },
-      },
-      include: {
-        role: { select: { code: true, name: true } },
-      },
+    const staff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, role FROM users
+         WHERE id = $1 AND role IN ('trainer', 'manager')`,
+        [createSalaryDto.staffId]
+      );
+      return result.rows[0];
     });
 
     if (!staff) {
@@ -45,15 +67,12 @@ export class SalaryService {
     }
 
     // Check if salary record already exists for this month/year
-    const existingSalary = await this.prisma.staffSalary.findUnique({
-      where: {
-        staffId_gymId_month_year: {
-          staffId: createSalaryDto.staffId,
-          gymId,
-          month: createSalaryDto.month,
-          year: createSalaryDto.year,
-        },
-      },
+    const existingSalary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+        [createSalaryDto.staffId, createSalaryDto.month, createSalaryDto.year]
+      );
+      return result.rows[0];
     });
 
     if (existingSalary) {
@@ -62,234 +81,208 @@ export class SalaryService {
       );
     }
 
-    // Calculate net amount
     const bonus = createSalaryDto.bonus || 0;
     const deductions = createSalaryDto.deductions || 0;
     const netAmount = createSalaryDto.baseSalary + bonus - deductions;
 
-    const salary = await this.prisma.staffSalary.create({
-      data: {
-        staffId: createSalaryDto.staffId,
-        gymId,
-        month: createSalaryDto.month,
-        year: createSalaryDto.year,
-        baseSalary: createSalaryDto.baseSalary,
-        bonus,
-        deductions,
-        netAmount,
-        notes: createSalaryDto.notes,
-      },
+    const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, payment_status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, NOW(), NOW())
+         RETURNING *`,
+        [createSalaryDto.staffId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, createSalaryDto.notes || null]
+      );
+      return result.rows[0];
     });
 
     return this.findOne(salary.id, gymId);
   }
 
-  async findAll(
-    filters: SalaryFilters,
-    gymId: number,
-  ): Promise<PaginatedResponse<any>> {
-    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+  async findAll(filters: SalaryFilters, gymId: number): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take } = getPaginationParams(filters);
 
-    const where: any = { gymId };
+    const { salaries, total, userMap } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = '1=1';
+      const values: any[] = [];
+      let paramIndex = 1;
 
-    if (filters.staffId) {
-      where.staffId = filters.staffId;
-    }
+      if (filters.staffId) {
+        whereClause += ` AND s.staff_id = $${paramIndex++}`;
+        values.push(filters.staffId);
+      }
+      if (filters.month) {
+        whereClause += ` AND s.month = $${paramIndex++}`;
+        values.push(filters.month);
+      }
+      if (filters.year) {
+        whereClause += ` AND s.year = $${paramIndex++}`;
+        values.push(filters.year);
+      }
+      if (filters.paymentStatus && filters.paymentStatus !== 'all') {
+        whereClause += ` AND s.payment_status = $${paramIndex++}`;
+        values.push(filters.paymentStatus);
+      }
+      if (filters.search) {
+        whereClause += ` AND u.name ILIKE $${paramIndex++}`;
+        values.push(`%${filters.search}%`);
+      }
 
-    if (filters.month) {
-      where.month = filters.month;
-    }
+      const [salariesResult, countResult] = await Promise.all([
+        client.query(
+          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
+           FROM staff_salaries s
+           JOIN users u ON u.id = s.staff_id
+           WHERE ${whereClause}
+           ORDER BY s.year DESC, s.month DESC, s.created_at DESC
+           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+          [...values, take, skip]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM staff_salaries s
+           JOIN users u ON u.id = s.staff_id
+           WHERE ${whereClause}`,
+          values
+        ),
+      ]);
 
-    if (filters.year) {
-      where.year = filters.year;
-    }
+      // Build user map for paidBy lookups
+      const paidByIds = salariesResult.rows.filter((s: any) => s.paid_by_id).map((s: any) => s.paid_by_id);
+      let paidByMap = new Map();
+      if (paidByIds.length > 0) {
+        const paidByResult = await client.query(
+          `SELECT u.id, u.name, u.email FROM users u WHERE u.id = ANY($1)`,
+          [paidByIds]
+        );
+        paidByMap = new Map(paidByResult.rows.map((u: any) => [u.id, u]));
+      }
 
-    if (filters.paymentStatus && filters.paymentStatus !== 'all') {
-      where.paymentStatus = filters.paymentStatus;
-    }
-
-    if (filters.search) {
-      // Search by staff name
-      const staffUsers = await this.prisma.user.findMany({
-        where: {
-          gymId,
-          name: { contains: filters.search, mode: 'insensitive' },
-        },
-        select: { id: true },
-      });
-      where.staffId = { in: staffUsers.map((u) => u.id) };
-    }
-
-    const total = await this.prisma.staffSalary.count({ where });
-
-    const salaries = await this.prisma.staffSalary.findMany({
-      where,
-      orderBy: [{ year: 'desc' }, { month: 'desc' }, { createdAt: 'desc' }],
-      skip,
-      take,
+      return {
+        salaries: salariesResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+        userMap: paidByMap,
+      };
     });
 
-    // Batch fetch staff info
-    const staffIds = salaries.map((s) => s.staffId);
-    const paidByIds = salaries.filter((s) => s.paidById).map((s) => s.paidById as number);
-    const allUserIds = [...new Set([...staffIds, ...paidByIds])];
-
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: allUserIds } },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        role: { select: { code: true, name: true } },
-      },
-    });
-
-    const userMap = new Map(users.map((u) => [u.id, u]));
-
-    const salariesWithStaffInfo = salaries.map((salary) => ({
-      ...salary,
-      baseSalary: Number(salary.baseSalary),
-      bonus: Number(salary.bonus),
-      deductions: Number(salary.deductions),
-      netAmount: Number(salary.netAmount),
-      staff: userMap.get(salary.staffId) || null,
-      paidBy: salary.paidById ? userMap.get(salary.paidById) || null : null,
-    }));
+    const data = salaries.map((s: any) => this.formatSalary(s, {
+      id: s.staff_id,
+      name: s.staff_name,
+      email: s.staff_email,
+      avatar: s.staff_avatar,
+      role: s.staff_role,
+    }, userMap.get(s.paid_by_id)));
 
     return {
-      data: salariesWithStaffInfo,
-      pagination: createPaginationMeta(total, page, limit, noPagination),
+      data,
+      pagination: createPaginationMeta(total, page, limit, false),
     };
   }
 
   async findOne(salaryId: number, gymId: number) {
-    const salary = await this.prisma.staffSalary.findUnique({
-      where: { id: salaryId },
+    const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
+         FROM staff_salaries s
+         JOIN users u ON u.id = s.staff_id
+         WHERE s.id = $1`,
+        [salaryId]
+      );
+      return result.rows[0];
     });
 
     if (!salary) {
       throw new NotFoundException('Salary record not found');
     }
 
-    if (salary.gymId !== gymId) {
-      throw new ForbiddenException('You can only view salary records from your gym');
+    let paidBy = null;
+    if (salary.paid_by_id) {
+      paidBy = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const result = await client.query(
+          `SELECT id, name, email FROM users WHERE id = $1`,
+          [salary.paid_by_id]
+        );
+        return result.rows[0];
+      });
     }
 
-    // Fetch staff and paidBy info
-    const userIds = [salary.staffId];
-    if (salary.paidById) userIds.push(salary.paidById);
-
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        phone: true,
-        role: { select: { code: true, name: true } },
-      },
-    });
-
-    const userMap = new Map(users.map((u) => [u.id, u]));
-
-    return {
-      ...salary,
-      baseSalary: Number(salary.baseSalary),
-      bonus: Number(salary.bonus),
-      deductions: Number(salary.deductions),
-      netAmount: Number(salary.netAmount),
-      staff: userMap.get(salary.staffId) || null,
-      paidBy: salary.paidById ? userMap.get(salary.paidById) || null : null,
-    };
+    return this.formatSalary(salary, {
+      id: salary.staff_id,
+      name: salary.staff_name,
+      email: salary.staff_email,
+      avatar: salary.staff_avatar,
+      phone: salary.staff_phone,
+      role: salary.staff_role,
+    }, paidBy);
   }
 
   async update(salaryId: number, updateSalaryDto: UpdateSalaryDto, gymId: number) {
-    const salary = await this.prisma.staffSalary.findUnique({
-      where: { id: salaryId },
+    const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM staff_salaries WHERE id = $1`, [salaryId]);
+      return result.rows[0];
     });
 
     if (!salary) {
       throw new NotFoundException('Salary record not found');
     }
 
-    if (salary.gymId !== gymId) {
-      throw new ForbiddenException('You can only update salary records from your gym');
-    }
-
-    if (salary.paymentStatus === 'paid') {
+    if (salary.payment_status === 'paid') {
       throw new ForbiddenException('Cannot update a paid salary record');
     }
 
-    // Recalculate net amount if any amount fields are updated
-    const baseSalary = updateSalaryDto.baseSalary ?? Number(salary.baseSalary);
+    const baseSalary = updateSalaryDto.baseSalary ?? Number(salary.base_salary);
     const bonus = updateSalaryDto.bonus ?? Number(salary.bonus);
     const deductions = updateSalaryDto.deductions ?? Number(salary.deductions);
     const netAmount = baseSalary + bonus - deductions;
 
-    await this.prisma.staffSalary.update({
-      where: { id: salaryId },
-      data: {
-        ...updateSalaryDto,
-        netAmount,
-      },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, notes = $5, updated_at = NOW() WHERE id = $6`,
+        [baseSalary, bonus, deductions, netAmount, updateSalaryDto.notes || salary.notes, salaryId]
+      );
     });
 
     return this.findOne(salaryId, gymId);
   }
 
   async paySalary(salaryId: number, paySalaryDto: PaySalaryDto, gymId: number, paidById: number) {
-    const salary = await this.prisma.staffSalary.findUnique({
-      where: { id: salaryId },
+    const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM staff_salaries WHERE id = $1`, [salaryId]);
+      return result.rows[0];
     });
 
     if (!salary) {
       throw new NotFoundException('Salary record not found');
     }
 
-    if (salary.gymId !== gymId) {
-      throw new ForbiddenException('You can only pay salary records from your gym');
-    }
-
-    if (salary.paymentStatus === 'paid') {
+    if (salary.payment_status === 'paid') {
       throw new ForbiddenException('Salary has already been paid');
     }
 
-    await this.prisma.staffSalary.update({
-      where: { id: salaryId },
-      data: {
-        paymentStatus: 'paid',
-        paymentMethod: paySalaryDto.paymentMethod,
-        paymentRef: paySalaryDto.paymentRef,
-        paidAt: new Date(),
-        paidById,
-        notes: paySalaryDto.notes || salary.notes,
-      },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4`,
+        [paySalaryDto.paymentMethod, paySalaryDto.paymentRef || null, paidById, salaryId]
+      );
     });
 
     return this.findOne(salaryId, gymId);
   }
 
   async remove(salaryId: number, gymId: number) {
-    const salary = await this.prisma.staffSalary.findUnique({
-      where: { id: salaryId },
+    const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM staff_salaries WHERE id = $1`, [salaryId]);
+      return result.rows[0];
     });
 
     if (!salary) {
       throw new NotFoundException('Salary record not found');
     }
 
-    if (salary.gymId !== gymId) {
-      throw new ForbiddenException('You can only delete salary records from your gym');
-    }
-
-    if (salary.paymentStatus === 'paid') {
+    if (salary.payment_status === 'paid') {
       throw new ForbiddenException('Cannot delete a paid salary record');
     }
 
-    await this.prisma.staffSalary.delete({
-      where: { id: salaryId },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(`DELETE FROM staff_salaries WHERE id = $1`, [salaryId]);
     });
 
     return { success: true, message: 'Salary record deleted successfully' };
@@ -300,65 +293,48 @@ export class SalaryService {
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
 
-    const [totalPending, totalPaid, currentMonthStats, staffCount] = await Promise.all([
-      // Total pending amount
-      this.prisma.staffSalary.aggregate({
-        where: { gymId, paymentStatus: 'pending' },
-        _sum: { netAmount: true },
-        _count: true,
-      }),
-      // Total paid this year
-      this.prisma.staffSalary.aggregate({
-        where: { gymId, paymentStatus: 'paid', year: currentYear },
-        _sum: { netAmount: true },
-        _count: true,
-      }),
-      // Current month stats
-      this.prisma.staffSalary.aggregate({
-        where: { gymId, month: currentMonth, year: currentYear },
-        _sum: { netAmount: true },
-        _count: true,
-      }),
-      // Staff count (trainers + managers)
-      this.prisma.user.count({
-        where: {
-          gymId,
-          status: 'active',
-          role: { code: { in: ['trainer', 'manager'] } },
-        },
-      }),
-    ]);
+    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [pendingResult, paidResult, currentMonthResult, staffCountResult] = await Promise.all([
+        client.query(`SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE payment_status = 'pending'`),
+        client.query(`SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE payment_status = 'paid' AND year = $1`, [currentYear]),
+        client.query(`SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE month = $1 AND year = $2`, [currentMonth, currentYear]),
+        client.query(
+          `SELECT COUNT(*) as count FROM users
+           WHERE status = 'active' AND role IN ('trainer', 'manager')`
+        ),
+      ]);
 
-    return {
-      pendingAmount: Number(totalPending._sum.netAmount || 0),
-      pendingCount: totalPending._count,
-      paidThisYear: Number(totalPaid._sum.netAmount || 0),
-      paidCountThisYear: totalPaid._count,
-      currentMonthTotal: Number(currentMonthStats._sum.netAmount || 0),
-      currentMonthCount: currentMonthStats._count,
-      totalStaff: staffCount,
-    };
+      return {
+        pendingAmount: parseFloat(pendingResult.rows[0].sum),
+        pendingCount: parseInt(pendingResult.rows[0].count, 10),
+        paidThisYear: parseFloat(paidResult.rows[0].sum),
+        paidCountThisYear: parseInt(paidResult.rows[0].count, 10),
+        currentMonthTotal: parseFloat(currentMonthResult.rows[0].sum),
+        currentMonthCount: parseInt(currentMonthResult.rows[0].count, 10),
+        totalStaff: parseInt(staffCountResult.rows[0].count, 10),
+      };
+    });
+
+    return stats;
   }
 
   async getStaffList(gymId: number) {
-    // Get all staff (trainers and managers) for the gym
-    const staff = await this.prisma.user.findMany({
-      where: {
-        gymId,
-        status: 'active',
-        role: { code: { in: ['trainer', 'manager'] } },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        phone: true,
-        role: { select: { code: true, name: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, email, avatar, phone, role
+         FROM users
+         WHERE status = 'active' AND role IN ('trainer', 'manager')
+         ORDER BY name ASC`
+      );
 
-    return staff;
+      return result.rows.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        avatar: u.avatar,
+        phone: u.phone,
+        role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
+      }));
+    });
   }
 }

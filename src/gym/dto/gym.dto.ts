@@ -1,14 +1,40 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail, IsNotEmpty } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail, IsNotEmpty, ValidateNested, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+// Admin user details for creating a new gym
+export class CreateAdminUserDto {
+  @ApiProperty({ description: 'Admin user name' })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({ description: 'Admin user email' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({ description: 'Admin user password' })
+  @IsString()
+  @MinLength(6)
+  @IsNotEmpty()
+  password: string;
+
+  @ApiPropertyOptional({ description: 'Admin user phone' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
 
 export class CreateGymDto {
-  @ApiProperty({ description: 'Owner/Admin user ID' })
-  @IsInt()
-  @IsNotEmpty()
-  userId: number;
+  @ApiProperty({ description: 'Admin user details', type: CreateAdminUserDto })
+  @ValidateNested()
+  @Type(() => CreateAdminUserDto)
+  admin: CreateAdminUserDto;
 
   @ApiProperty({ description: 'Gym name' })
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @ApiPropertyOptional({ description: 'Gym description' })
@@ -87,4 +113,5 @@ export class CreateGymDto {
   isActive?: boolean;
 }
 
-export class UpdateGymDto extends PartialType(CreateGymDto) {}
+// UpdateGymDto excludes admin (can't change admin on update)
+export class UpdateGymDto extends PartialType(OmitType(CreateGymDto, ['admin'] as const)) {}

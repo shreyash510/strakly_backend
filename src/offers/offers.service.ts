@@ -1,287 +1,191 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { CreateOfferDto, UpdateOfferDto, AssignOfferToPlansDto } from './dto/offer.dto';
+import { TenantService } from '../tenant/tenant.service';
+import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
 
 @Injectable()
 export class OffersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantService: TenantService,
+  ) {}
 
-  async findAll(includeInactive = false) {
-    const where = includeInactive ? {} : { isActive: true };
+  private formatOffer(o: any) {
+    return {
+      id: o.id,
+      code: o.code,
+      name: o.name,
+      description: o.description,
+      discountType: o.discount_type,
+      discountValue: o.discount_value,
+      startDate: o.valid_from,
+      endDate: o.valid_to,
+      maxUsage: o.max_usage_count,
+      currentUsage: o.used_count,
+      isActive: o.is_active,
+      createdAt: o.created_at,
+      updatedAt: o.updated_at,
+    };
+  }
 
-    return this.prisma.offer.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        planOffers: {
-          include: {
-            plan: {
-              select: { id: true, code: true, name: true },
-            },
-          },
-        },
-      },
+  async findAll(gymId: number, includeInactive = false) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const whereClause = includeInactive ? '' : 'WHERE is_active = true';
+      const result = await client.query(
+        `SELECT * FROM offers ${whereClause} ORDER BY created_at DESC`
+      );
+      return result.rows.map((o: any) => this.formatOffer(o));
     });
   }
 
-  async findActive() {
-    const now = new Date();
-
-    return this.prisma.offer.findMany({
-      where: {
-        isActive: true,
-        validFrom: { lte: now },
-        validTo: { gte: now },
-      },
-      orderBy: { validTo: 'asc' },
-      include: {
-        planOffers: {
-          include: {
-            plan: {
-              select: { id: true, code: true, name: true },
-            },
-          },
-        },
-      },
+  async findActive(gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() ORDER BY valid_to ASC`
+      );
+      return result.rows.map((o: any) => this.formatOffer(o));
     });
   }
 
-  async findOne(id: number) {
-    const offer = await this.prisma.offer.findUnique({
-      where: { id },
-      include: {
-        planOffers: {
-          include: {
-            plan: true,
-          },
-        },
-      },
+  async findOne(id: number, gymId: number) {
+    const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM offers WHERE id = $1`, [id]);
+      return result.rows[0];
     });
 
     if (!offer) {
       throw new NotFoundException(`Offer with ID ${id} not found`);
     }
 
-    return offer;
+    return this.formatOffer(offer);
   }
 
-  async findByCode(code: string) {
-    const offer = await this.prisma.offer.findUnique({
-      where: { code },
-      include: {
-        planOffers: {
-          include: {
-            plan: {
-              select: { id: true, code: true, name: true },
-            },
-          },
-        },
-      },
+  async findByCode(code: string, gymId: number) {
+    const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM offers WHERE code = $1`, [code]);
+      return result.rows[0];
     });
 
     if (!offer) {
       throw new NotFoundException(`Offer with code ${code} not found`);
     }
 
-    return offer;
+    return this.formatOffer(offer);
   }
 
-  async validateOfferCode(code: string, planId?: number) {
-    const offer = await this.prisma.offer.findUnique({
-      where: { code },
+  async validateOfferCode(code: string, gymId: number) {
+    const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM offers WHERE code = $1`, [code]);
+      return result.rows[0];
     });
 
     if (!offer) {
       return { valid: false, message: 'Offer code not found' };
     }
 
-    if (!offer.isActive) {
+    if (!offer.is_active) {
       return { valid: false, message: 'Offer is not active' };
     }
 
     const now = new Date();
-    if (offer.validFrom > now) {
+    if (new Date(offer.valid_from) > now) {
       return { valid: false, message: 'Offer is not yet valid' };
     }
 
-    if (offer.validTo < now) {
+    if (new Date(offer.valid_to) < now) {
       return { valid: false, message: 'Offer has expired' };
     }
 
-    if (offer.maxUsageCount && offer.usedCount >= offer.maxUsageCount) {
+    if (offer.max_usage_count && offer.used_count >= offer.max_usage_count) {
       return { valid: false, message: 'Offer usage limit reached' };
     }
 
-    // Check if offer applies to the plan
-    if (planId && !offer.applicableToAll) {
-      const planOffer = await this.prisma.planOfferXref.findUnique({
-        where: {
-          planId_offerId: {
-            planId,
-            offerId: offer.id,
-          },
-        },
-      });
-
-      if (!planOffer) {
-        return { valid: false, message: 'Offer does not apply to this plan' };
-      }
-    }
-
-    return { valid: true, offer };
+    return { valid: true, offer: this.formatOffer(offer) };
   }
 
-  async create(dto: CreateOfferDto) {
-    const existing = await this.prisma.offer.findUnique({
-      where: { code: dto.code },
+  async create(dto: CreateOfferDto, gymId: number) {
+    const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT id FROM offers WHERE code = $1`, [dto.code]);
+      return result.rows[0];
     });
 
     if (existing) {
       throw new ConflictException(`Offer with code ${dto.code} already exists`);
     }
 
-    // Validate dates
-    const validFrom = new Date(dto.validFrom);
-    const validTo = new Date(dto.validTo);
+    const startDate = new Date(dto.validFrom);
+    const endDate = new Date(dto.validTo);
 
-    if (validTo <= validFrom) {
+    if (endDate <= startDate) {
       throw new BadRequestException('validTo must be after validFrom');
     }
 
-    const { planIds, ...offerData } = dto;
-
-    const offer = await this.prisma.offer.create({
-      data: {
-        ...offerData,
-        validFrom,
-        validTo,
-        applicableToAll: dto.applicableToAll ?? true,
-      },
+    const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, NOW(), NOW())
+         RETURNING *`,
+        [
+          dto.code,
+          dto.name,
+          dto.description || null,
+          dto.discountType,
+          dto.discountValue,
+          startDate,
+          endDate,
+          dto.maxUsageCount || null,
+        ]
+      );
+      return result.rows[0];
     });
 
-    // Create plan associations if provided
-    if (planIds && planIds.length > 0 && !dto.applicableToAll) {
-      await this.prisma.planOfferXref.createMany({
-        data: planIds.map(planId => ({
-          planId,
-          offerId: offer.id,
-        })),
-        skipDuplicates: true,
-      });
-    }
-
-    return this.findOne(offer.id);
+    return this.formatOffer(offer);
   }
 
-  async update(id: number, dto: UpdateOfferDto) {
-    await this.findOne(id);
+  async update(id: number, gymId: number, dto: UpdateOfferDto) {
+    await this.findOne(id, gymId);
 
-    const updateData: any = { ...dto };
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
 
-    if (dto.validFrom) {
-      updateData.validFrom = new Date(dto.validFrom);
-    }
-    if (dto.validTo) {
-      updateData.validTo = new Date(dto.validTo);
-    }
+    if (dto.name) { updates.push(`name = $${paramIndex++}`); values.push(dto.name); }
+    if (dto.description !== undefined) { updates.push(`description = $${paramIndex++}`); values.push(dto.description); }
+    if (dto.discountType) { updates.push(`discount_type = $${paramIndex++}`); values.push(dto.discountType); }
+    if (dto.discountValue !== undefined) { updates.push(`discount_value = $${paramIndex++}`); values.push(dto.discountValue); }
+    if (dto.validFrom) { updates.push(`valid_from = $${paramIndex++}`); values.push(new Date(dto.validFrom)); }
+    if (dto.validTo) { updates.push(`valid_to = $${paramIndex++}`); values.push(new Date(dto.validTo)); }
+    if (dto.maxUsageCount !== undefined) { updates.push(`max_usage_count = $${paramIndex++}`); values.push(dto.maxUsageCount); }
+    if (dto.isActive !== undefined) { updates.push(`is_active = $${paramIndex++}`); values.push(dto.isActive); }
 
-    return this.prisma.offer.update({
-      where: { id },
-      data: updateData,
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE offers SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+      const result = await client.query(`SELECT * FROM offers WHERE id = $1`, [id]);
+      return result.rows[0];
     });
+
+    return this.formatOffer(offer);
   }
 
-  async delete(id: number) {
-    await this.findOne(id);
+  async delete(id: number, gymId: number) {
+    await this.findOne(id, gymId);
 
-    return this.prisma.offer.update({
-      where: { id },
-      data: { isActive: false },
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(`UPDATE offers SET is_active = false, updated_at = NOW() WHERE id = $1`, [id]);
     });
+
+    return { id, deleted: true };
   }
 
-  async assignToPlans(offerId: number, dto: AssignOfferToPlansDto) {
-    await this.findOne(offerId);
-
-    // Delete existing associations
-    await this.prisma.planOfferXref.deleteMany({
-      where: { offerId },
-    });
-
-    // Create new associations
-    if (dto.planIds.length > 0) {
-      await this.prisma.planOfferXref.createMany({
-        data: dto.planIds.map(planId => ({
-          planId,
-          offerId,
-        })),
-        skipDuplicates: true,
-      });
-
-      // Mark offer as not applicable to all
-      await this.prisma.offer.update({
-        where: { id: offerId },
-        data: { applicableToAll: false },
-      });
-    }
-
-    return this.findOne(offerId);
-  }
-
-  async addToPlan(offerId: number, planId: number) {
-    await this.findOne(offerId);
-
-    // Verify plan exists
-    const plan = await this.prisma.plan.findUnique({
-      where: { id: planId },
-    });
-    if (!plan) {
-      throw new NotFoundException(`Plan with ID ${planId} not found`);
-    }
-
-    const existing = await this.prisma.planOfferXref.findUnique({
-      where: {
-        planId_offerId: { planId, offerId },
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException('Offer is already assigned to this plan');
-    }
-
-    return this.prisma.planOfferXref.create({
-      data: { planId, offerId },
-      include: {
-        plan: true,
-        offer: true,
-      },
-    });
-  }
-
-  async removeFromPlan(offerId: number, planId: number) {
-    const existing = await this.prisma.planOfferXref.findUnique({
-      where: {
-        planId_offerId: { planId, offerId },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundException('Offer is not assigned to this plan');
-    }
-
-    await this.prisma.planOfferXref.delete({
-      where: {
-        planId_offerId: { planId, offerId },
-      },
-    });
-
-    return { success: true };
-  }
-
-  async incrementUsage(offerId: number) {
-    return this.prisma.offer.update({
-      where: { id: offerId },
-      data: { usedCount: { increment: 1 } },
+  async incrementUsage(offerId: number, gymId: number) {
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(`UPDATE offers SET used_count = used_count + 1, updated_at = NOW() WHERE id = $1`, [offerId]);
     });
   }
 }

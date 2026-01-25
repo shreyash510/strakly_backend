@@ -1,4 +1,5 @@
-// Prisma schema for Strakly
+// Prisma schema for Strakly - PUBLIC SCHEMA ONLY
+// Tenant-specific tables (clients, memberships, etc.) are created dynamically via TenantService
 // Learn more: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -9,70 +10,147 @@ datasource db {
   provider = "postgresql"
 }
 
-// User model
+// ============================================
+// SYSTEM USERS (Superadmins - platform level)
+// ============================================
+
+model SystemUser {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  name          String
+  role          String    @default("superadmin")
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("system_users")
+}
+
+// ============================================
+// USERS (Staff: Admin, Manager, Trainer)
+// ============================================
+
 model User {
-  id           Int         @id @default(autoincrement())
-  name         String
-  email        String      @unique
-  passwordHash String      @map("password_hash")
-
-  // Optional profile fields
-  phone        String?
-  avatar       String?
-  bio          String?
-  dateOfBirth  DateTime?   @map("date_of_birth")
-  address      String?
-  city         String?
-  state        String?
-  zipCode      String?     @map("zip_code")
-
-  // Lookup references
-  roleId         Int         @map("role_id")
-  status         String      @default("active")
-  gender         String?
-  attendanceCode String?     @unique @map("attendance_code")
-
-  // Gym reference - null for superadmin, set for all other roles
-  gymId          Int?        @map("gym_id")
-
-  // Role relation
-  role           Lookup      @relation(fields: [roleId], references: [id])
-
-  // Gym relation
-  gym            Gym?        @relation(fields: [gymId], references: [id], onDelete: SetNull)
-
-  // Tracking
-  joinDate     DateTime?   @map("join_date")
-  lastLoginAt  DateTime?   @map("last_login_at")
-
-  // Timestamps
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  name          String
+  phone         String?
+  avatar        String?
+  bio           String?
+  dateOfBirth   DateTime? @map("date_of_birth")
+  gender        String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?   @map("zip_code")
+  status        String    @default("active") // active, inactive, suspended
+  lastLoginAt   DateTime? @map("last_login_at")
+  isDeleted     Boolean   @default(false) @map("is_deleted") // Soft delete
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  memberships          Membership[]
-  membershipHistory    MembershipHistory[]
-  bodyMetrics          BodyMetrics?
-  bodyMetricsHistory   BodyMetricsHistory[]
-  attendances          Attendance[]
-  attendanceHistory    AttendanceHistory[]
-  userGyms             UserGymXref[]
+  gymAssignments  UserGymXref[]
+  staffSalaries   StaffSalary[]
+  paidSalaries    StaffSalary[] @relation("PaidBy")
 
-  @@index([gymId])
-  @@index([roleId, gymId])
-  @@index([status, gymId])
+  @@index([email])
+  @@index([status])
+  @@index([isDeleted])
   @@map("users")
 }
 
-// LookupType model - Categories for lookup values
+// ============================================
+// USER-GYM CROSS REFERENCE (Many-to-Many)
+// ============================================
+
+model UserGymXref {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  gymId       Int       @map("gym_id")
+  role        String    // admin, manager, trainer
+  isPrimary   Boolean   @default(false) @map("is_primary") // Primary gym for this user
+  isActive    Boolean   @default(true) @map("is_active")
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym         Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gymId])
+  @@index([userId])
+  @@index([gymId])
+  @@index([role])
+  @@map("user_gym_xref")
+}
+
+// ============================================
+// GYM MODEL (Tenant Registry)
+// ============================================
+
+model Gym {
+  id                Int       @id @default(autoincrement())
+
+  // Tenant identification
+  tenantSchemaName  String?   @unique @map("tenant_schema_name") // e.g., "tenant_1", null if not created yet
+
+  // Basic info
+  name              String
+  description       String?
+  logo              String?
+
+  // Contact
+  phone             String?
+  email             String?
+  website           String?
+
+  // Address
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?   @map("zip_code")
+  country           String?   @default("India")
+
+  // Operating hours (stored as HH:MM format)
+  openingTime       String?   @map("opening_time")
+  closingTime       String?   @map("closing_time")
+
+  // Capacity and facilities
+  capacity          Int?
+  amenities         Json?     // Array of amenities like ["Parking", "AC", "Locker", "Shower"]
+
+  // Status
+  isActive          Boolean   @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  userAssignments   UserGymXref[]
+  subscription      SaasGymSubscription?
+  supportTickets    SupportTicket[]
+  staffSalaries     StaffSalary[]
+
+  @@map("gyms")
+}
+
+// ============================================
+// LOOKUP TABLES (Shared across all tenants)
+// ============================================
+
 model LookupType {
   id          Int       @id @default(autoincrement())
   code        String    @unique
   name        String
   description String?
   isActive    Boolean   @default(true) @map("is_active")
-
-  // Timestamps
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -82,7 +160,6 @@ model LookupType {
   @@map("lookup_types")
 }
 
-// Lookup model - Actual lookup values
 model Lookup {
   id            Int        @id @default(autoincrement())
   lookupTypeId  Int        @map("lookup_type_id")
@@ -91,30 +168,29 @@ model Lookup {
   value         String?
   displayOrder  Int        @default(0) @map("display_order")
   isActive      Boolean    @default(true) @map("is_active")
-  metadata      Json?      // For any additional data
+  metadata      Json?
 
-  // Timestamps
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
   // Relations
   lookupType    LookupType @relation(fields: [lookupTypeId], references: [id], onDelete: Cascade)
-  users         User[]     // Users with this lookup as their role
 
   @@unique([lookupTypeId, code])
   @@map("lookups")
 }
 
-// Permission model - Defines all available permissions
+// ============================================
+// PERMISSION TABLES (Shared across all tenants)
+// ============================================
+
 model Permission {
   id          Int              @id @default(autoincrement())
-  code        String           @unique  // e.g., "users.create", "users.read", "attendance.mark"
-  name        String                    // e.g., "Create Users", "Read Users"
-  module      String                    // e.g., "users", "attendance", "lookups"
+  code        String           @unique
+  name        String
+  module      String
   description String?
   isActive    Boolean          @default(true) @map("is_active")
-
-  // Timestamps
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
@@ -125,13 +201,10 @@ model Permission {
   @@map("permissions")
 }
 
-// RolePermissionXref model - Links roles to permissions
 model RolePermissionXref {
   id           Int        @id @default(autoincrement())
-  role         String     // Role code from lookup (e.g., "admin", "manager")
+  role         String
   permissionId Int        @map("permission_id")
-
-  // Timestamps
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
@@ -143,513 +216,157 @@ model RolePermissionXref {
   @@map("role_permission_xref")
 }
 
-// Attendance model - Active check-in sessions
-model Attendance {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @map("user_id")
-  gymId           Int       @map("gym_id")
-  membershipId    Int?      @map("membership_id")
-  checkInTime     DateTime  @map("check_in_time")
-  checkOutTime    DateTime? @map("check_out_time")
-  date            String    // YYYY-MM-DD format
-  markedById      Int       @map("marked_by_id")
-  checkInMethod   String    @default("code") @map("check_in_method") // code, qr, manual, self
-  status          String    @default("present") // present, checked_out
+// ============================================
+// SAAS SUBSCRIPTION MODELS
+// ============================================
 
-  // Timestamps
+model SaasPlan {
+  id              Int       @id @default(autoincrement())
+  code            String    @unique
+  name            String
+  description     String?
+
+  // Pricing
+  price           Decimal   @db.Decimal(10, 2)
+  currency        String    @default("INR")
+  billingPeriod   String    @default("monthly") @map("billing_period")
+
+  // Limits
+  maxMembers      Int       @default(-1) @map("max_members")
+  maxStaff        Int       @default(-1) @map("max_staff")
+  maxBranches     Int       @default(1) @map("max_branches")
+
+  // Features
+  features        Json?
+
+  // Display
+  displayOrder    Int       @default(0) @map("display_order")
+  isFeatured      Boolean   @default(false) @map("is_featured")
+  badge           String?
+  isActive        Boolean   @default(true) @map("is_active")
+
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  membership      Membership? @relation(fields: [membershipId], references: [id])
+  gymSubscriptions SaasGymSubscription[]
 
-  @@index([userId, date])
-  @@index([gymId, date])
-  @@index([date, status])
-  @@map("attendance")
-}
-
-// AttendanceHistory model - Completed attendance records
-model AttendanceHistory {
-  id                Int       @id @default(autoincrement())
-  userId            Int       @map("user_id")
-  gymId             Int       @map("gym_id")
-  membershipId      Int?      @map("membership_id")
-  checkInTime       DateTime  @map("check_in_time")
-  checkOutTime      DateTime  @map("check_out_time")
-  date              String    // YYYY-MM-DD format
-  duration          Int?      // Duration in minutes
-  markedById        Int       @map("marked_by_id")
-  checkedOutById    Int?      @map("checked_out_by_id")
-  checkInMethod     String    @default("code") @map("check_in_method") // code, qr, manual, self
-  status            String    @default("checked_out")
-
-  // Timestamps
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gym               Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  membership        Membership? @relation(fields: [membershipId], references: [id])
-
-  @@index([userId, date])
-  @@index([gymId, date])
-  @@index([date])
-  @@index([userId, checkInTime])
-  @@map("attendance_history")
-}
-
-// ============================================
-// MEMBERSHIP & SUBSCRIPTION MODELS
-// ============================================
-
-// Plan model - Membership plans available
-model Plan {
-  id              Int          @id @default(autoincrement())
-  code            String       @unique                    // e.g., "basic", "premium", "vip"
-  name            String                                  // e.g., "Basic Plan", "Premium Plan"
-  description     String?
-
-  // Gym reference - null for global plans, set for gym-specific plans
-  gymId           Int?         @map("gym_id")
-
-  // Duration
-  durationValue   Int          @map("duration_value")     // e.g., 1, 3, 6, 12
-  durationType    String       @map("duration_type")      // day, month, year
-
-  // Pricing
-  price           Decimal      @db.Decimal(10, 2)         // Base price
-  currency        String       @default("INR")
-
-  // Features (JSON array of feature strings or objects)
-  features        Json?                                   // e.g., ["Gym Access", "Personal Trainer", "Diet Plan"]
-
-  // Display
-  displayOrder    Int          @default(0) @map("display_order")
-  isFeatured      Boolean      @default(false) @map("is_featured")  // Highlighted plan
-  isActive        Boolean      @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
-
-  // Relations
-  gym               Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  planOffers        PlanOfferXref[]
-  memberships       Membership[]
-  membershipHistory MembershipHistory[]
-
-  @@index([gymId])
   @@index([isActive, displayOrder])
-  @@map("plans")
+  @@map("saas_plans")
 }
 
-// Offer model - Discounts and promotions
-model Offer {
-  id                Int          @id @default(autoincrement())
-  code              String       @unique                  // e.g., "SUMMER20", "NEWYEAR50"
-  name              String                                // e.g., "Summer Sale", "New Year Offer"
-  description       String?
-
-  // Gym reference - null for global offers, set for gym-specific offers
-  gymId             Int?         @map("gym_id")
-
-  // Discount
-  discountType      String       @map("discount_type")    // percentage, fixed
-  discountValue     Decimal      @map("discount_value") @db.Decimal(10, 2)  // 20 for 20% or 500 for ₹500
-
-  // Validity
-  validFrom         DateTime     @map("valid_from")
-  validTo           DateTime     @map("valid_to")
-
-  // Usage limits
-  maxUsageCount     Int?         @map("max_usage_count")  // null = unlimited
-  usedCount         Int          @default(0) @map("used_count")
-  maxUsagePerUser   Int?         @map("max_usage_per_user")  // null = unlimited per user
-
-  // Conditions
-  minPurchaseAmount Decimal?     @map("min_purchase_amount") @db.Decimal(10, 2)
-  applicableToAll   Boolean      @default(true) @map("applicable_to_all")  // If false, check PlanOffer
-
-  // Status
-  isActive          Boolean      @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-
-  // Relations
-  gym               Gym?         @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  planOffers        PlanOfferXref[]
-  memberships       Membership[]
-  membershipHistory MembershipHistory[]
-
-  @@index([gymId])
-  @@index([isActive, validFrom, validTo])
-  @@index([code])
-  @@map("offers")
-}
-
-// PlanOfferXref model - Many-to-many: which offers apply to which plans
-model PlanOfferXref {
-  id        Int      @id @default(autoincrement())
-  planId    Int      @map("plan_id")
-  offerId   Int      @map("offer_id")
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at")
-
-  // Relations
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
-
-  @@unique([planId, offerId])
-  @@map("plan_offer_xref")
-}
-
-// Membership model - User's subscription/membership record
-model Membership {
+model SaasGymSubscription {
   id              Int       @id @default(autoincrement())
-
-  // User reference
-  userId          Int       @map("user_id")
-
-  // Gym reference - membership is valid at this gym
-  gymId           Int       @map("gym_id")
-
-  // Plan reference
+  gymId           Int       @unique @map("gym_id")
   planId          Int       @map("plan_id")
 
-  // Offer reference (optional - if discount was applied)
-  offerId         Int?      @map("offer_id")
-
-  // Membership period
+  // Subscription period
   startDate       DateTime  @map("start_date")
   endDate         DateTime  @map("end_date")
+  status          String    @default("trial") // active, expired, cancelled, trial, suspended
 
-  // Status: active, expired, cancelled, paused, pending
-  status          String    @default("pending")
+  // Trial info
+  trialEndsAt     DateTime? @map("trial_ends_at")
 
   // Payment details
-  originalAmount  Decimal   @map("original_amount") @db.Decimal(10, 2)
-  discountAmount  Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  finalAmount     Decimal   @map("final_amount") @db.Decimal(10, 2)
+  amount          Decimal   @db.Decimal(10, 2)
   currency        String    @default("INR")
-
-  // Payment status: paid, pending, failed, refunded
   paymentStatus   String    @default("pending") @map("payment_status")
-  paymentMethod   String?   @map("payment_method")  // cash, card, upi, online
-  paymentRef      String?   @map("payment_ref")     // Transaction reference
-  paidAt          DateTime? @map("paid_at")
+  paymentMethod   String?   @map("payment_method")
+  paymentRef      String?   @map("payment_ref")
+  lastPaymentAt   DateTime? @map("last_payment_at")
+  nextPaymentAt   DateTime? @map("next_payment_at")
 
   // Cancellation
   cancelledAt     DateTime? @map("cancelled_at")
   cancelReason    String?   @map("cancel_reason")
 
-  // Additional info
+  // Auto-renewal
+  autoRenew       Boolean   @default(true) @map("auto_renew")
   notes           String?
-
-  // Soft delete
   isActive        Boolean   @default(true) @map("is_active")
 
-  // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  // Relations - Using Restrict to prevent deletion of user/gym/plan if memberships exist
-  user              User      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  gym               Gym       @relation(fields: [gymId], references: [id], onDelete: Restrict)
-  plan              Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
-  offer             Offer?    @relation(fields: [offerId], references: [id])
-  attendances       Attendance[]
-  attendanceHistory AttendanceHistory[]
+  // Relations
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan            SaasPlan  @relation(fields: [planId], references: [id])
 
-  @@index([userId, status])
-  @@index([gymId, status])
-  @@index([status, endDate])
+  @@index([status])
   @@index([planId])
-  @@index([paymentStatus, paidAt])
-  @@index([gymId, paymentStatus])
-  @@map("memberships")
+  @@index([paymentStatus])
+  @@index([endDate, status])
+  @@map("saas_gym_subscriptions")
 }
 
-// MembershipHistory model - Past memberships (expired, cancelled, completed)
-model MembershipHistory {
+// ============================================
+// STAFF SALARIES (in public schema with gym_id)
+// ============================================
+
+model StaffSalary {
   id              Int       @id @default(autoincrement())
-
-  // Original membership ID (for reference/tracking)
-  originalId      Int       @map("original_id")
-
-  // User reference
-  userId          Int       @map("user_id")
-
-  // Gym reference
+  staffId         Int       @map("staff_id")
   gymId           Int       @map("gym_id")
 
-  // Plan reference
-  planId          Int       @map("plan_id")
+  // Period
+  month           Int
+  year            Int
 
-  // Offer reference (optional)
-  offerId         Int?      @map("offer_id")
-
-  // Membership period
-  startDate       DateTime  @map("start_date")
-  endDate         DateTime  @map("end_date")
-
-  // Final status when archived: expired, cancelled, completed
-  status          String
-
-  // Payment details
-  originalAmount  Decimal   @map("original_amount") @db.Decimal(10, 2)
-  discountAmount  Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  finalAmount     Decimal   @map("final_amount") @db.Decimal(10, 2)
+  // Amount
+  baseSalary      Decimal   @db.Decimal(10, 2) @map("base_salary")
+  bonus           Decimal   @default(0) @db.Decimal(10, 2)
+  deductions      Decimal   @default(0) @db.Decimal(10, 2)
+  netAmount       Decimal   @db.Decimal(10, 2) @map("net_amount")
   currency        String    @default("INR")
 
-  // Payment status
-  paymentStatus   String    @map("payment_status")
+  // Payment
+  paymentStatus   String    @default("pending") @map("payment_status")
   paymentMethod   String?   @map("payment_method")
   paymentRef      String?   @map("payment_ref")
   paidAt          DateTime? @map("paid_at")
+  paidById        Int?      @map("paid_by_id")
 
-  // Cancellation info (if cancelled)
-  cancelledAt     DateTime? @map("cancelled_at")
-  cancelReason    String?   @map("cancel_reason")
-
-  // Notes
   notes           String?
 
-  // Archive info
-  archivedAt      DateTime  @default(now()) @map("archived_at")
-  archiveReason   String?   @map("archive_reason")  // expired, cancelled, manual
-
-  // Original timestamps preserved
-  originalCreatedAt DateTime @map("original_created_at")
-
-  // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Restrict)
-  plan            Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
-  offer           Offer?    @relation(fields: [offerId], references: [id])
+  staff           User      @relation(fields: [staffId], references: [id])
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  paidBy          User?     @relation("PaidBy", fields: [paidById], references: [id])
 
-  @@index([userId])
+  @@unique([staffId, gymId, month, year])
+  @@index([staffId])
   @@index([gymId])
-  @@index([status])
-  @@index([archivedAt])
-  @@index([originalId])
-  @@map("membership_history")
-}
-
-// ============================================
-// BODY METRICS MODELS
-// ============================================
-
-// BodyMetrics model - Current/latest body metrics for a user
-model BodyMetrics {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @unique @map("user_id")
-
-  // Basic measurements
-  height          Decimal?  @db.Decimal(5, 2)   // in cm
-  weight          Decimal?  @db.Decimal(5, 2)   // in kg
-  bmi             Decimal?  @db.Decimal(4, 2)   // Body Mass Index
-
-  // Body composition
-  bodyFat         Decimal?  @map("body_fat") @db.Decimal(4, 2)      // percentage
-  muscleMass      Decimal?  @map("muscle_mass") @db.Decimal(5, 2)   // in kg
-  boneMass        Decimal?  @map("bone_mass") @db.Decimal(4, 2)     // in kg
-  waterPercentage Decimal?  @map("water_percentage") @db.Decimal(4, 2)  // percentage
-
-  // Measurements (in cm)
-  chest           Decimal?  @db.Decimal(5, 2)
-  waist           Decimal?  @db.Decimal(5, 2)
-  hips            Decimal?  @db.Decimal(5, 2)
-  biceps          Decimal?  @db.Decimal(5, 2)
-  thighs          Decimal?  @db.Decimal(5, 2)
-  calves          Decimal?  @db.Decimal(5, 2)
-  shoulders       Decimal?  @db.Decimal(5, 2)
-  neck            Decimal?  @db.Decimal(5, 2)
-
-  // Health indicators
-  restingHeartRate  Int?    @map("resting_heart_rate")  // bpm
-  bloodPressureSys  Int?    @map("blood_pressure_sys")  // systolic
-  bloodPressureDia  Int?    @map("blood_pressure_dia")  // diastolic
-
-  // Goals
-  targetWeight    Decimal?  @map("target_weight") @db.Decimal(5, 2)
-  targetBodyFat   Decimal?  @map("target_body_fat") @db.Decimal(4, 2)
-
-  // Last measured
-  lastMeasuredAt  DateTime? @map("last_measured_at")
-  measuredBy      String?   @map("measured_by")  // trainer/self
-
-  // Notes
-  notes           String?
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("body_metrics")
-}
-
-// BodyMetricsHistory model - Historical body metrics records
-model BodyMetricsHistory {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @map("user_id")
-
-  // Measurement date
-  measuredAt      DateTime  @map("measured_at")
-
-  // Basic measurements
-  height          Decimal?  @db.Decimal(5, 2)   // in cm
-  weight          Decimal?  @db.Decimal(5, 2)   // in kg
-  bmi             Decimal?  @db.Decimal(4, 2)   // Body Mass Index
-
-  // Body composition
-  bodyFat         Decimal?  @map("body_fat") @db.Decimal(4, 2)
-  muscleMass      Decimal?  @map("muscle_mass") @db.Decimal(5, 2)
-  boneMass        Decimal?  @map("bone_mass") @db.Decimal(4, 2)
-  waterPercentage Decimal?  @map("water_percentage") @db.Decimal(4, 2)
-
-  // Measurements (in cm)
-  chest           Decimal?  @db.Decimal(5, 2)
-  waist           Decimal?  @db.Decimal(5, 2)
-  hips            Decimal?  @db.Decimal(5, 2)
-  biceps          Decimal?  @db.Decimal(5, 2)
-  thighs          Decimal?  @db.Decimal(5, 2)
-  calves          Decimal?  @db.Decimal(5, 2)
-  shoulders       Decimal?  @db.Decimal(5, 2)
-  neck            Decimal?  @db.Decimal(5, 2)
-
-  // Health indicators
-  restingHeartRate  Int?    @map("resting_heart_rate")
-  bloodPressureSys  Int?    @map("blood_pressure_sys")
-  bloodPressureDia  Int?    @map("blood_pressure_dia")
-
-  // Metadata
-  measuredBy      String?   @map("measured_by")
-  notes           String?
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-
-  // Relations
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, measuredAt])
-  @@index([userId, createdAt])
-  @@map("body_metrics_history")
-}
-
-// ============================================
-// GYM MANAGEMENT MODEL
-// ============================================
-
-// Gym model - Gym/Branch details
-model Gym {
-  id              Int       @id @default(autoincrement())
-
-  // Basic info
-  name            String
-  description     String?
-  logo            String?
-
-  // Contact
-  phone           String?
-  email           String?
-  website         String?
-
-  // Address
-  address         String?
-  city            String?
-  state           String?
-  zipCode         String?   @map("zip_code")
-  country         String?   @default("India")
-
-  // Operating hours (stored as HH:MM format)
-  openingTime     String?   @map("opening_time")
-  closingTime     String?   @map("closing_time")
-
-  // Capacity and facilities
-  capacity        Int?
-  amenities       Json?     // Array of amenities like ["Parking", "AC", "Locker", "Shower"]
-
-  // Status
-  isActive        Boolean   @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  users             User[]            // All users belonging to this gym
-  gymUsers          UserGymXref[]
-  plans             Plan[]            // Gym-specific membership plans
-  offers            Offer[]           // Gym-specific offers
-  memberships       Membership[]
-  membershipHistory MembershipHistory[]
-  attendances       Attendance[]
-  attendanceHistory AttendanceHistory[]
-  supportTickets    SupportTicket[]   // Support tickets from this gym's users
-  subscription      GymSubscription?  // Platform subscription
-
-  @@map("gyms")
-}
-
-// UserGymXref model - Cross reference table for User-Gym relationship
-model UserGymXref {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  gymId     Int      @map("gym_id")
-  role      String   @default("admin")  // admin, manager, trainer, etc.
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations - Using Restrict to prevent deletion of user/gym if associations exist
-  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  gym       Gym      @relation(fields: [gymId], references: [id], onDelete: Restrict)
-
-  @@unique([userId, gymId])
-  @@map("user_gym_xref")
+  @@index([paymentStatus])
+  @@map("staff_salaries")
 }
 
 // ============================================
 // SUPPORT TICKET MODEL
 // ============================================
 
-// SupportTicket model - Support tickets from users
 model SupportTicket {
   id              Int       @id @default(autoincrement())
-
-  // Ticket info
-  ticketNumber    String    @unique @map("ticket_number")  // Auto-generated unique ticket number
+  ticketNumber    String    @unique @map("ticket_number")
   subject         String
   description     String
-  category        String    @default("general")  // general, technical, billing, feedback, complaint
-
-  // Priority: low, medium, high, urgent
+  category        String    @default("general")
   priority        String    @default("medium")
-
-  // Status: open, in_progress, resolved, closed
   status          String    @default("open")
 
-  // User who created the ticket
-  userId          Int       @map("user_id")
+  // User info (can be staff from public.users or client from tenant)
+  userType        String    @map("user_type") // staff, client
+  userId          Int       @map("user_id") // public.users.id for staff, tenant.users.id for client
+  userEmail       String    @map("user_email")
+  userName        String    @map("user_name")
 
-  // Gym/Tenant the ticket belongs to (for multi-tenancy)
-  gymId           Int?      @map("gym_id")
+  // Gym reference
+  gymId           Int       @map("gym_id")
 
-  // Admin/Staff assigned to handle the ticket
+  // Admin assigned
   assignedToId    Int?      @map("assigned_to_id")
 
   // Resolution
@@ -657,16 +374,13 @@ model SupportTicket {
   resolvedAt      DateTime? @map("resolved_at")
   closedAt        DateTime? @map("closed_at")
 
-  // Soft delete
   isActive        Boolean   @default(true) @map("is_active")
-
-  // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
   messages        SupportTicketMessage[]
-  gym             Gym?      @relation(fields: [gymId], references: [id], onDelete: SetNull)
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([gymId])
@@ -676,24 +390,17 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
-// SupportTicketMessage model - Messages/comments on support tickets
 model SupportTicketMessage {
   id              Int       @id @default(autoincrement())
-
-  // Ticket reference
   ticketId        Int       @map("ticket_id")
-
-  // Message content
   message         String
 
-  // Who sent the message
+  // Sender info
   senderId        Int       @map("sender_id")
-  senderType      String    @map("sender_type")  // user, admin, system
+  senderName      String    @map("sender_name")
+  senderType      String    @map("sender_type") // staff, client, admin, system
 
-  // Attachment (optional)
   attachment      String?
-
-  // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Relations
@@ -707,11 +414,8 @@ model SupportTicketMessage {
 // CONTACT REQUEST MODEL
 // ============================================
 
-// ContactRequest model - Contact form submissions from public website
 model ContactRequest {
   id              Int       @id @default(autoincrement())
-
-  // Request number (auto-generated)
   requestNumber   String    @unique @map("request_number")
 
   // Contact info
@@ -722,21 +426,14 @@ model ContactRequest {
   // Request details
   subject         String?
   message         String
-
-  // Status: new, read, replied, closed
-  status          String    @default("new")
+  status          String    @default("new") // new, read, replied, closed
 
   // Admin notes
   adminNotes      String?   @map("admin_notes")
-
-  // Reply info
   repliedAt       DateTime? @map("replied_at")
   repliedBy       Int?      @map("replied_by")
 
-  // Soft delete
   isActive        Boolean   @default(true) @map("is_active")
-
-  // Timestamps
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -744,151 +441,4 @@ model ContactRequest {
   @@index([email])
   @@index([createdAt])
   @@map("contact_requests")
-}
-
-// ============================================
-// STAFF SALARY MODEL
-// ============================================
-
-// StaffSalary model - Salary payments to staff (trainers, managers)
-model StaffSalary {
-  id              Int       @id @default(autoincrement())
-
-  // Staff reference (trainer, manager)
-  staffId         Int       @map("staff_id")
-
-  // Gym reference - tenant isolation
-  gymId           Int       @map("gym_id")
-
-  // Salary period
-  month           Int                             // 1-12
-  year            Int                             // e.g., 2025
-
-  // Salary breakdown
-  baseSalary      Decimal   @map("base_salary") @db.Decimal(10, 2)
-  bonus           Decimal   @default(0) @db.Decimal(10, 2)
-  deductions      Decimal   @default(0) @db.Decimal(10, 2)
-  netAmount       Decimal   @map("net_amount") @db.Decimal(10, 2)
-  currency        String    @default("INR")
-
-  // Payment details
-  paymentStatus   String    @default("pending") @map("payment_status")  // pending, paid
-  paymentMethod   String?   @map("payment_method")  // cash, bank_transfer, upi
-  paymentRef      String?   @map("payment_ref")     // Transaction reference
-  paidAt          DateTime? @map("paid_at")
-  paidById        Int?      @map("paid_by_id")      // Admin who processed payment
-
-  // Notes
-  notes           String?
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  @@unique([staffId, gymId, month, year])
-  @@index([gymId, month, year])
-  @@index([staffId])
-  @@index([paymentStatus])
-  @@index([gymId, paymentStatus])
-  @@map("staff_salaries")
-}
-
-// ============================================
-// SAAS SUBSCRIPTION MODELS (Platform subscriptions for gyms)
-// ============================================
-
-// SaasPlan model - Platform subscription plans offered to gyms
-model SaasPlan {
-  id              Int       @id @default(autoincrement())
-
-  // Plan identification
-  code            String    @unique                    // e.g., "free", "pro", "enterprise"
-  name            String                               // e.g., "Free", "Pro", "Enterprise"
-  description     String?
-
-  // Pricing
-  price           Decimal   @db.Decimal(10, 2)         // Monthly price
-  currency        String    @default("INR")
-  billingPeriod   String    @default("monthly") @map("billing_period")  // monthly, yearly
-
-  // Limits
-  maxMembers      Int       @default(-1) @map("max_members")   // -1 = unlimited
-  maxStaff        Int       @default(-1) @map("max_staff")     // -1 = unlimited
-  maxBranches     Int       @default(1) @map("max_branches")   // Number of gym branches allowed
-
-  // Features (JSON array of feature strings)
-  features        Json?                                // e.g., ["QR check-in", "Custom branding", "API access"]
-
-  // Display
-  displayOrder    Int       @default(0) @map("display_order")
-  isFeatured      Boolean   @default(false) @map("is_featured")
-  badge           String?                              // e.g., "Most Popular", "Best Value"
-  isActive        Boolean   @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  gymSubscriptions GymSubscription[]
-
-  @@index([isActive, displayOrder])
-  @@map("saas_plans")
-}
-
-// GymSubscription model - A gym's subscription to a SaaS plan
-model GymSubscription {
-  id              Int       @id @default(autoincrement())
-
-  // Gym reference
-  gymId           Int       @unique @map("gym_id")     // One subscription per gym
-
-  // Plan reference
-  planId          Int       @map("plan_id")
-
-  // Subscription period
-  startDate       DateTime  @map("start_date")
-  endDate         DateTime  @map("end_date")
-
-  // Status: active, expired, cancelled, trial, suspended
-  status          String    @default("trial")
-
-  // Trial info
-  trialEndsAt     DateTime? @map("trial_ends_at")
-
-  // Payment details
-  amount          Decimal   @db.Decimal(10, 2)         // Amount charged
-  currency        String    @default("INR")
-  paymentStatus   String    @default("pending") @map("payment_status")  // paid, pending, failed, refunded
-  paymentMethod   String?   @map("payment_method")     // cash, card, upi, bank_transfer
-  paymentRef      String?   @map("payment_ref")        // Transaction reference
-  lastPaymentAt   DateTime? @map("last_payment_at")
-  nextPaymentAt   DateTime? @map("next_payment_at")
-
-  // Cancellation
-  cancelledAt     DateTime? @map("cancelled_at")
-  cancelReason    String?   @map("cancel_reason")
-
-  // Auto-renewal
-  autoRenew       Boolean   @default(true) @map("auto_renew")
-
-  // Notes
-  notes           String?
-
-  // Soft delete
-  isActive        Boolean   @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  plan            SaasPlan  @relation(fields: [planId], references: [id])
-
-  @@index([status])
-  @@index([planId])
-  @@index([paymentStatus])
-  @@index([endDate, status])
-  @@map("gym_subscriptions")
 }

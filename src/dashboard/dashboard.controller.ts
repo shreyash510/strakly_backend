@@ -4,7 +4,7 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { SuperadminDashboardDto, AdminDashboardDto, MemberDashboardDto } from './dto/dashboard.dto';
+import { SuperadminDashboardDto, AdminDashboardDto, ClientDashboardDto } from './dto/dashboard.dto';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -34,8 +34,9 @@ export class DashboardController {
     type: AdminDashboardDto,
   })
   async getAdminDashboard(@Req() req: any): Promise<AdminDashboardDto> {
-    const userId = req.user?.userId || req.headers['x-user-id'];
-    return this.dashboardService.getAdminDashboard(Number(userId));
+    const userId = req.user?.userId;
+    const gymId = req.user?.gymId;
+    return this.dashboardService.getAdminDashboard(Number(userId), Number(gymId));
   }
 
   @Get('client')
@@ -44,10 +45,11 @@ export class DashboardController {
   @ApiResponse({
     status: 200,
     description: 'Client dashboard data retrieved successfully',
-    type: MemberDashboardDto,
+    type: ClientDashboardDto,
   })
-  async getClientDashboard(@Req() req: any): Promise<MemberDashboardDto> {
-    const userId = req.user?.userId || req.headers['x-user-id'];
-    return this.dashboardService.getMemberDashboard(Number(userId));
+  async getClientDashboard(@Req() req: any): Promise<ClientDashboardDto> {
+    const userId = req.user?.userId;
+    const gymId = req.user?.gymId;
+    return this.dashboardService.getClientDashboard(Number(userId), Number(gymId));
   }
 }

@@ -2,14 +2,10 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { UserRole } from '../../constants';
-import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(
-    private reflector: Reflector,
-    private prisma: PrismaService,
-  ) {}
+  constructor(private reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
@@ -28,24 +24,8 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Get user from database to get their role
-    const userData = await this.prisma.user.findUnique({
-      where: { id: user.userId },
-      include: { role: true },
-    });
-
-    if (!userData) {
-      throw new ForbiddenException('User not found');
-    }
-
-    const userRole = userData.role?.code || 'client';
-
-    // Attach full user data to request for controllers to use
-    request.user = {
-      ...user,
-      role: userRole,
-      fullUser: userData,
-    };
+    // The role is already set by JWT strategy
+    const userRole = user.role || 'client';
 
     // Check if user has required role
     const hasRole = requiredRoles.includes(userRole as UserRole);
