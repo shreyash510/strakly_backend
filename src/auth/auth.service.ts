@@ -261,10 +261,67 @@ export class AuthService {
   }
 
   /**
-   * Login user - looks up tenant first, then authenticates
+   * Login user - checks superadmin first, then tenant users
    */
   async login(loginDto: LoginDto): Promise<AuthResponse> {
-    // First, find which tenant the user belongs to
+    // First, check if this is a superadmin login
+    const systemUser = await this.prisma.systemUser.findUnique({
+      where: { email: loginDto.email },
+    });
+
+    if (systemUser) {
+      // Superadmin login flow
+      if (!systemUser.isActive) {
+        throw new UnauthorizedException('Your account has been deactivated');
+      }
+
+      const isPasswordValid = await this.comparePassword(
+        loginDto.password,
+        systemUser.passwordHash,
+      );
+
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Update last login time
+      await this.prisma.systemUser.update({
+        where: { id: systemUser.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      const user: UserResponse = {
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        role: systemUser.role,
+        status: 'active',
+      };
+
+      const payload = {
+        sub: systemUser.id,
+        email: systemUser.email,
+        name: systemUser.name,
+        role: systemUser.role,
+        gymId: null,
+        tenantSchemaName: null,
+        isSuperAdmin: true,
+      };
+      const accessToken = this.jwtService.sign(payload);
+
+      return {
+        user,
+        accessToken,
+        tokens: {
+          accessToken,
+          expiresIn: 604800, // 7 days in seconds
+          tokenType: 'Bearer',
+        },
+      };
+    }
+
+    // Regular tenant user login flow
+    // Find which tenant the user belongs to
     const mapping = await this.prisma.userTenantMapping.findUnique({
       where: { email: loginDto.email },
       include: { gym: true },

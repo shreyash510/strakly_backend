@@ -145,6 +145,9 @@ const rolePermissions: Record<string, string[]> = {
     // User Management (all users)
     'users.view',
     'users.manage',
+    // Requests Management
+    'requests.view',
+    'requests.manage',
     // Contact Requests
     'contact_requests.view',
     'contact_requests.manage',
@@ -166,6 +169,8 @@ const rolePermissions: Record<string, string[]> = {
     'share_app.view',
     // Role Permissions
     'role_permissions.manage',
+    // Permissions module
+    'permissions.manage',
   ],
 
   admin: [

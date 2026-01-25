@@ -5,12 +5,13 @@ import { ConfigService } from '@nestjs/config';
 import { TenantService } from '../../tenant/tenant.service';
 
 export interface JwtPayload {
-  sub: number; // userId (tenant user id)
+  sub: number; // userId (tenant user id or system user id for superadmin)
   email: string;
   name: string;
   role?: string;
-  gymId: number;
-  tenantSchemaName: string;
+  gymId: number | null;
+  tenantSchemaName: string | null;
+  isSuperAdmin?: boolean;
 }
 
 export interface AuthenticatedUser {
@@ -18,8 +19,9 @@ export interface AuthenticatedUser {
   email: string;
   name: string;
   role: string;
-  gymId: number;
-  tenantSchemaName: string;
+  gymId: number | null;
+  tenantSchemaName: string | null;
+  isSuperAdmin: boolean;
 }
 
 @Injectable()
@@ -39,7 +41,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
     const gymId = payload.gymId;
     const tenantSchemaName = payload.tenantSchemaName;
+    const isSuperAdmin = payload.isSuperAdmin === true;
 
+    // Handle superadmin case - they don't have gym/tenant info
+    if (isSuperAdmin) {
+      return {
+        userId: userId,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role || 'superadmin',
+        gymId: null,
+        tenantSchemaName: null,
+        isSuperAdmin: true,
+      };
+    }
+
+    // For regular users, require tenant information
     if (!gymId || !tenantSchemaName) {
       throw new UnauthorizedException('Invalid token: missing tenant information');
     }
@@ -72,6 +89,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role || userData.role_code || 'client',
       gymId: gymId,
       tenantSchemaName: tenantSchemaName,
+      isSuperAdmin: false,
     };
   }
 }

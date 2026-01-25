@@ -6,7 +6,6 @@ import {
   Body,
   Query,
   UseGuards,
-  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -16,11 +15,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { AuthenticatedUser } from './strategies/jwt.strategy';
-
-interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser;
-}
+import { GymId, UserId } from './decorators';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -55,34 +50,42 @@ export class AuthController {
   @Post('logout')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout user' })
-  logout(@Request() req: AuthenticatedRequest) {
-    return this.authService.logout(req.user.userId);
+  logout(@UserId() userId: number) {
+    return this.authService.logout(userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@Request() req: AuthenticatedRequest) {
-    return this.authService.getProfile(req.user.userId, req.user.gymId);
+  getProfile(@UserId() userId: number, @GymId() gymId: number) {
+    return this.authService.getProfile(userId, gymId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update current user profile' })
-  updateProfile(@Request() req: AuthenticatedRequest, @Body() updateProfileDto: UpdateProfileDto) {
-    return this.authService.updateProfile(req.user.userId, req.user.gymId, updateProfileDto);
+  updateProfile(
+    @UserId() userId: number,
+    @GymId() gymId: number,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(userId, gymId, updateProfileDto);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change user password' })
-  changePassword(@Request() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
+  changePassword(
+    @UserId() userId: number,
+    @GymId() gymId: number,
+    @Body() dto: ChangePasswordDto,
+  ) {
     return this.authService.changePassword(
-      req.user.userId,
-      req.user.gymId,
+      userId,
+      gymId,
       dto.currentPassword,
       dto.newPassword,
     );
@@ -92,8 +95,8 @@ export class AuthController {
   @Post('refresh')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
-  refreshToken(@Request() req: AuthenticatedRequest) {
-    return this.authService.refreshToken(req.user.userId, req.user.gymId);
+  refreshToken(@UserId() userId: number, @GymId() gymId: number) {
+    return this.authService.refreshToken(userId, gymId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -101,13 +104,14 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Search users by name or email' })
   searchUsers(
-    @Request() req: AuthenticatedRequest,
+    @UserId() userId: number,
+    @GymId() gymId: number,
     @Query('q') query: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     const pageNum = parseInt(page || '1', 10) || 1;
     const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50);
-    return this.authService.searchUsers(query, req.user.userId, req.user.gymId, pageNum, limitNum);
+    return this.authService.searchUsers(query, userId, gymId, pageNum, limitNum);
   }
 }

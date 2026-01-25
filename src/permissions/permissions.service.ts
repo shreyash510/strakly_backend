@@ -199,7 +199,13 @@ export class PermissionsService {
 
   // ============ USER PERMISSIONS (via role) ============
 
-  async getUserPermissions(userId: number, gymId: number) {
+  async getUserPermissions(userId: number, gymId: number | null, role?: string) {
+    // Handle superadmin case - they don't have gymId
+    if (gymId === null || role === 'superadmin') {
+      // For superadmin, return all permissions or permissions for 'superadmin' role
+      return this.getPermissionsByRole('superadmin');
+    }
+
     // Get user's role from tenant schema
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
@@ -220,8 +226,8 @@ export class PermissionsService {
     return this.getPermissionsByRole(roleCode);
   }
 
-  async getUserPermissionCodes(userId: number, gymId: number) {
-    const permissions = await this.getUserPermissions(userId, gymId);
+  async getUserPermissionCodes(userId: number, gymId: number | null, role?: string) {
+    const permissions = await this.getUserPermissions(userId, gymId, role);
     return permissions.map(p => p.code);
   }
 
