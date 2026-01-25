@@ -209,9 +209,7 @@ export class PermissionsService {
     // Get user's role from tenant schema
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT u.id, l.code as role_code FROM users u
-         LEFT JOIN public.lookups l ON l.id = u.role_id
-         WHERE u.id = $1`,
+        `SELECT id, role FROM users WHERE id = $1`,
         [userId]
       );
       return result.rows[0];
@@ -221,8 +219,8 @@ export class PermissionsService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    // Get role code from the lookup relation
-    const roleCode = user.role_code || 'client';
+    // Get role from the user record
+    const roleCode = user.role || 'client';
     return this.getPermissionsByRole(roleCode);
   }
 

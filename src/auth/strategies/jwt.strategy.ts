@@ -64,10 +64,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Verify user still exists in tenant schema
     const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.status, l.code as role_code
-         FROM users u
-         LEFT JOIN public.lookups l ON l.id = u.role_id
-         WHERE u.id = $1`,
+        `SELECT id, email, name, status, role
+         FROM users
+         WHERE id = $1`,
         [userId]
       );
       return result.rows[0];
@@ -86,7 +85,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: userId,
       email: payload.email,
       name: payload.name,
-      role: payload.role || userData.role_code || 'client',
+      role: payload.role || userData.role || 'client',
       gymId: gymId,
       tenantSchemaName: tenantSchemaName,
       isSuperAdmin: false,
