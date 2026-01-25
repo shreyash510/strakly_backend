@@ -80,6 +80,23 @@ export class MembershipsController {
     return this.membershipsService.getStats(req.user.gymId);
   }
 
+  @Get('overview')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get membership overview (stats, expiring, recent)' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  getOverview(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = req.user.role === 'superadmin'
+      ? (queryGymId ? parseInt(queryGymId) : null)
+      : req.user.gymId;
+
+    if (!gymId) {
+      throw new BadRequestException('gymId is required');
+    }
+
+    return this.membershipsService.getOverview(gymId);
+  }
+
   @Get('expiring')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')

@@ -6,7 +6,9 @@ export class TenantService implements OnModuleInit {
   private pool: Pool;
 
   constructor() {
-    const databaseUrl = process.env.DATABASE_URL;
+    // Use DIRECT_URL for tenant operations because PgBouncer (in DATABASE_URL)
+    // doesn't preserve session state (like SET search_path) between queries
+    const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
     if (!databaseUrl) {
       throw new Error('DATABASE_URL not configured');
     }
@@ -15,6 +17,55 @@ export class TenantService implements OnModuleInit {
 
   async onModuleInit() {
     console.log('TenantService initialized');
+    // Run migrations to ensure all tenant schemas have required columns
+    await this.migrateAllTenantSchemas();
+  }
+
+  /**
+   * Run migrations on all tenant schemas to add missing columns
+   */
+  async migrateAllTenantSchemas(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      // Get all tenant schemas
+      const schemasResult = await client.query(`
+        SELECT schema_name FROM information_schema.schemata
+        WHERE schema_name LIKE 'tenant_%'
+      `);
+
+      console.log(`Found ${schemasResult.rows.length} tenant schemas to migrate`);
+
+      for (const row of schemasResult.rows) {
+        const schemaName = row.schema_name;
+        try {
+          await this.migrateTenantSchema(client, schemaName);
+        } catch (error) {
+          console.error(`Failed to migrate schema ${schemaName}:`, error.message);
+        }
+      }
+
+      console.log('Tenant schema migrations completed');
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Apply migrations to a single tenant schema
+   */
+  private async migrateTenantSchema(client: any, schemaName: string): Promise<void> {
+    console.log(`Migrating schema: ${schemaName}`);
+
+    // Always try to add the role column (IF NOT EXISTS handles the case where it already exists)
+    try {
+      await client.query(`
+        ALTER TABLE "${schemaName}".users
+        ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'client'
+      `);
+      console.log(`Ensured 'role' column exists in ${schemaName}.users`);
+    } catch (error) {
+      console.error(`Error adding role column to ${schemaName}:`, error.message);
+    }
   }
 
   /**

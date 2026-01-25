@@ -408,6 +408,38 @@ export class MembershipsService {
     return stats;
   }
 
+  async getOverview(gymId: number) {
+    const [stats, expiringSoon, recentSubscriptions] = await Promise.all([
+      this.getStats(gymId),
+      this.getExpiringSoon(gymId, 7),
+      this.getRecentSubscriptions(gymId, 10),
+    ]);
+
+    return {
+      stats,
+      expiringSoon,
+      recentSubscriptions,
+    };
+  }
+
+  private async getRecentSubscriptions(gymId: number, limit = 10) {
+    const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                p.name as plan_name, p.code as plan_code
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN plans p ON p.id = m.plan_id
+         ORDER BY m.created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
+    });
+
+    return memberships.map((m: any) => this.formatMembership(m));
+  }
+
   async renew(userId: number, gymId: number, dto: RenewMembershipDto) {
     const currentMembership = await this.getActiveMembership(userId, gymId);
     const planId = dto.planId || currentMembership?.planId;
