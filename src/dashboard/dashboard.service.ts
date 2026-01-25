@@ -9,12 +9,12 @@ import {
   RecentTicketDto,
   AdminDashboardDto,
   AdminDashboardStatsDto,
-  RecentMemberDto,
+  RecentClientDto,
   RecentAttendanceDto,
-  MemberDashboardDto,
-  MemberSubscriptionDto,
-  MemberAttendanceStatsDto,
-  MemberRecentAttendanceDto,
+  ClientDashboardDto,
+  ClientSubscriptionDto,
+  ClientAttendanceStatsDto,
+  ClientRecentAttendanceDto,
   ActiveOfferDto,
 } from './dto/dashboard.dto';
 
@@ -244,16 +244,16 @@ export class DashboardService {
 
   // Admin Dashboard Methods
   async getAdminDashboard(userId: number, gymId: number): Promise<AdminDashboardDto> {
-    const [stats, recentMembers, recentAttendance, recentTickets] = await Promise.all([
+    const [stats, recentClients, recentAttendance, recentTickets] = await Promise.all([
       this.getAdminStats(gymId),
-      this.getRecentMembers(gymId),
+      this.getRecentClients(gymId),
       this.getRecentAttendance(gymId),
       this.getRecentTicketsForGym(gymId),
     ]);
 
     return {
       stats,
-      recentMembers,
+      recentClients,
       recentAttendance,
       recentTickets,
     };
@@ -347,8 +347,8 @@ export class DashboardService {
     };
   }
 
-  private async getRecentMembers(gymId: number, limit = 5): Promise<RecentMemberDto[]> {
-    const members = await this.tenantService.executeInTenant(gymId, async (client) => {
+  private async getRecentClients(gymId: number, limit = 5): Promise<RecentClientDto[]> {
+    const clients = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC LIMIT $1`,
         [limit]
@@ -356,13 +356,13 @@ export class DashboardService {
       return result.rows;
     });
 
-    return members.map((member: any) => ({
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      avatar: member.avatar || undefined,
-      status: member.status,
-      createdAt: member.created_at,
+    return clients.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      avatar: c.avatar || undefined,
+      status: c.status,
+      createdAt: c.created_at,
     }));
   }
 
@@ -417,14 +417,14 @@ export class DashboardService {
     return tickets;
   }
 
-  // Member Dashboard Methods
-  async getMemberDashboard(userId: number, gymId: number): Promise<MemberDashboardDto> {
+  // Client Dashboard Methods
+  async getClientDashboard(userId: number, gymId: number): Promise<ClientDashboardDto> {
     const [user, subscription, attendanceStats, recentAttendance, activeOffers] = await Promise.all([
-      this.getMemberUser(userId, gymId),
-      this.getMemberSubscription(userId, gymId),
-      this.getMemberAttendanceStats(userId, gymId),
-      this.getMemberRecentAttendance(userId, gymId),
-      this.getMemberActiveOffers(gymId),
+      this.getClientUser(userId, gymId),
+      this.getClientSubscription(userId, gymId),
+      this.getClientAttendanceStats(userId, gymId),
+      this.getClientRecentAttendance(userId, gymId),
+      this.getClientActiveOffers(gymId),
     ]);
 
     // Get gym info from public schema
@@ -461,7 +461,7 @@ export class DashboardService {
     };
   }
 
-  private async getMemberUser(userId: number, gymId: number) {
+  private async getClientUser(userId: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, attendance_code FROM users WHERE id = $1`,
@@ -471,7 +471,7 @@ export class DashboardService {
     });
   }
 
-  private async getMemberSubscription(userId: number, gymId: number): Promise<MemberSubscriptionDto | undefined> {
+  private async getClientSubscription(userId: number, gymId: number): Promise<ClientSubscriptionDto | undefined> {
     const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT m.*, p.name as plan_name
@@ -521,7 +521,7 @@ export class DashboardService {
     };
   }
 
-  private async getMemberAttendanceStats(userId: number, gymId: number): Promise<MemberAttendanceStatsDto> {
+  private async getClientAttendanceStats(userId: number, gymId: number): Promise<ClientAttendanceStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
@@ -618,7 +618,7 @@ export class DashboardService {
     return streak;
   }
 
-  private async getMemberRecentAttendance(userId: number, gymId: number, limit = 5): Promise<MemberRecentAttendanceDto[]> {
+  private async getClientRecentAttendance(userId: number, gymId: number, limit = 5): Promise<ClientRecentAttendanceDto[]> {
     const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY date DESC LIMIT $2`,
@@ -646,15 +646,15 @@ export class DashboardService {
     }));
   }
 
-  private async getMemberActiveOffers(gymId: number, limit = 3): Promise<ActiveOfferDto[]> {
+  private async getClientActiveOffers(gymId: number, limit = 3): Promise<ActiveOfferDto[]> {
     const now = new Date();
 
     const offers = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id, name, description, discount_type, discount_value, code, end_date
+        `SELECT id, name, description, discount_type, discount_value, code, valid_to
          FROM offers
-         WHERE is_active = true AND start_date <= $1 AND end_date >= $1
-         ORDER BY end_date ASC LIMIT $2`,
+         WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1
+         ORDER BY valid_to ASC LIMIT $2`,
         [now, limit]
       );
       return result.rows;
@@ -666,7 +666,7 @@ export class DashboardService {
       description: offer.description || undefined,
       discountPercentage: offer.discount_type === 'percentage' ? Number(offer.discount_value) : 0,
       code: offer.code || undefined,
-      endDate: new Date(offer.end_date).toISOString().split('T')[0],
+      endDate: new Date(offer.valid_to).toISOString().split('T')[0],
     }));
   }
 }

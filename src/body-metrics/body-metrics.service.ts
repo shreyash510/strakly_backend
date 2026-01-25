@@ -167,7 +167,15 @@ export class BodyMetricsService {
     return metrics;
   }
 
-  async getHistory(userId: number, gymId: number, options?: { startDate?: Date; endDate?: Date; limit?: number }) {
+  async getHistory(
+    userId: number,
+    gymId: number,
+    options?: { startDate?: Date; endDate?: Date; page?: number; limit?: number }
+  ) {
+    const page = options?.page || 1;
+    const limit = options?.limit || 10;
+    const skip = (page - 1) * limit;
+
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let whereClause = 'user_id = $1';
       const values: any[] = [userId];
@@ -182,15 +190,21 @@ export class BodyMetricsService {
         values.push(options.endDate);
       }
 
-      const limit = options?.limit || 50;
-      values.push(limit);
-
-      const result = await client.query(
-        `SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT $${paramIndex}`,
+      // Get total count
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM body_metrics_history WHERE ${whereClause}`,
         values
       );
+      const total = parseInt(countResult.rows[0].count, 10);
 
-      return result.rows.map((h: any) => ({
+      // Get paginated data
+      const dataValues = [...values, limit, skip];
+      const result = await client.query(
+        `SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+        dataValues
+      );
+
+      const data = result.rows.map((h: any) => ({
         id: h.id,
         userId: h.user_id,
         measuredAt: h.measured_at,
@@ -199,11 +213,35 @@ export class BodyMetricsService {
         bmi: h.bmi,
         bodyFat: h.body_fat,
         muscleMass: h.muscle_mass,
+        boneMass: h.bone_mass,
+        waterPercentage: h.water_percentage,
         waist: h.waist,
         chest: h.chest,
         hips: h.hips,
+        biceps: h.biceps,
+        thighs: h.thighs,
+        calves: h.calves,
+        shoulders: h.shoulders,
+        neck: h.neck,
+        restingHeartRate: h.resting_heart_rate,
+        bloodPressureSys: h.blood_pressure_sys,
+        bloodPressureDia: h.blood_pressure_dia,
+        measuredBy: h.measured_by,
         notes: h.notes,
+        createdAt: h.created_at,
       }));
+
+      return {
+        data,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1,
+        },
+      };
     });
   }
 

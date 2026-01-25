@@ -66,6 +66,16 @@ export class TenantService implements OnModuleInit {
     } catch (error) {
       console.error(`Error adding role column to ${schemaName}:`, error.message);
     }
+
+    // Seed default plans if none exist
+    try {
+      const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
+      if (parseInt(plansResult.rows[0].count) === 0) {
+        await this.seedDefaultPlans(client, schemaName);
+      }
+    } catch (error) {
+      console.error(`Error seeding plans for ${schemaName}:`, error.message);
+    }
   }
 
   /**
@@ -90,6 +100,9 @@ export class TenantService implements OnModuleInit {
 
       // Create tenant tables
       await this.createTenantTables(client, schemaName);
+
+      // Seed default plans
+      await this.seedDefaultPlans(client, schemaName);
 
       await client.query('COMMIT');
       console.log(`Created tenant schema: ${schemaName}`);
@@ -393,6 +406,89 @@ export class TenantService implements OnModuleInit {
     // Trainer-client indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`);
+  }
+
+  /**
+   * Seed default membership plans for a new tenant
+   */
+  private async seedDefaultPlans(client: any, schemaName: string): Promise<void> {
+    const defaultPlans = [
+      {
+        code: 'monthly',
+        name: 'Monthly Plan',
+        description: 'Perfect for getting started with your fitness journey',
+        duration_value: 30,
+        duration_type: 'days',
+        price: 999,
+        features: JSON.stringify([
+          'Full gym access',
+          'Basic equipment usage',
+          'Locker room access',
+          'Fitness assessment',
+        ]),
+        display_order: 1,
+        is_featured: false,
+      },
+      {
+        code: 'quarterly',
+        name: 'Quarterly Plan',
+        description: 'Our most popular plan with great value for committed members',
+        duration_value: 90,
+        duration_type: 'days',
+        price: 2499,
+        features: JSON.stringify([
+          'Full gym access',
+          'All equipment usage',
+          'Locker room access',
+          'Fitness assessment',
+          '1 Personal training session',
+          'Diet consultation',
+        ]),
+        display_order: 2,
+        is_featured: true,
+      },
+      {
+        code: 'annual',
+        name: 'Annual Plan',
+        description: 'Best value for long-term fitness commitment',
+        duration_value: 365,
+        duration_type: 'days',
+        price: 7999,
+        features: JSON.stringify([
+          'Full gym access',
+          'All equipment usage',
+          'Locker room access',
+          'Monthly fitness assessment',
+          '4 Personal training sessions',
+          'Diet consultation',
+          'Priority booking',
+          'Guest passes (2/month)',
+        ]),
+        display_order: 3,
+        is_featured: false,
+      },
+    ];
+
+    for (const plan of defaultPlans) {
+      await client.query(`
+        INSERT INTO "${schemaName}"."plans"
+        (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+        ON CONFLICT (code) DO NOTHING
+      `, [
+        plan.code,
+        plan.name,
+        plan.description,
+        plan.duration_value,
+        plan.duration_type,
+        plan.price,
+        plan.features,
+        plan.display_order,
+        plan.is_featured,
+      ]);
+    }
+
+    console.log(`Seeded default plans for ${schemaName}`);
   }
 
   /**

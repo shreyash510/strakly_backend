@@ -159,7 +159,7 @@ export class AdminDashboardStatsDto {
   expiringThisWeek: number;
 }
 
-export class RecentMemberDto {
+export class RecentClientDto {
   @ApiProperty()
   id: number;
 
@@ -203,8 +203,8 @@ export class AdminDashboardDto {
   @ApiProperty({ type: AdminDashboardStatsDto })
   stats: AdminDashboardStatsDto;
 
-  @ApiProperty({ type: [RecentMemberDto] })
-  recentMembers: RecentMemberDto[];
+  @ApiProperty({ type: [RecentClientDto] })
+  recentClients: RecentClientDto[];
 
   @ApiProperty({ type: [RecentAttendanceDto] })
   recentAttendance: RecentAttendanceDto[];
@@ -213,9 +213,9 @@ export class AdminDashboardDto {
   recentTickets: RecentTicketDto[];
 }
 
-// Member Dashboard DTOs
+// Client Dashboard DTOs
 
-export class MemberSubscriptionDto {
+export class ClientSubscriptionDto {
   @ApiProperty()
   id: number;
 
@@ -241,7 +241,7 @@ export class MemberSubscriptionDto {
   isEndingSoon: boolean;
 }
 
-export class MemberAttendanceStatsDto {
+export class ClientAttendanceStatsDto {
   @ApiProperty({ description: 'Total attendance this month' })
   thisMonth: number;
 
@@ -255,7 +255,7 @@ export class MemberAttendanceStatsDto {
   currentStreak: number;
 }
 
-export class MemberRecentAttendanceDto {
+export class ClientRecentAttendanceDto {
   @ApiProperty()
   id: number;
 
@@ -292,7 +292,7 @@ export class ActiveOfferDto {
   endDate: string;
 }
 
-export class MemberGymDto {
+export class ClientGymDto {
   @ApiProperty()
   id: number;
 
@@ -318,21 +318,21 @@ export class MemberGymDto {
   state?: string;
 }
 
-export class MemberDashboardDto {
+export class ClientDashboardDto {
   @ApiProperty()
   attendanceCode: string;
 
-  @ApiProperty({ type: MemberGymDto, required: false })
-  gym?: MemberGymDto;
+  @ApiProperty({ type: ClientGymDto, required: false })
+  gym?: ClientGymDto;
 
-  @ApiProperty({ type: MemberSubscriptionDto, required: false })
-  subscription?: MemberSubscriptionDto;
+  @ApiProperty({ type: ClientSubscriptionDto, required: false })
+  subscription?: ClientSubscriptionDto;
 
-  @ApiProperty({ type: MemberAttendanceStatsDto })
-  attendanceStats: MemberAttendanceStatsDto;
+  @ApiProperty({ type: ClientAttendanceStatsDto })
+  attendanceStats: ClientAttendanceStatsDto;
 
-  @ApiProperty({ type: [MemberRecentAttendanceDto] })
-  recentAttendance: MemberRecentAttendanceDto[];
+  @ApiProperty({ type: [ClientRecentAttendanceDto] })
+  recentAttendance: ClientRecentAttendanceDto[];
 
   @ApiProperty({ type: [ActiveOfferDto] })
   activeOffers: ActiveOfferDto[];

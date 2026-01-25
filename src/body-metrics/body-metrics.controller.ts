@@ -48,19 +48,22 @@ export class BodyMetricsController {
 
   @Get('me/history')
   @ApiOperation({ summary: 'Get current user metrics history' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   getMyHistory(
     @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('limit') limit?: string,
   ) {
     return this.bodyMetricsService.getHistory(req.user.userId, req.user.gymId, {
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
     });
   }
 
@@ -122,23 +125,25 @@ export class BodyMetricsController {
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get metrics history for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   async getUserHistory(
     @Request() req: any,
     @Headers('x-user-id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('limit') limit?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const history = await this.bodyMetricsService.getHistory(parseInt(userId), req.user.gymId, {
+    return this.bodyMetricsService.getHistory(parseInt(userId), req.user.gymId, {
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
     });
-    return history;
   }
 
   @Get('user/progress')

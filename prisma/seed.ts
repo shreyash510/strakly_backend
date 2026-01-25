@@ -221,6 +221,8 @@ const rolePermissions: Record<string, string[]> = {
     // Reports & Analytics
     'reports.view',
     'analytics.view',
+    // Subscriptions (memberships, plans, offers)
+    'subscription.manage',
     // Attendance
     'attendance.manage',
     // Settings

@@ -4,7 +4,7 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { SuperadminDashboardDto, AdminDashboardDto, MemberDashboardDto } from './dto/dashboard.dto';
+import { SuperadminDashboardDto, AdminDashboardDto, ClientDashboardDto } from './dto/dashboard.dto';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -45,11 +45,11 @@ export class DashboardController {
   @ApiResponse({
     status: 200,
     description: 'Client dashboard data retrieved successfully',
-    type: MemberDashboardDto,
+    type: ClientDashboardDto,
   })
-  async getClientDashboard(@Req() req: any): Promise<MemberDashboardDto> {
+  async getClientDashboard(@Req() req: any): Promise<ClientDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
-    return this.dashboardService.getMemberDashboard(Number(userId), Number(gymId));
+    return this.dashboardService.getClientDashboard(Number(userId), Number(gymId));
   }
 }
