@@ -519,10 +519,115 @@ async function seedSuperadmin() {
   console.log('  ⚠️  Please change the password after first login!');
 }
 
+// Default membership plans for tenant schemas
+const defaultPlans = [
+  {
+    code: 'monthly',
+    name: 'Monthly Plan',
+    description: 'Perfect for getting started with your fitness journey',
+    duration_value: 30,
+    duration_type: 'days',
+    price: 999,
+    features: JSON.stringify([
+      'Full gym access',
+      'Basic equipment usage',
+      'Locker room access',
+      'Fitness assessment',
+    ]),
+    display_order: 1,
+    is_featured: false,
+  },
+  {
+    code: 'quarterly',
+    name: 'Quarterly Plan',
+    description: 'Our most popular plan with great value for committed members',
+    duration_value: 90,
+    duration_type: 'days',
+    price: 2499,
+    features: JSON.stringify([
+      'Full gym access',
+      'All equipment usage',
+      'Locker room access',
+      'Fitness assessment',
+      '1 Personal training session',
+      'Diet consultation',
+    ]),
+    display_order: 2,
+    is_featured: true,
+  },
+  {
+    code: 'annual',
+    name: 'Annual Plan',
+    description: 'Best value for long-term fitness commitment',
+    duration_value: 365,
+    duration_type: 'days',
+    price: 7999,
+    features: JSON.stringify([
+      'Full gym access',
+      'All equipment usage',
+      'Locker room access',
+      'Monthly fitness assessment',
+      '4 Personal training sessions',
+      'Diet consultation',
+      'Priority booking',
+      'Guest passes (2/month)',
+    ]),
+    display_order: 3,
+    is_featured: false,
+  },
+];
+
+async function seedTenantPlans() {
+  console.log('Seeding default plans for all tenant schemas...');
+
+  const client = await pool.connect();
+  try {
+    // Get all tenant schemas
+    const schemasResult = await client.query(`
+      SELECT schema_name FROM information_schema.schemata
+      WHERE schema_name LIKE 'tenant_%'
+    `);
+
+    console.log(`  Found ${schemasResult.rows.length} tenant schemas`);
+
+    for (const row of schemasResult.rows) {
+      const schemaName = row.schema_name;
+
+      // Check if plans already exist
+      const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
+      if (parseInt(plansResult.rows[0].count) > 0) {
+        console.log(`  ${schemaName}: Already has plans, skipping...`);
+        continue;
+      }
+
+      // Seed default plans
+      for (const plan of defaultPlans) {
+        await client.query(`
+          INSERT INTO "${schemaName}"."plans"
+          (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+          ON CONFLICT (code) DO NOTHING
+        `, [
+          plan.code,
+          plan.name,
+          plan.description,
+          plan.duration_value,
+          plan.duration_type,
+          plan.price,
+          plan.features,
+          plan.display_order,
+          plan.is_featured,
+        ]);
+      }
+      console.log(`  ${schemaName}: Seeded 3 default plans`);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 async function main() {
   console.log('Starting seed...\n');
-  console.log('NOTE: This seeds PUBLIC schema tables only.');
-  console.log('Gyms and users are created via the signup flow.\n');
 
   await seedLookupTypes();
   console.log('');
@@ -535,9 +640,10 @@ async function main() {
   await seedSaasPlans();
   console.log('');
   await seedSuperadmin();
+  console.log('');
+  await seedTenantPlans();
 
   console.log('\nSeed completed!');
-  console.log('\nTo create a gym with admin user, use the signup flow at /signup');
 }
 
 main()
