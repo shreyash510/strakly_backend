@@ -11,6 +11,25 @@ datasource db {
 }
 
 // ============================================
+// SYSTEM USERS (Superadmins - not tied to any tenant)
+// ============================================
+
+// SystemUser - Platform superadmins who manage all gyms
+model SystemUser {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  name          String
+  role          String    @default("superadmin")  // superadmin
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("system_users")
+}
+
+// ============================================
 // USER-TENANT MAPPING (for login lookup)
 // ============================================
 

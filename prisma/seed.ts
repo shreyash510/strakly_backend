@@ -1,11 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
 
 const pool = new Pool({ connectionString: process.env.DIRECT_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+const SALT_ROUNDS = 10;
 
 // Lookup Types data
 const lookupTypes = [
@@ -479,6 +482,39 @@ async function seedSaasPlans() {
   }
 }
 
+async function seedSuperadmin() {
+  console.log('Seeding superadmin...');
+
+  const superadminEmail = process.env.SUPERADMIN_EMAIL || 'superadmin@strakly.com';
+  const superadminPassword = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin@123';
+  const superadminName = process.env.SUPERADMIN_NAME || 'Super Admin';
+
+  const existing = await prisma.systemUser.findUnique({
+    where: { email: superadminEmail },
+  });
+
+  if (existing) {
+    console.log(`  Superadmin ${superadminEmail} already exists, skipping...`);
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(superadminPassword, SALT_ROUNDS);
+
+  await prisma.systemUser.create({
+    data: {
+      email: superadminEmail,
+      passwordHash,
+      name: superadminName,
+      role: 'superadmin',
+      isActive: true,
+    },
+  });
+
+  console.log(`  Created superadmin: ${superadminEmail}`);
+  console.log(`  Default password: ${superadminPassword}`);
+  console.log('  ⚠️  Please change the password after first login!');
+}
+
 async function main() {
   console.log('Starting seed...\n');
   console.log('NOTE: This seeds PUBLIC schema tables only.');
@@ -493,6 +529,8 @@ async function main() {
   await seedRolePermissions();
   console.log('');
   await seedSaasPlans();
+  console.log('');
+  await seedSuperadmin();
 
   console.log('\nSeed completed!');
   console.log('\nTo create a gym with admin user, use the signup flow at /signup');
