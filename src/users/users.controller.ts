@@ -20,7 +20,7 @@ import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-use
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
-import { setPaginationHeaders, resolveGymId } from '../common';
+import { setPaginationHeaders, resolveGymId, resolveOptionalGymId } from '../common';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('users')
@@ -40,7 +40,7 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false, type: String, description: 'Filter by role' })
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (optional for superadmin - omit to see all gyms)' })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('page') page?: string,
@@ -52,7 +52,12 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const isSuperAdmin = user.role === 'superadmin';
+    // For superadmin, gymId is optional (can view all gyms)
+    // For others, use their assigned gymId or query param
+    const gymId = isSuperAdmin
+      ? (queryGymId ? parseInt(queryGymId) : undefined)
+      : resolveGymId(user.gymId, queryGymId, false);
 
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
@@ -61,6 +66,7 @@ export class UsersController {
       role,
       status,
       gymId,
+      isSuperAdmin,
       noPagination: noPagination === 'true',
     });
 
@@ -261,14 +267,17 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get user by ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (optional for superadmin)' })
   findById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.findOne(id, gymId);
+    // Superadmin can view any user without specifying gymId
+    const gymId = user.role === 'superadmin'
+      ? resolveOptionalGymId(user.gymId, queryGymId)
+      : resolveGymId(user.gymId, queryGymId, false);
+    return this.usersService.findOne(id, gymId as number);
   }
 
   @Patch(':id')

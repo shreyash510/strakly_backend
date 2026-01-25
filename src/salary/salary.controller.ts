@@ -11,6 +11,7 @@ import {
   Request,
   Res,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -24,15 +25,27 @@ import { setPaginationHeaders } from '../common/pagination.util';
 @ApiTags('salary')
 @Controller('salary')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class SalaryController {
   constructor(private readonly salaryService: SalaryService) {}
 
+  private resolveGymId(req: any, queryGymId?: string): number {
+    if (req.user.role === 'superadmin') {
+      if (!queryGymId) {
+        throw new BadRequestException('gymId query parameter is required for superadmin');
+      }
+      return parseInt(queryGymId);
+    }
+    return req.user.gymId;
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new salary record' })
-  create(@Request() req: any, @Body() createSalaryDto: CreateSalaryDto) {
-    return this.salaryService.create(createSalaryDto, req.user.gymId, req.user.userId);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  create(@Request() req: any, @Body() createSalaryDto: CreateSalaryDto, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.create(createSalaryDto, gymId, req.user.userId);
   }
 
   @Get()
@@ -45,6 +58,7 @@ export class SalaryController {
   @ApiQuery({ name: 'year', required: false, type: Number })
   @ApiQuery({ name: 'paymentStatus', required: false, type: String })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async findAll(
     @Request() req: any,
     @Query('page') page?: string,
@@ -55,8 +69,10 @@ export class SalaryController {
     @Query('year') year?: string,
     @Query('paymentStatus') paymentStatus?: string,
     @Query('noPagination') noPagination?: string,
+    @Query('gymId') queryGymId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
+    const gymId = this.resolveGymId(req, queryGymId);
     const result = await this.salaryService.findAll(
       {
         page: page ? parseInt(page) : undefined,
@@ -68,7 +84,7 @@ export class SalaryController {
         paymentStatus,
         noPagination: noPagination === 'true',
       },
-      req.user.gymId,
+      gymId,
     );
 
     if (res && result.pagination) {
@@ -80,45 +96,59 @@ export class SalaryController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get salary statistics' })
-  getStats(@Request() req: any) {
-    return this.salaryService.getStats(req.user.gymId);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  getStats(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.getStats(gymId);
   }
 
   @Get('staff')
   @ApiOperation({ summary: 'Get staff list for salary management' })
-  getStaffList(@Request() req: any) {
-    return this.salaryService.getStaffList(req.user.gymId);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  getStaffList(@Request() req: any, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.getStaffList(gymId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single salary record' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.salaryService.findOne(id, req.user.gymId);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.findOne(id, gymId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a salary record' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   update(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSalaryDto: UpdateSalaryDto,
+    @Query('gymId') queryGymId?: string,
   ) {
-    return this.salaryService.update(id, updateSalaryDto, req.user.gymId);
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.update(id, updateSalaryDto, gymId);
   }
 
   @Patch(':id/pay')
   @ApiOperation({ summary: 'Mark salary as paid' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   paySalary(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
     @Body() paySalaryDto: PaySalaryDto,
+    @Query('gymId') queryGymId?: string,
   ) {
-    return this.salaryService.paySalary(id, paySalaryDto, req.user.gymId, req.user.userId);
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.paySalary(id, paySalaryDto, gymId, req.user.userId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a salary record' })
-  remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.salaryService.remove(id, req.user.gymId);
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  remove(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('gymId') queryGymId?: string) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.salaryService.remove(id, gymId);
   }
 }

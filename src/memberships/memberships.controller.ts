@@ -35,7 +35,7 @@ export class MembershipsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
@@ -43,6 +43,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'search', required: false, description: 'Search by user name or email' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   findAll(
     @Request() req: any,
     @Query('status') status?: string,
@@ -51,8 +52,17 @@ export class MembershipsController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('gymId') queryGymId?: string,
   ) {
-    return this.membershipsService.findAll(req.user.gymId, {
+    const gymId = req.user.role === 'superadmin'
+      ? (queryGymId ? parseInt(queryGymId) : null)
+      : req.user.gymId;
+
+    if (!gymId) {
+      throw new BadRequestException('gymId is required');
+    }
+
+    return this.membershipsService.findAll(gymId, {
       status,
       userId: clientId ? parseInt(clientId) : undefined,
       planId: planId ? parseInt(planId) : undefined,

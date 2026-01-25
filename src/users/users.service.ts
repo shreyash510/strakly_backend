@@ -944,14 +944,29 @@ export class UsersService {
 
   /**
    * Find all users - combines admin (public), staff and clients (tenant) based on filters
+   * Superadmin can see all users across all gyms without specifying gymId
    */
   async findAll(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const userType = filters.userType || 'all';
     const role = filters.role;
+    const isSuperAdmin = filters.isSuperAdmin || false;
 
     // If role is 'admin', only get admins from public.users
     if (role === 'admin') {
       return this.findAllAdmins(filters);
+    }
+
+    // For non-superadmin, gymId is required for tenant queries
+    if (!isSuperAdmin && !filters.gymId) {
+      // If role requires tenant access, throw error
+      if (role === 'client' || role === 'manager' || role === 'trainer' || userType !== 'all') {
+        throw new BadRequestException('gymId is required for fetching users');
+      }
+    }
+
+    // If superadmin without gymId, fetch from ALL gyms
+    if (isSuperAdmin && !filters.gymId) {
+      return this.findAllUsersAcrossGyms(filters);
     }
 
     // If role is 'client', only get clients from tenant.users
@@ -972,7 +987,7 @@ export class UsersService {
       return this.findAllClients(filters);
     }
 
-    // For 'all' type, combine all (but need gymId)
+    // For 'all' type with gymId, combine admin, staff and clients
     if (!filters.gymId) {
       throw new BadRequestException('gymId is required for fetching all users');
     }
@@ -1003,37 +1018,111 @@ export class UsersService {
   }
 
   /**
-   * Find one user by ID - checks admin (public) first, then tenant (staff/client)
+   * Find all users across ALL gyms (superadmin only)
    */
-  async findOne(id: number, gymId: number, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
+  private async findAllUsersAcrossGyms(filters: UserFilters): Promise<PaginatedResponse<any>> {
+    const { page, limit, noPagination } = getPaginationParams(filters);
+
+    // Get all active gyms
+    const gyms = await this.prisma.gym.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    });
+
+    // Get all admins from public.users
+    const adminResult = await this.findAllAdmins({ ...filters, noPagination: true });
+    let allUsers = [...adminResult.data];
+
+    // Get staff and clients from each tenant
+    for (const gym of gyms) {
+      try {
+        const [staffResult, clientResult] = await Promise.all([
+          this.findAllStaff({ ...filters, gymId: gym.id, noPagination: true }),
+          this.findAllClients({ ...filters, gymId: gym.id, noPagination: true }),
+        ]);
+
+        // Add gymName to each user for context
+        const staffWithGym = staffResult.data.map((u: any) => ({ ...u, gymName: gym.name }));
+        const clientsWithGym = clientResult.data.map((u: any) => ({ ...u, gymName: gym.name }));
+
+        allUsers = [...allUsers, ...staffWithGym, ...clientsWithGym];
+      } catch (error) {
+        // Skip gyms that don't have tenant schema yet
+        console.warn(`Could not fetch users for gym ${gym.id}: ${error.message}`);
+      }
+    }
+
+    const total = allUsers.length;
+
+    // Sort by createdAt desc
+    allUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination
+    const skip = (page - 1) * limit;
+    const paginatedUsers = noPagination ? allUsers : allUsers.slice(skip, skip + limit);
+
+    return {
+      data: paginatedUsers,
+      pagination: createPaginationMeta(total, page, limit, noPagination),
+    };
+  }
+
+  /**
+   * Find one user by ID - checks admin (public) first, then tenant (staff/client)
+   * If gymId is null/undefined (superadmin), searches across all gyms
+   */
+  async findOne(id: number, gymId?: number | null, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
     // If userType is specified, use that
     if (userType === 'admin') {
-      return this.findOneAdmin(id, gymId);
+      return this.findOneAdmin(id, gymId ?? undefined);
     }
-    if (userType === 'staff') {
+    if (userType === 'staff' && gymId) {
       return this.findOneStaff(id, gymId);
     }
-    if (userType === 'client') {
+    if (userType === 'client' && gymId) {
       return this.findOneClient(id, gymId);
     }
 
     // Try to find in public.users first (admin)
     try {
-      const admin = await this.findOneAdmin(id, gymId);
+      const admin = await this.findOneAdmin(id, gymId ?? undefined);
       return admin;
     } catch (e) {
       // Not found in admin, try tenant
     }
 
-    // Try to find in tenant schema (staff or client)
-    const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM users WHERE id = $1`, [id]);
-      return result.rows[0];
-    });
+    // If gymId is provided, search in that specific tenant
+    if (gymId) {
+      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [id]);
+        return result.rows[0];
+      });
 
-    if (tenantUser) {
-      const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-      return this.formatTenantUser(tenantUser, gym);
+      if (tenantUser) {
+        const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+        return this.formatTenantUser(tenantUser, gym);
+      }
+    } else {
+      // No gymId (superadmin) - search across ALL tenant schemas
+      const gyms = await this.prisma.gym.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, logo: true, city: true, state: true },
+      });
+
+      for (const gym of gyms) {
+        try {
+          const tenantUser = await this.tenantService.executeInTenant(gym.id, async (client) => {
+            const result = await client.query(`SELECT * FROM users WHERE id = $1`, [id]);
+            return result.rows[0];
+          });
+
+          if (tenantUser) {
+            return this.formatTenantUser(tenantUser, gym);
+          }
+        } catch (e) {
+          // Tenant schema might not exist, continue to next gym
+        }
+      }
     }
 
     throw new NotFoundException(`User with ID ${id} not found`);
