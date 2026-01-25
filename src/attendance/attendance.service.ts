@@ -67,11 +67,9 @@ export class AttendanceService {
   async searchUserByCode(code: string, gymId: number): Promise<SearchUserResult | null> {
     const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT u.id, u.name, u.email, u.phone, u.avatar, u.status, u.attendance_code, u.created_at,
-                l.name as role_name
-         FROM users u
-         LEFT JOIN public.lookups l ON l.id = u.role_id
-         WHERE u.attendance_code = $1`,
+        `SELECT id, name, email, phone, avatar, status, attendance_code, role, created_at
+         FROM users
+         WHERE attendance_code = $1`,
         [code]
       );
       return result.rows[0];
@@ -87,7 +85,7 @@ export class AttendanceService {
       email: userData.email,
       phone: userData.phone,
       avatar: userData.avatar,
-      role: userData.role_name || 'client',
+      role: userData.role || 'client',
       status: userData.status || 'active',
       attendanceCode: userData.attendance_code,
       joinDate: userData.created_at,

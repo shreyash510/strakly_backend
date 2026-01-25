@@ -108,8 +108,8 @@ export class PublicService {
     /* Create the user in tenant schema as a pending client */
     const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO users (name, email, password_hash, phone, status, join_date, attendance_code, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'pending', NOW(), $5, NOW(), NOW())
+        `INSERT INTO users (name, email, password_hash, phone, role, status, join_date, attendance_code, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'client', 'pending', NOW(), $5, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
         [
           dto.name,

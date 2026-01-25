@@ -55,9 +55,8 @@ export class SalaryService {
     // Verify staff belongs to the gym
     const staff = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT u.id, u.name, l.code as role_code FROM users u
-         LEFT JOIN public.lookups l ON l.id = u.role_id
-         WHERE u.id = $1 AND l.code IN ('trainer', 'manager')`,
+        `SELECT id, name, role FROM users
+         WHERE id = $1 AND role IN ('trainer', 'manager')`,
         [createSalaryDto.staffId]
       );
       return result.rows[0];
@@ -130,10 +129,9 @@ export class SalaryService {
 
       const [salariesResult, countResult] = await Promise.all([
         client.query(
-          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, l.code as staff_role
+          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
            FROM staff_salaries s
            JOIN users u ON u.id = s.staff_id
-           LEFT JOIN public.lookups l ON l.id = u.role_id
            WHERE ${whereClause}
            ORDER BY s.year DESC, s.month DESC, s.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -182,10 +180,9 @@ export class SalaryService {
   async findOne(salaryId: number, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, l.code as staff_role
+        `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
          FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
-         LEFT JOIN public.lookups l ON l.id = u.role_id
          WHERE s.id = $1`,
         [salaryId]
       );
@@ -302,9 +299,8 @@ export class SalaryService {
         client.query(`SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE payment_status = 'paid' AND year = $1`, [currentYear]),
         client.query(`SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE month = $1 AND year = $2`, [currentMonth, currentYear]),
         client.query(
-          `SELECT COUNT(*) as count FROM users u
-           JOIN public.lookups l ON l.id = u.role_id
-           WHERE u.status = 'active' AND l.code IN ('trainer', 'manager')`
+          `SELECT COUNT(*) as count FROM users
+           WHERE status = 'active' AND role IN ('trainer', 'manager')`
         ),
       ]);
 
@@ -325,11 +321,10 @@ export class SalaryService {
   async getStaffList(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT u.id, u.name, u.email, u.avatar, u.phone, l.code as role_code, l.name as role_name
-         FROM users u
-         LEFT JOIN public.lookups l ON l.id = u.role_id
-         WHERE u.status = 'active' AND l.code IN ('trainer', 'manager')
-         ORDER BY u.name ASC`
+        `SELECT id, name, email, avatar, phone, role
+         FROM users
+         WHERE status = 'active' AND role IN ('trainer', 'manager')
+         ORDER BY name ASC`
       );
 
       return result.rows.map((u: any) => ({
@@ -338,7 +333,7 @@ export class SalaryService {
         email: u.email,
         avatar: u.avatar,
         phone: u.phone,
-        role: { code: u.role_code, name: u.role_name },
+        role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
       }));
     });
   }

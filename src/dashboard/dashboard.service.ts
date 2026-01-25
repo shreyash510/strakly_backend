@@ -83,22 +83,6 @@ export class DashboardService {
     let lastMonthRevenueValue = 0;
     let presentToday = 0;
 
-    // Get role lookups from public schema
-    const [trainerRole, memberRole] = await Promise.all([
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'trainer',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'client',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-    ]);
-
     // Aggregate data from each tenant
     for (const gym of activeGymsList) {
       try {
@@ -116,12 +100,8 @@ export class DashboardService {
           ] = await Promise.all([
             client.query(`SELECT COUNT(*) as count FROM users`),
             client.query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`),
-            trainerRole
-              ? client.query(`SELECT COUNT(*) as count FROM users WHERE role_id = $1`, [trainerRole.id])
-              : { rows: [{ count: 0 }] },
-            memberRole
-              ? client.query(`SELECT COUNT(*) as count FROM users WHERE role_id = $1`, [memberRole.id])
-              : { rows: [{ count: 0 }] },
+            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
+            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
             client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
             client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
             client.query(
@@ -287,22 +267,6 @@ export class DashboardService {
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    // Get role lookups
-    const [trainerRole, memberRole] = await Promise.all([
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'trainer',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-      this.prisma.lookup.findFirst({
-        where: {
-          code: 'client',
-          lookupType: { code: 'USER_ROLE' },
-        },
-      }),
-    ]);
-
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
       const [
         totalMembersResult,
@@ -316,15 +280,9 @@ export class DashboardService {
         presentTodayResult,
         expiringThisWeekResult,
       ] = await Promise.all([
-        memberRole
-          ? client.query(`SELECT COUNT(*) as count FROM users WHERE role_id = $1`, [memberRole.id])
-          : { rows: [{ count: 0 }] },
-        memberRole
-          ? client.query(`SELECT COUNT(*) as count FROM users WHERE role_id = $1 AND status = 'active'`, [memberRole.id])
-          : { rows: [{ count: 0 }] },
-        trainerRole
-          ? client.query(`SELECT COUNT(*) as count FROM users WHERE role_id = $1`, [trainerRole.id])
-          : { rows: [{ count: 0 }] },
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
         client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
         client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
         client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'`),
@@ -390,19 +348,10 @@ export class DashboardService {
   }
 
   private async getRecentMembers(gymId: number, limit = 5): Promise<RecentMemberDto[]> {
-    const memberRole = await this.prisma.lookup.findFirst({
-      where: {
-        code: 'client',
-        lookupType: { code: 'USER_ROLE' },
-      },
-    });
-
-    if (!memberRole) return [];
-
     const members = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id, name, email, avatar, status, created_at FROM users WHERE role_id = $1 ORDER BY created_at DESC LIMIT $2`,
-        [memberRole.id, limit]
+        `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC LIMIT $1`,
+        [limit]
       );
       return result.rows;
     });
