@@ -18,10 +18,10 @@ export class OffersService {
       description: o.description,
       discountType: o.discount_type,
       discountValue: o.discount_value,
-      startDate: o.start_date,
-      endDate: o.end_date,
-      maxUsage: o.max_usage,
-      currentUsage: o.current_usage,
+      startDate: o.valid_from,
+      endDate: o.valid_to,
+      maxUsage: o.max_usage_count,
+      currentUsage: o.used_count,
       isActive: o.is_active,
       createdAt: o.created_at,
       updatedAt: o.updated_at,
@@ -41,7 +41,7 @@ export class OffersService {
   async findActive(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM offers WHERE is_active = true AND start_date <= NOW() AND end_date >= NOW() ORDER BY end_date ASC`
+        `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() ORDER BY valid_to ASC`
       );
       return result.rows.map((o: any) => this.formatOffer(o));
     });
@@ -88,15 +88,15 @@ export class OffersService {
     }
 
     const now = new Date();
-    if (new Date(offer.start_date) > now) {
+    if (new Date(offer.valid_from) > now) {
       return { valid: false, message: 'Offer is not yet valid' };
     }
 
-    if (new Date(offer.end_date) < now) {
+    if (new Date(offer.valid_to) < now) {
       return { valid: false, message: 'Offer has expired' };
     }
 
-    if (offer.max_usage && offer.current_usage >= offer.max_usage) {
+    if (offer.max_usage_count && offer.used_count >= offer.max_usage_count) {
       return { valid: false, message: 'Offer usage limit reached' };
     }
 
@@ -122,7 +122,7 @@ export class OffersService {
 
     const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO offers (code, name, description, discount_type, discount_value, start_date, end_date, max_usage, current_usage, is_active, created_at, updated_at)
+        `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, NOW(), NOW())
          RETURNING *`,
         [
@@ -153,9 +153,9 @@ export class OffersService {
     if (dto.description !== undefined) { updates.push(`description = $${paramIndex++}`); values.push(dto.description); }
     if (dto.discountType) { updates.push(`discount_type = $${paramIndex++}`); values.push(dto.discountType); }
     if (dto.discountValue !== undefined) { updates.push(`discount_value = $${paramIndex++}`); values.push(dto.discountValue); }
-    if (dto.validFrom) { updates.push(`start_date = $${paramIndex++}`); values.push(new Date(dto.validFrom)); }
-    if (dto.validTo) { updates.push(`end_date = $${paramIndex++}`); values.push(new Date(dto.validTo)); }
-    if (dto.maxUsageCount !== undefined) { updates.push(`max_usage = $${paramIndex++}`); values.push(dto.maxUsageCount); }
+    if (dto.validFrom) { updates.push(`valid_from = $${paramIndex++}`); values.push(new Date(dto.validFrom)); }
+    if (dto.validTo) { updates.push(`valid_to = $${paramIndex++}`); values.push(new Date(dto.validTo)); }
+    if (dto.maxUsageCount !== undefined) { updates.push(`max_usage_count = $${paramIndex++}`); values.push(dto.maxUsageCount); }
     if (dto.isActive !== undefined) { updates.push(`is_active = $${paramIndex++}`); values.push(dto.isActive); }
 
     updates.push(`updated_at = NOW()`);
@@ -185,7 +185,7 @@ export class OffersService {
 
   async incrementUsage(offerId: number, gymId: number) {
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(`UPDATE offers SET current_usage = current_usage + 1, updated_at = NOW() WHERE id = $1`, [offerId]);
+      await client.query(`UPDATE offers SET used_count = used_count + 1, updated_at = NOW() WHERE id = $1`, [offerId]);
     });
   }
 }

@@ -120,8 +120,6 @@ export class UsersService {
         city: gym.city,
         state: gym.state,
       } : null,
-      bodyMetrics: user.bodyMetrics || null,
-      bodyMetricsHistory: user.bodyMetricsHistory || [],
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
     };
@@ -1083,15 +1081,7 @@ export class UsersService {
       return this.findOneClient(id, gymId);
     }
 
-    // Try to find in public.users first (admin)
-    try {
-      const admin = await this.findOneAdmin(id, gymId ?? undefined);
-      return admin;
-    } catch (e) {
-      // Not found in admin, try tenant
-    }
-
-    // If gymId is provided, search in that specific tenant
+    // If gymId is provided, check tenant schema FIRST (avoids ID collision with public.users)
     if (gymId) {
       const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(`SELECT * FROM users WHERE id = $1`, [id]);
@@ -1102,7 +1092,26 @@ export class UsersService {
         const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
         return this.formatTenantUser(tenantUser, gym);
       }
+
+      // Not found in tenant, try admin (public.users)
+      try {
+        const admin = await this.findOneAdmin(id, gymId);
+        return admin;
+      } catch (e) {
+        // Not found in admin either
+      }
     } else {
+      // No gymId - try admin first (superadmin context)
+      try {
+        const admin = await this.findOneAdmin(id, undefined);
+        return admin;
+      } catch (e) {
+        // Not found in admin, try tenant
+      }
+    }
+
+    // No gymId (superadmin) - search across ALL tenant schemas
+    if (!gymId) {
       // No gymId (superadmin) - search across ALL tenant schemas
       const gyms = await this.prisma.gym.findMany({
         where: { isActive: true },
