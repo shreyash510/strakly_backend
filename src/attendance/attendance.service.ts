@@ -105,8 +105,8 @@ export class AttendanceService {
       throw new NotFoundException('Gym not found');
     }
 
-    const { existingRecord, activeMembership, staffName } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [existingResult, membershipResult, staffResult] = await Promise.all([
+    const { existingRecord, activeMembership } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [existingResult, membershipResult] = await Promise.all([
         client.query(
           `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
           [user.id, today]
@@ -116,15 +116,17 @@ export class AttendanceService {
            AND start_date <= $2 AND end_date >= $2`,
           [user.id, new Date()]
         ),
-        client.query(`SELECT name FROM users WHERE id = $1`, [staffId]),
       ]);
 
       return {
         existingRecord: existingResult.rows[0],
         activeMembership: membershipResult.rows[0],
-        staffName: staffResult.rows[0]?.name,
       };
     });
+
+    // Get staff name from public.users (admin/staff)
+    const staffUser = await this.prisma.user.findUnique({ where: { id: staffId } });
+    const staffName = staffUser?.name;
 
     if (existingRecord) {
       throw new BadRequestException('User is already checked in at this gym today');
@@ -136,7 +138,7 @@ export class AttendanceService {
 
     const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO attendance (user_id, membership_id, check_in_time, date, marked_by_id, check_in_method, status, created_at, updated_at)
+        `INSERT INTO attendance (user_id, membership_id, check_in_time, date, marked_by, check_in_method, status, created_at, updated_at)
          VALUES ($1, $2, NOW(), $3, $4, $5, 'present', NOW(), NOW())
          RETURNING *`,
         [user.id, activeMembership.id, today, staffId, checkInMethod]
@@ -156,7 +158,7 @@ export class AttendanceService {
       checkInTime: attendance.check_in_time,
       checkOutTime: attendance.check_out_time,
       date: attendance.date,
-      markedById: attendance.marked_by_id,
+      markedById: attendance.marked_by,
       markedByName: staffName,
       checkInMethod: attendance.check_in_method,
       status: attendance.status,
@@ -198,18 +200,17 @@ export class AttendanceService {
     const checkOutTime = new Date();
     const checkInTime = new Date(attendance.check_in_time).getTime();
     const duration = Math.round((checkOutTime.getTime() - checkInTime) / (1000 * 60));
-    const checkedOutById = staffId || attendance.marked_by_id;
+    const checkedOutById = staffId || attendance.marked_by;
 
-    const staffName = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT name FROM users WHERE id = $1`, [checkedOutById]);
-      return result.rows[0]?.name;
-    });
+    // Get staff name from public.users
+    const staffUserForCheckout = await this.prisma.user.findUnique({ where: { id: checkedOutById } });
+    const staffName = staffUserForCheckout?.name;
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, duration, marked_by_id, checked_out_by_id, check_in_method, status, created_at)
+        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'checked_out', NOW())`,
-        [attendance.user_id, attendance.membership_id, attendance.check_in_time, checkOutTime, attendance.date, duration, attendance.marked_by_id, checkedOutById, attendance.check_in_method]
+        [attendance.user_id, attendance.membership_id, attendance.check_in_time, checkOutTime, attendance.date, duration, attendance.marked_by, checkedOutById, attendance.check_in_method]
       );
 
       await client.query(
@@ -230,7 +231,7 @@ export class AttendanceService {
       checkInTime: attendance.check_in_time,
       checkOutTime: checkOutTime,
       date: attendance.date,
-      markedById: attendance.marked_by_id,
+      markedById: attendance.marked_by,
       markedByName: staffName,
       checkInMethod: attendance.check_in_method,
       status: 'checked_out',
@@ -250,7 +251,7 @@ export class AttendanceService {
       checkInTime: record.check_in_time,
       checkOutTime: record.check_out_time,
       date: record.date,
-      markedById: record.marked_by_id,
+      markedById: record.marked_by,
       checkInMethod: record.check_in_method || 'code',
       status: record.status,
     };
