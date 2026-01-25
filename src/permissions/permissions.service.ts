@@ -206,7 +206,13 @@ export class PermissionsService {
       return this.getPermissionsByRole('superadmin');
     }
 
-    // Get user's role from tenant schema
+    // Handle admin case - admin users are in public.users, not tenant.users
+    // They have a role passed from JWT, so we can use it directly
+    if (role === 'admin') {
+      return this.getPermissionsByRole('admin');
+    }
+
+    // For tenant users (manager, trainer, client), get role from tenant schema
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, role FROM users WHERE id = $1`,

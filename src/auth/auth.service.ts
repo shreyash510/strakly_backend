@@ -109,7 +109,7 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  private generateToken(user: UserResponse, gymAssignment?: GymAssignment): string {
+  private generateToken(user: UserResponse, gymAssignment?: GymAssignment, isAdmin: boolean = false): string {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -117,6 +117,7 @@ export class AuthService {
       role: gymAssignment?.role || user.role || 'client',
       gymId: gymAssignment?.gymId || user.gymId || null,
       tenantSchemaName: gymAssignment?.gym?.tenantSchemaName || user.gym?.tenantSchemaName || null,
+      isAdmin, // Admin users are in public.users, not tenant.users
     };
     return this.jwtService.sign(payload);
   }
@@ -265,7 +266,7 @@ export class AuthService {
     };
 
     const user = this.toUserResponse({ ...createdUser, role: 'admin' }, updatedGym, [gymAssignment]);
-    const accessToken = this.generateToken(user, gymAssignment);
+    const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
 
     return {
       user,
@@ -410,7 +411,7 @@ export class AuthService {
         gymAssignments
       );
 
-      const accessToken = this.generateToken(user, primaryAssignment);
+      const accessToken = this.generateToken(user, primaryAssignment, true); // isAdmin = true
 
       return {
         user,
@@ -558,7 +559,7 @@ export class AuthService {
       gymAssignments
     );
 
-    const accessToken = this.generateToken(userResponse, selectedAssignment);
+    const accessToken = this.generateToken(userResponse, selectedAssignment, true); // isAdmin = true (only admins can switch gyms)
 
     return {
       user: userResponse,
@@ -831,8 +832,11 @@ export class AuthService {
       ? user.gyms.find((g) => g.gymId === gymId)
       : user.gyms?.[0];
 
+    // Admin users (not tenant users) need isAdmin flag
+    const isAdmin = !isTenantUser && user.role === 'admin';
+
     return {
-      accessToken: this.generateToken(user, gymAssignment),
+      accessToken: this.generateToken(user, gymAssignment, isAdmin),
     };
   }
 
