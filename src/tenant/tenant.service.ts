@@ -14,7 +14,6 @@ export class TenantService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    // Ensure public schema has necessary tables
     console.log('TenantService initialized');
   }
 
@@ -54,9 +53,11 @@ export class TenantService implements OnModuleInit {
 
   /**
    * Create all tenant-specific tables in the schema
+   * Note: Only CLIENTS are stored in tenant schema
+   * Staff (admin, manager, trainer) are in public.users
    */
   private async createTenantTables(client: any, schemaName: string): Promise<void> {
-    // Users table (tenant-specific users: admin, manager, trainer, client)
+    // Users table (CLIENTS ONLY - members of the gym)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."users" (
         id SERIAL PRIMARY KEY,
@@ -67,13 +68,14 @@ export class TenantService implements OnModuleInit {
         avatar TEXT,
         bio TEXT,
         date_of_birth TIMESTAMP,
+        gender VARCHAR(20),
         address TEXT,
         city VARCHAR(100),
         state VARCHAR(100),
         zip_code VARCHAR(20),
-        role_id INTEGER NOT NULL,
+        emergency_contact_name VARCHAR(255),
+        emergency_contact_phone VARCHAR(50),
         status VARCHAR(50) DEFAULT 'active',
-        gender VARCHAR(20),
         attendance_code VARCHAR(20) UNIQUE,
         join_date TIMESTAMP,
         last_login_at TIMESTAMP,
@@ -156,6 +158,7 @@ export class TenantService implements OnModuleInit {
         cancelled_at TIMESTAMP,
         cancel_reason TEXT,
         notes TEXT,
+        created_by INTEGER, -- public.users.id (staff who created)
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -192,6 +195,7 @@ export class TenantService implements OnModuleInit {
     `);
 
     // Attendance table (active check-ins)
+    // marked_by references public.users.id (staff)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."attendance" (
         id SERIAL PRIMARY KEY,
@@ -200,7 +204,7 @@ export class TenantService implements OnModuleInit {
         check_in_time TIMESTAMP NOT NULL,
         check_out_time TIMESTAMP,
         date VARCHAR(20) NOT NULL,
-        marked_by_id INTEGER NOT NULL,
+        marked_by INTEGER NOT NULL, -- public.users.id (staff who marked)
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'present',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -218,8 +222,8 @@ export class TenantService implements OnModuleInit {
         check_out_time TIMESTAMP NOT NULL,
         date VARCHAR(20) NOT NULL,
         duration INTEGER,
-        marked_by_id INTEGER NOT NULL,
-        checked_out_by_id INTEGER,
+        marked_by INTEGER NOT NULL,
+        checked_out_by INTEGER,
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'checked_out',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -253,7 +257,7 @@ export class TenantService implements OnModuleInit {
         target_weight DECIMAL(5, 2),
         target_body_fat DECIMAL(4, 2),
         last_measured_at TIMESTAMP,
-        measured_by VARCHAR(100),
+        measured_by INTEGER, -- public.users.id (staff)
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -284,33 +288,25 @@ export class TenantService implements OnModuleInit {
         resting_heart_rate INTEGER,
         blood_pressure_sys INTEGER,
         blood_pressure_dia INTEGER,
-        measured_by VARCHAR(100),
+        measured_by INTEGER, -- public.users.id (staff)
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Staff salaries table
+    // Trainer-Client cross reference
+    // trainer_id references public.users.id
     await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."staff_salaries" (
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."trainer_client_xref" (
         id SERIAL PRIMARY KEY,
-        staff_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id),
-        month INTEGER NOT NULL,
-        year INTEGER NOT NULL,
-        base_salary DECIMAL(10, 2) NOT NULL,
-        bonus DECIMAL(10, 2) DEFAULT 0,
-        deductions DECIMAL(10, 2) DEFAULT 0,
-        net_amount DECIMAL(10, 2) NOT NULL,
-        currency VARCHAR(10) DEFAULT 'INR',
-        payment_status VARCHAR(50) DEFAULT 'pending',
-        payment_method VARCHAR(50),
-        payment_ref VARCHAR(255),
-        paid_at TIMESTAMP,
-        paid_by_id INTEGER,
+        trainer_id INTEGER NOT NULL, -- public.users.id (trainer)
+        client_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(staff_id, month, year)
+        UNIQUE(trainer_id, client_id)
       )
     `);
 
@@ -324,20 +320,26 @@ export class TenantService implements OnModuleInit {
   private async createTenantIndexes(client: any, schemaName: string): Promise<void> {
     // Users indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_email" ON "${schemaName}"."users"(email)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`);
 
     // Memberships indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_user" ON "${schemaName}"."memberships"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_status" ON "${schemaName}"."memberships"(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_dates" ON "${schemaName}"."memberships"(start_date, end_date)`);
 
     // Attendance indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_user" ON "${schemaName}"."attendance"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date" ON "${schemaName}"."attendance"(date)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_marked_by" ON "${schemaName}"."attendance"(marked_by)`);
 
     // Attendance history indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_user" ON "${schemaName}"."attendance_history"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date" ON "${schemaName}"."attendance_history"(date)`);
+
+    // Trainer-client indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`);
   }
 
   /**

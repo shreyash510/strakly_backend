@@ -72,57 +72,54 @@ export class PublicService {
       throw new BadRequestException('This gym is not accepting new registrations');
     }
 
-    /* Check if email already exists in user_tenant_mappings */
-    const existingMapping = await this.prisma.userTenantMapping.findUnique({
+    /* Check if email already exists in tenant schema */
+    const existingClient = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM users WHERE email = $1`,
+        [dto.email.toLowerCase()]
+      );
+      return result.rows[0];
+    });
+
+    if (existingClient) {
+      throw new ConflictException('A user with this email already exists in this gym');
+    }
+
+    /* Also check public.users (staff) and system_users */
+    const existingStaff = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
 
-    if (existingMapping) {
-      throw new ConflictException('A user with this email already exists');
+    if (existingStaff) {
+      throw new ConflictException('This email is already registered as a staff member');
     }
 
-    /* Find the 'client' role from Lookup table */
-    const memberRole = await this.prisma.lookup.findFirst({
-      where: {
-        lookupType: { code: 'USER_ROLE' },
-        code: 'client',
-      },
+    const existingSystemUser = await this.prisma.systemUser.findUnique({
+      where: { email: dto.email.toLowerCase() },
     });
 
-    if (!memberRole) {
-      throw new Error('Default member role not found in lookup table');
+    if (existingSystemUser) {
+      throw new ConflictException('This email is already registered');
     }
 
     /* Generate unique attendance code */
     const attendanceCode = await this.generateUniqueAttendanceCode(dto.gymId);
 
-    /* Create the user in tenant schema */
+    /* Create the user in tenant schema as a pending client */
     const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO users (name, email, password_hash, phone, role_id, status, join_date, attendance_code, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), $6, NOW(), NOW())
+        `INSERT INTO users (name, email, password_hash, phone, status, join_date, attendance_code, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'pending', NOW(), $5, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
         [
           dto.name,
           dto.email.toLowerCase(),
           await this.hashPassword(dto.password),
           dto.phone || null,
-          memberRole.id,
           attendanceCode,
         ]
       );
       return result.rows[0];
-    });
-
-    /* Create user-tenant mapping */
-    await this.prisma.userTenantMapping.create({
-      data: {
-        email: dto.email.toLowerCase(),
-        gymId: dto.gymId,
-        tenantUserId: user.id,
-        role: 'client',
-        isActive: true,
-      },
     });
 
     return {

@@ -18,7 +18,7 @@ export interface SupportFilters extends PaginationParams {
   status?: string;
   category?: string;
   priority?: string;
-  tenantUserId?: number;
+  userId?: number;
   assignedToId?: number;
   gymId?: number;
 }
@@ -36,7 +36,7 @@ export class SupportService {
     return `TKT-${timestamp}-${random}`;
   }
 
-  async create(userId: number, gymId: number, userName: string, userEmail: string, createTicketDto: CreateTicketDto) {
+  async create(userId: number, gymId: number, userName: string, userEmail: string, userType: string, createTicketDto: CreateTicketDto) {
     const ticketNumber = this.generateTicketNumber();
 
     const ticket = await this.prisma.supportTicket.create({
@@ -46,9 +46,10 @@ export class SupportService {
         description: createTicketDto.description,
         category: createTicketDto.category || 'general',
         priority: createTicketDto.priority || 'medium',
-        tenantUserId: userId,
-        tenantUserEmail: userEmail,
-        tenantUserName: userName,
+        userId: userId,
+        userEmail: userEmail,
+        userName: userName,
+        userType: userType || 'client',
         gymId: gymId,
         status: 'open',
       },
@@ -92,12 +93,12 @@ export class SupportService {
       }
     } else {
       // Regular users can only see their own tickets
-      where.tenantUserId = userId;
+      where.userId = userId;
       where.gymId = userGymId;
     }
 
-    if (filters.tenantUserId) {
-      where.tenantUserId = filters.tenantUserId;
+    if (filters.userId) {
+      where.userId = filters.userId;
     }
 
     if (filters.status && filters.status !== 'all') {
@@ -122,8 +123,8 @@ export class SupportService {
         { subject: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
         { ticketNumber: { contains: filters.search, mode: 'insensitive' } },
-        { tenantUserName: { contains: filters.search, mode: 'insensitive' } },
-        { tenantUserEmail: { contains: filters.search, mode: 'insensitive' } },
+        { userName: { contains: filters.search, mode: 'insensitive' } },
+        { userEmail: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
@@ -179,9 +180,9 @@ export class SupportService {
       updatedAt: ticket.updatedAt,
       gym: ticket.gym,
       user: {
-        id: ticket.tenantUserId,
-        name: ticket.tenantUserName,
-        email: ticket.tenantUserEmail,
+        id: ticket.userId,
+        name: ticket.userName,
+        email: ticket.userEmail,
       },
       lastMessage: ticket.messages[0] || null,
     }));
@@ -220,7 +221,7 @@ export class SupportService {
       throw new ForbiddenException('You can only view tickets from your gym');
     }
 
-    if (!isAdmin && userId && ticket.tenantUserId !== userId) {
+    if (!isAdmin && userId && ticket.userId !== userId) {
       throw new ForbiddenException('You can only view your own tickets');
     }
 
@@ -251,9 +252,9 @@ export class SupportService {
       updatedAt: ticket.updatedAt,
       gym: ticket.gym,
       user: {
-        id: ticket.tenantUserId,
-        name: ticket.tenantUserName,
-        email: ticket.tenantUserEmail,
+        id: ticket.userId,
+        name: ticket.userName,
+        email: ticket.userEmail,
       },
       messages: messagesWithSenderInfo,
     };
@@ -283,7 +284,7 @@ export class SupportService {
     }
 
     if (!isAdmin) {
-      if (ticket.tenantUserId !== userId) {
+      if (ticket.userId !== userId) {
         throw new ForbiddenException('You can only update your own tickets');
       }
       const allowedFields = ['subject', 'description', 'category'];
@@ -341,7 +342,7 @@ export class SupportService {
       throw new ForbiddenException('You can only add messages to tickets from your gym');
     }
 
-    if (!isAdmin && ticket.tenantUserId !== senderId) {
+    if (!isAdmin && ticket.userId !== senderId) {
       throw new ForbiddenException('You can only add messages to your own tickets');
     }
 

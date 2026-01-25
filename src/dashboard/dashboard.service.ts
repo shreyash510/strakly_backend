@@ -213,48 +213,35 @@ export class DashboardService {
   }
 
   private async getRecentUsers(limit = 5): Promise<RecentUserDto[]> {
-    // Get recent users from all tenants based on user_tenant_mappings
-    const recentMappings = await this.prisma.userTenantMapping.findMany({
+    // Get recent staff users from public.users with their gym assignments
+    const recentStaff = await this.prisma.user.findMany({
       take: limit,
       orderBy: { createdAt: 'desc' },
-      where: { isActive: true },
+      where: { isDeleted: false },
       select: {
+        id: true,
+        name: true,
         email: true,
-        gymId: true,
-        tenantUserId: true,
-        role: true,
+        avatar: true,
+        status: true,
         createdAt: true,
+        gymAssignments: {
+          where: { isActive: true },
+          take: 1,
+          select: { role: true },
+        },
       },
     });
 
-    const users: RecentUserDto[] = [];
-    for (const mapping of recentMappings) {
-      try {
-        const user = await this.tenantService.executeInTenant(mapping.gymId, async (client) => {
-          const result = await client.query(
-            `SELECT id, name, email, avatar, status FROM users WHERE id = $1`,
-            [mapping.tenantUserId]
-          );
-          return result.rows[0];
-        });
-
-        if (user) {
-          users.push({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            avatar: user.avatar || undefined,
-            role: mapping.role,
-            status: user.status,
-            createdAt: mapping.createdAt,
-          });
-        }
-      } catch (error) {
-        // Skip if tenant query fails
-      }
-    }
-
-    return users;
+    return recentStaff.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar || undefined,
+      role: user.gymAssignments[0]?.role || 'staff',
+      status: user.status,
+      createdAt: user.createdAt,
+    }));
   }
 
   private async getRecentTickets(limit = 5): Promise<RecentTicketDto[]> {

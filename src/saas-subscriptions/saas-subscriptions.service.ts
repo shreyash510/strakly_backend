@@ -133,7 +133,7 @@ export class SaasSubscriptionsService {
     const plan = await this.findPlanById(id);
 
     // Check if any gyms are subscribed to this plan
-    const activeSubscriptions = await this.prisma.gymSubscription.count({
+    const activeSubscriptions = await this.prisma.saasGymSubscription.count({
       where: {
         planId: id,
         status: { in: ['active', 'trial'] },
@@ -182,7 +182,7 @@ export class SaasSubscriptionsService {
     }
 
     const [subscriptions, total] = await Promise.all([
-      this.prisma.gymSubscription.findMany({
+      this.prisma.saasGymSubscription.findMany({
         where,
         include: {
           gym: {
@@ -207,42 +207,39 @@ export class SaasSubscriptionsService {
         skip,
         take,
       }),
-      this.prisma.gymSubscription.count({ where }),
+      this.prisma.saasGymSubscription.count({ where }),
     ]);
 
-    // Get admin owners for each gym from user_tenant_mappings
+    // Get admin owners for each gym from user_gym_xref (public.users)
     const gymIds = subscriptions.map(s => s.gym.id);
-    const adminMappings = await this.prisma.userTenantMapping.findMany({
+    const adminAssignments = await this.prisma.userGymXref.findMany({
       where: {
         gymId: { in: gymIds },
         role: 'admin',
         isActive: true,
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
     });
 
     // Create a map of gymId -> admin info
     const ownerMap = new Map<number, any>();
-    for (const mapping of adminMappings) {
-      if (!ownerMap.has(mapping.gymId)) {
-        try {
-          const adminUser = await this.tenantService.executeInTenant(mapping.gymId, async (client) => {
-            const result = await client.query(
-              `SELECT id, name, email, avatar FROM users WHERE id = $1`,
-              [mapping.tenantUserId]
-            );
-            return result.rows[0];
-          });
-          if (adminUser) {
-            ownerMap.set(mapping.gymId, {
-              id: adminUser.id,
-              name: adminUser.name,
-              email: adminUser.email,
-              avatar: adminUser.avatar,
-            });
-          }
-        } catch (e) {
-          // Tenant schema might not exist yet
-        }
+    for (const assignment of adminAssignments) {
+      if (!ownerMap.has(assignment.gymId)) {
+        ownerMap.set(assignment.gymId, {
+          id: assignment.user.id,
+          name: assignment.user.name,
+          email: assignment.user.email,
+          avatar: assignment.user.avatar,
+        });
       }
     }
 
@@ -262,7 +259,7 @@ export class SaasSubscriptionsService {
   }
 
   async findSubscriptionById(id: number) {
-    const subscription = await this.prisma.gymSubscription.findUnique({
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
       where: { id },
       include: {
         gym: true,
@@ -278,7 +275,7 @@ export class SaasSubscriptionsService {
   }
 
   async findSubscriptionByGymId(gymId: number) {
-    const subscription = await this.prisma.gymSubscription.findUnique({
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
       where: { gymId },
       include: {
         gym: {
@@ -307,7 +304,7 @@ export class SaasSubscriptionsService {
     }
 
     // Check if gym already has a subscription
-    const existingSubscription = await this.prisma.gymSubscription.findUnique({
+    const existingSubscription = await this.prisma.saasGymSubscription.findUnique({
       where: { gymId: dto.gymId },
     });
 
@@ -352,7 +349,7 @@ export class SaasSubscriptionsService {
     const paymentStatus =
       dto.paymentStatus || (plan.price.toNumber() === 0 ? 'paid' : 'pending');
 
-    return this.prisma.gymSubscription.create({
+    return this.prisma.saasGymSubscription.create({
       data: {
         gymId: dto.gymId,
         planId: dto.planId,
@@ -408,7 +405,7 @@ export class SaasSubscriptionsService {
       updateData.lastPaymentAt = new Date();
     }
 
-    return this.prisma.gymSubscription.update({
+    return this.prisma.saasGymSubscription.update({
       where: { id },
       data: updateData,
       include: {
@@ -427,7 +424,7 @@ export class SaasSubscriptionsService {
   async cancelSubscription(id: number, dto: CancelSubscriptionDto) {
     await this.findSubscriptionById(id);
 
-    return this.prisma.gymSubscription.update({
+    return this.prisma.saasGymSubscription.update({
       where: { id },
       data: {
         status: 'cancelled',
@@ -459,17 +456,17 @@ export class SaasSubscriptionsService {
       monthlyRevenue,
       planDistribution,
     ] = await Promise.all([
-      this.prisma.gymSubscription.count(),
-      this.prisma.gymSubscription.count({ where: { status: 'active' } }),
-      this.prisma.gymSubscription.count({ where: { status: 'trial' } }),
-      this.prisma.gymSubscription.aggregate({
+      this.prisma.saasGymSubscription.count(),
+      this.prisma.saasGymSubscription.count({ where: { status: 'active' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'trial' } }),
+      this.prisma.saasGymSubscription.aggregate({
         where: {
           paymentStatus: 'paid',
           status: 'active',
         },
         _sum: { amount: true },
       }),
-      this.prisma.gymSubscription.groupBy({
+      this.prisma.saasGymSubscription.groupBy({
         by: ['planId'],
         _count: { id: true },
         where: { status: { in: ['active', 'trial'] } },

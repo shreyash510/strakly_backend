@@ -112,6 +112,17 @@ export class AuthController {
   ) {
     const pageNum = parseInt(page || '1', 10) || 1;
     const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50);
-    return this.authService.searchUsers(query, userId, gymId, pageNum, limitNum);
+    return this.authService.searchStaff(query, userId, gymId, pageNum, limitNum);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('switch-gym')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Switch to a different gym (for multi-gym staff)' })
+  switchGym(
+    @UserId() userId: number,
+    @Body('gymId') targetGymId: number,
+  ) {
+    return this.authService.switchGym(userId, targetGymId);
   }
 }

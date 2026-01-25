@@ -82,7 +82,7 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.create(createUserDto, gymId, user.userId);
+    return this.usersService.create(createUserDto, gymId);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -235,11 +235,10 @@ export class UsersController {
   approveRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { role: string },
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.approveRequest(id, gymId, body.role);
+    return this.usersService.approveRequest(id, gymId);
   }
 
   @Patch(':id/reject')

@@ -12,6 +12,10 @@ class UserDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }
 
 class GymDto {
