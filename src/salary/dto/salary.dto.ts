@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsEnum, Min, Max } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsEnum, IsBoolean, Min, Max } from 'class-validator';
 
 export const PAYMENT_STATUSES = ['pending', 'paid'] as const;
 export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'upi'] as const;
@@ -36,6 +36,10 @@ export class CreateSalaryDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
 }
 
 export class UpdateSalaryDto {
@@ -57,6 +61,10 @@ export class UpdateSalaryDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
 }
 
 export class PaySalaryDto {
