@@ -992,8 +992,8 @@ export class AuthService {
     }
 
     // Invalidate any existing OTPs for this email
-    await this.prisma.passwordResetOtp.updateMany({
-      where: { email, isUsed: false },
+    await this.prisma.emailVerification.updateMany({
+      where: { email, userType: 'password_reset', isUsed: false },
       data: { isUsed: true },
     });
 
@@ -1001,12 +1001,13 @@ export class AuthService {
     const otp = this.generateOtp();
     const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    await this.prisma.passwordResetOtp.create({
+    await this.prisma.emailVerification.create({
       data: {
         email,
         otp,
         expiresAt,
-        userType: userInfo.userType,
+        userType: 'password_reset',
+        userId: 0, // Not needed for password reset
         gymId: userInfo.gymId,
       },
     });
@@ -1030,10 +1031,11 @@ export class AuthService {
    * Verify OTP without resetting password
    */
   async verifyOtp(email: string, otp: string): Promise<{ success: boolean; valid: boolean }> {
-    const otpRecord = await this.prisma.passwordResetOtp.findFirst({
+    const otpRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
         otp,
+        userType: 'password_reset',
         isUsed: false,
         expiresAt: { gt: new Date() },
       },
@@ -1042,14 +1044,14 @@ export class AuthService {
 
     if (!otpRecord) {
       // Check if there's an expired or used OTP
-      const anyOtpRecord = await this.prisma.passwordResetOtp.findFirst({
-        where: { email },
+      const anyOtpRecord = await this.prisma.emailVerification.findFirst({
+        where: { email, userType: 'password_reset' },
         orderBy: { createdAt: 'desc' },
       });
 
       if (anyOtpRecord) {
         // Increment attempts
-        await this.prisma.passwordResetOtp.update({
+        await this.prisma.emailVerification.update({
           where: { id: anyOtpRecord.id },
           data: { attempts: { increment: 1 } },
         });
@@ -1074,10 +1076,11 @@ export class AuthService {
     newPassword: string,
   ): Promise<{ success: boolean }> {
     // Find and validate OTP
-    const otpRecord = await this.prisma.passwordResetOtp.findFirst({
+    const otpRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
         otp,
+        userType: 'password_reset',
         isUsed: false,
         expiresAt: { gt: new Date() },
       },
@@ -1086,13 +1089,13 @@ export class AuthService {
 
     if (!otpRecord) {
       // Increment attempts for any existing record
-      const anyOtpRecord = await this.prisma.passwordResetOtp.findFirst({
-        where: { email, isUsed: false },
+      const anyOtpRecord = await this.prisma.emailVerification.findFirst({
+        where: { email, userType: 'password_reset', isUsed: false },
         orderBy: { createdAt: 'desc' },
       });
 
       if (anyOtpRecord) {
-        await this.prisma.passwordResetOtp.update({
+        await this.prisma.emailVerification.update({
           where: { id: anyOtpRecord.id },
           data: { attempts: { increment: 1 } },
         });
@@ -1106,30 +1109,36 @@ export class AuthService {
     }
 
     // Mark OTP as used
-    await this.prisma.passwordResetOtp.update({
+    await this.prisma.emailVerification.update({
       where: { id: otpRecord.id },
       data: { isUsed: true },
     });
+
+    // Find user to determine where to update password
+    const userInfo = await this.findUserByEmail(email);
+    if (!userInfo) {
+      throw new BadRequestException('User not found.');
+    }
 
     // Hash new password
     const newPasswordHash = await this.hashPassword(newPassword);
 
     // Update password based on user type
-    if (otpRecord.userType === 'admin' || otpRecord.userType === 'system') {
+    if (userInfo.userType === 'admin' || userInfo.userType === 'system') {
       // Update in public.users
       await this.prisma.user.update({
         where: { email },
         data: { passwordHash: newPasswordHash },
       });
-    } else if (otpRecord.userType === 'system_admin') {
+    } else if (userInfo.userType === 'system_admin') {
       // Update in system_users
       await this.prisma.systemUser.update({
         where: { email },
         data: { passwordHash: newPasswordHash },
       });
-    } else if (otpRecord.gymId) {
+    } else if (userInfo.gymId) {
       // Update in tenant schema
-      await this.tenantService.executeInTenant(otpRecord.gymId, async (client) => {
+      await this.tenantService.executeInTenant(userInfo.gymId, async (client) => {
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2`,
           [newPasswordHash, email]
@@ -1137,16 +1146,14 @@ export class AuthService {
       });
     }
 
-    // Get user info for success email
-    const userInfo = await this.findUserByEmail(email);
-    if (userInfo) {
-      await this.emailService.sendPasswordResetSuccessEmail(email, userInfo.userName);
-    }
+    // Send success email
+    await this.emailService.sendPasswordResetSuccessEmail(email, userInfo.userName);
 
     // Cleanup old OTPs for this email
-    await this.prisma.passwordResetOtp.deleteMany({
+    await this.prisma.emailVerification.deleteMany({
       where: {
         email,
+        userType: 'password_reset',
         createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Older than 24 hours
       },
     });
@@ -1222,9 +1229,10 @@ export class AuthService {
    */
   async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
     // Check if there's a recent OTP (less than 1 minute old)
-    const recentOtp = await this.prisma.passwordResetOtp.findFirst({
+    const recentOtp = await this.prisma.emailVerification.findFirst({
       where: {
         email,
+        userType: 'password_reset',
         isUsed: false,
         createdAt: { gt: new Date(Date.now() - 60 * 1000) }, // Last minute
       },
@@ -1508,6 +1516,64 @@ export class AuthService {
     });
 
     return { success: true, valid: true };
+  }
+
+  /**
+   * TEMPORARY: Get OTP from database for testing
+   * Remove this method when email service is working
+   */
+  async getSignupOtpTemporary(email: string): Promise<{ success: boolean; otp?: string; message: string }> {
+    const verificationRecord = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        userType: 'signup',
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!verificationRecord) {
+      return {
+        success: false,
+        message: 'No active OTP found for this email. Please request a new code.',
+      };
+    }
+
+    return {
+      success: true,
+      otp: verificationRecord.otp,
+      message: 'Email service is temporarily unavailable. Use this OTP to verify.',
+    };
+  }
+
+  /**
+   * TEMPORARY: Get password reset OTP from database for testing
+   * Remove this method when email service is working
+   */
+  async getPasswordResetOtpTemporary(email: string): Promise<{ success: boolean; otp?: string; message: string }> {
+    const otpRecord = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        userType: 'password_reset',
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      return {
+        success: false,
+        message: 'No active OTP found for this email. Please request a new code.',
+      };
+    }
+
+    return {
+      success: true,
+      otp: otpRecord.otp,
+      message: 'Email service is temporarily unavailable. Use this OTP to verify.',
+    };
   }
 
   /**

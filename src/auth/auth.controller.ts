@@ -179,6 +179,20 @@ export class AuthController {
     return this.authService.verifySignupOtp(dto.email, dto.otp);
   }
 
+  // TEMPORARY: Get OTP for testing while email service is not working
+  @Post('get-signup-otp')
+  @ApiOperation({ summary: '[TEMPORARY] Get signup OTP - Remove when email service is working' })
+  getSignupOtp(@Body() dto: { email: string }) {
+    return this.authService.getSignupOtpTemporary(dto.email);
+  }
+
+  // TEMPORARY: Get password reset OTP for testing while email service is not working
+  @Post('get-password-reset-otp')
+  @ApiOperation({ summary: '[TEMPORARY] Get password reset OTP - Remove when email service is working' })
+  getPasswordResetOtp(@Body() dto: { email: string }) {
+    return this.authService.getPasswordResetOtpTemporary(dto.email);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('email-verification-status')
   @ApiBearerAuth()
