@@ -151,9 +151,6 @@ const rolePermissions: Record<string, string[]> = {
     // SaaS Subscriptions
     'saas_subscriptions.view',
     'saas_subscriptions.manage',
-    // Reports & Analytics
-    'reports.view',
-    'analytics.view',
     // Settings
     'settings.view',
     'settings.manage',
