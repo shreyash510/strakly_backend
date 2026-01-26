@@ -7,8 +7,10 @@ import {
   Body,
   Param,
   Query,
+  Request,
   UseGuards,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SaasSubscriptionsService } from './saas-subscriptions.service';
@@ -109,6 +111,17 @@ export class SaasSubscriptionsController {
   @ApiOperation({ summary: 'Get subscription statistics' })
   getStats() {
     return this.service.getStats();
+  }
+
+  @Get('me')
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Get current user gym subscription' })
+  getMySubscription(@Request() req: any) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    return this.service.findSubscriptionByGymId(gymId);
   }
 
   @Get(':id')
