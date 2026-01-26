@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AppController } from './app.controller';
@@ -23,12 +24,14 @@ import { ContactRequestsModule } from './contact-requests/contact-requests.modul
 import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions.module';
 import { SalaryModule } from './salary/salary.module';
 import { EmailModule } from './email/email.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api/{*path}', '/docs/{*path}'],
@@ -52,6 +55,7 @@ import { EmailModule } from './email/email.module';
     SaasSubscriptionsModule,
     SalaryModule,
     EmailModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

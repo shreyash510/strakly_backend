@@ -3,7 +3,9 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { CreateSalaryDto, UpdateSalaryDto, PaySalaryDto } from './dto/salary.dto';
@@ -23,6 +25,8 @@ export interface SalaryFilters extends PaginationParams {
 
 @Injectable()
 export class SalaryService {
+  private readonly logger = new Logger(SalaryService.name);
+
   constructor(
     private prisma: PrismaService,
     private tenantService: TenantService,
@@ -38,6 +42,7 @@ export class SalaryService {
       bonus: Number(s.bonus || 0),
       deductions: Number(s.deductions || 0),
       netAmount: Number(s.net_amount),
+      isRecurring: s.is_recurring || false,
       paymentStatus: s.payment_status,
       paymentMethod: s.payment_method,
       paymentRef: s.payment_ref,
@@ -84,13 +89,14 @@ export class SalaryService {
     const bonus = createSalaryDto.bonus || 0;
     const deductions = createSalaryDto.deductions || 0;
     const netAmount = createSalaryDto.baseSalary + bonus - deductions;
+    const isRecurring = createSalaryDto.isRecurring || false;
 
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO public.staff_salaries (staff_id, gym_id, month, year, base_salary, bonus, deductions, net_amount, payment_status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, NOW(), NOW())
+        `INSERT INTO public.staff_salaries (staff_id, gym_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, NOW(), NOW())
          RETURNING *`,
-        [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, createSalaryDto.notes || null]
+        [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, isRecurring, createSalaryDto.notes || null]
       );
       return result.rows[0];
     });
@@ -233,11 +239,12 @@ export class SalaryService {
     const bonus = updateSalaryDto.bonus ?? Number(salary.bonus);
     const deductions = updateSalaryDto.deductions ?? Number(salary.deductions);
     const netAmount = baseSalary + bonus - deductions;
+    const isRecurring = updateSalaryDto.isRecurring ?? salary.is_recurring;
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE public.staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, notes = $5, updated_at = NOW() WHERE id = $6 AND gym_id = $7`,
-        [baseSalary, bonus, deductions, netAmount, updateSalaryDto.notes || salary.notes, salaryId, gymId]
+        `UPDATE public.staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, is_recurring = $5, notes = $6, updated_at = NOW() WHERE id = $7 AND gym_id = $8`,
+        [baseSalary, bonus, deductions, netAmount, isRecurring, updateSalaryDto.notes ?? salary.notes, salaryId, gymId]
       );
     });
 
@@ -355,5 +362,97 @@ export class SalaryService {
         role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
       }));
     });
+  }
+
+  /**
+   * Generate recurring salaries for all gyms
+   * Runs at midnight on the 1st of each month
+   */
+  @Cron('0 0 1 * *')
+  async generateRecurringSalaries(): Promise<{ created: number; skipped: number; errors: number }> {
+    this.logger.log('Starting recurring salary generation...');
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+
+    // Get the previous month/year to find recurring salaries
+    let prevMonth = currentMonth - 1;
+    let prevYear = currentYear;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear = currentYear - 1;
+    }
+
+    // Find all recurring salaries from the previous month
+    const recurringSalaries = await this.prisma.$queryRaw<any[]>`
+      SELECT s.*, g.tenant_schema_name
+      FROM staff_salaries s
+      JOIN gyms g ON g.id = s.gym_id
+      WHERE s.is_recurring = true
+        AND s.month = ${prevMonth}
+        AND s.year = ${prevYear}
+    `;
+
+    let created = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const salary of recurringSalaries) {
+      try {
+        // Check if salary already exists for current month
+        const existing = await this.prisma.staffSalary.findFirst({
+          where: {
+            staffId: salary.staff_id,
+            gymId: salary.gym_id,
+            month: currentMonth,
+            year: currentYear,
+          },
+        });
+
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        // Check if staff is still active in the gym
+        const staffActive = await this.tenantService.executeInTenant(salary.gym_id, async (client) => {
+          const result = await client.query(
+            `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('trainer', 'manager')`,
+            [salary.staff_id]
+          );
+          return result.rows.length > 0;
+        });
+
+        if (!staffActive) {
+          skipped++;
+          continue;
+        }
+
+        // Create new salary record for current month
+        await this.prisma.staffSalary.create({
+          data: {
+            staffId: salary.staff_id,
+            gymId: salary.gym_id,
+            month: currentMonth,
+            year: currentYear,
+            baseSalary: salary.base_salary,
+            bonus: salary.bonus,
+            deductions: salary.deductions,
+            netAmount: salary.net_amount,
+            isRecurring: true,
+            paymentStatus: 'pending',
+            notes: `Auto-generated recurring salary`,
+          },
+        });
+
+        created++;
+      } catch (error) {
+        this.logger.error(`Error creating recurring salary for staff ${salary.staff_id}:`, error);
+        errors++;
+      }
+    }
+
+    this.logger.log(`Recurring salaries completed: ${created} created, ${skipped} skipped, ${errors} errors`);
+    return { created, skipped, errors };
   }
 }
