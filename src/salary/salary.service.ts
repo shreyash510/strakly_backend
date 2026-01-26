@@ -183,6 +183,41 @@ export class SalaryService {
     };
   }
 
+  async findByStaffId(staffId: number, gymId: number, year?: number) {
+    const currentYear = year || new Date().getFullYear();
+
+    const salaries = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
+         FROM public.staff_salaries s
+         JOIN users u ON u.id = s.staff_id
+         WHERE s.staff_id = $1 AND s.gym_id = $2 AND s.year = $3
+         ORDER BY s.year DESC, s.month DESC`,
+        [staffId, gymId, currentYear]
+      );
+      return result.rows;
+    });
+
+    // Get paidBy info for paid salaries
+    const paidByIds = salaries.filter((s: any) => s.paid_by_id).map((s: any) => s.paid_by_id);
+    let paidByMap = new Map();
+    if (paidByIds.length > 0) {
+      const paidByUsers = await this.prisma.user.findMany({
+        where: { id: { in: paidByIds } },
+        select: { id: true, name: true, email: true },
+      });
+      paidByMap = new Map(paidByUsers.map((u: any) => [u.id, u]));
+    }
+
+    return salaries.map((s: any) => this.formatSalary(s, {
+      id: s.staff_id,
+      name: s.staff_name,
+      email: s.staff_email,
+      avatar: s.staff_avatar,
+      role: s.staff_role,
+    }, paidByMap.get(s.paid_by_id)));
+  }
+
   async findOne(salaryId: number, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(

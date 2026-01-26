@@ -68,6 +68,7 @@ export class GymController {
   }
 
   @Get(':id')
+  @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.gymService.findOne(id);

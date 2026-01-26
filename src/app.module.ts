@@ -25,6 +25,7 @@ import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions
 import { SalaryModule } from './salary/salary.module';
 import { EmailModule } from './email/email.module';
 import { ReportsModule } from './reports/reports.module';
+import { DietsModule } from './diets/diets.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ReportsModule } from './reports/reports.module';
     SalaryModule,
     EmailModule,
     ReportsModule,
+    DietsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -94,6 +94,21 @@ export class SalaryController {
     return result.data;
   }
 
+  @Get('me')
+  @Roles('superadmin', 'admin', 'trainer', 'manager')
+  @ApiOperation({ summary: 'Get current user salary records' })
+  @ApiQuery({ name: 'year', required: false, type: Number })
+  async findMySalaries(
+    @Request() req: any,
+    @Query('year') year?: string,
+  ) {
+    return this.salaryService.findByStaffId(
+      req.user.userId,
+      req.user.gymId,
+      year ? parseInt(year) : undefined,
+    );
+  }
+
   @Get('stats')
   @ApiOperation({ summary: 'Get salary statistics' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
