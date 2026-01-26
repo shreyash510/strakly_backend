@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto } from './dto/create-user.dto';
+import { AssignClientDto, TrainerClientResponseDto } from './dto/trainer-client.dto';
 import * as bcrypt from 'bcrypt';
 import {
   PaginationParams,
@@ -1370,5 +1371,254 @@ export class UsersService {
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
     return this.formatTenantUser(updatedUser, gym);
+  }
+
+  // ============================================
+  // TRAINER-CLIENT ASSIGNMENT OPERATIONS
+  // ============================================
+
+  /**
+   * Assign a client to a trainer
+   */
+  async assignClientToTrainer(
+    trainerId: number,
+    dto: AssignClientDto,
+    gymId: number,
+  ): Promise<TrainerClientResponseDto> {
+    // Verify trainer exists and is a trainer
+    const trainer = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, email, role FROM users WHERE id = $1 AND role = 'trainer'`,
+        [trainerId],
+      );
+      return result.rows[0];
+    });
+
+    if (!trainer) {
+      throw new NotFoundException(`Trainer with ID ${trainerId} not found`);
+    }
+
+    // Verify client exists and is a client
+    const clientUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, name, email, role FROM users WHERE id = $1 AND role = 'client'`,
+        [dto.clientId],
+      );
+      return result.rows[0];
+    });
+
+    if (!clientUser) {
+      throw new NotFoundException(`Client with ID ${dto.clientId} not found`);
+    }
+
+    // Check if assignment already exists
+    const existingAssignment = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM trainer_client_xref WHERE trainer_id = $1 AND client_id = $2 AND is_active = true`,
+        [trainerId, dto.clientId],
+      );
+      return result.rows[0];
+    });
+
+    if (existingAssignment) {
+      throw new ConflictException('Client is already assigned to this trainer');
+    }
+
+    // Check if client is already assigned to another trainer
+    const existingOtherAssignment = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT tc.id, u.name as trainer_name
+         FROM trainer_client_xref tc
+         JOIN users u ON u.id = tc.trainer_id
+         WHERE tc.client_id = $1 AND tc.is_active = true`,
+        [dto.clientId],
+      );
+      return result.rows[0];
+    });
+
+    if (existingOtherAssignment) {
+      throw new ConflictException(
+        `Client is already assigned to trainer ${existingOtherAssignment.trainer_name}`,
+      );
+    }
+
+    // Create assignment
+    const assignment = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `INSERT INTO trainer_client_xref (trainer_id, client_id, notes, is_active, assigned_at, created_at, updated_at)
+         VALUES ($1, $2, $3, true, NOW(), NOW(), NOW())
+         RETURNING *`,
+        [trainerId, dto.clientId, dto.notes || null],
+      );
+      return result.rows[0];
+    });
+
+    return {
+      id: assignment.id,
+      trainerId: trainer.id,
+      trainerName: trainer.name,
+      trainerEmail: trainer.email,
+      clientId: clientUser.id,
+      clientName: clientUser.name,
+      clientEmail: clientUser.email,
+      isActive: assignment.is_active,
+      assignedAt: assignment.assigned_at,
+      notes: assignment.notes,
+    };
+  }
+
+  /**
+   * Get all clients assigned to a trainer
+   */
+  async getTrainerClients(trainerId: number, gymId: number): Promise<TrainerClientResponseDto[]> {
+    const assignments = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT
+          tc.id,
+          tc.trainer_id,
+          tc.client_id,
+          tc.is_active,
+          tc.assigned_at,
+          tc.notes,
+          t.name as trainer_name,
+          t.email as trainer_email,
+          c.name as client_name,
+          c.email as client_email
+        FROM trainer_client_xref tc
+        JOIN users t ON t.id = tc.trainer_id
+        JOIN users c ON c.id = tc.client_id
+        WHERE tc.trainer_id = $1 AND tc.is_active = true
+        ORDER BY tc.assigned_at DESC`,
+        [trainerId],
+      );
+      return result.rows;
+    });
+
+    return assignments.map((a: any) => ({
+      id: a.id,
+      trainerId: a.trainer_id,
+      trainerName: a.trainer_name,
+      trainerEmail: a.trainer_email,
+      clientId: a.client_id,
+      clientName: a.client_name,
+      clientEmail: a.client_email,
+      isActive: a.is_active,
+      assignedAt: a.assigned_at,
+      notes: a.notes,
+    }));
+  }
+
+  /**
+   * Get trainer for a client
+   */
+  async getClientTrainer(clientId: number, gymId: number): Promise<TrainerClientResponseDto | null> {
+    const assignment = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT
+          tc.id,
+          tc.trainer_id,
+          tc.client_id,
+          tc.is_active,
+          tc.assigned_at,
+          tc.notes,
+          t.name as trainer_name,
+          t.email as trainer_email,
+          c.name as client_name,
+          c.email as client_email
+        FROM trainer_client_xref tc
+        JOIN users t ON t.id = tc.trainer_id
+        JOIN users c ON c.id = tc.client_id
+        WHERE tc.client_id = $1 AND tc.is_active = true`,
+        [clientId],
+      );
+      return result.rows[0];
+    });
+
+    if (!assignment) {
+      return null;
+    }
+
+    return {
+      id: assignment.id,
+      trainerId: assignment.trainer_id,
+      trainerName: assignment.trainer_name,
+      trainerEmail: assignment.trainer_email,
+      clientId: assignment.client_id,
+      clientName: assignment.client_name,
+      clientEmail: assignment.client_email,
+      isActive: assignment.is_active,
+      assignedAt: assignment.assigned_at,
+      notes: assignment.notes,
+    };
+  }
+
+  /**
+   * Remove client from trainer
+   */
+  async removeClientFromTrainer(
+    trainerId: number,
+    clientId: number,
+    gymId: number,
+  ): Promise<{ success: boolean }> {
+    const assignment = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM trainer_client_xref WHERE trainer_id = $1 AND client_id = $2 AND is_active = true`,
+        [trainerId, clientId],
+      );
+      return result.rows[0];
+    });
+
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE trainer_client_xref SET is_active = false, updated_at = NOW() WHERE id = $1`,
+        [assignment.id],
+      );
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Get all trainer-client assignments for a gym
+   */
+  async getAllTrainerClientAssignments(gymId: number): Promise<TrainerClientResponseDto[]> {
+    const assignments = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT
+          tc.id,
+          tc.trainer_id,
+          tc.client_id,
+          tc.is_active,
+          tc.assigned_at,
+          tc.notes,
+          t.name as trainer_name,
+          t.email as trainer_email,
+          c.name as client_name,
+          c.email as client_email
+        FROM trainer_client_xref tc
+        JOIN users t ON t.id = tc.trainer_id
+        JOIN users c ON c.id = tc.client_id
+        WHERE tc.is_active = true
+        ORDER BY tc.assigned_at DESC`,
+      );
+      return result.rows;
+    });
+
+    return assignments.map((a: any) => ({
+      id: a.id,
+      trainerId: a.trainer_id,
+      trainerName: a.trainer_name,
+      trainerEmail: a.trainer_email,
+      clientId: a.client_id,
+      clientName: a.client_name,
+      clientEmail: a.client_email,
+      isActive: a.is_active,
+      assignedAt: a.assigned_at,
+      notes: a.notes,
+    }));
   }
 }
