@@ -129,9 +129,6 @@ const permissions = [
   // Salary module (admin only)
   { code: 'salary.view', name: 'View Salary', module: 'salary', description: 'View staff salary records' },
   { code: 'salary.manage', name: 'Manage Salary', module: 'salary', description: 'Manage staff salary records' },
-
-  // Role Permissions module (superadmin only)
-  { code: 'role_permissions.manage', name: 'Manage Role Permissions', module: 'role_permissions', description: 'Manage role permissions' },
 ];
 
 // Role permissions mapping - which permissions each role has
@@ -151,9 +148,6 @@ const rolePermissions: Record<string, string[]> = {
     // SaaS Subscriptions
     'saas_subscriptions.view',
     'saas_subscriptions.manage',
-    // Reports & Analytics
-    'reports.view',
-    'analytics.view',
     // Settings
     'settings.view',
     'settings.manage',
@@ -164,8 +158,6 @@ const rolePermissions: Record<string, string[]> = {
     'support.manage',
     // Share App
     'share_app.view',
-    // Role Permissions
-    'role_permissions.manage',
     // Permissions module
     'permissions.manage',
   ],
