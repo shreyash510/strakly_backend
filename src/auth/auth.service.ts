@@ -14,6 +14,12 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import * as bcrypt from 'bcrypt';
 
+export interface GymSubscriptionInfo {
+  planCode: string;
+  planName: string;
+  status: string;
+}
+
 export interface GymInfo {
   id: number;
   name: string;
@@ -21,6 +27,7 @@ export interface GymInfo {
   city?: string;
   state?: string;
   tenantSchemaName: string;
+  subscription?: GymSubscriptionInfo;
 }
 
 export interface GymAssignment {
@@ -137,7 +144,7 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
-  private toUserResponse(user: any, gym?: any, gyms?: GymAssignment[]): UserResponse {
+  private toUserResponse(user: any, gym?: any, gyms?: GymAssignment[], subscription?: any): UserResponse {
     return {
       id: user.id,
       name: user.name,
@@ -156,11 +163,24 @@ export class AuthService {
         city: gym.city || undefined,
         state: gym.state || undefined,
         tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
+        subscription: subscription ? {
+          planCode: subscription.plan?.code,
+          planName: subscription.plan?.name,
+          status: subscription.status,
+        } : undefined,
       } : undefined,
       gyms,
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
     };
+  }
+
+  private async getGymSubscription(gymId: number) {
+    return this.prisma.saasGymSubscription.findFirst({
+      where: { gymId, status: { in: ['active', 'trial'] } },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
@@ -643,7 +663,10 @@ export class AuthService {
       // Get role from tenant user (could be manager, trainer, or client)
       const userRole = tenantUser.role || 'client';
 
-      return this.toUserResponse({ ...tenantUser, role: userRole }, gym);
+      // Get subscription for gym
+      const subscription = await this.getGymSubscription(gymId);
+
+      return this.toUserResponse({ ...tenantUser, role: userRole }, gym, undefined, subscription);
     }
 
     // Admin profile from public.users
@@ -680,10 +703,16 @@ export class AuthService {
       ? gymAssignments.find((g) => g.gymId === gymId)
       : gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
 
+    // Get subscription for current gym
+    const subscription = currentAssignment?.gymId
+      ? await this.getGymSubscription(currentAssignment.gymId)
+      : null;
+
     return this.toUserResponse(
       { ...adminUser, role: currentAssignment?.role || 'admin' },
       currentAssignment?.gym,
-      gymAssignments
+      gymAssignments,
+      subscription
     );
   }
 

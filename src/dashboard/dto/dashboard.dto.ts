@@ -7,38 +7,35 @@ export class DashboardStatsDto {
   @ApiProperty({ description: 'Number of active gyms' })
   activeGyms: number;
 
-  @ApiProperty({ description: 'Total number of users' })
+  @ApiProperty({ description: 'Total number of admin users' })
   totalUsers: number;
 
-  @ApiProperty({ description: 'Number of active users' })
+  @ApiProperty({ description: 'Number of active admin users' })
   activeUsers: number;
-
-  @ApiProperty({ description: 'Total number of trainers' })
-  totalTrainers: number;
-
-  @ApiProperty({ description: 'Total number of members' })
-  totalMembers: number;
-
-  @ApiProperty({ description: 'Total number of active memberships' })
-  activeMemberships: number;
-
-  @ApiProperty({ description: 'Total revenue from paid memberships' })
-  totalRevenue: number;
-
-  @ApiProperty({ description: 'Revenue this month' })
-  monthlyRevenue: number;
-
-  @ApiProperty({ description: 'Monthly revenue growth percentage' })
-  monthlyGrowth: number;
-
-  @ApiProperty({ description: 'Users present today' })
-  presentToday: number;
 
   @ApiProperty({ description: 'Total support tickets' })
   totalTickets: number;
 
   @ApiProperty({ description: 'Open support tickets' })
   openTickets: number;
+
+  @ApiProperty({ description: 'Total contact requests' })
+  totalContactRequests: number;
+
+  @ApiProperty({ description: 'Unread contact requests' })
+  unreadContactRequests: number;
+
+  @ApiProperty({ description: 'Total SaaS subscriptions' })
+  totalSubscriptions: number;
+
+  @ApiProperty({ description: 'Active SaaS subscriptions' })
+  activeSubscriptions: number;
+
+  @ApiProperty({ description: 'Trial SaaS subscriptions' })
+  trialSubscriptions: number;
+
+  @ApiProperty({ description: 'Expired SaaS subscriptions' })
+  expiredSubscriptions: number;
 }
 
 export class RecentGymDto {

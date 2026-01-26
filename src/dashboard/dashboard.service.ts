@@ -42,129 +42,57 @@ export class DashboardService {
   }
 
   private async getStats(): Promise<DashboardStatsDto> {
-    // Get current date info for monthly calculations
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-    const today = now.toISOString().split('T')[0];
-
-    // Get stats from public schema (gyms, tickets)
+    // Get stats from public schema
     const [
       totalGyms,
       activeGyms,
       totalTickets,
       openTickets,
+      totalAdminUsers,
+      activeAdminUsers,
+      totalContactRequests,
+      unreadContactRequests,
+      totalSubscriptions,
+      activeSubscriptions,
+      trialSubscriptions,
+      expiredSubscriptions,
     ] = await Promise.all([
+      // Gyms
       this.prisma.gym.count(),
       this.prisma.gym.count({ where: { isActive: true } }),
+      // Support tickets
       this.prisma.supportTicket.count(),
       this.prisma.supportTicket.count({
         where: {
           status: { in: ['open', 'in_progress'] },
         },
       }),
+      // Admin users from public schema
+      this.prisma.user.count({ where: { isDeleted: false } }),
+      this.prisma.user.count({ where: { isDeleted: false, status: 'active' } }),
+      // Contact requests
+      this.prisma.contactRequest.count(),
+      this.prisma.contactRequest.count({ where: { status: 'new' } }),
+      // SaaS subscriptions
+      this.prisma.saasGymSubscription.count(),
+      this.prisma.saasGymSubscription.count({ where: { status: 'active' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'trial' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'expired' } }),
     ]);
-
-    // Get all active gyms to aggregate tenant data
-    const activeGymsList = await this.prisma.gym.findMany({
-      where: { isActive: true },
-      select: { id: true },
-    });
-
-    // Aggregate stats across all tenants
-    let totalUsers = 0;
-    let activeUsers = 0;
-    let totalTrainers = 0;
-    let totalMembers = 0;
-    let activeMemberships = 0;
-    let totalRevenue = 0;
-    let monthlyRevenue = 0;
-    let lastMonthRevenueValue = 0;
-    let presentToday = 0;
-
-    // Aggregate data from each tenant
-    for (const gym of activeGymsList) {
-      try {
-        const tenantStats = await this.tenantService.executeInTenant(gym.id, async (client) => {
-          const [
-            usersResult,
-            activeUsersResult,
-            trainersResult,
-            membersResult,
-            activeMembershipsResult,
-            revenueResult,
-            lastMonthRevenueResult,
-            thisMonthRevenueResult,
-            presentTodayResult,
-          ] = await Promise.all([
-            client.query(`SELECT COUNT(*) as count FROM users`),
-            client.query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`),
-            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
-            client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
-            client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
-            client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
-            client.query(
-              `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`,
-              [startOfLastMonth, endOfLastMonth]
-            ),
-            client.query(
-              `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1`,
-              [startOfMonth]
-            ),
-            client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
-          ]);
-
-          return {
-            users: parseInt(usersResult.rows[0].count, 10),
-            activeUsers: parseInt(activeUsersResult.rows[0].count, 10),
-            trainers: parseInt(trainersResult.rows[0].count, 10),
-            members: parseInt(membersResult.rows[0].count, 10),
-            activeMemberships: parseInt(activeMembershipsResult.rows[0].count, 10),
-            revenue: parseFloat(revenueResult.rows[0].sum),
-            lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
-            thisMonthRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
-            presentToday: parseInt(presentTodayResult.rows[0].count, 10),
-          };
-        });
-
-        totalUsers += tenantStats.users;
-        activeUsers += tenantStats.activeUsers;
-        totalTrainers += tenantStats.trainers;
-        totalMembers += tenantStats.members;
-        activeMemberships += tenantStats.activeMemberships;
-        totalRevenue += tenantStats.revenue;
-        lastMonthRevenueValue += tenantStats.lastMonthRevenue;
-        monthlyRevenue += tenantStats.thisMonthRevenue;
-        presentToday += tenantStats.presentToday;
-      } catch (error) {
-        // Skip failed tenant queries (tenant schema might not exist yet)
-        console.error(`Failed to get stats for gym ${gym.id}:`, error);
-      }
-    }
-
-    // Calculate monthly growth percentage
-    let monthlyGrowth = 0;
-    if (lastMonthRevenueValue > 0) {
-      monthlyGrowth = ((monthlyRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100;
-    } else if (monthlyRevenue > 0) {
-      monthlyGrowth = 100;
-    }
 
     return {
       totalGyms,
       activeGyms,
-      totalUsers,
-      activeUsers,
-      totalTrainers,
-      totalMembers,
-      activeMemberships,
-      totalRevenue,
-      monthlyRevenue,
-      monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
-      presentToday,
+      totalUsers: totalAdminUsers,
+      activeUsers: activeAdminUsers,
       totalTickets,
       openTickets,
+      totalContactRequests,
+      unreadContactRequests,
+      totalSubscriptions,
+      activeSubscriptions,
+      trialSubscriptions,
+      expiredSubscriptions,
     };
   }
 
