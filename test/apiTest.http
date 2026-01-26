@@ -1,0 +1,17 @@
+### Test Strakly.com Homepage
+GET https://strakly.com
+
+### Test Guide Page
+GET https://strakly.com/guide/
+
+### Test Pricing Page
+GET https://strakly.com/pricing/
+
+### Test Services Page
+GET https://strakly.com/services/
+
+### Test Community Page
+GET https://strakly.com/community/
+
+### Test Contact Page
+GET https://strakly.com/contact/
