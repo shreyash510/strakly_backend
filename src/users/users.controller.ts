@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-user.dto';
+import { AssignClientDto } from './dto/trainer-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
@@ -259,6 +260,77 @@ export class UsersController {
       throw new BadRequestException('Gym ID is required for this operation');
     }
     return this.usersService.rejectRequest(id, user.gymId);
+  }
+
+  // ============ TRAINER-CLIENT ASSIGNMENT ENDPOINTS ============
+
+  @Get('trainer-clients/all')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Get all trainer-client assignments' })
+  getAllTrainerClientAssignments(@CurrentUser() user: AuthenticatedUser) {
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.getAllTrainerClientAssignments(user.gymId);
+  }
+
+  @Get('trainers/:trainerId/clients')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get clients assigned to a trainer' })
+  getTrainerClients(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('trainerId', ParseIntPipe) trainerId: number,
+  ) {
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.getTrainerClients(trainerId, user.gymId);
+  }
+
+  @Post('trainers/:trainerId/clients')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Assign a client to a trainer' })
+  assignClientToTrainer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('trainerId', ParseIntPipe) trainerId: number,
+    @Body() dto: AssignClientDto,
+  ) {
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.assignClientToTrainer(trainerId, dto, user.gymId);
+  }
+
+  @Delete('trainers/:trainerId/clients/:clientId')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Remove a client from a trainer' })
+  removeClientFromTrainer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('trainerId', ParseIntPipe) trainerId: number,
+    @Param('clientId', ParseIntPipe) clientId: number,
+  ) {
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.removeClientFromTrainer(trainerId, clientId, user.gymId);
+  }
+
+  @Get('clients/:clientId/trainer')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager', 'trainer', 'client')
+  @ApiOperation({ summary: 'Get trainer assigned to a client' })
+  getClientTrainer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('clientId', ParseIntPipe) clientId: number,
+  ) {
+    if (!user.gymId) {
+      throw new BadRequestException('Gym ID is required for this operation');
+    }
+    return this.usersService.getClientTrainer(clientId, user.gymId);
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============
