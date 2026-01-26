@@ -409,17 +409,50 @@ export class MembershipsService {
   }
 
   async getOverview(gymId: number) {
-    const [stats, expiringSoon, recentSubscriptions] = await Promise.all([
+    const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] = await Promise.all([
       this.getStats(gymId),
       this.getExpiringSoon(gymId, 7),
       this.getRecentSubscriptions(gymId, 10),
+      this.getPlansForOverview(gymId),
+      this.getPlanDistribution(gymId),
     ]);
 
     return {
       stats,
       expiringSoon,
       recentSubscriptions,
+      plans,
+      planDistribution,
     };
+  }
+
+  private async getPlansForOverview(gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id, code, name FROM plans WHERE is_active = true ORDER BY display_order ASC`
+      );
+      return result.rows.map((p: any) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+      }));
+    });
+  }
+
+  private async getPlanDistribution(gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT plan_id, COUNT(*) as count
+         FROM memberships
+         WHERE status = 'active'
+         GROUP BY plan_id
+         ORDER BY count DESC`
+      );
+      return result.rows.map((row: any) => ({
+        planId: row.plan_id,
+        count: parseInt(row.count, 10),
+      }));
+    });
   }
 
   private async getRecentSubscriptions(gymId: number, limit = 10) {
