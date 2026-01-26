@@ -22,6 +22,7 @@ import { PublicModule } from './public/public.module';
 import { ContactRequestsModule } from './contact-requests/contact-requests.module';
 import { SaasSubscriptionsModule } from './saas-subscriptions/saas-subscriptions.module';
 import { SalaryModule } from './salary/salary.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { SalaryModule } from './salary/salary.module';
     ContactRequestsModule,
     SaasSubscriptionsModule,
     SalaryModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -47,6 +47,7 @@ model User {
   state         String?
   zipCode       String?   @map("zip_code")
   status        String    @default("active") // active, inactive, suspended
+  emailVerified Boolean   @default(false) @map("email_verified")
   lastLoginAt   DateTime? @map("last_login_at")
   isDeleted     Boolean   @default(false) @map("is_deleted") // Soft delete
   deletedAt     DateTime? @map("deleted_at")
@@ -408,6 +409,29 @@ model SupportTicketMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_ticket_messages")
+}
+
+// ============================================
+// EMAIL VERIFICATION MODEL (also used for password reset)
+// ============================================
+
+model EmailVerification {
+  id          Int       @id @default(autoincrement())
+  email       String
+  otp         String
+  expiresAt   DateTime  @map("expires_at")
+  isUsed      Boolean   @default(false) @map("is_used")
+  attempts    Int       @default(0)
+  userType    String    @map("user_type") // signup, password_reset, admin, staff, client
+  userId      Int       @map("user_id") // 0 for signup/password_reset before user exists
+  gymId       Int?      @map("gym_id") // null for admin users in public schema
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([email, otp])
+  @@index([expiresAt])
+  @@index([userId])
+  @@index([userType])
+  @@map("email_verifications")
 }
 
 // ============================================

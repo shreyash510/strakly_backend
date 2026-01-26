@@ -15,6 +15,11 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import {
+  RequestPasswordResetDto,
+  VerifyOtpDto,
+  ResetPasswordDto,
+} from './dto/forgot-password.dto';
 import { GymId, UserId } from './decorators';
 
 @ApiTags('auth')
@@ -124,5 +129,75 @@ export class AuthController {
     @Body('gymId') targetGymId: number,
   ) {
     return this.authService.switchGym(userId, targetGymId);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset OTP' })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Post('verify-otp')
+  @ApiOperation({ summary: 'Verify password reset OTP' })
+  verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.email, dto.otp);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password with OTP verification' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithOtp(dto.email, dto.otp, dto.newPassword);
+  }
+
+  @Post('resend-otp')
+  @ApiOperation({ summary: 'Resend password reset OTP' })
+  resendOtp(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.resendOtp(dto.email);
+  }
+
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email with OTP' })
+  verifyEmail(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyEmail(dto.email, dto.otp);
+  }
+
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend email verification OTP' })
+  resendVerification(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.resendVerificationEmail(dto.email);
+  }
+
+  @Post('send-signup-otp')
+  @ApiOperation({ summary: 'Send OTP for signup email verification' })
+  sendSignupOtp(@Body() dto: { email: string; name: string }) {
+    return this.authService.sendSignupVerificationOtp(dto.email, dto.name);
+  }
+
+  @Post('verify-signup-otp')
+  @ApiOperation({ summary: 'Verify signup OTP' })
+  verifySignupOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifySignupOtp(dto.email, dto.otp);
+  }
+
+  // TEMPORARY: Get OTP for testing while email service is not working
+  @Post('get-signup-otp')
+  @ApiOperation({ summary: '[TEMPORARY] Get signup OTP - Remove when email service is working' })
+  getSignupOtp(@Body() dto: { email: string }) {
+    return this.authService.getSignupOtpTemporary(dto.email);
+  }
+
+  // TEMPORARY: Get password reset OTP for testing while email service is not working
+  @Post('get-password-reset-otp')
+  @ApiOperation({ summary: '[TEMPORARY] Get password reset OTP - Remove when email service is working' })
+  getPasswordResetOtp(@Body() dto: { email: string }) {
+    return this.authService.getPasswordResetOtpTemporary(dto.email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('email-verification-status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check email verification status' })
+  checkEmailVerification(@UserId() userId: number, @GymId() gymId: number) {
+    return this.authService.checkEmailVerification(userId, false, gymId);
   }
 }
