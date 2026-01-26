@@ -141,6 +141,7 @@ export class TenantService implements OnModuleInit {
         emergency_contact_name VARCHAR(255),
         emergency_contact_phone VARCHAR(50),
         status VARCHAR(50) DEFAULT 'active',
+        email_verified BOOLEAN DEFAULT false,
         attendance_code VARCHAR(20) UNIQUE,
         join_date TIMESTAMP,
         last_login_at TIMESTAMP,

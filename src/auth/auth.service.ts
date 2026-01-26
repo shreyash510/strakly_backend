@@ -2,10 +2,13 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { EmailService } from '../email/email.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -35,6 +38,7 @@ export interface UserResponse {
   avatar?: string;
   status?: string;
   phone?: string;
+  emailVerified?: boolean;
   attendanceCode?: string;
   gymId?: number;
   gym?: GymInfo;
@@ -58,12 +62,23 @@ export interface AuthResponse {
 @Injectable()
 export class AuthService {
   private readonly SALT_ROUNDS = 10;
+  private readonly OTP_EXPIRY_MINUTES = 10;
+  private readonly VERIFICATION_EXPIRY_MINUTES = 30;
+  private readonly MAX_OTP_ATTEMPTS = 5;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly tenantService: TenantService,
+    private readonly emailService: EmailService,
   ) {}
+
+  /**
+   * Generate a 6-digit OTP
+   */
+  private generateOtp(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
 
   private async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, this.SALT_ROUNDS);
@@ -131,6 +146,7 @@ export class AuthService {
       avatar: user.avatar,
       status: user.status || 'active',
       phone: user.phone,
+      emailVerified: user.emailVerified ?? user.email_verified ?? false,
       attendanceCode: user.attendance_code || user.attendanceCode,
       gymId: gym?.id,
       gym: gym ? {
@@ -251,6 +267,31 @@ export class AuthService {
       where: { id: gym.id },
     });
 
+    // Generate and send email verification OTP
+    const verificationOtp = this.generateOtp();
+    const verificationExpiry = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+
+    await this.prisma.emailVerification.create({
+      data: {
+        email: dto.user.email,
+        otp: verificationOtp,
+        expiresAt: verificationExpiry,
+        userType: 'admin',
+        userId: createdUser.id,
+        gymId: null, // Admin users are in public schema
+      },
+    });
+
+    // Send verification email (non-blocking)
+    this.emailService.sendEmailVerificationEmail(
+      dto.user.email,
+      dto.user.name,
+      verificationOtp,
+      this.VERIFICATION_EXPIRY_MINUTES,
+    ).catch((error) => {
+      console.error('Failed to send verification email:', error);
+    });
+
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
       role: 'admin',
@@ -265,7 +306,7 @@ export class AuthService {
       },
     };
 
-    const user = this.toUserResponse({ ...createdUser, role: 'admin' }, updatedGym, [gymAssignment]);
+    const user = this.toUserResponse({ ...createdUser, role: 'admin', emailVerified: false }, updatedGym, [gymAssignment]);
     const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
 
     return {
@@ -935,22 +976,212 @@ export class AuthService {
   }
 
   /**
-   * Forgot password - reset password by email
+   * Request password reset - sends OTP to email
    * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
-  async forgotPassword(email: string, newPassword: string): Promise<{ success: boolean }> {
-    // First check public.users (admin)
+  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string; emailFound: boolean }> {
+    // Find user in any location
+    const userInfo = await this.findUserByEmail(email);
+
+    if (!userInfo) {
+      return {
+        success: false,
+        message: 'No account found with this email address.',
+        emailFound: false,
+      };
+    }
+
+    // Invalidate any existing OTPs for this email
+    await this.prisma.passwordResetOtp.updateMany({
+      where: { email, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    // Generate and save new OTP
+    const otp = this.generateOtp();
+    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await this.prisma.passwordResetOtp.create({
+      data: {
+        email,
+        otp,
+        expiresAt,
+        userType: userInfo.userType,
+        gymId: userInfo.gymId,
+      },
+    });
+
+    // Send OTP email
+    await this.emailService.sendPasswordResetOtpEmail(
+      email,
+      userInfo.userName,
+      otp,
+      this.OTP_EXPIRY_MINUTES,
+    );
+
+    return {
+      success: true,
+      message: 'Verification code sent to your email.',
+      emailFound: true,
+    };
+  }
+
+  /**
+   * Verify OTP without resetting password
+   */
+  async verifyOtp(email: string, otp: string): Promise<{ success: boolean; valid: boolean }> {
+    const otpRecord = await this.prisma.passwordResetOtp.findFirst({
+      where: {
+        email,
+        otp,
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      // Check if there's an expired or used OTP
+      const anyOtpRecord = await this.prisma.passwordResetOtp.findFirst({
+        where: { email },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (anyOtpRecord) {
+        // Increment attempts
+        await this.prisma.passwordResetOtp.update({
+          where: { id: anyOtpRecord.id },
+          data: { attempts: { increment: 1 } },
+        });
+
+        if (anyOtpRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
+          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+        }
+      }
+
+      return { success: true, valid: false };
+    }
+
+    return { success: true, valid: true };
+  }
+
+  /**
+   * Reset password with OTP verification
+   */
+  async resetPasswordWithOtp(
+    email: string,
+    otp: string,
+    newPassword: string,
+  ): Promise<{ success: boolean }> {
+    // Find and validate OTP
+    const otpRecord = await this.prisma.passwordResetOtp.findFirst({
+      where: {
+        email,
+        otp,
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      // Increment attempts for any existing record
+      const anyOtpRecord = await this.prisma.passwordResetOtp.findFirst({
+        where: { email, isUsed: false },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (anyOtpRecord) {
+        await this.prisma.passwordResetOtp.update({
+          where: { id: anyOtpRecord.id },
+          data: { attempts: { increment: 1 } },
+        });
+
+        if (anyOtpRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
+          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+        }
+      }
+
+      throw new BadRequestException('Invalid or expired verification code.');
+    }
+
+    // Mark OTP as used
+    await this.prisma.passwordResetOtp.update({
+      where: { id: otpRecord.id },
+      data: { isUsed: true },
+    });
+
+    // Hash new password
+    const newPasswordHash = await this.hashPassword(newPassword);
+
+    // Update password based on user type
+    if (otpRecord.userType === 'admin' || otpRecord.userType === 'system') {
+      // Update in public.users
+      await this.prisma.user.update({
+        where: { email },
+        data: { passwordHash: newPasswordHash },
+      });
+    } else if (otpRecord.userType === 'system_admin') {
+      // Update in system_users
+      await this.prisma.systemUser.update({
+        where: { email },
+        data: { passwordHash: newPasswordHash },
+      });
+    } else if (otpRecord.gymId) {
+      // Update in tenant schema
+      await this.tenantService.executeInTenant(otpRecord.gymId, async (client) => {
+        await client.query(
+          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2`,
+          [newPasswordHash, email]
+        );
+      });
+    }
+
+    // Get user info for success email
+    const userInfo = await this.findUserByEmail(email);
+    if (userInfo) {
+      await this.emailService.sendPasswordResetSuccessEmail(email, userInfo.userName);
+    }
+
+    // Cleanup old OTPs for this email
+    await this.prisma.passwordResetOtp.deleteMany({
+      where: {
+        email,
+        createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Older than 24 hours
+      },
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Find user by email across all user tables
+   */
+  private async findUserByEmail(
+    email: string,
+  ): Promise<{ userName: string; userType: string; gymId?: number } | null> {
+    // Check system_users (superadmin)
+    const systemUser = await this.prisma.systemUser.findUnique({
+      where: { email },
+    });
+
+    if (systemUser) {
+      return {
+        userName: systemUser.name,
+        userType: 'system_admin',
+      };
+    }
+
+    // Check public.users (admin)
     const adminUser = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (adminUser) {
-      const newPasswordHash = await this.hashPassword(newPassword);
-      await this.prisma.user.update({
-        where: { id: adminUser.id },
-        data: { passwordHash: newPasswordHash },
-      });
-      return { success: true };
+      return {
+        userName: adminUser.name,
+        userType: 'admin',
+      };
     }
 
     // Check all tenant schemas for staff and clients
@@ -963,30 +1194,344 @@ export class AuthService {
         const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
         if (!schemaExists) continue;
 
-        const clientData = await this.tenantService.executeInTenant(gym.id, async (client) => {
+        const tenantUser = await this.tenantService.executeInTenant(gym.id, async (client) => {
           const result = await client.query(
-            `SELECT id FROM users WHERE email = $1`,
+            `SELECT name, role FROM users WHERE email = $1`,
             [email]
           );
           return result.rows[0];
         });
 
-        if (clientData) {
-          const newPasswordHash = await this.hashPassword(newPassword);
-          await this.tenantService.executeInTenant(gym.id, async (client) => {
-            await client.query(
-              `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-              [newPasswordHash, clientData.id]
-            );
-          });
-          return { success: true };
+        if (tenantUser) {
+          return {
+            userName: tenantUser.name,
+            userType: tenantUser.role || 'client',
+            gymId: gym.id,
+          };
         }
       } catch (e) {
         // Skip gyms with errors
       }
     }
 
-    throw new UnauthorizedException('User not found');
+    return null;
+  }
+
+  /**
+   * Resend OTP for password reset
+   */
+  async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
+    // Check if there's a recent OTP (less than 1 minute old)
+    const recentOtp = await this.prisma.passwordResetOtp.findFirst({
+      where: {
+        email,
+        isUsed: false,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) }, // Last minute
+      },
+    });
+
+    if (recentOtp) {
+      throw new BadRequestException('Please wait before requesting a new code.');
+    }
+
+    // Use the same logic as requestPasswordReset
+    return this.requestPasswordReset(email);
+  }
+
+  // ============================================
+  // EMAIL VERIFICATION METHODS
+  // ============================================
+
+  /**
+   * Verify email with OTP
+   */
+  async verifyEmail(
+    email: string,
+    otp: string,
+  ): Promise<{ success: boolean; message: string }> {
+    // Find and validate OTP
+    const verificationRecord = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        otp,
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!verificationRecord) {
+      // Increment attempts for any existing record
+      const anyRecord = await this.prisma.emailVerification.findFirst({
+        where: { email, isUsed: false },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (anyRecord) {
+        await this.prisma.emailVerification.update({
+          where: { id: anyRecord.id },
+          data: { attempts: { increment: 1 } },
+        });
+
+        if (anyRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
+          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+        }
+      }
+
+      throw new BadRequestException('Invalid or expired verification code.');
+    }
+
+    // Mark verification as used
+    await this.prisma.emailVerification.update({
+      where: { id: verificationRecord.id },
+      data: { isUsed: true },
+    });
+
+    // Update user's emailVerified status based on user type
+    if (verificationRecord.userType === 'admin') {
+      // Update in public.users
+      await this.prisma.user.update({
+        where: { id: verificationRecord.userId },
+        data: { emailVerified: true },
+      });
+    } else if (verificationRecord.gymId) {
+      // Update in tenant schema (for staff/clients)
+      await this.tenantService.executeInTenant(verificationRecord.gymId, async (client) => {
+        await client.query(
+          `UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1`,
+          [verificationRecord.userId]
+        );
+      });
+    }
+
+    // Cleanup old verification records for this email
+    await this.prisma.emailVerification.deleteMany({
+      where: {
+        email,
+        createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Older than 24 hours
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Email verified successfully.',
+    };
+  }
+
+  /**
+   * Resend email verification OTP
+   */
+  async resendVerificationEmail(email: string): Promise<{ success: boolean; message: string }> {
+    // Check if there's a recent verification (less than 1 minute old)
+    const recentVerification = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        isUsed: false,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) }, // Last minute
+      },
+    });
+
+    if (recentVerification) {
+      throw new BadRequestException('Please wait before requesting a new code.');
+    }
+
+    // Find user
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Don't reveal if user exists
+      return {
+        success: true,
+        message: 'If an account exists with this email, you will receive a verification code shortly.',
+      };
+    }
+
+    if (user.emailVerified) {
+      throw new BadRequestException('Email is already verified.');
+    }
+
+    // Invalidate any existing verification codes
+    await this.prisma.emailVerification.updateMany({
+      where: { email, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    // Generate new OTP
+    const verificationOtp = this.generateOtp();
+    const verificationExpiry = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+
+    await this.prisma.emailVerification.create({
+      data: {
+        email,
+        otp: verificationOtp,
+        expiresAt: verificationExpiry,
+        userType: 'admin',
+        userId: user.id,
+        gymId: null,
+      },
+    });
+
+    // Send verification email
+    await this.emailService.sendEmailVerificationEmail(
+      email,
+      user.name,
+      verificationOtp,
+      this.VERIFICATION_EXPIRY_MINUTES,
+    );
+
+    return {
+      success: true,
+      message: 'Verification code sent successfully.',
+    };
+  }
+
+  /**
+   * Send signup verification OTP (before registration)
+   */
+  async sendSignupVerificationOtp(email: string, name: string): Promise<{ success: boolean; message: string }> {
+    // Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    const existingSystemUser = await this.prisma.systemUser.findUnique({
+      where: { email },
+    });
+
+    if (existingSystemUser) {
+      throw new ConflictException('Email already exists');
+    }
+
+    // Check rate limit (1 minute)
+    const recentOtp = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        isUsed: false,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+      },
+    });
+
+    if (recentOtp) {
+      throw new BadRequestException('Please wait before requesting a new code.');
+    }
+
+    // Invalidate any existing OTPs
+    await this.prisma.emailVerification.updateMany({
+      where: { email, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    // Generate new OTP
+    const otp = this.generateOtp();
+    const expiresAt = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+
+    await this.prisma.emailVerification.create({
+      data: {
+        email,
+        otp,
+        expiresAt,
+        userType: 'signup',
+        userId: 0, // No user yet
+        gymId: null,
+      },
+    });
+
+    // Send verification email
+    try {
+      const emailResult = await this.emailService.sendEmailVerificationEmail(
+        email,
+        name,
+        otp,
+        this.VERIFICATION_EXPIRY_MINUTES,
+      );
+
+      if (!emailResult.success) {
+        console.error('Email sending failed:', emailResult.error);
+        throw new BadRequestException('Failed to send verification email. Please try again.');
+      }
+    } catch (error) {
+      console.error('Email sending error:', error);
+      throw new BadRequestException('Failed to send verification email. Please try again.');
+    }
+
+    return {
+      success: true,
+      message: 'Verification code sent successfully.',
+    };
+  }
+
+  /**
+   * Verify signup OTP (before registration)
+   */
+  async verifySignupOtp(email: string, otp: string): Promise<{ success: boolean; valid: boolean }> {
+    const verificationRecord = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        otp,
+        userType: 'signup',
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!verificationRecord) {
+      const anyRecord = await this.prisma.emailVerification.findFirst({
+        where: { email, userType: 'signup', isUsed: false },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (anyRecord) {
+        await this.prisma.emailVerification.update({
+          where: { id: anyRecord.id },
+          data: { attempts: { increment: 1 } },
+        });
+
+        if (anyRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
+          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+        }
+      }
+
+      return { success: true, valid: false };
+    }
+
+    // Mark as used
+    await this.prisma.emailVerification.update({
+      where: { id: verificationRecord.id },
+      data: { isUsed: true },
+    });
+
+    return { success: true, valid: true };
+  }
+
+  /**
+   * Check if user's email is verified
+   */
+  async checkEmailVerification(userId: number, isTenantUser: boolean = false, gymId?: number): Promise<{ verified: boolean }> {
+    if (isTenantUser && gymId) {
+      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const result = await client.query(
+          `SELECT email_verified FROM users WHERE id = $1`,
+          [userId]
+        );
+        return result.rows[0];
+      });
+
+      return { verified: tenantUser?.email_verified ?? false };
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { emailVerified: true },
+    });
+
+    return { verified: user?.emailVerified ?? false };
   }
 
   // ============================================
