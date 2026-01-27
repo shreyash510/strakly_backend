@@ -129,6 +129,9 @@ const permissions = [
   // Salary module (admin only)
   { code: 'salary.view', name: 'View Salary', module: 'salary', description: 'View staff salary records' },
   { code: 'salary.manage', name: 'Manage Salary', module: 'salary', description: 'Manage staff salary records' },
+
+  // Programs/Diet module
+  { code: 'programs.manage', name: 'Manage Programs', module: 'programs', description: 'Create and manage diet programs' },
 ];
 
 // Role permissions mapping - which permissions each role has
@@ -196,6 +199,8 @@ const rolePermissions: Record<string, string[]> = {
     // Salary
     'salary.view',
     'salary.manage',
+    // Programs/Diet
+    'programs.manage',
   ],
 
   manager: [
@@ -224,6 +229,8 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Share App
     'share_app.view',
+    // Programs/Diet
+    'programs.manage',
   ],
 
   trainer: [
