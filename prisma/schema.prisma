@@ -56,8 +56,6 @@ model User {
 
   // Relations
   gymAssignments  UserGymXref[]
-  staffSalaries   StaffSalary[]
-  paidSalaries    StaffSalary[] @relation("PaidBy")
 
   @@index([email])
   @@index([status])
@@ -137,7 +135,6 @@ model Gym {
   userAssignments   UserGymXref[]
   subscription      SaasGymSubscription?
   supportTickets    SupportTicket[]
-  staffSalaries     StaffSalary[]
 
   @@map("gyms")
 }
@@ -299,53 +296,6 @@ model SaasGymSubscription {
   @@index([paymentStatus])
   @@index([endDate, status])
   @@map("saas_gym_subscriptions")
-}
-
-// ============================================
-// STAFF SALARIES (in public schema with gym_id)
-// ============================================
-
-model StaffSalary {
-  id              Int       @id @default(autoincrement())
-  staffId         Int       @map("staff_id")
-  gymId           Int       @map("gym_id")
-
-  // Period
-  month           Int
-  year            Int
-
-  // Amount
-  baseSalary      Decimal   @db.Decimal(10, 2) @map("base_salary")
-  bonus           Decimal   @default(0) @db.Decimal(10, 2)
-  deductions      Decimal   @default(0) @db.Decimal(10, 2)
-  netAmount       Decimal   @db.Decimal(10, 2) @map("net_amount")
-  currency        String    @default("INR")
-
-  // Recurring
-  isRecurring     Boolean   @default(false) @map("is_recurring")
-
-  // Payment
-  paymentStatus   String    @default("pending") @map("payment_status")
-  paymentMethod   String?   @map("payment_method")
-  paymentRef      String?   @map("payment_ref")
-  paidAt          DateTime? @map("paid_at")
-  paidById        Int?      @map("paid_by_id")
-
-  notes           String?
-
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  staff           User      @relation(fields: [staffId], references: [id])
-  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  paidBy          User?     @relation("PaidBy", fields: [paidById], references: [id])
-
-  @@unique([staffId, gymId, month, year])
-  @@index([staffId])
-  @@index([gymId])
-  @@index([paymentStatus])
-  @@map("staff_salaries")
 }
 
 // ============================================

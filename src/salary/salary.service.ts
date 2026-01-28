@@ -74,7 +74,7 @@ export class SalaryService {
     // Check if salary record already exists for this month/year (public schema with gym_id filter)
     const existingSalary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id FROM public.staff_salaries WHERE staff_id = $1 AND gym_id = $2 AND month = $3 AND year = $4`,
+        `SELECT id FROM staff_salaries WHERE staff_id = $1 AND gym_id = $2 AND month = $3 AND year = $4`,
         [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year]
       );
       return result.rows[0];
@@ -93,7 +93,7 @@ export class SalaryService {
 
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO public.staff_salaries (staff_id, gym_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
+        `INSERT INTO staff_salaries (staff_id, gym_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, NOW(), NOW())
          RETURNING *`,
         [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, isRecurring, createSalaryDto.notes || null]
@@ -136,7 +136,7 @@ export class SalaryService {
       const [salariesResult, countResult] = await Promise.all([
         client.query(
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
-           FROM public.staff_salaries s
+           FROM staff_salaries s
            JOIN users u ON u.id = s.staff_id
            WHERE ${whereClause}
            ORDER BY s.year DESC, s.month DESC, s.created_at DESC
@@ -144,7 +144,7 @@ export class SalaryService {
           [...values, take, skip]
         ),
         client.query(
-          `SELECT COUNT(*) as count FROM public.staff_salaries s
+          `SELECT COUNT(*) as count FROM staff_salaries s
            JOIN users u ON u.id = s.staff_id
            WHERE ${whereClause}`,
           values
@@ -189,7 +189,7 @@ export class SalaryService {
     const salaries = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
-         FROM public.staff_salaries s
+         FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
          WHERE s.staff_id = $1 AND s.gym_id = $2 AND s.year = $3
          ORDER BY s.year DESC, s.month DESC`,
@@ -222,7 +222,7 @@ export class SalaryService {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
-         FROM public.staff_salaries s
+         FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
          WHERE s.id = $1 AND s.gym_id = $2`,
         [salaryId, gymId]
@@ -256,7 +256,7 @@ export class SalaryService {
   async update(salaryId: number, updateSalaryDto: UpdateSalaryDto, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM public.staff_salaries WHERE id = $1 AND gym_id = $2`,
+        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
         [salaryId, gymId]
       );
       return result.rows[0];
@@ -278,7 +278,7 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE public.staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, is_recurring = $5, notes = $6, updated_at = NOW() WHERE id = $7 AND gym_id = $8`,
+        `UPDATE staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, is_recurring = $5, notes = $6, updated_at = NOW() WHERE id = $7 AND gym_id = $8`,
         [baseSalary, bonus, deductions, netAmount, isRecurring, updateSalaryDto.notes ?? salary.notes, salaryId, gymId]
       );
     });
@@ -289,7 +289,7 @@ export class SalaryService {
   async paySalary(salaryId: number, paySalaryDto: PaySalaryDto, gymId: number, paidById: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM public.staff_salaries WHERE id = $1 AND gym_id = $2`,
+        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
         [salaryId, gymId]
       );
       return result.rows[0];
@@ -305,7 +305,7 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE public.staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4 AND gym_id = $5`,
+        `UPDATE staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4 AND gym_id = $5`,
         [paySalaryDto.paymentMethod, paySalaryDto.paymentRef || null, paidById, salaryId, gymId]
       );
     });
@@ -316,7 +316,7 @@ export class SalaryService {
   async remove(salaryId: number, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM public.staff_salaries WHERE id = $1 AND gym_id = $2`,
+        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
         [salaryId, gymId]
       );
       return result.rows[0];
@@ -332,7 +332,7 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `DELETE FROM public.staff_salaries WHERE id = $1 AND gym_id = $2`,
+        `DELETE FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
         [salaryId, gymId]
       );
     });
@@ -348,15 +348,15 @@ export class SalaryService {
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
       const [pendingResult, paidResult, currentMonthResult, staffCountResult] = await Promise.all([
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM public.staff_salaries WHERE gym_id = $1 AND payment_status = 'pending'`,
+          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND payment_status = 'pending'`,
           [gymId]
         ),
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM public.staff_salaries WHERE gym_id = $1 AND payment_status = 'paid' AND year = $2`,
+          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND payment_status = 'paid' AND year = $2`,
           [gymId, currentYear]
         ),
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM public.staff_salaries WHERE gym_id = $1 AND month = $2 AND year = $3`,
+          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND month = $2 AND year = $3`,
           [gymId, currentMonth, currentYear]
         ),
         client.query(
@@ -418,71 +418,78 @@ export class SalaryService {
       prevYear = currentYear - 1;
     }
 
-    // Find all recurring salaries from the previous month
-    const recurringSalaries = await this.prisma.$queryRaw<any[]>`
-      SELECT s.*, g.tenant_schema_name
-      FROM staff_salaries s
-      JOIN gyms g ON g.id = s.gym_id
-      WHERE s.is_recurring = true
-        AND s.month = ${prevMonth}
-        AND s.year = ${prevYear}
-    `;
+    // Get all active gyms with tenant schemas
+    const gyms = await this.prisma.gym.findMany({
+      where: {
+        isActive: true,
+        tenantSchemaName: { not: null },
+      },
+      select: { id: true, tenantSchemaName: true },
+    });
 
     let created = 0;
     let skipped = 0;
     let errors = 0;
 
-    for (const salary of recurringSalaries) {
+    for (const gym of gyms) {
       try {
-        // Check if salary already exists for current month
-        const existing = await this.prisma.staffSalary.findFirst({
-          where: {
-            staffId: salary.staff_id,
-            gymId: salary.gym_id,
-            month: currentMonth,
-            year: currentYear,
-          },
-        });
-
-        if (existing) {
-          skipped++;
-          continue;
-        }
-
-        // Check if staff is still active in the gym
-        const staffActive = await this.tenantService.executeInTenant(salary.gym_id, async (client) => {
+        // Find recurring salaries from previous month in this tenant
+        const recurringSalaries = await this.tenantService.executeInTenant(gym.id, async (client) => {
           const result = await client.query(
-            `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('trainer', 'manager')`,
-            [salary.staff_id]
+            `SELECT * FROM staff_salaries
+             WHERE is_recurring = true AND month = $1 AND year = $2`,
+            [prevMonth, prevYear]
           );
-          return result.rows.length > 0;
+          return result.rows;
         });
 
-        if (!staffActive) {
-          skipped++;
-          continue;
+        for (const salary of recurringSalaries) {
+          try {
+            // Check if salary already exists for current month
+            const existing = await this.tenantService.executeInTenant(gym.id, async (client) => {
+              const result = await client.query(
+                `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+                [salary.staff_id, currentMonth, currentYear]
+              );
+              return result.rows[0];
+            });
+
+            if (existing) {
+              skipped++;
+              continue;
+            }
+
+            // Check if staff is still active
+            const staffActive = await this.tenantService.executeInTenant(gym.id, async (client) => {
+              const result = await client.query(
+                `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('trainer', 'manager')`,
+                [salary.staff_id]
+              );
+              return result.rows.length > 0;
+            });
+
+            if (!staffActive) {
+              skipped++;
+              continue;
+            }
+
+            // Create new salary record for current month
+            await this.tenantService.executeInTenant(gym.id, async (client) => {
+              await client.query(
+                `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pending', 'Auto-generated recurring salary', NOW(), NOW())`,
+                [salary.staff_id, currentMonth, currentYear, salary.base_salary, salary.bonus, salary.deductions, salary.net_amount]
+              );
+            });
+
+            created++;
+          } catch (error) {
+            this.logger.error(`Error creating recurring salary for staff ${salary.staff_id}:`, error);
+            errors++;
+          }
         }
-
-        // Create new salary record for current month
-        await this.prisma.staffSalary.create({
-          data: {
-            staffId: salary.staff_id,
-            gymId: salary.gym_id,
-            month: currentMonth,
-            year: currentYear,
-            baseSalary: salary.base_salary,
-            bonus: salary.bonus,
-            deductions: salary.deductions,
-            netAmount: salary.net_amount,
-            isRecurring: true,
-            paymentStatus: 'pending',
-            notes: `Auto-generated recurring salary`,
-          },
-        });
-
-        created++;
       } catch (error) {
-        this.logger.error(`Error creating recurring salary for staff ${salary.staff_id}:`, error);
+        this.logger.error(`Error processing gym ${gym.id}:`, error);
         errors++;
       }
     }

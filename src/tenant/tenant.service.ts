@@ -376,6 +376,31 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // Staff Salaries (for trainers and managers in this tenant)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."staff_salaries" (
+        id SERIAL PRIMARY KEY,
+        staff_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        base_salary DECIMAL(10, 2) NOT NULL,
+        bonus DECIMAL(10, 2) DEFAULT 0,
+        deductions DECIMAL(10, 2) DEFAULT 0,
+        net_amount DECIMAL(10, 2) NOT NULL,
+        currency VARCHAR(10) DEFAULT 'INR',
+        is_recurring BOOLEAN DEFAULT FALSE,
+        payment_status VARCHAR(20) DEFAULT 'pending',
+        payment_method VARCHAR(50),
+        payment_ref VARCHAR(100),
+        paid_at TIMESTAMP,
+        paid_by_id INTEGER, -- public.users.id (admin who paid)
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(staff_id, month, year)
+      )
+    `);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }
@@ -407,6 +432,11 @@ export class TenantService implements OnModuleInit {
     // Trainer-client indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`);
+
+    // Staff salaries indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_staff" ON "${schemaName}"."staff_salaries"(staff_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_status" ON "${schemaName}"."staff_salaries"(payment_status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period" ON "${schemaName}"."staff_salaries"(year, month)`);
   }
 
   /**
