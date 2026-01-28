@@ -1,0 +1,122 @@
+### Base URL
+@baseUrl = http://localhost:3000/api
+
+### ===================================================
+### SIGNUP FLOW
+### ===================================================
+
+### Step 1: Send Signup OTP
+POST {{baseUrl}}/auth/send-signup-otp
+Content-Type: application/json
+
+{
+    "email": "skcoder510@gmail.com",
+    "name": "shreyesh kolhe"
+}
+
+### Step 2: Verify Signup OTP (replace OTP with actual code from email)
+POST {{baseUrl}}/auth/verify-signup-otp
+Content-Type: application/json
+
+{
+    "email": "skcoder510@gmail.com",
+    "otp": "123456"
+}
+
+### Step 3: Register Admin with Gym (call after OTP verified)
+POST {{baseUrl}}/auth/register-admin-with-gym
+Content-Type: application/json
+
+{
+    "user": {
+        "name": "shrutik kolhe",
+        "email": "shrutikkolhe501@gmail.com",
+        "password": "password123"
+    },
+    "gym": {
+        "name": "SK fitness",
+        "phone": "9876543334",
+        "address": "strakly fitness, warje near aroma",
+        "city": "pune",
+        "state": "maharastra",
+        "zipCode": "411038",
+        "country": "India"
+    }
+}
+
+### ===================================================
+### LOGIN
+### ===================================================
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "shrutikkolhe501@gmail.com",
+    "password": "password123"
+}
+
+### ===================================================
+### PASSWORD RESET FLOW
+### ===================================================
+
+### Request Password Reset (sends OTP)
+POST {{baseUrl}}/auth/request-password-reset
+Content-Type: application/json
+
+{
+    "email": "skcoder510@gmail.com"
+}
+
+### Verify Password Reset OTP
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+    "email": "skcoder510@gmail.com",
+    "otp": "123456"
+}
+
+### Reset Password with OTP
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+    "email": "skcoder510@gmail.com",
+    "otp": "123456",
+    "newPassword": "newpassword123"
+}
+
+### ===================================================
+### AUTHENTICATED ROUTES (requires token)
+### ===================================================
+
+@token = YOUR_JWT_TOKEN_HERE
+
+### Get Profile
+GET {{baseUrl}}/auth/profile
+Authorization: Bearer {{token}}
+
+### Update Profile
+PATCH {{baseUrl}}/auth/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "Shreyesh Kolhe Updated"
+}
+
+### Change Password
+POST {{baseUrl}}/auth/change-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "currentPassword": "password123",
+    "newPassword": "newpassword456"
+}
+
+### Logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}

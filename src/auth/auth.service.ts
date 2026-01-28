@@ -195,23 +195,47 @@ export class AuthService {
       },
     });
 
-    // Only block if user exists AND has completed signup (verified email OR has gym assignments)
+    // Block if user exists AND has verified email (completed signup properly)
     if (existingUser) {
-      const hasGymAssignments = existingUser.gymAssignments && existingUser.gymAssignments.length > 0;
+      console.log('Found existing user:', existingUser.id, 'emailVerified:', existingUser.emailVerified, 'gymAssignments:', existingUser.gymAssignments?.length);
 
-      if (existingUser.emailVerified || hasGymAssignments) {
+      if (existingUser.emailVerified) {
         throw new ConflictException('User with this email already exists');
       }
 
-      // User exists but is truly incomplete (no verified email AND no gym assignments)
-      // Clean up the incomplete registration so they can start fresh
+      // User exists but email not verified - they didn't complete signup properly
+      // Clean up everything and let them start fresh
+      console.log('Cleaning up incomplete user:', existingUser.id);
+
+      // Delete gym assignments first
+      if (existingUser.gymAssignments && existingUser.gymAssignments.length > 0) {
+        for (const assignment of existingUser.gymAssignments) {
+          // Delete the gym and its tenant schema
+          try {
+            const gym = await this.prisma.gym.findUnique({ where: { id: assignment.gymId } });
+            if (gym?.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
+              await this.tenantService.dropTenantSchema(assignment.gymId);
+            }
+            // Delete subscriptions
+            await this.prisma.saasGymSubscription.deleteMany({ where: { gymId: assignment.gymId } });
+            // Delete the gym
+            await this.prisma.gym.delete({ where: { id: assignment.gymId } });
+            console.log('Cleaned up orphaned gym:', assignment.gymId);
+          } catch (cleanupError) {
+            console.error('Failed to cleanup gym:', assignment.gymId, cleanupError);
+          }
+        }
+      }
+
+      // Delete the user (this will cascade delete gym assignments due to onDelete: Cascade)
       try {
         await this.prisma.user.delete({
           where: { id: existingUser.id },
         });
+        console.log('Deleted incomplete user:', existingUser.id);
       } catch (deleteError) {
         console.error('Failed to delete incomplete user:', deleteError);
-        // Continue anyway - the user create will fail if there's a real conflict
+        throw new ConflictException('User with this email already exists. Please try again later.');
       }
     }
 
