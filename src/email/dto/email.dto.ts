@@ -27,6 +27,11 @@ export class SendEmailDto {
   @IsEmail()
   to: string;
 
+  @ApiPropertyOptional({ description: 'Recipient name' })
+  @IsOptional()
+  @IsString()
+  toName?: string;
+
   @ApiProperty({ description: 'Email subject' })
   @IsString()
   subject: string;

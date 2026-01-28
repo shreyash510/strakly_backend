@@ -1433,7 +1433,8 @@ export class AuthService {
       where: { email },
     });
 
-    if (existingUser) {
+    // Allow resending OTP if user exists but email is not verified
+    if (existingUser && existingUser.emailVerified) {
       throw new ConflictException('User with this email already exists');
     }
 
@@ -1441,6 +1442,7 @@ export class AuthService {
       where: { email },
     });
 
+    // System users (superadmins) are always considered verified
     if (existingSystemUser) {
       throw new ConflictException('Email already exists');
     }

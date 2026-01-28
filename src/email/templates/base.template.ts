@@ -29,7 +29,6 @@ export function baseTemplate(options: BaseTemplateOptions): string {
   </noscript>
   <![endif]-->
   <style>
-    /* Reset styles */
     body, table, td, p, a, li, blockquote {
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
@@ -51,34 +50,11 @@ export function baseTemplate(options: BaseTemplateOptions): string {
       margin: 0 !important;
       padding: 0 !important;
       width: 100% !important;
-      background-color: #f4f4f7;
+      background-color: #f8fafc;
     }
     a {
-      color: #6366f1;
-    }
-    .button {
-      display: inline-block;
-      padding: 16px 36px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #ffffff !important;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      border-radius: 8px;
+      color: #4f46e5;
       text-decoration: none;
-      text-align: center;
-      transition: all 0.2s ease;
-    }
-    .otp-code {
-      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-      font-size: 36px;
-      font-weight: 700;
-      letter-spacing: 8px;
-      color: #1f2937;
-      background-color: #f3f4f6;
-      padding: 20px 32px;
-      border-radius: 12px;
-      border: 2px dashed #d1d5db;
-      display: inline-block;
     }
     @media only screen and (max-width: 600px) {
       .email-container {
@@ -86,55 +62,49 @@ export function baseTemplate(options: BaseTemplateOptions): string {
         max-width: 100% !important;
       }
       .padding-mobile {
-        padding-left: 20px !important;
-        padding-right: 20px !important;
+        padding-left: 24px !important;
+        padding-right: 24px !important;
       }
       .otp-code {
-        font-size: 28px;
-        letter-spacing: 6px;
-        padding: 16px 24px;
+        font-size: 28px !important;
+        letter-spacing: 4px !important;
+        padding: 16px 20px !important;
       }
     }
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f7;">
-  <!-- Preheader text (hidden) -->
-  <div style="display: none; font-size: 1px; color: #f4f4f7; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <div style="display: none; font-size: 1px; color: #f8fafc; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
     ${preheader}
   </div>
 
-  <!-- Email wrapper -->
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f7;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc;">
     <tr>
-      <td align="center" style="padding: 40px 20px;">
+      <td align="center" style="padding: 48px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="560" class="email-container" style="max-width: 560px; width: 100%;">
 
-        <!-- Email container -->
-        <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="email-container" style="max-width: 600px; width: 100%;">
-
-          <!-- Logo Header -->
+          <!-- Logo -->
           <tr>
-            <td align="center" style="padding-bottom: 30px;">
+            <td align="center" style="padding-bottom: 32px;">
               <table role="presentation" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="vertical-align: middle; padding-right: 12px;">
-                    <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
-                      <span style="color: white; font-size: 20px; font-weight: bold; line-height: 40px; display: block; text-align: center; width: 40px;">S</span>
-                    </div>
+                  <td style="background-color: #4f46e5; width: 36px; height: 36px; border-radius: 8px; text-align: center; vertical-align: middle;">
+                    <span style="color: #ffffff; font-size: 18px; font-weight: 700; line-height: 36px;">S</span>
                   </td>
-                  <td style="vertical-align: middle;">
-                    <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 700; color: #1f2937;">Strakly</span>
+                  <td style="padding-left: 10px; vertical-align: middle;">
+                    <span style="font-size: 20px; font-weight: 600; color: #0f172a;">Strakly</span>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- Main content card -->
+          <!-- Main Card -->
           <tr>
             <td>
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
                 <tr>
-                  <td class="padding-mobile" style="padding: 48px 48px 40px 48px;">
+                  <td class="padding-mobile" style="padding: 40px 48px;">
                     ${content}
                   </td>
                 </tr>
@@ -144,20 +114,13 @@ export function baseTemplate(options: BaseTemplateOptions): string {
 
           <!-- Footer -->
           <tr>
-            <td align="center" style="padding: 30px 20px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td align="center" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #9ca3af; line-height: 1.6;">
-                    <p style="margin: 0 0 8px 0;">${footerText}</p>
-                    <p style="margin: 0 0 8px 0;">
-                      <a href="https://strakly.com" style="color: #6b7280; text-decoration: none;">strakly.com</a>
-                    </p>
-                    <p style="margin: 0; color: #d1d5db;">
-                      &copy; ${new Date().getFullYear()} Strakly. All rights reserved.
-                    </p>
-                  </td>
-                </tr>
-              </table>
+            <td align="center" style="padding: 32px 16px 16px;">
+              <p style="font-size: 13px; color: #64748b; margin: 0 0 8px 0; line-height: 1.5;">
+                ${footerText}
+              </p>
+              <p style="font-size: 13px; color: #94a3b8; margin: 0;">
+                &copy; ${new Date().getFullYear()} Strakly. All rights reserved.
+              </p>
             </td>
           </tr>
 
