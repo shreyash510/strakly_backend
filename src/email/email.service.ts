@@ -50,6 +50,7 @@ export class EmailService {
   private readonly zeptoMailApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
+    // Use native ZeptoMail API endpoint
     this.zeptoMailApiUrl = this.configService.get<string>('ZEPTOMAIL_API_URL') || 'https://api.zeptomail.in/v1.1/email';
     this.zeptoMailApiKey = this.configService.get<string>('ZEPTOMAIL_API_KEY') || '';
 
@@ -64,7 +65,8 @@ export class EmailService {
   }
 
   /**
-   * Send a single email via ZeptoMail Native API
+   * Send a single email via ZeptoMail native API
+   * Documentation: https://www.zoho.com/zeptomail/help/api/email-sending.html
    */
   async sendEmail(dto: SendEmailDto): Promise<EmailResponse> {
     try {
@@ -85,12 +87,12 @@ export class EmailService {
         subject: dto.subject,
       };
 
-      // Add HTML content
+      // Add HTML body
       if (dto.html) {
         emailPayload.htmlbody = dto.html;
       }
 
-      // Add plain text content
+      // Add plain text body
       if (dto.text) {
         emailPayload.textbody = dto.text;
       }
@@ -98,20 +100,14 @@ export class EmailService {
       // Add CC recipients
       if (dto.cc && dto.cc.length > 0) {
         emailPayload.cc = dto.cc.map(email => ({
-          email_address: {
-            address: email,
-            name: email,
-          },
+          email_address: { address: email, name: email },
         }));
       }
 
       // Add BCC recipients
       if (dto.bcc && dto.bcc.length > 0) {
         emailPayload.bcc = dto.bcc.map(email => ({
-          email_address: {
-            address: email,
-            name: email,
-          },
+          email_address: { address: email, name: email },
         }));
       }
 
@@ -156,6 +152,7 @@ export class EmailService {
 
   /**
    * Send bulk emails (multiple recipients, same content)
+   * Documentation: https://www.zoho.com/zeptomail/help/api/email-sending.html
    */
   async sendBulkEmail(dto: SendBulkEmailDto): Promise<EmailResponse> {
     try {
@@ -166,18 +163,17 @@ export class EmailService {
           name: dto.fromName || this.defaultFromName,
         },
         to: dto.to.map(email => ({
-          email_address: {
-            address: email,
-            name: email,
-          },
+          email_address: { address: email, name: email },
         })),
         subject: dto.subject,
       };
 
+      // Add HTML body
       if (dto.html) {
         emailPayload.htmlbody = dto.html;
       }
 
+      // Add plain text body
       if (dto.text) {
         emailPayload.textbody = dto.text;
       }
@@ -211,7 +207,7 @@ export class EmailService {
       this.logger.error(`Failed to send bulk email: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
