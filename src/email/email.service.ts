@@ -26,15 +26,18 @@ export interface EmailResponse {
   error?: string;
 }
 
-interface SendPulseTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
-interface SendPulseEmailResponse {
-  result: boolean;
-  id?: string;
+interface ZeptoMailResponse {
+  data?: {
+    request_id?: string;
+    message?: string;
+  }[];
+  error?: {
+    code: string;
+    details: { code: string; message: string; target: string }[];
+    message: string;
+  };
+  message?: string;
+  request_id?: string;
 }
 
 @Injectable()
@@ -42,149 +45,115 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly defaultFromEmail: string;
   private readonly defaultFromName: string;
-  private readonly sendPulseClientId: string;
-  private readonly sendPulseClientSecret: string;
-  private accessToken: string | null = null;
-  private tokenExpiresAt: number = 0;
-
-  private readonly SENDPULSE_API_URL = 'https://api.sendpulse.com';
+  private readonly zeptoMailApiUrl: string;
+  private readonly zeptoMailApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.sendPulseClientId = this.configService.get<string>('SENDPULSE_CLIENT_ID') || '';
-    this.sendPulseClientSecret = this.configService.get<string>('SENDPULSE_CLIENT_SECRET') || '';
+    this.zeptoMailApiUrl = this.configService.get<string>('ZEPTOMAIL_API_URL') || 'https://api.zeptomail.in/v1.1/sg/email';
+    this.zeptoMailApiKey = this.configService.get<string>('ZEPTOMAIL_API_KEY') || '';
 
-    if (this.sendPulseClientId && this.sendPulseClientSecret) {
-      this.logger.log('SendPulse credentials configured');
+    if (this.zeptoMailApiKey) {
+      this.logger.log('ZeptoMail API configured');
     } else {
-      this.logger.warn('SendPulse credentials not configured');
+      this.logger.warn('ZeptoMail API key not configured');
     }
 
-    this.defaultFromEmail = this.configService.get<string>('SENDPULSE_FROM_EMAIL') || 'support@strakly.com';
-    this.defaultFromName = this.configService.get<string>('SENDPULSE_FROM_NAME') || 'Strakly';
+    this.defaultFromEmail = this.configService.get<string>('ZEPTOMAIL_FROM_EMAIL') || 'support@strakly.com';
+    this.defaultFromName = this.configService.get<string>('ZEPTOMAIL_FROM_NAME') || 'Strakly';
   }
 
   /**
-   * Get SendPulse access token (with caching)
-   */
-  private async getAccessToken(): Promise<string> {
-    // Return cached token if still valid (with 5 min buffer)
-    if (this.accessToken && Date.now() < this.tokenExpiresAt - 300000) {
-      return this.accessToken;
-    }
-
-    try {
-      const response = await fetch(`${this.SENDPULSE_API_URL}/oauth/access_token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          grant_type: 'client_credentials',
-          client_id: this.sendPulseClientId,
-          client_secret: this.sendPulseClientSecret,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get access token: ${response.statusText}`);
-      }
-
-      const data: SendPulseTokenResponse = await response.json();
-      this.accessToken = data.access_token;
-      this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
-
-      this.logger.log('SendPulse access token obtained');
-      return this.accessToken;
-    } catch (error: any) {
-      this.logger.error(`Failed to get SendPulse access token: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Send a single email via SendPulse SMTP API
+   * Send a single email via ZeptoMail Transactional API
    */
   async sendEmail(dto: SendEmailDto): Promise<EmailResponse> {
     try {
-      const token = await this.getAccessToken();
-
       const emailPayload: any = {
-        email: {
-          subject: dto.subject,
-          from: {
-            name: dto.fromName || this.defaultFromName,
-            email: dto.from || this.defaultFromEmail,
-          },
-          to: [
-            {
-              email: dto.to,
-            },
-          ],
+        from: {
+          email: dto.from || this.defaultFromEmail,
+          name: dto.fromName || this.defaultFromName,
         },
+        subject: dto.subject,
+        personalizations: [
+          {
+            to: [
+              {
+                email: dto.to,
+                name: dto.to,
+              },
+            ],
+          },
+        ],
+        content: [],
       };
 
-      // Add HTML body
+      // Add HTML content
       if (dto.html) {
-        emailPayload.email.html = Buffer.from(dto.html).toString('base64');
+        emailPayload.content.push({
+          type: 'html',
+          value: dto.html,
+        });
       }
 
-      // Add text body
+      // Add plain text content
       if (dto.text) {
-        emailPayload.email.text = dto.text;
+        emailPayload.content.push({
+          type: 'text',
+          value: dto.text,
+        });
       }
 
       // Add CC recipients
       if (dto.cc && dto.cc.length > 0) {
-        emailPayload.email.cc = dto.cc.map(email => ({ email }));
+        emailPayload.personalizations[0].cc = dto.cc.map(email => ({
+          email,
+          name: email,
+        }));
       }
 
       // Add BCC recipients
       if (dto.bcc && dto.bcc.length > 0) {
-        emailPayload.email.bcc = dto.bcc.map(email => ({ email }));
+        emailPayload.personalizations[0].bcc = dto.bcc.map(email => ({
+          email,
+          name: email,
+        }));
       }
 
-      // Add attachments
-      if (dto.attachments && dto.attachments.length > 0) {
-        emailPayload.email.attachments = dto.attachments.reduce((acc: any, attachment) => {
-          acc[attachment.filename] = attachment.content;
-          return acc;
-        }, {});
-      }
-
-      const response = await fetch(`${this.SENDPULSE_API_URL}/smtp/emails`, {
+      const response = await fetch(this.zeptoMailApiUrl, {
         method: 'POST',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': this.zeptoMailApiKey,
         },
         body: JSON.stringify(emailPayload),
       });
 
       const responseText = await response.text();
-      let data: SendPulseEmailResponse;
+      let data: ZeptoMailResponse;
 
       try {
         data = JSON.parse(responseText);
       } catch {
-        this.logger.error(`Invalid JSON response from SendPulse: ${responseText}`);
+        this.logger.error(`Invalid JSON response from ZeptoMail: ${responseText}`);
         return {
           success: false,
-          error: `Invalid response from SendPulse: ${responseText}`,
+          error: `Invalid response from ZeptoMail: ${responseText}`,
         };
       }
 
-      if (!response.ok || !data.result) {
-        this.logger.error(`Failed to send email to ${dto.to}: ${responseText}`);
+      if (!response.ok || data.error) {
+        const errorMessage = data.error?.message || data.message || responseText;
+        this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
         return {
           success: false,
-          error: responseText,
+          error: errorMessage,
         };
       }
 
       this.logger.log(`Email sent successfully to ${dto.to}`);
       return {
         success: true,
-        messageId: data.id,
+        messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
       this.logger.error(`Failed to send email to ${dto.to}: ${error.message}`);
@@ -200,60 +169,72 @@ export class EmailService {
    */
   async sendBulkEmail(dto: SendBulkEmailDto): Promise<EmailResponse> {
     try {
-      const token = await this.getAccessToken();
-
       const emailPayload: any = {
-        email: {
-          subject: dto.subject,
-          from: {
-            name: dto.fromName || this.defaultFromName,
-            email: dto.from || this.defaultFromEmail,
-          },
-          to: dto.to.map(email => ({ email })),
+        from: {
+          email: dto.from || this.defaultFromEmail,
+          name: dto.fromName || this.defaultFromName,
         },
+        subject: dto.subject,
+        personalizations: dto.to.map(email => ({
+          to: [
+            {
+              email,
+              name: email,
+            },
+          ],
+        })),
+        content: [],
       };
 
       if (dto.html) {
-        emailPayload.email.html = Buffer.from(dto.html).toString('base64');
+        emailPayload.content.push({
+          type: 'html',
+          value: dto.html,
+        });
       }
 
       if (dto.text) {
-        emailPayload.email.text = dto.text;
+        emailPayload.content.push({
+          type: 'text',
+          value: dto.text,
+        });
       }
 
-      const response = await fetch(`${this.SENDPULSE_API_URL}/smtp/emails`, {
+      const response = await fetch(this.zeptoMailApiUrl, {
         method: 'POST',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': this.zeptoMailApiKey,
         },
         body: JSON.stringify(emailPayload),
       });
 
       const responseText = await response.text();
-      let data: SendPulseEmailResponse;
+      let data: ZeptoMailResponse;
 
       try {
         data = JSON.parse(responseText);
       } catch {
         return {
           success: false,
-          error: `Invalid response from SendPulse: ${responseText}`,
+          error: `Invalid response from ZeptoMail: ${responseText}`,
         };
       }
 
-      if (!response.ok || !data.result) {
-        this.logger.error(`Failed to send bulk email: ${responseText}`);
+      if (!response.ok || data.error) {
+        const errorMessage = data.error?.message || data.message || responseText;
+        this.logger.error(`Failed to send bulk email: ${errorMessage}`);
         return {
           success: false,
-          error: responseText,
+          error: errorMessage,
         };
       }
 
       this.logger.log(`Bulk email sent successfully to ${dto.to.length} recipients`);
       return {
         success: true,
-        messageId: data.id,
+        messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
       this.logger.error(`Failed to send bulk email: ${error.message}`);
@@ -265,14 +246,13 @@ export class EmailService {
   }
 
   /**
-   * Send email using template (SendPulse doesn't have dynamic templates like SendGrid,
-   * so we'll just send regular HTML email)
+   * Send email using template
    */
   async sendTemplateEmail(dto: SendTemplateEmailDto): Promise<EmailResponse> {
-    this.logger.warn('SendPulse does not support dynamic templates. Use sendEmail with HTML instead.');
+    this.logger.warn('ZeptoMail template emails require template setup in ZeptoMail dashboard.');
     return {
       success: false,
-      error: 'Template emails not supported with SendPulse. Use sendEmail with HTML.',
+      error: 'Template emails require ZeptoMail template setup. Use sendEmail with HTML instead.',
     };
   }
 
