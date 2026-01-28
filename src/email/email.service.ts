@@ -116,6 +116,7 @@ export class EmailService {
       }
 
       this.logger.debug(`Sending email to ${dto.to} with subject: ${dto.subject}`);
+      this.logger.debug(`Email payload: ${JSON.stringify(emailPayload, null, 2)}`);
 
       const response = await axios.post(this.zeptoMailApiUrl, emailPayload, {
         headers: {
@@ -144,9 +145,8 @@ export class EmailService {
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || error.message;
       this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
-      if (error.response?.data) {
-        this.logger.error(`API Response: ${JSON.stringify(error.response.data)}`);
-      }
+      this.logger.error(`Full API Response: ${JSON.stringify(error.response?.data)}`);
+      this.logger.error(`Status Code: ${error.response?.status}`);
       return {
         success: false,
         error: errorMessage,
