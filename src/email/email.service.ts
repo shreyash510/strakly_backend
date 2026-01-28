@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import {
   SendEmailDto,
   SendBulkEmailDto,
@@ -116,31 +117,18 @@ export class EmailService {
 
       this.logger.debug(`Sending email to ${dto.to} with subject: ${dto.subject}`);
 
-      const response = await fetch(this.zeptoMailApiUrl, {
-        method: 'POST',
+      const response = await axios.post(this.zeptoMailApiUrl, emailPayload, {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
           'Authorization': this.zeptoMailApiKey,
         },
-        body: JSON.stringify(emailPayload),
       });
 
-      const responseText = await response.text();
-      let data: ZeptoMailResponse;
+      const data: ZeptoMailResponse = response.data;
 
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        this.logger.error(`Invalid JSON response from ZeptoMail: ${responseText}`);
-        return {
-          success: false,
-          error: `Invalid response from ZeptoMail: ${responseText}`,
-        };
-      }
-
-      if (!response.ok || data.error) {
-        const errorMessage = data.error?.message || data.message || responseText;
+      if (data.error) {
+        const errorMessage = data.error?.message || data.message;
         this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
         return {
           success: false,
@@ -154,10 +142,14 @@ export class EmailService {
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
-      this.logger.error(`Failed to send email to ${dto.to}: ${error.message}`);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || error.message;
+      this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
+      if (error.response?.data) {
+        this.logger.error(`API Response: ${JSON.stringify(error.response.data)}`);
+      }
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
@@ -190,30 +182,18 @@ export class EmailService {
         emailPayload.textbody = dto.text;
       }
 
-      const response = await fetch(this.zeptoMailApiUrl, {
-        method: 'POST',
+      const response = await axios.post(this.zeptoMailApiUrl, emailPayload, {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
           'Authorization': this.zeptoMailApiKey,
         },
-        body: JSON.stringify(emailPayload),
       });
 
-      const responseText = await response.text();
-      let data: ZeptoMailResponse;
+      const data: ZeptoMailResponse = response.data;
 
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        return {
-          success: false,
-          error: `Invalid response from ZeptoMail: ${responseText}`,
-        };
-      }
-
-      if (!response.ok || data.error) {
-        const errorMessage = data.error?.message || data.message || responseText;
+      if (data.error) {
+        const errorMessage = data.error?.message || data.message;
         this.logger.error(`Failed to send bulk email: ${errorMessage}`);
         return {
           success: false,
@@ -227,7 +207,8 @@ export class EmailService {
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
-      this.logger.error(`Failed to send bulk email: ${error.message}`);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || error.message;
+      this.logger.error(`Failed to send bulk email: ${errorMessage}`);
       return {
         success: false,
         error: error.message,
