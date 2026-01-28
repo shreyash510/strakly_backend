@@ -53,28 +53,37 @@ export class ReportsService {
       },
     );
 
-    // Get salary expense (from public schema)
-    let salaryWhereClause = `gym_id = $1 AND payment_status = 'paid'`;
-    const salaryValues: any[] = [gymId];
-    let salaryParamIndex = 2;
+    // Get salary expense (from tenant schema)
+    const salaryExpense = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = `payment_status = 'paid'`;
+        const values: any[] = [];
+        let paramIndex = 1;
 
-    if (month) {
-      salaryWhereClause += ` AND month = $${salaryParamIndex++}`;
-      salaryValues.push(month);
-    }
-    salaryWhereClause += ` AND year = $${salaryParamIndex++}`;
-    salaryValues.push(year);
+        if (month) {
+          whereClause += ` AND month = $${paramIndex++}`;
+          values.push(month);
+        }
+        whereClause += ` AND year = $${paramIndex++}`;
+        values.push(year);
 
-    const salaryExpense = await this.prisma.$queryRawUnsafe<any[]>(
-      `SELECT
-        COALESCE(SUM(net_amount), 0) as total,
-        COUNT(*) as count
-      FROM staff_salaries
-      WHERE ${salaryWhereClause}`,
-      ...salaryValues,
+        const result = await client.query(
+          `SELECT
+            COALESCE(SUM(net_amount), 0) as total,
+            COUNT(*) as count
+          FROM staff_salaries
+          WHERE ${whereClause}`,
+          values,
+        );
+        return {
+          total: parseFloat(result.rows[0]?.total || 0),
+          count: parseInt(result.rows[0]?.count || 0, 10),
+        };
+      },
     );
 
-    const salaryTotal = parseFloat(salaryExpense[0]?.total || 0);
+    const salaryTotal = salaryExpense.total;
 
     // Get income by month
     const incomeByMonth = await this.tenantService.executeInTenant(
@@ -99,25 +108,29 @@ export class ReportsService {
       },
     );
 
-    // Get expense by month
-    const expenseByMonth = await this.prisma.$queryRawUnsafe<any[]>(
-      `SELECT
-        CASE month
-          WHEN 1 THEN 'Jan' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
-          WHEN 4 THEN 'Apr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
-          WHEN 7 THEN 'Jul' WHEN 8 THEN 'Aug' WHEN 9 THEN 'Sep'
-          WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dec'
-        END as month,
-        month as month_num,
-        COALESCE(SUM(net_amount), 0) as amount
-      FROM staff_salaries
-      WHERE gym_id = $1
-        AND payment_status = 'paid'
-        AND year = $2
-      GROUP BY month
-      ORDER BY month_num`,
+    // Get expense by month (from tenant schema)
+    const expenseByMonth = await this.tenantService.executeInTenant(
       gymId,
-      year,
+      async (client) => {
+        const result = await client.query(
+          `SELECT
+            CASE month
+              WHEN 1 THEN 'Jan' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
+              WHEN 4 THEN 'Apr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
+              WHEN 7 THEN 'Jul' WHEN 8 THEN 'Aug' WHEN 9 THEN 'Sep'
+              WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dec'
+            END as month,
+            month as month_num,
+            COALESCE(SUM(net_amount), 0) as amount
+          FROM staff_salaries
+          WHERE payment_status = 'paid'
+            AND year = $1
+          GROUP BY month
+          ORDER BY month_num`,
+          [year],
+        );
+        return result.rows;
+      },
     );
 
     // Get income by payment method
@@ -358,7 +371,7 @@ export class ReportsService {
             s.month,
             s.year,
             s.net_amount as amount
-          FROM public.staff_salaries s
+          FROM staff_salaries s
           JOIN users u ON u.id = s.staff_id
           WHERE s.gym_id = $1 AND s.payment_status = 'pending'
           ORDER BY s.year DESC, s.month DESC`,
