@@ -190,60 +190,96 @@ export class AuthService {
     // Check if user already exists in public.users
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.user.email },
+      include: {
+        gymAssignments: true,
+      },
     });
 
+    // Only block if user exists AND has completed signup (verified email OR has gym assignments)
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      const hasGymAssignments = existingUser.gymAssignments && existingUser.gymAssignments.length > 0;
+
+      if (existingUser.emailVerified || hasGymAssignments) {
+        throw new ConflictException('User with this email already exists');
+      }
+
+      // User exists but is truly incomplete (no verified email AND no gym assignments)
+      // Clean up the incomplete registration so they can start fresh
+      try {
+        await this.prisma.user.delete({
+          where: { id: existingUser.id },
+        });
+      } catch (deleteError) {
+        console.error('Failed to delete incomplete user:', deleteError);
+        // Continue anyway - the user create will fail if there's a real conflict
+      }
     }
 
-    // Also check system_users table
-    const existingSystemUser = await this.prisma.systemUser.findUnique({
+    // Clean up any old email verification records for this email
+    await this.prisma.emailVerification.deleteMany({
       where: { email: dto.user.email },
     });
-
-    if (existingSystemUser) {
-      throw new ConflictException('Email already exists as a system user');
-    }
 
     // Hash password before transaction
     const passwordHash = await this.hashPassword(dto.user.password);
 
-    // Create gym and get gym ID first
-    const gym = await this.prisma.gym.create({
-      data: {
-        name: dto.gym.name,
-        tenantSchemaName: 'pending', // Will update after getting ID
-        phone: dto.gym.phone,
-        email: dto.gym.email,
-        address: dto.gym.address,
-        city: dto.gym.city,
-        state: dto.gym.state,
-        zipCode: dto.gym.zipCode,
-        country: dto.gym.country || 'India',
-        isActive: true,
-      },
-    });
+    let gym: any;
+    let createdUser: any;
 
-    // Update tenant schema name with the gym ID
-    const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
-    await this.prisma.gym.update({
-      where: { id: gym.id },
-      data: { tenantSchemaName },
-    });
+    try {
+      // Create gym and get gym ID first
+      gym = await this.prisma.gym.create({
+        data: {
+          name: dto.gym.name,
+          tenantSchemaName: 'pending', // Will update after getting ID
+          phone: dto.gym.phone,
+          email: dto.gym.email,
+          address: dto.gym.address,
+          city: dto.gym.city,
+          state: dto.gym.state,
+          zipCode: dto.gym.zipCode,
+          country: dto.gym.country || 'India',
+          isActive: true,
+        },
+      });
+      console.log('Gym created:', gym.id);
 
-    // Create the tenant schema with all tables (for clients)
-    await this.tenantService.createTenantSchema(gym.id);
+      // Update tenant schema name with the gym ID
+      const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
+      await this.prisma.gym.update({
+        where: { id: gym.id },
+        data: { tenantSchemaName },
+      });
+      console.log('Tenant schema name updated:', tenantSchemaName);
 
-    // Create admin user in PUBLIC.users (not tenant schema)
-    const createdUser = await this.prisma.user.create({
-      data: {
-        email: dto.user.email,
-        passwordHash,
-        name: dto.user.name,
-        phone: dto.user.phone,
-        status: 'active',
-      },
-    });
+      // Create the tenant schema with all tables (for clients)
+      await this.tenantService.createTenantSchema(gym.id);
+      console.log('Tenant schema created');
+
+      // Create admin user in PUBLIC.users (not tenant schema)
+      createdUser = await this.prisma.user.create({
+        data: {
+          email: dto.user.email,
+          passwordHash,
+          name: dto.user.name,
+          phone: dto.user.phone,
+          status: 'active',
+        },
+      });
+      console.log('User created:', createdUser.id);
+    } catch (error: any) {
+      console.error('Registration error:', error.message || error);
+      // Clean up gym if it was created but user creation failed
+      if (gym?.id && !createdUser) {
+        try {
+          await this.prisma.gym.delete({ where: { id: gym.id } });
+          console.log('Cleaned up orphaned gym:', gym.id);
+        } catch (cleanupError) {
+          console.error('Failed to clean up gym:', cleanupError);
+        }
+      }
+      throw error;
+    }
 
     // Create user-gym assignment with admin role
     await this.prisma.userGymXref.create({
