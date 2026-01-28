@@ -9,74 +9,48 @@ export function passwordResetSuccessTemplate(options: PasswordResetSuccessTempla
   const { userName, loginUrl = 'https://app.strakly.com/login' } = options;
 
   const content = `
-    <!-- Icon -->
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-      <tr>
-        <td align="center" style="padding-bottom: 24px;">
-          <div style="width: 72px; height: 72px; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-radius: 50%; display: inline-block; line-height: 72px; text-align: center;">
-            <span style="font-size: 36px;">&#128274;</span>
-          </div>
-        </td>
-      </tr>
-    </table>
-
-    <!-- Heading -->
-    <h1 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 700; color: #1f2937; margin: 0 0 8px 0; text-align: center;">
-      Password Reset Successful
+    <h1 style="font-size: 22px; font-weight: 600; color: #0f172a; margin: 0 0 8px 0; text-align: center;">
+      Password updated
     </h1>
-
-    <!-- Subheading -->
-    <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; color: #6b7280; margin: 0 0 32px 0; text-align: center;">
-      Your password has been updated
+    <p style="font-size: 15px; color: #64748b; margin: 0 0 32px 0; text-align: center;">
+      Your password has been successfully changed
     </p>
 
-    <!-- Greeting -->
-    <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; color: #374151; margin: 0 0 20px 0; line-height: 1.6;">
-      Hi <strong>${userName}</strong>,
+    <p style="font-size: 15px; color: #334155; margin: 0 0 24px 0; line-height: 1.6;">
+      Hi ${userName},
     </p>
 
-    <!-- Message -->
-    <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; color: #374151; margin: 0 0 24px 0; line-height: 1.6;">
+    <p style="font-size: 15px; color: #334155; margin: 0 0 32px 0; line-height: 1.6;">
       Your password has been successfully reset. You can now log in with your new password.
     </p>
 
     <!-- Success Box -->
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 32px;">
-      <tr>
-        <td style="padding: 20px 24px; background-color: #d1fae5; border-radius: 8px; border-left: 4px solid #059669;">
-          <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #065f46; margin: 0;">
-            &#10003; Your password was changed on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </p>
-        </td>
-      </tr>
-    </table>
+    <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 4px; padding: 16px 20px; margin-bottom: 32px;">
+      <p style="font-size: 14px; color: #166534; margin: 0;">
+        Password changed on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+      </p>
+    </div>
 
     <!-- CTA Button -->
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
       <tr>
-        <td align="center" style="padding-bottom: 32px;">
-          <a href="${loginUrl}" class="button" style="display: inline-block; padding: 16px 36px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 8px; text-decoration: none;">
-            Log In Now
+        <td align="center" style="padding: 0 0 32px 0;">
+          <a href="${loginUrl}" style="display: inline-block; padding: 14px 28px; font-size: 15px; font-weight: 600; color: #ffffff; background-color: #4f46e5; border-radius: 8px; text-decoration: none;">
+            Log in to your account
           </a>
         </td>
       </tr>
     </table>
 
-    <!-- Security Notice -->
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #fef3c7; border-radius: 8px;">
-      <tr>
-        <td style="padding: 20px;">
-          <p style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #92400e; margin: 0; line-height: 1.5;">
-            <strong>&#9888; Security Notice:</strong> If you did not make this change, please contact support immediately at
-            <a href="mailto:support@strakly.com" style="color: #92400e; text-decoration: underline;">support@strakly.com</a>
-          </p>
-        </td>
-      </tr>
-    </table>
+    <div style="border-top: 1px solid #e2e8f0; padding-top: 24px;">
+      <p style="font-size: 13px; color: #94a3b8; margin: 0; line-height: 1.6;">
+        If you didn't make this change, please contact us immediately at <a href="mailto:support@strakly.com" style="color: #4f46e5;">support@strakly.com</a>
+      </p>
+    </div>
   `;
 
   return baseTemplate({
-    preheader: 'Your password has been successfully reset.',
+    preheader: 'Your password has been successfully reset',
     content,
     footerText: 'You received this email because your password was changed.',
   });
@@ -86,7 +60,7 @@ export function passwordResetSuccessPlainText(options: PasswordResetSuccessTempl
   const { userName, loginUrl = 'https://app.strakly.com/login' } = options;
 
   return `
-Password Reset Successful
+Password updated
 
 Hi ${userName},
 
@@ -94,7 +68,7 @@ Your password has been successfully reset. You can now log in with your new pass
 
 Log in: ${loginUrl}
 
-Security Notice: If you did not make this change, please contact support immediately at support@strakly.com
+If you didn't make this change, please contact us immediately at support@strakly.com
 
 ---
 Strakly

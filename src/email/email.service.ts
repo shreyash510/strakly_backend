@@ -49,7 +49,7 @@ export class EmailService {
   private readonly zeptoMailApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.zeptoMailApiUrl = this.configService.get<string>('ZEPTOMAIL_API_URL') || 'https://api.zeptomail.in/v1.1/sg/email';
+    this.zeptoMailApiUrl = this.configService.get<string>('ZEPTOMAIL_API_URL') || 'https://api.zeptomail.in/v1.1/email';
     this.zeptoMailApiKey = this.configService.get<string>('ZEPTOMAIL_API_KEY') || '';
 
     if (this.zeptoMailApiKey) {
@@ -63,60 +63,58 @@ export class EmailService {
   }
 
   /**
-   * Send a single email via ZeptoMail Transactional API
+   * Send a single email via ZeptoMail Native API
    */
   async sendEmail(dto: SendEmailDto): Promise<EmailResponse> {
     try {
+      // Build native ZeptoMail API payload
       const emailPayload: any = {
         from: {
-          email: dto.from || this.defaultFromEmail,
+          address: dto.from || this.defaultFromEmail,
           name: dto.fromName || this.defaultFromName,
         },
-        subject: dto.subject,
-        personalizations: [
+        to: [
           {
-            to: [
-              {
-                email: dto.to,
-                name: dto.to,
-              },
-            ],
+            email_address: {
+              address: dto.to,
+              name: dto.to,
+            },
           },
         ],
-        content: [],
+        subject: dto.subject,
       };
 
       // Add HTML content
       if (dto.html) {
-        emailPayload.content.push({
-          type: 'html',
-          value: dto.html,
-        });
+        emailPayload.htmlbody = dto.html;
       }
 
       // Add plain text content
       if (dto.text) {
-        emailPayload.content.push({
-          type: 'text',
-          value: dto.text,
-        });
+        emailPayload.textbody = dto.text;
       }
 
       // Add CC recipients
       if (dto.cc && dto.cc.length > 0) {
-        emailPayload.personalizations[0].cc = dto.cc.map(email => ({
-          email,
-          name: email,
+        emailPayload.cc = dto.cc.map(email => ({
+          email_address: {
+            address: email,
+            name: email,
+          },
         }));
       }
 
       // Add BCC recipients
       if (dto.bcc && dto.bcc.length > 0) {
-        emailPayload.personalizations[0].bcc = dto.bcc.map(email => ({
-          email,
-          name: email,
+        emailPayload.bcc = dto.bcc.map(email => ({
+          email_address: {
+            address: email,
+            name: email,
+          },
         }));
       }
+
+      this.logger.debug(`Sending email to ${dto.to} with subject: ${dto.subject}`);
 
       const response = await fetch(this.zeptoMailApiUrl, {
         method: 'POST',
@@ -169,35 +167,27 @@ export class EmailService {
    */
   async sendBulkEmail(dto: SendBulkEmailDto): Promise<EmailResponse> {
     try {
+      // Build native ZeptoMail API payload
       const emailPayload: any = {
         from: {
-          email: dto.from || this.defaultFromEmail,
+          address: dto.from || this.defaultFromEmail,
           name: dto.fromName || this.defaultFromName,
         },
-        subject: dto.subject,
-        personalizations: dto.to.map(email => ({
-          to: [
-            {
-              email,
-              name: email,
-            },
-          ],
+        to: dto.to.map(email => ({
+          email_address: {
+            address: email,
+            name: email,
+          },
         })),
-        content: [],
+        subject: dto.subject,
       };
 
       if (dto.html) {
-        emailPayload.content.push({
-          type: 'html',
-          value: dto.html,
-        });
+        emailPayload.htmlbody = dto.html;
       }
 
       if (dto.text) {
-        emailPayload.content.push({
-          type: 'text',
-          value: dto.text,
-        });
+        emailPayload.textbody = dto.text;
       }
 
       const response = await fetch(this.zeptoMailApiUrl, {
