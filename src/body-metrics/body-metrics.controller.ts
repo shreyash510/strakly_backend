@@ -11,6 +11,7 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { BodyMetricsService } from './body-metrics.service';
@@ -75,8 +76,8 @@ export class BodyMetricsController {
 
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
-  deleteMyHistoryRecord(@Request() req: any, @Param('id') id: string) {
-    return this.bodyMetricsService.deleteHistoryRecord(parseInt(id), req.user.userId, req.user.gymId);
+  deleteMyHistoryRecord(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.bodyMetricsService.deleteHistoryRecord(id, req.user.userId, req.user.gymId);
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============

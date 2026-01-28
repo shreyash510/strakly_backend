@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LookupsService } from './lookups.service';
@@ -67,8 +68,8 @@ export class LookupsController {
 
   @Get('value/:id')
   @ApiOperation({ summary: 'Get a single lookup value by ID' })
-  findById(@Param('id') id: string) {
-    return this.lookupsService.findLookupById(parseInt(id));
+  findById(@Param('id', ParseIntPipe) id: number) {
+    return this.lookupsService.findLookupById(id);
   }
 
   @Post(':typeCode')
@@ -91,15 +92,15 @@ export class LookupsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup value' })
-  update(@Param('id') id: string, @Body() dto: UpdateLookupDto) {
-    return this.lookupsService.updateLookup(parseInt(id), dto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLookupDto) {
+    return this.lookupsService.updateLookup(id, dto);
   }
 
   @Delete('value/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup value (soft delete)' })
-  delete(@Param('id') id: string) {
-    return this.lookupsService.deleteLookup(parseInt(id));
+  delete(@Param('id', ParseIntPipe) id: number) {
+    return this.lookupsService.deleteLookup(id);
   }
 }

@@ -12,6 +12,7 @@ export interface JwtPayload {
   role?: string;
   gymId: number | null;
   tenantSchemaName: string | null;
+  branchId: number | null; // null = all branches access
   isSuperAdmin?: boolean;
   isAdmin?: boolean; // Admin users are in public.users, not tenant.users
 }
@@ -23,6 +24,7 @@ export interface AuthenticatedUser {
   role: string;
   gymId: number | null;
   tenantSchemaName: string | null;
+  branchId: number | null; // null = all branches access
   isSuperAdmin: boolean;
 }
 
@@ -44,6 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
     const gymId = payload.gymId;
     const tenantSchemaName = payload.tenantSchemaName;
+    const branchId = payload.branchId;
     const isSuperAdmin = payload.isSuperAdmin === true;
     const isAdmin = payload.isAdmin === true;
 
@@ -56,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: payload.role || 'superadmin',
         gymId: null,
         tenantSchemaName: null,
+        branchId: null,
         isSuperAdmin: true,
       };
     }
@@ -95,6 +99,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: payload.role || 'admin',
         gymId: gymId,
         tenantSchemaName: tenantSchemaName,
+        branchId: branchId, // null for admin = all branches access
         isSuperAdmin: false,
       };
     }
@@ -107,7 +112,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Verify user still exists in tenant schema
     const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id, email, name, status, role
+        `SELECT id, email, name, status, role, branch_id
          FROM users
          WHERE id = $1`,
         [userId]
@@ -131,6 +136,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role || userData.role || 'client',
       gymId: gymId,
       tenantSchemaName: tenantSchemaName,
+      branchId: branchId ?? userData.branch_id ?? null,
       isSuperAdmin: false,
     };
   }

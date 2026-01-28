@@ -18,6 +18,7 @@ export class ReportsService {
   async getIncomeExpenseReport(
     gymId: number,
     filters: ReportFilterDto,
+    branchId: number | null = null,
   ): Promise<IncomeExpenseReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -30,6 +31,12 @@ export class ReportsService {
         let whereClause = `payment_status = 'paid'`;
         const values: any[] = [];
         let paramIndex = 1;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
         if (month) {
           whereClause += ` AND EXTRACT(MONTH FROM paid_at) = $${paramIndex++}`;
@@ -185,6 +192,7 @@ export class ReportsService {
   async getMembershipSalesReport(
     gymId: number,
     filters: ReportFilterDto,
+    branchId: number | null = null,
   ): Promise<MembershipSalesReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -197,6 +205,12 @@ export class ReportsService {
         let whereClause = `m.payment_status = 'paid'`;
         const values: any[] = [];
         let paramIndex = 1;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
         if (month) {
           whereClause += ` AND EXTRACT(MONTH FROM m.paid_at) = $${paramIndex++}`;
@@ -230,6 +244,12 @@ export class ReportsService {
         let whereClause = `m.payment_status = 'paid'`;
         const values: any[] = [];
         let paramIndex = 1;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
         if (month) {
           whereClause += ` AND EXTRACT(MONTH FROM m.paid_at) = $${paramIndex++}`;
@@ -318,13 +338,12 @@ export class ReportsService {
     };
   }
 
-  async getPaymentDuesReport(gymId: number): Promise<PaymentDuesReportDto> {
+  async getPaymentDuesReport(gymId: number, branchId: number | null = null): Promise<PaymentDuesReportDto> {
     // Get membership dues (pending payments)
     const membershipDues = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(
-          `SELECT
+        let query = `SELECT
             m.id,
             u.name as client_name,
             u.email as client_email,
@@ -335,9 +354,18 @@ export class ReportsService {
           FROM memberships m
           JOIN users u ON u.id = m.user_id
           JOIN plans p ON p.id = m.plan_id
-          WHERE m.payment_status = 'pending'
-          ORDER BY m.created_at ASC`,
-        );
+          WHERE m.payment_status = 'pending'`;
+        const values: any[] = [];
+
+        // Branch filtering
+        if (branchId !== null) {
+          query += ` AND m.branch_id = $1`;
+          values.push(branchId);
+        }
+
+        query += ` ORDER BY m.created_at ASC`;
+
+        const result = await client.query(query, values);
 
         const today = new Date();
         return result.rows.map((r: any) => {

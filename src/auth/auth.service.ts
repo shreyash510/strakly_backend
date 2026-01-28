@@ -9,10 +9,12 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
+import { BranchService } from '../branch/branch.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword, comparePassword } from '../common/utils';
+import { PASSWORD_CONFIG, OTP_CONFIG } from '../common/constants';
 
 export interface GymSubscriptionInfo {
   planCode: string;
@@ -32,6 +34,7 @@ export interface GymInfo {
 
 export interface GymAssignment {
   gymId: number;
+  branchId: number | null; // null = all branches access
   role: string;
   isPrimary: boolean;
   gym: GymInfo;
@@ -68,8 +71,7 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
-  private readonly SALT_ROUNDS = 10;
-  private readonly OTP_EXPIRY_MINUTES = 10;
+  private readonly OTP_EXPIRY_MINUTES = OTP_CONFIG.EXPIRY_MINUTES;
   private readonly VERIFICATION_EXPIRY_MINUTES = 30;
   private readonly MAX_OTP_ATTEMPTS = 5;
 
@@ -78,6 +80,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly tenantService: TenantService,
     private readonly emailService: EmailService,
+    private readonly branchService: BranchService,
   ) {}
 
   /**
@@ -87,49 +90,6 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  private async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, this.SALT_ROUNDS);
-  }
-
-  private async generateUniqueAttendanceCode(gymId: number): Promise<string> {
-    /* Generate batch of candidate codes and check in single query for efficiency */
-    const batchSize = 10;
-    const maxAttempts = 5;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      /* Generate batch of random 4-digit codes */
-      const candidates: string[] = [];
-      for (let i = 0; i < batchSize; i++) {
-        const code = String(Math.floor(1000 + Math.random() * 9000));
-        candidates.push(code);
-      }
-
-      /* Check which codes already exist in tenant schema */
-      const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
-          [candidates]
-        );
-        return result.rows.map((r: any) => r.attendance_code);
-      });
-
-      const existingCodes = new Set(existing);
-
-      /* Return first available code */
-      for (const code of candidates) {
-        if (!existingCodes.has(code)) {
-          return code;
-        }
-      }
-    }
-
-    /* Fallback: generate 6-digit code if 4-digit space is exhausted */
-    return String(Math.floor(100000 + Math.random() * 900000));
-  }
-
-  private async comparePassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
-  }
 
   private generateToken(user: UserResponse, gymAssignment?: GymAssignment, isAdmin: boolean = false): string {
     const payload = {
@@ -139,6 +99,7 @@ export class AuthService {
       role: gymAssignment?.role || user.role || 'client',
       gymId: gymAssignment?.gymId || user.gymId || null,
       tenantSchemaName: gymAssignment?.gym?.tenantSchemaName || user.gym?.tenantSchemaName || null,
+      branchId: gymAssignment?.branchId ?? null, // null = all branches access
       isAdmin, // Admin users are in public.users, not tenant.users
     };
     return this.jwtService.sign(payload);
@@ -245,7 +206,7 @@ export class AuthService {
     });
 
     // Hash password before transaction
-    const passwordHash = await this.hashPassword(dto.user.password);
+    const passwordHash = await hashPassword(dto.user.password);
 
     let gym: any;
     let createdUser: any;
@@ -279,6 +240,10 @@ export class AuthService {
       // Create the tenant schema with all tables (for clients)
       await this.tenantService.createTenantSchema(gym.id);
       console.log('Tenant schema created');
+
+      // Create default branch for the gym
+      await this.branchService.createDefaultBranch(gym.id, gym);
+      console.log('Default branch created');
 
       // Create admin user in PUBLIC.users (not tenant schema)
       createdUser = await this.prisma.user.create({
@@ -374,6 +339,7 @@ export class AuthService {
 
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
+      branchId: null, // Admin has access to all branches
       role: 'admin',
       isPrimary: true,
       gym: {
@@ -416,7 +382,7 @@ export class AuthService {
         throw new UnauthorizedException('Your account has been deactivated');
       }
 
-      const isPasswordValid = await this.comparePassword(
+      const isPasswordValid = await comparePassword(
         loginDto.password,
         systemUser.passwordHash,
       );
@@ -488,7 +454,7 @@ export class AuthService {
         throw new UnauthorizedException('Your account is inactive');
       }
 
-      const isPasswordValid = await this.comparePassword(
+      const isPasswordValid = await comparePassword(
         loginDto.password,
         adminUser.passwordHash,
       );
@@ -506,6 +472,7 @@ export class AuthService {
       // Build gym assignments list
       const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
         gymId: assignment.gymId,
+        branchId: assignment.branchId, // null = all branches access
         role: assignment.role,
         isPrimary: assignment.isPrimary,
         gym: {
@@ -579,7 +546,7 @@ export class AuthService {
           }
 
           // Check password
-          const isPasswordValid = await this.comparePassword(
+          const isPasswordValid = await comparePassword(
             loginDto.password,
             tenantUser.password_hash,
           );
@@ -602,6 +569,7 @@ export class AuthService {
           const user = this.toUserResponse({ ...tenantUser, role: userRole }, gym);
           const accessToken = this.generateToken(user, {
             gymId: gym.id,
+            branchId: tenantUser.branch_id ?? null, // User's assigned branch
             role: userRole,
             isPrimary: true,
             gym: {
@@ -660,6 +628,7 @@ export class AuthService {
 
     const gymAssignments: GymAssignment[] = user.gymAssignments.map((assignment) => ({
       gymId: assignment.gymId,
+      branchId: assignment.branchId, // null = all branches access
       role: assignment.role,
       isPrimary: assignment.isPrimary,
       gym: {
@@ -746,6 +715,7 @@ export class AuthService {
 
     const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
       gymId: assignment.gymId,
+      branchId: assignment.branchId, // null = all branches access
       role: assignment.role,
       isPrimary: assignment.isPrimary,
       gym: {
@@ -857,6 +827,7 @@ export class AuthService {
 
     const gymAssignments: GymAssignment[] = updatedUser.gymAssignments.map((assignment) => ({
       gymId: assignment.gymId,
+      branchId: assignment.branchId, // null = all branches access
       role: assignment.role,
       isPrimary: assignment.isPrimary,
       gym: {
@@ -905,7 +876,7 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      const isPasswordValid = await this.comparePassword(
+      const isPasswordValid = await comparePassword(
         currentPassword,
         tenantUser.password_hash,
       );
@@ -914,7 +885,7 @@ export class AuthService {
         throw new UnauthorizedException('Current password is incorrect');
       }
 
-      const newPasswordHash = await this.hashPassword(newPassword);
+      const newPasswordHash = await hashPassword(newPassword);
       await this.tenantService.executeInTenant(gymId, async (client) => {
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
@@ -934,7 +905,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isPasswordValid = await this.comparePassword(
+    const isPasswordValid = await comparePassword(
       currentPassword,
       adminUser.passwordHash,
     );
@@ -943,7 +914,7 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    const newPasswordHash = await this.hashPassword(newPassword);
+    const newPasswordHash = await hashPassword(newPassword);
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash: newPasswordHash },
@@ -1210,7 +1181,7 @@ export class AuthService {
     }
 
     // Hash new password
-    const newPasswordHash = await this.hashPassword(newPassword);
+    const newPasswordHash = await hashPassword(newPassword);
 
     // Update password based on user type
     if (userInfo.userType === 'admin' || userInfo.userType === 'system') {
