@@ -148,6 +148,16 @@ export class MembershipsController {
     return this.membershipsService.checkMembershipStatus(req.user.userId, req.user.gymId);
   }
 
+  @Get('me/facilities')
+  @ApiOperation({ summary: 'Get facilities for current user active membership' })
+  async getMyFacilities(@Request() req: any) {
+    const activeMembership = await this.membershipsService.getActiveMembership(req.user.userId, req.user.gymId);
+    if (!activeMembership) {
+      return { facilities: [], amenities: [] };
+    }
+    return this.membershipsService.getMembershipFacilitiesAndAmenities(activeMembership.id, req.user.gymId);
+  }
+
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
   renewMyMembership(@Request() req: any, @Body() dto: RenewMembershipDto) {
@@ -210,6 +220,31 @@ export class MembershipsController {
   findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('branchId') queryBranchId?: string) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.findOne(id, req.user.gymId, branchId);
+  }
+
+  @Get(':id/facilities')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
+  getMembershipFacilities(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.membershipsService.getMembershipFacilitiesAndAmenities(id, req.user.gymId);
+  }
+
+  @Patch(':id/facilities')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
+  updateMembershipFacilities(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
+  ) {
+    return this.membershipsService.updateMembershipFacilitiesAndAmenities(
+      id,
+      req.user.gymId,
+      dto.facilityIds || [],
+      dto.amenityIds || [],
+    );
   }
 
   @Post()

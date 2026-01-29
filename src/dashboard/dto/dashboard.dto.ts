@@ -315,6 +315,40 @@ export class ClientGymDto {
   state?: string;
 }
 
+export class ClientFacilityDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty()
+  code: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  icon?: string;
+}
+
+export class ClientAmenityDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty()
+  code: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  icon?: string;
+}
+
 export class ClientDashboardDto {
   @ApiProperty()
   attendanceCode: string;
@@ -333,4 +367,10 @@ export class ClientDashboardDto {
 
   @ApiProperty({ type: [ActiveOfferDto] })
   activeOffers: ActiveOfferDto[];
+
+  @ApiProperty({ type: [ClientFacilityDto], required: false })
+  facilities?: ClientFacilityDto[];
+
+  @ApiProperty({ type: [ClientAmenityDto], required: false })
+  amenities?: ClientAmenityDto[];
 }

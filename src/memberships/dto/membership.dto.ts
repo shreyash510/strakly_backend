@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsDateString, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsNumber, Min, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateMembershipDto {
@@ -29,6 +29,18 @@ export class CreateMembershipDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  facilityIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  amenityIds?: number[];
 }
 
 export class UpdateMembershipDto {

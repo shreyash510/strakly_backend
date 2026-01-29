@@ -518,6 +518,112 @@ async function seedSuperadmin() {
   console.log('  ⚠️  Please change the password after first login!');
 }
 
+// Default facilities for tenant schemas
+const defaultFacilities = [
+  {
+    code: 'GYM_FLOOR',
+    name: 'Gym Floor',
+    description: 'Main workout area with weight machines and free weights',
+    icon: 'Dumbbell',
+    display_order: 1,
+  },
+  {
+    code: 'CARDIO',
+    name: 'Cardio Zone',
+    description: 'Treadmills, ellipticals, stationary bikes, and rowing machines',
+    icon: 'Activity',
+    display_order: 2,
+  },
+  {
+    code: 'YOGA',
+    name: 'Yoga Studio',
+    description: 'Dedicated space for yoga, meditation, and stretching',
+    icon: 'Sparkles',
+    display_order: 3,
+  },
+  {
+    code: 'CROSSFIT',
+    name: 'CrossFit Area',
+    description: 'Functional training area with CrossFit equipment',
+    icon: 'Flame',
+    display_order: 4,
+  },
+  {
+    code: 'POOL',
+    name: 'Swimming Pool',
+    description: 'Indoor heated swimming pool',
+    icon: 'Waves',
+    display_order: 5,
+  },
+  {
+    code: 'SAUNA',
+    name: 'Sauna',
+    description: 'Steam and dry sauna rooms for relaxation',
+    icon: 'Flame',
+    display_order: 6,
+  },
+];
+
+// Default amenities for tenant schemas
+const defaultAmenities = [
+  {
+    code: 'WIFI',
+    name: 'Free WiFi',
+    description: 'High-speed wireless internet access',
+    icon: 'Wifi',
+    display_order: 1,
+  },
+  {
+    code: 'LOCKER',
+    name: 'Locker Room',
+    description: 'Secure lockers for personal belongings',
+    icon: 'Lock',
+    display_order: 2,
+  },
+  {
+    code: 'SHOWER',
+    name: 'Showers',
+    description: 'Clean shower facilities with hot water',
+    icon: 'Droplets',
+    display_order: 3,
+  },
+  {
+    code: 'TOWEL',
+    name: 'Towel Service',
+    description: 'Fresh towels provided for members',
+    icon: 'Shirt',
+    display_order: 4,
+  },
+  {
+    code: 'PARKING',
+    name: 'Free Parking',
+    description: 'Complimentary parking for members',
+    icon: 'Car',
+    display_order: 5,
+  },
+  {
+    code: 'CAFE',
+    name: 'Juice Bar',
+    description: 'Healthy drinks, protein shakes, and snacks',
+    icon: 'Coffee',
+    display_order: 6,
+  },
+  {
+    code: 'AC',
+    name: 'Air Conditioning',
+    description: 'Climate controlled environment',
+    icon: 'AirVent',
+    display_order: 7,
+  },
+  {
+    code: 'WATER',
+    name: 'Water Station',
+    description: 'Filtered drinking water stations',
+    icon: 'GlassWater',
+    display_order: 8,
+  },
+];
+
 // Default membership plans for tenant schemas
 const defaultPlans = [
   {
@@ -625,6 +731,86 @@ async function seedTenantPlans() {
   }
 }
 
+async function seedTenantFacilitiesAndAmenities() {
+  console.log('Seeding default facilities and amenities for all tenant schemas...');
+
+  const client = await pool.connect();
+  try {
+    // Get all tenant schemas
+    const schemasResult = await client.query(`
+      SELECT schema_name FROM information_schema.schemata
+      WHERE schema_name LIKE 'tenant_%'
+    `);
+
+    console.log(`  Found ${schemasResult.rows.length} tenant schemas`);
+
+    for (const row of schemasResult.rows) {
+      const schemaName = row.schema_name;
+
+      // Check if facilities table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = $1 AND table_name = 'facilities'
+        )
+      `, [schemaName]);
+
+      if (!tableCheck.rows[0].exists) {
+        console.log(`  ${schemaName}: facilities table does not exist, skipping...`);
+        continue;
+      }
+
+      // Check if facilities already exist
+      const facilitiesResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".facilities`);
+      if (parseInt(facilitiesResult.rows[0].count) === 0) {
+        // Seed default facilities
+        for (const facility of defaultFacilities) {
+          await client.query(`
+            INSERT INTO "${schemaName}"."facilities"
+            (code, name, description, icon, display_order, is_active, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+            ON CONFLICT (branch_id, code) DO NOTHING
+          `, [
+            facility.code,
+            facility.name,
+            facility.description,
+            facility.icon,
+            facility.display_order,
+          ]);
+        }
+        console.log(`  ${schemaName}: Seeded ${defaultFacilities.length} default facilities`);
+      } else {
+        console.log(`  ${schemaName}: Facilities already exist, skipping...`);
+      }
+
+      // Check if amenities already exist
+      const amenitiesResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".amenities`);
+      if (parseInt(amenitiesResult.rows[0].count) === 0) {
+        // Seed default amenities
+        for (const amenity of defaultAmenities) {
+          await client.query(`
+            INSERT INTO "${schemaName}"."amenities"
+            (code, name, description, icon, display_order, is_active, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+            ON CONFLICT (branch_id, code) DO NOTHING
+          `, [
+            amenity.code,
+            amenity.name,
+            amenity.description,
+            amenity.icon,
+            amenity.display_order,
+          ]);
+        }
+        console.log(`  ${schemaName}: Seeded ${defaultAmenities.length} default amenities`);
+      } else {
+        console.log(`  ${schemaName}: Amenities already exist, skipping...`);
+      }
+    }
+  } finally {
+    client.release();
+  }
+}
+
 async function main() {
   console.log('Starting seed...\n');
 
@@ -641,6 +827,8 @@ async function main() {
   await seedSuperadmin();
   console.log('');
   await seedTenantPlans();
+  console.log('');
+  await seedTenantFacilitiesAndAmenities();
 
   console.log('\nSeed completed!');
 }

@@ -70,6 +70,12 @@ export class TenantService implements OnModuleInit {
     // Add branch_id columns to all tenant tables
     await this.addBranchIdColumns(client, schemaName);
 
+    // Create facilities and amenities tables if they don't exist
+    await this.createFacilitiesAndAmenitiesTables(client, schemaName);
+
+    // Create membership_facilities and membership_amenities junction tables
+    await this.createMembershipFacilityTables(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -136,6 +142,102 @@ export class TenantService implements OnModuleInit {
       }
     }
     console.log(`Created branch_id indexes for ${schemaName}`);
+  }
+
+  /**
+   * Create facilities and amenities tables if they don't exist (migration for existing tenants)
+   */
+  private async createFacilitiesAndAmenitiesTables(client: any, schemaName: string): Promise<void> {
+    // Create facilities table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."facilities" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          name VARCHAR(100) NOT NULL,
+          code VARCHAR(20) NOT NULL,
+          description TEXT,
+          icon VARCHAR(50),
+          is_active BOOLEAN DEFAULT TRUE,
+          display_order INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(branch_id, code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`);
+      console.log(`Ensured 'facilities' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating facilities table for ${schemaName}:`, error.message);
+    }
+
+    // Create amenities table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."amenities" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          name VARCHAR(100) NOT NULL,
+          code VARCHAR(20) NOT NULL,
+          description TEXT,
+          icon VARCHAR(50),
+          is_active BOOLEAN DEFAULT TRUE,
+          display_order INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(branch_id, code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`);
+      console.log(`Ensured 'amenities' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating amenities table for ${schemaName}:`, error.message);
+    }
+  }
+
+  /**
+   * Create membership_facilities and membership_amenities junction tables (migration for existing tenants)
+   */
+  private async createMembershipFacilityTables(client: any, schemaName: string): Promise<void> {
+    // Create membership_facilities table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_facilities" (
+          id SERIAL PRIMARY KEY,
+          membership_id INTEGER NOT NULL,
+          facility_id INTEGER NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(membership_id, facility_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`);
+      console.log(`Ensured 'membership_facilities' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating membership_facilities table for ${schemaName}:`, error.message);
+    }
+
+    // Create membership_amenities table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_amenities" (
+          id SERIAL PRIMARY KEY,
+          membership_id INTEGER NOT NULL,
+          amenity_id INTEGER NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(membership_id, amenity_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`);
+      console.log(`Ensured 'membership_amenities' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating membership_amenities table for ${schemaName}:`, error.message);
+    }
   }
 
   /**
@@ -475,6 +577,62 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // Facilities table (branch-specific)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."facilities" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(100) NOT NULL,
+        code VARCHAR(20) NOT NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, code)
+      )
+    `);
+
+    // Amenities table (branch-specific)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."amenities" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(100) NOT NULL,
+        code VARCHAR(20) NOT NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, code)
+      )
+    `);
+
+    // Membership-Facility association (which facilities a membership includes)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_facilities" (
+        id SERIAL PRIMARY KEY,
+        membership_id INTEGER NOT NULL REFERENCES "${schemaName}"."memberships"(id) ON DELETE CASCADE,
+        facility_id INTEGER NOT NULL REFERENCES "${schemaName}"."facilities"(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(membership_id, facility_id)
+      )
+    `);
+
+    // Membership-Amenity association (which amenities a membership includes)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_amenities" (
+        id SERIAL PRIMARY KEY,
+        membership_id INTEGER NOT NULL REFERENCES "${schemaName}"."memberships"(id) ON DELETE CASCADE,
+        amenity_id INTEGER NOT NULL REFERENCES "${schemaName}"."amenities"(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(membership_id, amenity_id)
+      )
+    `);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }
@@ -533,6 +691,24 @@ export class TenantService implements OnModuleInit {
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_status" ON "${schemaName}"."staff_salaries"(payment_status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period" ON "${schemaName}"."staff_salaries"(year, month)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch" ON "${schemaName}"."staff_salaries"(branch_id)`);
+
+    // Facilities indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`);
+
+    // Amenities indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`);
+
+    // Membership-Facility indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`);
+
+    // Membership-Amenity indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`);
   }
 
   /**

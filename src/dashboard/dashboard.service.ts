@@ -390,6 +390,15 @@ export class DashboardService {
       },
     });
 
+    // Get membership facilities and amenities if subscription exists
+    let facilities: any[] = [];
+    let amenities: any[] = [];
+    if (subscription) {
+      const membershipExtras = await this.getClientMembershipFacilities(subscription.id, gymId);
+      facilities = membershipExtras.facilities;
+      amenities = membershipExtras.amenities;
+    }
+
     return {
       attendanceCode: user?.attendance_code || '----',
       gym: gym ? {
@@ -406,7 +415,49 @@ export class DashboardService {
       attendanceStats,
       recentAttendance,
       activeOffers,
+      facilities,
+      amenities,
     };
+  }
+
+  private async getClientMembershipFacilities(membershipId: number, gymId: number): Promise<{ facilities: any[]; amenities: any[] }> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const [facilitiesResult, amenitiesResult] = await Promise.all([
+        client.query(
+          `SELECT f.id, f.name, f.code, f.description, f.icon
+           FROM membership_facilities mf
+           JOIN facilities f ON f.id = mf.facility_id
+           WHERE mf.membership_id = $1 AND f.is_active = true
+           ORDER BY f.display_order`,
+          [membershipId]
+        ),
+        client.query(
+          `SELECT a.id, a.name, a.code, a.description, a.icon
+           FROM membership_amenities ma
+           JOIN amenities a ON a.id = ma.amenity_id
+           WHERE ma.membership_id = $1 AND a.is_active = true
+           ORDER BY a.display_order`,
+          [membershipId]
+        ),
+      ]);
+
+      return {
+        facilities: facilitiesResult.rows.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          code: f.code,
+          description: f.description,
+          icon: f.icon,
+        })),
+        amenities: amenitiesResult.rows.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          code: a.code,
+          description: a.description,
+          icon: a.icon,
+        })),
+      };
+    });
   }
 
   private async getClientUser(userId: number, gymId: number) {

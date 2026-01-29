@@ -27,6 +27,8 @@ import { SalaryModule } from './salary/salary.module';
 import { EmailModule } from './email/email.module';
 import { ReportsModule } from './reports/reports.module';
 import { DietsModule } from './diets/diets.module';
+import { FacilitiesModule } from './facilities/facilities.module';
+import { AmenitiesModule } from './amenities/amenities.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { DietsModule } from './diets/diets.module';
     EmailModule,
     ReportsModule,
     DietsModule,
+    FacilitiesModule,
+    AmenitiesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
