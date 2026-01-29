@@ -27,6 +27,16 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class DietsController {
   constructor(private readonly dietsService: DietsService) {}
 
+  /**
+   * Resolve branchId from request: null = all branches, number = specific branch
+   */
+  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+    if (req.user.role === 'superadmin') {
+      return queryBranchId ? parseInt(queryBranchId) : null;
+    }
+    return queryBranchId ? parseInt(queryBranchId) : (req.user.branchId ?? null);
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -38,6 +48,7 @@ export class DietsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
   findAll(
     @Request() req: any,
     @Query('status') status?: string,
@@ -47,6 +58,7 @@ export class DietsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.role === 'superadmin'
       ? (queryGymId ? parseInt(queryGymId) : null)
@@ -56,6 +68,8 @@ export class DietsController {
       throw new BadRequestException('gymId is required');
     }
 
+    const branchId = this.resolveBranchId(req, queryBranchId);
+
     return this.dietsService.findAll(gymId, {
       status,
       type,
@@ -63,6 +77,7 @@ export class DietsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
+      branchId,
     });
   }
 
@@ -92,7 +107,8 @@ export class DietsController {
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a new diet plan' })
   create(@Request() req: any, @Body() dto: CreateDietDto) {
-    return this.dietsService.create(dto, req.user.gymId, req.user.userId);
+    const branchId = req.user.branchId ?? null;
+    return this.dietsService.create(dto, req.user.gymId, req.user.userId, branchId);
   }
 
   @Patch(':id')
@@ -122,7 +138,8 @@ export class DietsController {
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
   assignDiet(@Request() req: any, @Body() dto: AssignDietDto) {
-    return this.dietsService.assignDiet(dto, req.user.gymId, req.user.userId);
+    const branchId = req.user.branchId ?? null;
+    return this.dietsService.assignDiet(dto, req.user.gymId, req.user.userId, branchId);
   }
 
   @Get(':id/assignments')
