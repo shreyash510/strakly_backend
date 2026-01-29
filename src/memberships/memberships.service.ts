@@ -313,7 +313,122 @@ export class MembershipsService {
       });
     }
 
+    // Save membership facilities
+    if (dto.facilityIds && dto.facilityIds.length > 0) {
+      await this.saveMembershipFacilities(membership.id, dto.facilityIds, gymId);
+    }
+
+    // Save membership amenities
+    if (dto.amenityIds && dto.amenityIds.length > 0) {
+      await this.saveMembershipAmenities(membership.id, dto.amenityIds, gymId);
+    }
+
     return this.findOne(membership.id, gymId);
+  }
+
+  /**
+   * Save facilities for a membership
+   */
+  private async saveMembershipFacilities(membershipId: number, facilityIds: number[], gymId: number): Promise<void> {
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Clear existing facilities
+      await client.query(`DELETE FROM membership_facilities WHERE membership_id = $1`, [membershipId]);
+
+      // Insert new facilities
+      for (const facilityId of facilityIds) {
+        await client.query(
+          `INSERT INTO membership_facilities (membership_id, facility_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [membershipId, facilityId]
+        );
+      }
+    });
+  }
+
+  /**
+   * Save amenities for a membership
+   */
+  private async saveMembershipAmenities(membershipId: number, amenityIds: number[], gymId: number): Promise<void> {
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Clear existing amenities
+      await client.query(`DELETE FROM membership_amenities WHERE membership_id = $1`, [membershipId]);
+
+      // Insert new amenities
+      for (const amenityId of amenityIds) {
+        await client.query(
+          `INSERT INTO membership_amenities (membership_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [membershipId, amenityId]
+        );
+      }
+    });
+  }
+
+  /**
+   * Get facilities and amenities for a membership
+   */
+  async getMembershipFacilitiesAndAmenities(membershipId: number, gymId: number): Promise<{ facilities: any[]; amenities: any[] }> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const [facilitiesResult, amenitiesResult] = await Promise.all([
+        client.query(
+          `SELECT f.id, f.name, f.code, f.description, f.icon
+           FROM membership_facilities mf
+           JOIN facilities f ON f.id = mf.facility_id
+           WHERE mf.membership_id = $1 AND f.is_active = true
+           ORDER BY f.display_order`,
+          [membershipId]
+        ),
+        client.query(
+          `SELECT a.id, a.name, a.code, a.description, a.icon
+           FROM membership_amenities ma
+           JOIN amenities a ON a.id = ma.amenity_id
+           WHERE ma.membership_id = $1 AND a.is_active = true
+           ORDER BY a.display_order`,
+          [membershipId]
+        ),
+      ]);
+
+      return {
+        facilities: facilitiesResult.rows.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          code: f.code,
+          description: f.description,
+          icon: f.icon,
+        })),
+        amenities: amenitiesResult.rows.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          code: a.code,
+          description: a.description,
+          icon: a.icon,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Update facilities and amenities for a membership
+   */
+  async updateMembershipFacilitiesAndAmenities(
+    membershipId: number,
+    gymId: number,
+    facilityIds: number[],
+    amenityIds: number[],
+  ): Promise<{ facilities: any[]; amenities: any[] }> {
+    // Verify membership exists
+    await this.findOne(membershipId, gymId);
+
+    // Update facilities
+    if (facilityIds) {
+      await this.saveMembershipFacilities(membershipId, facilityIds, gymId);
+    }
+
+    // Update amenities
+    if (amenityIds) {
+      await this.saveMembershipAmenities(membershipId, amenityIds, gymId);
+    }
+
+    // Return updated facilities and amenities
+    return this.getMembershipFacilitiesAndAmenities(membershipId, gymId);
   }
 
   async update(id: number, gymId: number, dto: UpdateMembershipDto) {
