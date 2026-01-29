@@ -340,31 +340,45 @@ export class AttendanceService {
     return Array.from(uniqueMap.values()).map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  async getUserAttendance(userId: number, gymId: number, limit: number = 50): Promise<AttendanceRecord[]> {
+  async getUserAttendance(
+    userId: number,
+    gymId: number,
+    options: { page?: number; limit?: number } = {}
+  ): Promise<{ data: AttendanceRecord[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
+    const page = options.page || 1;
+    const limit = options.limit || 10;
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const { activeRecords, historyRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [activeResult, historyResult] = await Promise.all([
+    const { activeRecords, historyRecords, totalCount } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [activeResult, historyResult, countResult] = await Promise.all([
         client.query(
           `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            WHERE a.user_id = $1
-           ORDER BY a.check_in_time DESC
-           LIMIT $2`,
-          [userId, limit]
+           ORDER BY a.check_in_time DESC`,
+          [userId]
         ),
         client.query(
           `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            WHERE ah.user_id = $1
-           ORDER BY ah.check_in_time DESC
-           LIMIT $2`,
-          [userId, limit]
+           ORDER BY ah.check_in_time DESC`,
+          [userId]
+        ),
+        client.query(
+          `SELECT
+            (SELECT COUNT(*) FROM attendance WHERE user_id = $1) +
+            (SELECT COUNT(*) FROM attendance_history WHERE user_id = $1) as total`,
+          [userId]
         ),
       ]);
-      return { activeRecords: activeResult.rows, historyRecords: historyResult.rows };
+      return {
+        activeRecords: activeResult.rows,
+        historyRecords: historyResult.rows,
+        totalCount: parseInt(countResult.rows[0]?.total || '0', 10),
+      };
     });
 
     const allRecords = [...activeRecords, ...historyRecords];
@@ -377,10 +391,25 @@ export class AttendanceService {
       }
     }
 
-    return Array.from(uniqueMap.values())
-      .sort((a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime())
-      .slice(0, limit)
-      .map((r: any) => this.formatAttendanceRecord(r, gym));
+    const sortedRecords = Array.from(uniqueMap.values())
+      .sort((a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime());
+
+    const total = sortedRecords.length;
+    const totalPages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+    const paginatedRecords = sortedRecords.slice(offset, offset + limit);
+
+    return {
+      data: paginatedRecords.map((r: any) => this.formatAttendanceRecord(r, gym)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
   }
 
   async getAttendanceStats(gymId: number, branchId: number | null = null): Promise<AttendanceStats> {

@@ -115,12 +115,18 @@ export class AttendanceController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user attendance history' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Records per page' })
   async getMyAttendance(
     @UserId() userId: number,
     @GymId() gymId: number,
+    @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.attendanceService.getUserAttendance(userId, gymId, limit || 50);
+    return this.attendanceService.getUserAttendance(userId, gymId, {
+      page: page ? parseInt(String(page), 10) : 1,
+      limit: limit ? parseInt(String(limit), 10) : 10,
+    });
   }
 
   @Get('today')
@@ -158,15 +164,21 @@ export class AttendanceController {
   @ApiOperation({ summary: "Get a user's attendance history" })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Records per page' })
   async getUserAttendance(
     @Request() req: any,
     @Headers('x-user-id') userId: string,
+    @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getUserAttendance(parseInt(userId), gymId, limit || 50);
+    return this.attendanceService.getUserAttendance(parseInt(userId), gymId, {
+      page: page ? parseInt(String(page), 10) : 1,
+      limit: limit ? parseInt(String(limit), 10) : 10,
+    });
   }
 
   @Get('stats')
