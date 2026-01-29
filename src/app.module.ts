@@ -29,6 +29,7 @@ import { ReportsModule } from './reports/reports.module';
 import { DietsModule } from './diets/diets.module';
 import { FacilitiesModule } from './facilities/facilities.module';
 import { AmenitiesModule } from './amenities/amenities.module';
+import { WorkoutsModule } from './workouts/workouts.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { AmenitiesModule } from './amenities/amenities.module';
     DietsModule,
     FacilitiesModule,
     AmenitiesModule,
+    WorkoutsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

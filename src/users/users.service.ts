@@ -1520,6 +1520,9 @@ export class UsersService {
           tc.notes,
           t.name as trainer_name,
           t.email as trainer_email,
+          t.phone as trainer_phone,
+          t.avatar as trainer_avatar,
+          t.bio as trainer_bio,
           c.name as client_name,
           c.email as client_email
         FROM trainer_client_xref tc
@@ -1540,6 +1543,9 @@ export class UsersService {
       trainerId: assignment.trainer_id,
       trainerName: assignment.trainer_name,
       trainerEmail: assignment.trainer_email,
+      trainerPhone: assignment.trainer_phone || undefined,
+      trainerAvatar: assignment.trainer_avatar || undefined,
+      trainerBio: assignment.trainer_bio || undefined,
       clientId: assignment.client_id,
       clientName: assignment.client_name,
       clientEmail: assignment.client_email,

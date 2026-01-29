@@ -139,20 +139,24 @@ export class BodyMetricsService {
   }
 
   async recordMetrics(userId: number, gymId: number, dto: RecordMetricsDto, branchId?: number | null) {
-    const metrics = await this.updateMetrics(userId, gymId, dto, branchId);
+    // Update current metrics
+    await this.updateMetrics(userId, gymId, dto, branchId);
 
     const currentMetrics = await this.getMetrics(userId, gymId);
     const height = dto.height || currentMetrics?.height;
     const bmi = this.calculateBMI(dto.weight, height);
+    const measuredAt = dto.measuredAt ? new Date(dto.measuredAt) : new Date();
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(
+    // Insert into history and return the new record
+    const historyRecord = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
         `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+         RETURNING *`,
         [
           userId,
           branchId ?? null,
-          dto.measuredAt ? new Date(dto.measuredAt) : new Date(),
+          measuredAt,
           dto.height || null,
           dto.weight || null,
           bmi,
@@ -164,9 +168,39 @@ export class BodyMetricsService {
           dto.notes || null,
         ]
       );
+      return result.rows[0];
     });
 
-    return metrics;
+    // Return the history record in the expected format
+    return {
+      id: historyRecord.id,
+      userId: historyRecord.user_id,
+      branchId: historyRecord.branch_id,
+      measuredAt: historyRecord.measured_at,
+      height: historyRecord.height,
+      weight: historyRecord.weight,
+      bmi: historyRecord.bmi,
+      bodyFat: historyRecord.body_fat,
+      muscleMass: historyRecord.muscle_mass,
+      boneMass: historyRecord.bone_mass,
+      waterPercentage: historyRecord.water_percentage,
+      chest: historyRecord.chest,
+      waist: historyRecord.waist,
+      hips: historyRecord.hips,
+      biceps: historyRecord.biceps,
+      thighs: historyRecord.thighs,
+      calves: historyRecord.calves,
+      shoulders: historyRecord.shoulders,
+      neck: historyRecord.neck,
+      restingHeartRate: historyRecord.resting_heart_rate,
+      bloodPressureSys: historyRecord.blood_pressure_sys,
+      bloodPressureDia: historyRecord.blood_pressure_dia,
+      targetWeight: historyRecord.target_weight,
+      targetBodyFat: historyRecord.target_body_fat,
+      measuredBy: historyRecord.measured_by,
+      notes: historyRecord.notes,
+      createdAt: historyRecord.created_at,
+    };
   }
 
   async getHistory(
