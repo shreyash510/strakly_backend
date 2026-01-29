@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreateContactRequestDto, UpdateContactRequestDto } from './dto/contact-request.dto';
 import {
   PaginationParams,
@@ -15,7 +16,12 @@ export interface ContactRequestFilters extends PaginationParams {
 
 @Injectable()
 export class ContactRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ContactRequestsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private generateRequestNumber(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -75,7 +81,7 @@ export class ContactRequestsService {
   async create(dto: CreateContactRequestDto) {
     const requestNumber = this.generateRequestNumber();
 
-    return this.prisma.contactRequest.create({
+    const contactRequest = await this.prisma.contactRequest.create({
       data: {
         requestNumber,
         name: dto.name,
@@ -86,6 +92,24 @@ export class ContactRequestsService {
         status: 'new',
       },
     });
+
+    // Send email notification to support
+    try {
+      await this.emailService.sendContactRequestNotification(
+        dto.name,
+        dto.email,
+        dto.phone || null,
+        dto.subject || null,
+        dto.message,
+        requestNumber,
+      );
+      this.logger.log(`Contact request notification sent for ${requestNumber}`);
+    } catch (error) {
+      // Log error but don't fail the request - contact was still saved
+      this.logger.error(`Failed to send contact request notification: ${error.message}`);
+    }
+
+    return contactRequest;
   }
 
   async update(id: number, dto: UpdateContactRequestDto, userId?: number) {
