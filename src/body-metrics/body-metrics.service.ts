@@ -20,6 +20,7 @@ export class BodyMetricsService {
     return {
       id: m.id,
       userId: m.user_id,
+      branchId: m.branch_id,
       height: m.height,
       weight: m.weight,
       bmi: m.bmi,
@@ -57,7 +58,7 @@ export class BodyMetricsService {
     return this.formatMetrics(metrics);
   }
 
-  async getOrCreateMetrics(userId: number, gymId: number) {
+  async getOrCreateMetrics(userId: number, gymId: number, branchId?: number | null) {
     let metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(`SELECT * FROM body_metrics WHERE user_id = $1`, [userId]);
       return result.rows[0];
@@ -66,8 +67,8 @@ export class BodyMetricsService {
     if (!metrics) {
       metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
-          `INSERT INTO body_metrics (user_id, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING *`,
-          [userId]
+          `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
+          [userId, branchId ?? null]
         );
         return result.rows[0];
       });
@@ -76,7 +77,7 @@ export class BodyMetricsService {
     return this.formatMetrics(metrics);
   }
 
-  async updateMetrics(userId: number, gymId: number, dto: UpdateBodyMetricsDto) {
+  async updateMetrics(userId: number, gymId: number, dto: UpdateBodyMetricsDto, branchId?: number | null) {
     // Verify user exists
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
@@ -124,9 +125,9 @@ export class BodyMetricsService {
         await client.query(`UPDATE body_metrics SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`, values);
       } else {
         await client.query(
-          `INSERT INTO body_metrics (user_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW())`,
-          [userId, dto.height, dto.weight, bmi, dto.bodyFat, dto.muscleMass]
+          `INSERT INTO body_metrics (user_id, branch_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
+          [userId, branchId ?? null, dto.height, dto.weight, bmi, dto.bodyFat, dto.muscleMass]
         );
       }
 
@@ -137,8 +138,8 @@ export class BodyMetricsService {
     return this.formatMetrics(metrics);
   }
 
-  async recordMetrics(userId: number, gymId: number, dto: RecordMetricsDto) {
-    const metrics = await this.updateMetrics(userId, gymId, dto);
+  async recordMetrics(userId: number, gymId: number, dto: RecordMetricsDto, branchId?: number | null) {
+    const metrics = await this.updateMetrics(userId, gymId, dto, branchId);
 
     const currentMetrics = await this.getMetrics(userId, gymId);
     const height = dto.height || currentMetrics?.height;
@@ -146,10 +147,11 @@ export class BodyMetricsService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `INSERT INTO body_metrics_history (user_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+        `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
         [
           userId,
+          branchId ?? null,
           dto.measuredAt ? new Date(dto.measuredAt) : new Date(),
           dto.height || null,
           dto.weight || null,
@@ -207,6 +209,7 @@ export class BodyMetricsService {
       const data = result.rows.map((h: any) => ({
         id: h.id,
         userId: h.user_id,
+        branchId: h.branch_id,
         measuredAt: h.measured_at,
         height: h.height,
         weight: h.weight,

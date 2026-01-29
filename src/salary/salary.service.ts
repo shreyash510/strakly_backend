@@ -21,6 +21,7 @@ export interface SalaryFilters extends PaginationParams {
   month?: number;
   year?: number;
   paymentStatus?: string;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -35,6 +36,7 @@ export class SalaryService {
   private formatSalary(s: any, staff?: any, paidBy?: any) {
     return {
       id: s.id,
+      branchId: s.branch_id,
       staffId: s.staff_id,
       month: s.month,
       year: s.year,
@@ -111,6 +113,12 @@ export class SalaryService {
       let whereClause = `s.gym_id = $1`;
       const values: any[] = [gymId];
       let paramIndex = 2;
+
+      // Branch filtering for non-admin users (filter by staff's branch)
+      if (filters.branchId !== undefined && filters.branchId !== null) {
+        whereClause += ` AND u.branch_id = $${paramIndex++}`;
+        values.push(filters.branchId);
+      }
 
       if (filters.staffId) {
         whereClause += ` AND s.staff_id = $${paramIndex++}`;
@@ -340,28 +348,34 @@ export class SalaryService {
     return { success: true, message: 'Salary record deleted successfully' };
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId: number | null = null) {
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
 
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Build branch filter for staff
+      const branchFilter = branchId !== null ? ` AND u.branch_id = ${branchId}` : '';
+      const salaryBranchFilter = branchId !== null
+        ? ` AND s.staff_id IN (SELECT id FROM users WHERE branch_id = ${branchId})`
+        : '';
+
       const [pendingResult, paidResult, currentMonthResult, staffCountResult] = await Promise.all([
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND payment_status = 'pending'`,
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.payment_status = 'pending'${salaryBranchFilter}`,
           [gymId]
         ),
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND payment_status = 'paid' AND year = $2`,
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.payment_status = 'paid' AND s.year = $2${salaryBranchFilter}`,
           [gymId, currentYear]
         ),
         client.query(
-          `SELECT COALESCE(SUM(net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries WHERE gym_id = $1 AND month = $2 AND year = $3`,
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.month = $2 AND s.year = $3${salaryBranchFilter}`,
           [gymId, currentMonth, currentYear]
         ),
         client.query(
-          `SELECT COUNT(*) as count FROM users
-           WHERE status = 'active' AND role IN ('trainer', 'manager')`
+          `SELECT COUNT(*) as count FROM users u
+           WHERE u.status = 'active' AND u.role IN ('trainer', 'manager')${branchFilter}`
         ),
       ]);
 
@@ -379,14 +393,22 @@ export class SalaryService {
     return stats;
   }
 
-  async getStaffList(gymId: number) {
+  async getStaffList(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, email, avatar, phone, role
+      let query = `SELECT id, name, email, avatar, phone, role, branch_id
          FROM users
-         WHERE status = 'active' AND role IN ('trainer', 'manager')
-         ORDER BY name ASC`
-      );
+         WHERE status = 'active' AND role IN ('trainer', 'manager')`;
+      const values: any[] = [];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND branch_id = $1`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY name ASC`;
+
+      const result = await client.query(query, values);
 
       return result.rows.map((u: any) => ({
         id: u.id,
@@ -394,6 +416,7 @@ export class SalaryService {
         email: u.email,
         avatar: u.avatar,
         phone: u.phone,
+        branchId: u.branch_id,
         role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
       }));
     });

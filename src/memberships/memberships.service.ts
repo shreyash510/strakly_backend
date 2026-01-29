@@ -16,7 +16,7 @@ export class MembershipsService {
     private readonly tenantService: TenantService,
   ) {}
 
-  async findAll(gymId: number, filters?: {
+  async findAll(gymId: number, branchId: number | null = null, filters?: {
     status?: string;
     userId?: number;
     planId?: number;
@@ -32,6 +32,12 @@ export class MembershipsService {
       let whereClause = '1=1';
       const values: any[] = [];
       let paramIndex = 1;
+
+      // Branch filtering: null = admin (all branches), number = specific branch
+      if (branchId !== null) {
+        whereClause += ` AND m.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
 
       if (filters?.status) {
         whereClause += ` AND m.status = $${paramIndex++}`;
@@ -88,6 +94,7 @@ export class MembershipsService {
   private formatMembership(m: any) {
     return {
       id: m.id,
+      branchId: m.branch_id,
       userId: m.user_id,
       planId: m.plan_id,
       offerId: m.offer_id,
@@ -127,19 +134,25 @@ export class MembershipsService {
     };
   }
 
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId: number | null = null) {
     const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT m.*, u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar,
+      let query = `SELECT m.*, u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar,
                 p.id as plan_id, p.name as plan_name, p.code as plan_code, p.price as plan_price,
                 o.id as offer_id, o.code as offer_code, o.name as offer_name
          FROM memberships m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
          LEFT JOIN offers o ON o.id = m.offer_id
-         WHERE m.id = $1`,
-        [id]
-      );
+         WHERE m.id = $1`;
+      const values: any[] = [id];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND m.branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -150,18 +163,25 @@ export class MembershipsService {
     return this.formatMembership(membership);
   }
 
-  async findByUser(userId: number, gymId: number) {
+  async findByUser(userId: number, gymId: number, branchId: number | null = null) {
     const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT m.*, p.id as plan_id, p.name as plan_name, p.code as plan_code,
+      let query = `SELECT m.*, p.id as plan_id, p.name as plan_name, p.code as plan_code,
                 o.id as offer_id, o.code as offer_code, o.name as offer_name
          FROM memberships m
          LEFT JOIN plans p ON p.id = m.plan_id
          LEFT JOIN offers o ON o.id = m.offer_id
-         WHERE m.user_id = $1
-         ORDER BY m.created_at DESC`,
-        [userId]
-      );
+         WHERE m.user_id = $1`;
+      const values: any[] = [userId];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND m.branch_id = $2`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY m.created_at DESC`;
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 
@@ -207,16 +227,25 @@ export class MembershipsService {
     };
   }
 
-  async create(dto: CreateMembershipDto, gymId: number) {
+  /**
+   * Create a new membership
+   * @param dto - Membership data
+   * @param gymId - Gym ID
+   * @param branchId - Branch ID for the membership
+   */
+  async create(dto: CreateMembershipDto, gymId: number, branchId: number | null = null) {
     // Verify user exists in tenant
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT id FROM users WHERE id = $1`, [dto.userId]);
+      const result = await client.query(`SELECT id, branch_id FROM users WHERE id = $1`, [dto.userId]);
       return result.rows[0];
     });
 
     if (!user) {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
+
+    // Use user's branch if branchId not provided
+    const membershipBranchId = branchId ?? user.branch_id;
 
     // Check for active membership
     const activeMembership = await this.getActiveMembership(dto.userId, gymId);
@@ -265,14 +294,14 @@ export class MembershipsService {
     const startDate = new Date(dto.startDate);
     const endDate = this.calculateEndDate(startDate, plan.duration_value, plan.duration_type);
 
-    // Create membership
+    // Create membership with branch_id
     const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
+        `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
           original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8, $9, 'paid', $10, NOW(), $11, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, NOW(), NOW())
          RETURNING *`,
-        [dto.userId, dto.planId, offer?.id || null, startDate, endDate, originalAmount, discountAmount, finalAmount, 'INR', dto.paymentMethod || 'cash', dto.notes || null]
+        [membershipBranchId, dto.userId, dto.planId, offer?.id || null, startDate, endDate, originalAmount, discountAmount, finalAmount, 'INR', dto.paymentMethod || 'cash', dto.notes || null]
       );
       return result.rows[0];
     });
@@ -362,39 +391,49 @@ export class MembershipsService {
     return { id, deleted: true };
   }
 
-  async getExpiringSoon(gymId: number, days = 7) {
+  async getExpiringSoon(gymId: number, branchId: number | null = null, days = 7) {
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + days);
 
     const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+      let query = `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
                 p.name as plan_name, p.code as plan_code
          FROM memberships m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
-         WHERE m.status = 'active' AND m.end_date >= $1 AND m.end_date <= $2
-         ORDER BY m.end_date ASC`,
-        [now, futureDate]
-      );
+         WHERE m.status = 'active' AND m.end_date >= $1 AND m.end_date <= $2`;
+      const values: any[] = [now, futureDate];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND m.branch_id = $3`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY m.end_date ASC`;
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 
     return memberships.map((m: any) => this.formatMembership(m));
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId: number | null = null) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Build branch filter clause
+      const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
       const [activeResult, revenueResult, endingResult, totalRevenueResult] = await Promise.all([
-        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1`, [now]),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`, [startOfMonth, now]),
-        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2`, [now, endOfMonth]),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1${branchFilter}`, [now]),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2${branchFilter}`, [startOfMonth, now]),
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${branchFilter}`, [now, endOfMonth]),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'${branchFilter}`),
       ]);
 
       return {
@@ -408,13 +447,13 @@ export class MembershipsService {
     return stats;
   }
 
-  async getOverview(gymId: number) {
+  async getOverview(gymId: number, branchId: number | null = null) {
     const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] = await Promise.all([
-      this.getStats(gymId),
-      this.getExpiringSoon(gymId, 7),
-      this.getRecentSubscriptions(gymId, 10),
-      this.getPlansForOverview(gymId),
-      this.getPlanDistribution(gymId),
+      this.getStats(gymId, branchId),
+      this.getExpiringSoon(gymId, branchId, 7),
+      this.getRecentSubscriptions(gymId, branchId, 10),
+      this.getPlansForOverview(gymId, branchId),
+      this.getPlanDistribution(gymId, branchId),
     ]);
 
     return {
@@ -426,11 +465,20 @@ export class MembershipsService {
     };
   }
 
-  private async getPlansForOverview(gymId: number) {
+  private async getPlansForOverview(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, code, name FROM plans WHERE is_active = true ORDER BY display_order ASC`
-      );
+      let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
+      const values: any[] = [];
+
+      // Branch filtering: show branch-specific plans + global plans (branch_id IS NULL)
+      if (branchId !== null) {
+        query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY display_order ASC`;
+
+      const result = await client.query(query, values);
       return result.rows.map((p: any) => ({
         id: p.id,
         code: p.code,
@@ -439,15 +487,22 @@ export class MembershipsService {
     });
   }
 
-  private async getPlanDistribution(gymId: number) {
+  private async getPlanDistribution(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT plan_id, COUNT(*) as count
+      let query = `SELECT plan_id, COUNT(*) as count
          FROM memberships
-         WHERE status = 'active'
-         GROUP BY plan_id
-         ORDER BY count DESC`
-      );
+         WHERE status = 'active'`;
+      const values: any[] = [];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND branch_id = $1`;
+        values.push(branchId);
+      }
+
+      query += ` GROUP BY plan_id ORDER BY count DESC`;
+
+      const result = await client.query(query, values);
       return result.rows.map((row: any) => ({
         planId: row.plan_id,
         count: parseInt(row.count, 10),
@@ -455,25 +510,33 @@ export class MembershipsService {
     });
   }
 
-  private async getRecentSubscriptions(gymId: number, limit = 10) {
+  private async getRecentSubscriptions(gymId: number, branchId: number | null = null, limit = 10) {
     const memberships = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+      let query = `SELECT m.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
                 p.name as plan_name, p.code as plan_code
          FROM memberships m
          JOIN users u ON u.id = m.user_id
-         LEFT JOIN plans p ON p.id = m.plan_id
-         ORDER BY m.created_at DESC
-         LIMIT $1`,
-        [limit]
-      );
+         LEFT JOIN plans p ON p.id = m.plan_id`;
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` WHERE m.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
+      values.push(limit);
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 
     return memberships.map((m: any) => this.formatMembership(m));
   }
 
-  async renew(userId: number, gymId: number, dto: RenewMembershipDto) {
+  async renew(userId: number, gymId: number, branchId: number | null = null, dto: RenewMembershipDto) {
     const currentMembership = await this.getActiveMembership(userId, gymId);
     const planId = dto.planId || currentMembership?.planId;
 
@@ -496,7 +559,7 @@ export class MembershipsService {
       startDate: startDate.toISOString(),
       paymentMethod: dto.paymentMethod,
       notes: dto.notes,
-    }, gymId);
+    }, gymId, branchId);
   }
 
   private calculateEndDate(startDate: Date, durationValue: number, durationType: string): Date {

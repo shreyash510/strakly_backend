@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { BranchService } from '../branch/branch.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
   PaginationParams,
@@ -8,7 +9,7 @@ import {
   getPaginationParams,
   createPaginationMeta,
 } from '../common/pagination.util';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../common/utils';
 
 export interface GymFilters extends PaginationParams {
   status?: string;
@@ -18,16 +19,12 @@ export interface GymFilters extends PaginationParams {
 
 @Injectable()
 export class GymService {
-  private readonly SALT_ROUNDS = 10;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    @Inject(forwardRef(() => BranchService))
+    private readonly branchService: BranchService,
   ) {}
-
-  private async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, this.SALT_ROUNDS);
-  }
 
   async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
@@ -187,7 +184,7 @@ export class GymService {
     }
 
     // Hash password
-    const passwordHash = await this.hashPassword(dto.admin.password);
+    const passwordHash = await hashPassword(dto.admin.password);
 
     // Create gym first with a temporary schema name
     const gym = await this.prisma.gym.create({
@@ -222,6 +219,9 @@ export class GymService {
     // Create the tenant schema with all tables (for clients)
     await this.tenantService.createTenantSchema(gym.id);
 
+    // Create default branch for this gym
+    const defaultBranch = await this.branchService.createDefaultBranch(gym.id, gym);
+
     // Create admin user in PUBLIC.users
     const createdUser = await this.prisma.user.create({
       data: {
@@ -233,11 +233,12 @@ export class GymService {
       },
     });
 
-    // Create user-gym assignment with admin role
+    // Create user-gym assignment with admin role (null branchId = all branches)
     await this.prisma.userGymXref.create({
       data: {
         userId: createdUser.id,
         gymId: gym.id,
+        branchId: null, // Admin has access to all branches
         role: 'admin',
         isPrimary: true,
         isActive: true,

@@ -29,8 +29,8 @@ Content-Type: application/json
 
 {
     "user": {
-        "name": "shrutik kolhe",
-        "email": "shrutikkolhe501@gmail.com",
+        "name": "skcoder kolhe",
+        "email": "skcoder510@gmail.com",
         "password": "password123"
     },
     "gym": {
