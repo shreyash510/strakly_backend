@@ -28,6 +28,9 @@ export class TrainerClientResponseDto {
   trainerId: number;
   trainerName: string;
   trainerEmail: string;
+  trainerPhone?: string;
+  trainerAvatar?: string;
+  trainerBio?: string;
   clientId: number;
   clientName: string;
   clientEmail: string;

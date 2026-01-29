@@ -76,6 +76,9 @@ export class TenantService implements OnModuleInit {
     // Create membership_facilities and membership_amenities junction tables
     await this.createMembershipFacilityTables(client, schemaName);
 
+    // Create workout_plans and workout_assignments tables
+    await this.createWorkoutTables(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -237,6 +240,68 @@ export class TenantService implements OnModuleInit {
       console.log(`Ensured 'membership_amenities' table exists in ${schemaName}`);
     } catch (error) {
       console.error(`Error creating membership_amenities table for ${schemaName}:`, error.message);
+    }
+  }
+
+  /**
+   * Create workout_plans and workout_assignments tables (migration for existing tenants)
+   */
+  private async createWorkoutTables(client: any, schemaName: string): Promise<void> {
+    // Create workout_plans table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."workout_plans" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          title VARCHAR(255) NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          description TEXT,
+          category VARCHAR(100) NOT NULL,
+          difficulty VARCHAR(50) DEFAULT 'beginner',
+          duration INTEGER DEFAULT 7,
+          sessions_per_week INTEGER DEFAULT 3,
+          estimated_session_duration INTEGER DEFAULT 45,
+          exercises JSONB DEFAULT '[]',
+          status VARCHAR(50) DEFAULT 'draft',
+          created_by INTEGER NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`);
+      console.log(`Ensured 'workout_plans' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating workout_plans table for ${schemaName}:`, error.message);
+    }
+
+    // Create workout_assignments table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."workout_assignments" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          workout_plan_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          assigned_by INTEGER NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(50) DEFAULT 'active',
+          progress_percentage INTEGER DEFAULT 0,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`);
+      console.log(`Ensured 'workout_assignments' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating workout_assignments table for ${schemaName}:`, error.message);
     }
   }
 
@@ -633,6 +698,44 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // Workout Plans table (trainer-created workout programs)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."workout_plans" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        title VARCHAR(255) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        description TEXT,
+        category VARCHAR(100) NOT NULL,
+        difficulty VARCHAR(50) DEFAULT 'beginner',
+        duration INTEGER DEFAULT 7,
+        sessions_per_week INTEGER DEFAULT 3,
+        estimated_session_duration INTEGER DEFAULT 45,
+        exercises JSONB DEFAULT '[]',
+        status VARCHAR(50) DEFAULT 'draft',
+        created_by INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Workout Assignments table (assign workout plans to clients)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."workout_assignments" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        workout_plan_id INTEGER NOT NULL REFERENCES "${schemaName}"."workout_plans"(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        assigned_by INTEGER NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'active',
+        progress_percentage INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }
@@ -709,6 +812,19 @@ export class TenantService implements OnModuleInit {
     // Membership-Amenity indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`);
+
+    // Workout Plans indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`);
+
+    // Workout Assignments indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`);
   }
 
   /**
