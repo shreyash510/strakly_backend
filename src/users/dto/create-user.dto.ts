@@ -86,6 +86,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsInt()
   trainerId?: number;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 // DTO for creating staff (admin, manager, trainer) - stored in public.users
@@ -159,6 +164,11 @@ export class CreateStaffDto {
   @IsOptional()
   @IsString()
   zipCode?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 // DTO for creating client (member) - stored in tenant.users
@@ -237,6 +247,11 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class UpdateUserDto {
@@ -299,6 +314,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsInt()
   trainerId?: number;
+
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class ResetPasswordDto {

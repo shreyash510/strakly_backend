@@ -171,11 +171,11 @@ export class DashboardService {
   }
 
   // Admin Dashboard Methods
-  async getAdminDashboard(userId: number, gymId: number): Promise<AdminDashboardDto> {
+  async getAdminDashboard(userId: number, gymId: number, branchId: number | null = null): Promise<AdminDashboardDto> {
     const [stats, recentClients, recentAttendance, recentTickets] = await Promise.all([
-      this.getAdminStats(gymId),
-      this.getRecentClients(gymId),
-      this.getRecentAttendance(gymId),
+      this.getAdminStats(gymId, branchId),
+      this.getRecentClients(gymId, branchId),
+      this.getRecentAttendance(gymId, branchId),
       this.getRecentTicketsForGym(gymId),
     ]);
 
@@ -187,7 +187,7 @@ export class DashboardService {
     };
   }
 
-  private async getAdminStats(gymId: number): Promise<AdminDashboardStatsDto> {
+  private async getAdminStats(gymId: number, branchId: number | null = null): Promise<AdminDashboardStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -196,6 +196,11 @@ export class DashboardService {
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Build branch filter clause
+      const userBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+      const membershipBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+      const attendanceBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
       const [
         totalMembersResult,
         activeMembersResult,
@@ -208,23 +213,23 @@ export class DashboardService {
         presentTodayResult,
         expiringThisWeekResult,
       ] = await Promise.all([
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'`),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'`),
-        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'`),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'`),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${userBranchFilter}`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'${userBranchFilter}`),
+        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'${membershipBranchFilter}`),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'${membershipBranchFilter}`),
+        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'${membershipBranchFilter}`),
         client.query(
-          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2`,
+          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
           [startOfLastMonth, endOfLastMonth]
         ),
         client.query(
-          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1`,
+          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1${membershipBranchFilter}`,
           [startOfMonth]
         ),
-        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
+        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${attendanceBranchFilter}`, [today]),
         client.query(
-          `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2`,
+          `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
           [now, endOfWeek]
         ),
       ]);
@@ -275,12 +280,20 @@ export class DashboardService {
     };
   }
 
-  private async getRecentClients(gymId: number, limit = 5): Promise<RecentClientDto[]> {
+  private async getRecentClients(gymId: number, branchId: number | null = null, limit = 5): Promise<RecentClientDto[]> {
     const clients = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' ORDER BY created_at DESC LIMIT $1`,
-        [limit]
-      );
+      let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
+      const values: any[] = [];
+
+      if (branchId !== null) {
+        query += ` AND branch_id = $1`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;
+      values.push(limit);
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 
@@ -294,15 +307,22 @@ export class DashboardService {
     }));
   }
 
-  private async getRecentAttendance(gymId: number, limit = 5): Promise<RecentAttendanceDto[]> {
+  private async getRecentAttendance(gymId: number, branchId: number | null = null, limit = 5): Promise<RecentAttendanceDto[]> {
     const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
+      let query = `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
          FROM attendance a
-         JOIN users u ON u.id = a.user_id
-         ORDER BY a.created_at DESC LIMIT $1`,
-        [limit]
-      );
+         JOIN users u ON u.id = a.user_id`;
+      const values: any[] = [];
+
+      if (branchId !== null) {
+        query += ` WHERE a.branch_id = $1`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY a.created_at DESC LIMIT $${values.length + 1}`;
+      values.push(limit);
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 

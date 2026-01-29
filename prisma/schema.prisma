@@ -71,6 +71,7 @@ model UserGymXref {
   id          Int       @id @default(autoincrement())
   userId      Int       @map("user_id")
   gymId       Int       @map("gym_id")
+  branchId    Int?      @map("branch_id") // null = all branches access
   role        String    // admin, manager, trainer
   isPrimary   Boolean   @default(false) @map("is_primary") // Primary gym for this user
   isActive    Boolean   @default(true) @map("is_active")
@@ -81,10 +82,12 @@ model UserGymXref {
   // Relations
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   gym         Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  branch      Branch?   @relation(fields: [branchId], references: [id])
 
   @@unique([userId, gymId])
   @@index([userId])
   @@index([gymId])
+  @@index([branchId])
   @@index([role])
   @@map("user_gym_xref")
 }
@@ -135,8 +138,49 @@ model Gym {
   userAssignments   UserGymXref[]
   subscription      SaasGymSubscription?
   supportTickets    SupportTicket[]
+  branches          Branch[]
 
   @@map("gyms")
+}
+
+// ============================================
+// BRANCH MODEL (Multi-location support)
+// ============================================
+
+model Branch {
+  id              Int       @id @default(autoincrement())
+  gymId           Int       @map("gym_id")
+
+  // Basic info
+  name            String
+  code            String    // e.g., "KP", "HNJ", "MAIN"
+
+  // Contact
+  phone           String?
+  email           String?
+
+  // Address
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?   @map("zip_code")
+
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  isDefault       Boolean   @default(false) @map("is_default")
+
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  gym             Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  userAssignments UserGymXref[]
+
+  @@unique([gymId, code])
+  @@index([gymId])
+  @@index([isActive])
+  @@map("branches")
 }
 
 // ============================================

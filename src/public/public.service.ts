@@ -7,56 +7,14 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { MemberRegistrationDto } from './dto/member-registration.dto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
 
 @Injectable()
 export class PublicService {
-  private readonly SALT_ROUNDS = 10;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
   ) {}
-
-  private async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, this.SALT_ROUNDS);
-  }
-
-  private async generateUniqueAttendanceCode(gymId: number): Promise<string> {
-    /* Generate batch of candidate codes and check in single query for efficiency */
-    const batchSize = 10;
-    const maxAttempts = 5;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      /* Generate batch of random 4-digit codes */
-      const candidates: string[] = [];
-      for (let i = 0; i < batchSize; i++) {
-        const code = String(Math.floor(1000 + Math.random() * 9000));
-        candidates.push(code);
-      }
-
-      /* Check which codes already exist in tenant schema */
-      const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
-          [candidates]
-        );
-        return result.rows.map((r: any) => r.attendance_code);
-      });
-
-      const existingCodes = new Set(existing);
-
-      /* Return first available code */
-      for (const code of candidates) {
-        if (!existingCodes.has(code)) {
-          return code;
-        }
-      }
-    }
-
-    /* Fallback: generate 6-digit code if 4-digit space is exhausted */
-    return String(Math.floor(100000 + Math.random() * 900000));
-  }
 
   async registerMember(dto: MemberRegistrationDto) {
     /* Validate gym exists and is active */
@@ -103,7 +61,7 @@ export class PublicService {
     }
 
     /* Generate unique attendance code */
-    const attendanceCode = await this.generateUniqueAttendanceCode(dto.gymId);
+    const attendanceCode = await generateUniqueAttendanceCode(dto.gymId, this.tenantService);
 
     /* Create the user in tenant schema as a pending client */
     const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
@@ -114,7 +72,7 @@ export class PublicService {
         [
           dto.name,
           dto.email.toLowerCase(),
-          await this.hashPassword(dto.password),
+          await hashPassword(dto.password),
           dto.phone || null,
           attendanceCode,
         ]

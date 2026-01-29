@@ -40,6 +40,18 @@ export class SalaryController {
     return req.user.gymId;
   }
 
+  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+    // If user has a specific branch assigned, they can only see their branch
+    if (req.user.branchId !== null && req.user.branchId !== undefined) {
+      return req.user.branchId;
+    }
+    // User is admin with access to all branches - use query param if provided
+    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
+      return parseInt(queryBranchId);
+    }
+    return null; // all branches
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new salary record' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
@@ -59,6 +71,7 @@ export class SalaryController {
   @ApiQuery({ name: 'paymentStatus', required: false, type: String })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
   async findAll(
     @Request() req: any,
     @Query('page') page?: string,
@@ -70,9 +83,11 @@ export class SalaryController {
     @Query('paymentStatus') paymentStatus?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
+    const branchId = this.resolveBranchId(req, queryBranchId);
     const result = await this.salaryService.findAll(
       {
         page: page ? parseInt(page) : undefined,
@@ -83,6 +98,7 @@ export class SalaryController {
         year: year ? parseInt(year) : undefined,
         paymentStatus,
         noPagination: noPagination === 'true',
+        branchId,
       },
       gymId,
     );
@@ -112,17 +128,21 @@ export class SalaryController {
   @Get('stats')
   @ApiOperation({ summary: 'Get salary statistics' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  getStats(@Request() req: any, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  getStats(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.getStats(gymId);
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.salaryService.getStats(gymId, branchId);
   }
 
   @Get('staff')
   @ApiOperation({ summary: 'Get staff list for salary management' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  getStaffList(@Request() req: any, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  getStaffList(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.getStaffList(gymId);
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.salaryService.getStaffList(gymId, branchId);
   }
 
   @Get(':id')

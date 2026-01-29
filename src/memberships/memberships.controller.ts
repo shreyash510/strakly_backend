@@ -33,6 +33,18 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
 
+  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+    // If user has a specific branch assigned, they can only see their branch
+    if (req.user.branchId !== null && req.user.branchId !== undefined) {
+      return req.user.branchId;
+    }
+    // User is admin with access to all branches - use query param if provided
+    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
+      return parseInt(queryBranchId);
+    }
+    return null; // all branches
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager')
@@ -44,6 +56,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
   findAll(
     @Request() req: any,
     @Query('status') status?: string,
@@ -53,6 +66,7 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.role === 'superadmin'
       ? (queryGymId ? parseInt(queryGymId) : null)
@@ -62,7 +76,9 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    return this.membershipsService.findAll(gymId, {
+    const branchId = this.resolveBranchId(req, queryBranchId);
+
+    return this.membershipsService.findAll(gymId, branchId, {
       status,
       userId: clientId ? parseInt(clientId) : undefined,
       planId: planId ? parseInt(planId) : undefined,
@@ -76,8 +92,10 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
-  getStats(@Request() req: any) {
-    return this.membershipsService.getStats(req.user.gymId);
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  getStats(@Request() req: any, @Query('branchId') queryBranchId?: string) {
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.getStats(req.user.gymId, branchId);
   }
 
   @Get('overview')
@@ -85,7 +103,8 @@ export class MembershipsController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get membership overview (stats, expiring, recent)' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  getOverview(@Request() req: any, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  getOverview(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
     const gymId = req.user.role === 'superadmin'
       ? (queryGymId ? parseInt(queryGymId) : null)
       : req.user.gymId;
@@ -94,7 +113,8 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    return this.membershipsService.getOverview(gymId);
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.getOverview(gymId, branchId);
   }
 
   @Get('expiring')
@@ -102,8 +122,10 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
-  getExpiringSoon(@Request() req: any, @Query('days') days?: string) {
-    return this.membershipsService.getExpiringSoon(req.user.gymId, days ? parseInt(days) : 7);
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  getExpiringSoon(@Request() req: any, @Query('days') days?: string, @Query('branchId') queryBranchId?: string) {
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.getExpiringSoon(req.user.gymId, branchId, days ? parseInt(days) : 7);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -111,7 +133,7 @@ export class MembershipsController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user memberships' })
   getMyMemberships(@Request() req: any) {
-    return this.membershipsService.findByUser(req.user.userId, req.user.gymId);
+    return this.membershipsService.findByUser(req.user.userId, req.user.gymId, req.user.branchId);
   }
 
   @Get('me/active')
@@ -129,7 +151,7 @@ export class MembershipsController {
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
   renewMyMembership(@Request() req: any, @Body() dto: RenewMembershipDto) {
-    return this.membershipsService.renew(req.user.userId, req.user.gymId, dto);
+    return this.membershipsService.renew(req.user.userId, req.user.gymId, req.user.branchId, dto);
   }
 
   // ============ USER-SPECIFIC ENDPOINTS (admin - userId from header) ============
@@ -139,9 +161,11 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  findByUser(@Request() req: any, @Headers('x-user-id') userId: string) {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  findByUser(@Request() req: any, @Headers('x-user-id') userId: string, @Query('branchId') queryBranchId?: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.findByUser(parseInt(userId), req.user.gymId);
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.findByUser(parseInt(userId), req.user.gymId, branchId);
   }
 
   @Get('user/active')
@@ -169,9 +193,11 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Renew membership for a user' })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  renew(@Request() req: any, @Headers('x-user-id') userId: string, @Body() dto: RenewMembershipDto) {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  renew(@Request() req: any, @Headers('x-user-id') userId: string, @Body() dto: RenewMembershipDto, @Query('branchId') queryBranchId?: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.renew(parseInt(userId), req.user.gymId, dto);
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.renew(parseInt(userId), req.user.gymId, branchId, dto);
   }
 
   // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
@@ -180,16 +206,20 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.membershipsService.findOne(id, req.user.gymId);
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('branchId') queryBranchId?: string) {
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.findOne(id, req.user.gymId, branchId);
   }
 
   @Post()
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a new membership' })
-  create(@Request() req: any, @Body() dto: CreateMembershipDto) {
-    return this.membershipsService.create(dto, req.user.gymId);
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the membership (admin only)' })
+  create(@Request() req: any, @Body() dto: CreateMembershipDto, @Query('branchId') queryBranchId?: string) {
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.create(dto, req.user.gymId, branchId);
   }
 
   @Patch(':id')

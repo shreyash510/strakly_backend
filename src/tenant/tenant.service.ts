@@ -67,6 +67,9 @@ export class TenantService implements OnModuleInit {
       console.error(`Error adding role column to ${schemaName}:`, error.message);
     }
 
+    // Add branch_id columns to all tenant tables
+    await this.addBranchIdColumns(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -76,6 +79,63 @@ export class TenantService implements OnModuleInit {
     } catch (error) {
       console.error(`Error seeding plans for ${schemaName}:`, error.message);
     }
+  }
+
+  /**
+   * Add branch_id columns to existing tenant tables (migration for multi-branch support)
+   */
+  private async addBranchIdColumns(client: any, schemaName: string): Promise<void> {
+    const tablesToMigrate = [
+      'users',
+      'plans',
+      'offers',
+      'memberships',
+      'membership_history',
+      'attendance',
+      'attendance_history',
+      'body_metrics',
+      'body_metrics_history',
+      'trainer_client_xref',
+      'plan_offer_xref',
+      'staff_salaries',
+    ];
+
+    for (const table of tablesToMigrate) {
+      try {
+        await client.query(`
+          ALTER TABLE "${schemaName}"."${table}"
+          ADD COLUMN IF NOT EXISTS branch_id INTEGER
+        `);
+        console.log(`Ensured 'branch_id' column exists in ${schemaName}.${table}`);
+      } catch (error) {
+        console.error(`Error adding branch_id to ${schemaName}.${table}:`, error.message);
+      }
+    }
+
+    // Create branch_id indexes for all tables
+    const indexQueries = [
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch" ON "${schemaName}"."users"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plans_branch" ON "${schemaName}"."plans"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_offers_branch" ON "${schemaName}"."offers"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_branch" ON "${schemaName}"."memberships"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_history_branch" ON "${schemaName}"."membership_history"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_branch" ON "${schemaName}"."attendance"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_branch" ON "${schemaName}"."attendance_history"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_branch" ON "${schemaName}"."body_metrics"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_branch" ON "${schemaName}"."body_metrics_history"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_xref_branch" ON "${schemaName}"."trainer_client_xref"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_offer_xref_branch" ON "${schemaName}"."plan_offer_xref"(branch_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch" ON "${schemaName}"."staff_salaries"(branch_id)`,
+    ];
+
+    for (const query of indexQueries) {
+      try {
+        await client.query(query);
+      } catch (error) {
+        console.error(`Error creating index for ${schemaName}:`, error.message);
+      }
+    }
+    console.log(`Created branch_id indexes for ${schemaName}`);
   }
 
   /**
@@ -125,6 +185,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."users" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
@@ -150,11 +211,12 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Plans table (gym-specific membership plans)
+    // Plans table (gym-specific membership plans, branch-specific)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."plans" (
         id SERIAL PRIMARY KEY,
-        code VARCHAR(100) UNIQUE NOT NULL,
+        branch_id INTEGER,
+        code VARCHAR(100) NOT NULL,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         duration_value INTEGER NOT NULL,
@@ -166,15 +228,17 @@ export class TenantService implements OnModuleInit {
         is_featured BOOLEAN DEFAULT FALSE,
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, code)
       )
     `);
 
-    // Offers table
+    // Offers table (branch-specific)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."offers" (
         id SERIAL PRIMARY KEY,
-        code VARCHAR(100) UNIQUE NOT NULL,
+        branch_id INTEGER,
+        code VARCHAR(100) NOT NULL,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         discount_type VARCHAR(50) NOT NULL,
@@ -188,7 +252,8 @@ export class TenantService implements OnModuleInit {
         applicable_to_all BOOLEAN DEFAULT TRUE,
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, code)
       )
     `);
 
@@ -196,6 +261,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."plan_offer_xref" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         plan_id INTEGER NOT NULL REFERENCES "${schemaName}"."plans"(id) ON DELETE CASCADE,
         offer_id INTEGER NOT NULL REFERENCES "${schemaName}"."offers"(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -203,10 +269,11 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Memberships table
+    // Memberships table (branch-specific)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."memberships" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE RESTRICT,
         plan_id INTEGER NOT NULL REFERENCES "${schemaName}"."plans"(id) ON DELETE RESTRICT,
         offer_id INTEGER REFERENCES "${schemaName}"."offers"(id),
@@ -235,6 +302,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_history" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         original_id INTEGER NOT NULL,
         user_id INTEGER NOT NULL,
         plan_id INTEGER NOT NULL,
@@ -260,11 +328,12 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Attendance table (active check-ins)
+    // Attendance table (active check-ins, branch-specific)
     // marked_by references public.users.id (staff)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."attendance" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
         membership_id INTEGER REFERENCES "${schemaName}"."memberships"(id),
         check_in_time TIMESTAMP NOT NULL,
@@ -282,6 +351,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."attendance_history" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         user_id INTEGER NOT NULL,
         membership_id INTEGER,
         check_in_time TIMESTAMP NOT NULL,
@@ -301,6 +371,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."body_metrics" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         user_id INTEGER UNIQUE NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
         height DECIMAL(5, 2),
         weight DECIMAL(5, 2),
@@ -334,6 +405,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."body_metrics_history" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         user_id INTEGER NOT NULL,
         measured_at TIMESTAMP NOT NULL,
         height DECIMAL(5, 2),
@@ -365,6 +437,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."trainer_client_xref" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         trainer_id INTEGER NOT NULL, -- public.users.id (trainer)
         client_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -376,10 +449,11 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Staff Salaries (for trainers and managers in this tenant)
+    // Staff Salaries (for trainers and managers in this tenant, branch-specific)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."staff_salaries" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         staff_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
         month INTEGER NOT NULL,
         year INTEGER NOT NULL,
@@ -397,7 +471,7 @@ export class TenantService implements OnModuleInit {
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(staff_id, month, year)
+        UNIQUE(staff_id, month, year, branch_id)
       )
     `);
 
@@ -414,29 +488,51 @@ export class TenantService implements OnModuleInit {
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch" ON "${schemaName}"."users"(branch_id)`);
+
+    // Plans indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plans_branch" ON "${schemaName}"."plans"(branch_id)`);
+
+    // Offers indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_offers_branch" ON "${schemaName}"."offers"(branch_id)`);
 
     // Memberships indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_user" ON "${schemaName}"."memberships"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_status" ON "${schemaName}"."memberships"(status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_dates" ON "${schemaName}"."memberships"(start_date, end_date)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_branch" ON "${schemaName}"."memberships"(branch_id)`);
 
     // Attendance indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_user" ON "${schemaName}"."attendance"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date" ON "${schemaName}"."attendance"(date)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_marked_by" ON "${schemaName}"."attendance"(marked_by)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_branch" ON "${schemaName}"."attendance"(branch_id)`);
 
     // Attendance history indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_user" ON "${schemaName}"."attendance_history"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date" ON "${schemaName}"."attendance_history"(date)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_branch" ON "${schemaName}"."attendance_history"(branch_id)`);
+
+    // Membership history indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_history_branch" ON "${schemaName}"."membership_history"(branch_id)`);
+
+    // Body metrics indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_branch" ON "${schemaName}"."body_metrics"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_branch" ON "${schemaName}"."body_metrics_history"(branch_id)`);
 
     // Trainer-client indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_branch" ON "${schemaName}"."trainer_client_xref"(branch_id)`);
+
+    // Plan-offer indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_offer_xref_branch" ON "${schemaName}"."plan_offer_xref"(branch_id)`);
 
     // Staff salaries indexes
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_staff" ON "${schemaName}"."staff_salaries"(staff_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_status" ON "${schemaName}"."staff_salaries"(payment_status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period" ON "${schemaName}"."staff_salaries"(year, month)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch" ON "${schemaName}"."staff_salaries"(branch_id)`);
   }
 
   /**
@@ -501,22 +597,29 @@ export class TenantService implements OnModuleInit {
     ];
 
     for (const plan of defaultPlans) {
-      await client.query(`
-        INSERT INTO "${schemaName}"."plans"
-        (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
-        ON CONFLICT (code) DO NOTHING
-      `, [
-        plan.code,
-        plan.name,
-        plan.description,
-        plan.duration_value,
-        plan.duration_type,
-        plan.price,
-        plan.features,
-        plan.display_order,
-        plan.is_featured,
-      ]);
+      // Check if plan already exists (with NULL branch_id)
+      const existing = await client.query(
+        `SELECT id FROM "${schemaName}"."plans" WHERE code = $1 AND branch_id IS NULL`,
+        [plan.code]
+      );
+
+      if (existing.rows.length === 0) {
+        await client.query(`
+          INSERT INTO "${schemaName}"."plans"
+          (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+        `, [
+          plan.code,
+          plan.name,
+          plan.description,
+          plan.duration_value,
+          plan.duration_type,
+          plan.price,
+          plan.features,
+          plan.display_order,
+          plan.is_featured,
+        ]);
+      }
     }
 
     console.log(`Seeded default plans for ${schemaName}`);

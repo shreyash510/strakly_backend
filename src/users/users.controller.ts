@@ -10,6 +10,7 @@ import {
   Headers,
   UseGuards,
   Res,
+  Request,
   BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -31,6 +32,24 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  /**
+   * Resolve branchId for filtering:
+   * - If user has a specific branch assigned, they can only see their branch
+   * - If user is admin with access to all branches, use query param if provided
+   * - Otherwise return null (all branches)
+   */
+  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+    // If user has a specific branch assigned, they can only see their branch
+    if (req.user.branchId !== null && req.user.branchId !== undefined) {
+      return req.user.branchId;
+    }
+    // User is admin with access to all branches - use query param if provided
+    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
+      return parseInt(queryBranchId);
+    }
+    return null; // all branches
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -42,7 +61,9 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (optional for superadmin - omit to see all gyms)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only, pass "all" for all branches)' })
   async findAll(
+    @Request() req: any,
     @CurrentUser() user: AuthenticatedUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -51,6 +72,7 @@ export class UsersController {
     @Query('status') status?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const isSuperAdmin = user.role === 'superadmin';
@@ -60,6 +82,9 @@ export class UsersController {
       ? (queryGymId ? parseInt(queryGymId) : undefined)
       : resolveGymId(user.gymId, queryGymId, false);
 
+    // Resolve branchId for filtering (non-superadmin only)
+    const branchId = isSuperAdmin ? null : this.resolveBranchId(req, queryBranchId);
+
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
@@ -67,6 +92,7 @@ export class UsersController {
       role,
       status,
       gymId,
+      branchId,
       isSuperAdmin,
       noPagination: noPagination === 'true',
     });

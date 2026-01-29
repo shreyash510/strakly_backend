@@ -3,65 +3,29 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto } from './dto/create-user.dto';
 import { AssignClientDto, TrainerClientResponseDto } from './dto/trainer-client.dto';
-import * as bcrypt from 'bcrypt';
 import {
   PaginationParams,
   PaginatedResponse,
   getPaginationParams,
   createPaginationMeta,
 } from '../common/pagination.util';
+import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
 
 export interface UserFilters extends PaginationParams {
   role?: string;
   status?: string;
   gymId?: number;
+  branchId?: number | null; // null = all branches, number = specific branch
   isSuperAdmin?: boolean;
   userType?: 'staff' | 'client' | 'all'; // New: filter by user type
 }
 
 @Injectable()
 export class UsersService {
-  private readonly SALT_ROUNDS = 10;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
   ) {}
-
-  private async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, this.SALT_ROUNDS);
-  }
-
-  private async generateUniqueAttendanceCode(gymId: number): Promise<string> {
-    const batchSize = 10;
-    const maxAttempts = 5;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const candidates: string[] = [];
-      for (let i = 0; i < batchSize; i++) {
-        const code = String(Math.floor(1000 + Math.random() * 9000));
-        candidates.push(code);
-      }
-
-      const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
-          [candidates]
-        );
-        return result.rows.map((r: any) => r.attendance_code);
-      });
-
-      const existingCodes = new Set(existing);
-
-      for (const code of candidates) {
-        if (!existingCodes.has(code)) {
-          return code;
-        }
-      }
-    }
-
-    return String(Math.floor(100000 + Math.random() * 900000));
-  }
 
   private formatAdminUser(user: any, gymAssignments?: any[]) {
     const primaryAssignment = gymAssignments?.find((a) => a.isPrimary) || gymAssignments?.[0];
@@ -81,6 +45,14 @@ export class UsersService {
       state: user.state,
       zipCode: user.zipCode,
       userType: 'admin',
+      gymId: primaryAssignment?.gymId || null,
+      gym: primaryAssignment?.gym ? {
+        id: primaryAssignment.gym.id,
+        name: primaryAssignment.gym.name,
+        logo: primaryAssignment.gym.logo,
+        city: primaryAssignment.gym.city,
+        state: primaryAssignment.gym.state,
+      } : null,
       gyms: gymAssignments?.map((a) => ({
         gymId: a.gymId,
         gymName: a.gym?.name,
@@ -114,6 +86,7 @@ export class UsersService {
       emergencyContactPhone: user.emergency_contact_phone || user.emergencyContactPhone,
       userType: role === 'client' ? 'client' : 'staff',
       gymId: gym?.id,
+      branchId: user.branch_id || user.branchId || null,
       gym: gym ? {
         id: gym.id,
         name: gym.name,
@@ -171,7 +144,7 @@ export class UsersService {
       throw new ConflictException('Email already exists in this gym');
     }
 
-    const passwordHash = await this.hashPassword(dto.password);
+    const passwordHash = await hashPassword(dto.password);
 
     // Create admin in public.users
     const createdUser = await this.prisma.user.create({
@@ -419,7 +392,7 @@ export class UsersService {
       throw new ConflictException('User with this email already exists in this gym');
     }
 
-    const passwordHash = await this.hashPassword(dto.password);
+    const passwordHash = await hashPassword(dto.password);
 
     // Create staff in tenant schema
     const createdStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
@@ -427,8 +400,8 @@ export class UsersService {
         `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+          join_date, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
         RETURNING *`,
         [
           dto.name,
@@ -446,6 +419,7 @@ export class UsersService {
           dto.state || null,
           dto.zipCode || null,
           new Date(),
+          dto.branchId || null,
         ]
       );
       return result.rows[0];
@@ -461,6 +435,7 @@ export class UsersService {
   async findAllStaff(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
     const gymId = filters.gymId;
+    const branchId = filters.branchId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching staff');
@@ -470,6 +445,12 @@ export class UsersService {
       const conditions: string[] = ["role IN ('manager', 'trainer')"];
       const values: any[] = [];
       let paramIndex = 1;
+
+      // Branch filtering: null = all branches, number = specific branch
+      if (branchId !== null && branchId !== undefined) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
 
       if (filters.role && filters.role !== 'all' && ['manager', 'trainer'].includes(filters.role)) {
         conditions.push(`role = $${paramIndex++}`);
@@ -595,6 +576,10 @@ export class UsersService {
       updates.push(`zip_code = $${paramIndex++}`);
       values.push(updateDto.zipCode);
     }
+    if (updateDto.branchId !== undefined) {
+      updates.push(`branch_id = $${paramIndex++}`);
+      values.push(updateDto.branchId);
+    }
 
     if (updates.length === 0) {
       return this.findOneStaff(id, gymId);
@@ -687,8 +672,8 @@ export class UsersService {
     }
 
     const [passwordHash, attendanceCode] = await Promise.all([
-      this.hashPassword(dto.password),
-      this.generateUniqueAttendanceCode(gymId),
+      hashPassword(dto.password),
+      generateUniqueAttendanceCode(gymId, this.tenantService),
     ]);
 
     // Create client in tenant schema with role='client'
@@ -698,8 +683,8 @@ export class UsersService {
           name, email, password_hash, phone, avatar, bio, role, status,
           date_of_birth, gender, address, city, state, zip_code,
           emergency_contact_name, emergency_contact_phone,
-          join_date, attendance_code, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
+          join_date, attendance_code, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
         RETURNING *`,
         [
           dto.name,
@@ -720,6 +705,7 @@ export class UsersService {
           dto.emergencyContactPhone || null,
           new Date(),
           attendanceCode,
+          dto.branchId || null,
         ]
       );
       return result.rows[0];
@@ -735,6 +721,7 @@ export class UsersService {
   async findAllClients(filters: UserFilters): Promise<PaginatedResponse<any>> {
     const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
     const gymId = filters.gymId;
+    const branchId = filters.branchId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching clients');
@@ -744,6 +731,12 @@ export class UsersService {
       const conditions: string[] = ["role = 'client'"]; // Filter only clients
       const values: any[] = [];
       let paramIndex = 1;
+
+      // Branch filtering: null = all branches, number = specific branch
+      if (branchId !== null && branchId !== undefined) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
 
       if (filters.status && filters.status !== 'all') {
         conditions.push(`status = $${paramIndex++}`);
@@ -859,6 +852,10 @@ export class UsersService {
     if (updateDto.zipCode !== undefined) {
       updates.push(`zip_code = $${paramIndex++}`);
       values.push(updateDto.zipCode);
+    }
+    if (updateDto.branchId !== undefined) {
+      updates.push(`branch_id = $${paramIndex++}`);
+      values.push(updateDto.branchId);
     }
 
     updates.push(`updated_at = NOW()`);
@@ -1227,7 +1224,7 @@ export class UsersService {
   }
 
   async resetPassword(userId: number, gymId: number, newPassword: string, userType?: 'admin' | 'staff' | 'client'): Promise<{ success: boolean }> {
-    const passwordHash = await this.hashPassword(newPassword);
+    const passwordHash = await hashPassword(newPassword);
 
     // Admin is in public.users
     if (userType === 'admin') {
@@ -1276,7 +1273,7 @@ export class UsersService {
     // Only clients have attendance codes
     await this.findOneClient(userId, gymId);
 
-    const attendanceCode = await this.generateUniqueAttendanceCode(gymId);
+    const attendanceCode = await generateUniqueAttendanceCode(gymId, this.tenantService);
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(

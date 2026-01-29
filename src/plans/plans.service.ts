@@ -10,20 +10,57 @@ export class PlansService {
     private readonly tenantService: TenantService,
   ) {}
 
-  async findAll(gymId: number, includeInactive = false) {
+  /**
+   * Get all plans for a gym
+   * @param gymId - Gym ID
+   * @param branchId - Branch ID (null = all branches for admin)
+   * @param includeInactive - Include inactive plans
+   */
+  async findAll(gymId: number, branchId: number | null = null, includeInactive = false) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const whereClause = includeInactive ? '' : 'WHERE is_active = true';
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (!includeInactive) {
+        conditions.push('is_active = true');
+      }
+
+      // Branch filtering: null = admin (all branches), number = specific branch
+      if (branchId !== null) {
+        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
+        values.push(branchId);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const result = await client.query(
-        `SELECT * FROM plans ${whereClause} ORDER BY display_order ASC`
+        `SELECT * FROM plans ${whereClause} ORDER BY display_order ASC`,
+        values
       );
       return result.rows.map((p: any) => this.formatPlan(p));
     });
   }
 
-  async findFeatured(gymId: number) {
+  /**
+   * Get featured plans
+   * @param gymId - Gym ID
+   * @param branchId - Branch ID (null = all branches for admin)
+   */
+  async findFeatured(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['is_active = true', 'is_featured = true'];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
       const result = await client.query(
-        `SELECT * FROM plans WHERE is_active = true AND is_featured = true ORDER BY display_order ASC`
+        `SELECT * FROM plans WHERE ${conditions.join(' AND ')} ORDER BY display_order ASC`,
+        values
       );
       return result.rows.map((p: any) => this.formatPlan(p));
     });
@@ -32,6 +69,7 @@ export class PlansService {
   private formatPlan(p: any) {
     return {
       id: p.id,
+      branchId: p.branch_id,
       code: p.code,
       name: p.name,
       description: p.description,
@@ -48,9 +86,18 @@ export class PlansService {
     };
   }
 
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId: number | null = null) {
     const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM plans WHERE id = $1`, [id]);
+      let query = `SELECT * FROM plans WHERE id = $1`;
+      const values: any[] = [id];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -61,9 +108,17 @@ export class PlansService {
     return this.formatPlan(plan);
   }
 
-  async findByCode(code: string, gymId: number) {
+  async findByCode(code: string, gymId: number, branchId: number | null = null) {
     const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM plans WHERE code = $1`, [code]);
+      let query = `SELECT * FROM plans WHERE code = $1`;
+      const values: any[] = [code];
+
+      if (branchId !== null) {
+        query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -74,7 +129,13 @@ export class PlansService {
     return this.formatPlan(plan);
   }
 
-  async create(dto: CreatePlanDto, gymId: number) {
+  /**
+   * Create a new plan
+   * @param dto - Plan data
+   * @param gymId - Gym ID
+   * @param branchId - Branch ID (null = available to all branches)
+   */
+  async create(dto: CreatePlanDto, gymId: number, branchId: number | null = null) {
     const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(`SELECT id FROM plans WHERE code = $1`, [dto.code]);
       return result.rows[0];
@@ -86,10 +147,11 @@ export class PlansService {
 
     const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO plans (code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, NOW(), NOW())
+        `INSERT INTO plans (branch_id, code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, NOW(), NOW())
          RETURNING *`,
         [
+          branchId,
           dto.code,
           dto.name,
           dto.description || null,
@@ -166,18 +228,24 @@ export class PlansService {
     return { id, deleted: true };
   }
 
-  async calculatePriceWithOffer(planId: number, gymId: number, offerCode?: string) {
-    const plan = await this.findOne(planId, gymId);
+  async calculatePriceWithOffer(planId: number, gymId: number, branchId: number | null = null, offerCode?: string) {
+    const plan = await this.findOne(planId, gymId, branchId);
 
     let discount = 0;
     let validOffer: any = null;
 
     if (offerCode) {
       const offer = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`,
-          [offerCode]
-        );
+        let query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`;
+        const values: any[] = [offerCode];
+
+        // Branch filtering for offers
+        if (branchId !== null) {
+          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
+          values.push(branchId);
+        }
+
+        const result = await client.query(query, values);
         return result.rows[0];
       });
 

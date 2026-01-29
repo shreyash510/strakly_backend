@@ -11,6 +11,7 @@ export interface AttendanceStats {
 
 export interface AttendanceRecord {
   id: number;
+  branchId: number | null;
   userId: number;
   userName: string;
   userEmail: string;
@@ -64,14 +65,20 @@ export class AttendanceService {
     return monthStart.toLocaleDateString('en-CA');
   }
 
-  async searchUserByCode(code: string, gymId: number): Promise<SearchUserResult | null> {
+  async searchUserByCode(code: string, gymId: number, branchId: number | null = null): Promise<SearchUserResult | null> {
     const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, email, phone, avatar, status, attendance_code, role, created_at
+      let query = `SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
          FROM users
-         WHERE attendance_code = $1`,
-        [code]
-      );
+         WHERE attendance_code = $1`;
+      const values: any[] = [code];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -96,6 +103,7 @@ export class AttendanceService {
     user: { id: number; name: string; email: string; attendanceCode?: string | null },
     staffId: number,
     gymId: number,
+    branchId: number | null = null,
     checkInMethod: string = 'code',
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
@@ -105,8 +113,8 @@ export class AttendanceService {
       throw new NotFoundException('Gym not found');
     }
 
-    const { existingRecord, activeMembership } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [existingResult, membershipResult] = await Promise.all([
+    const { existingRecord, activeMembership, userBranchId } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [existingResult, membershipResult, userResult] = await Promise.all([
         client.query(
           `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
           [user.id, today]
@@ -116,11 +124,13 @@ export class AttendanceService {
            AND start_date <= $2 AND end_date >= $2`,
           [user.id, new Date()]
         ),
+        client.query(`SELECT branch_id FROM users WHERE id = $1`, [user.id]),
       ]);
 
       return {
         existingRecord: existingResult.rows[0],
         activeMembership: membershipResult.rows[0],
+        userBranchId: userResult.rows[0]?.branch_id,
       };
     });
 
@@ -136,18 +146,22 @@ export class AttendanceService {
       throw new ForbiddenException('User does not have an active membership at this gym');
     }
 
+    // Use user's branch if branchId not provided
+    const attendanceBranchId = branchId ?? userBranchId;
+
     const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO attendance (user_id, membership_id, check_in_time, date, marked_by, check_in_method, status, created_at, updated_at)
-         VALUES ($1, $2, NOW(), $3, $4, $5, 'present', NOW(), NOW())
+        `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, marked_by, check_in_method, status, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), $4, $5, $6, 'present', NOW(), NOW())
          RETURNING *`,
-        [user.id, activeMembership.id, today, staffId, checkInMethod]
+        [attendanceBranchId, user.id, activeMembership.id, today, staffId, checkInMethod]
       );
       return result.rows[0];
     });
 
     return {
       id: attendance.id,
+      branchId: attendance.branch_id,
       userId: user.id,
       userName: user.name,
       userEmail: user.email,
@@ -221,6 +235,7 @@ export class AttendanceService {
 
     return {
       id: attendance.id,
+      branchId: attendance.branch_id,
       userId: attendance.user_id,
       userName: user?.name || '',
       userEmail: user?.email || '',
@@ -241,6 +256,7 @@ export class AttendanceService {
   private formatAttendanceRecord(record: any, gym: any): AttendanceRecord {
     return {
       id: record.id,
+      branchId: record.branch_id,
       userId: record.user_id,
       userName: record.user_name || '',
       userEmail: record.user_email || '',
@@ -257,35 +273,45 @@ export class AttendanceService {
     };
   }
 
-  async getTodayAttendance(gymId: number): Promise<AttendanceRecord[]> {
+  async getTodayAttendance(gymId: number, branchId: number | null = null): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const records = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+      let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
          FROM attendance a
          JOIN users u ON u.id = a.user_id
-         WHERE a.date = $1
-         ORDER BY a.check_in_time DESC`,
-        [today]
-      );
+         WHERE a.date = $1`;
+      const values: any[] = [today];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND a.branch_id = $2`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY a.check_in_time DESC`;
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 
     return records.map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  async getAttendanceByDate(date: string, gymId: number): Promise<AttendanceRecord[]> {
+  async getAttendanceByDate(date: string, gymId: number, branchId: number | null = null): Promise<AttendanceRecord[]> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const { activeRecords, historyRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Build branch filter
+      const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
       const [activeResult, historyResult] = await Promise.all([
         client.query(
           `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
-           WHERE a.date = $1
+           WHERE a.date = $1${branchFilter}
            ORDER BY a.check_in_time DESC`,
           [date]
         ),
@@ -293,7 +319,7 @@ export class AttendanceService {
           `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
-           WHERE ah.date = $1
+           WHERE ah.date = $1${branchFilter}
            ORDER BY ah.check_in_time DESC`,
           [date]
         ),
@@ -357,18 +383,21 @@ export class AttendanceService {
       .map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  async getAttendanceStats(gymId: number): Promise<AttendanceStats> {
+  async getAttendanceStats(gymId: number, branchId: number | null = null): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
     const monthStart = this.getMonthStartDate();
 
     const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Build branch filter clause
+      const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
       const [todayResult, weekResult, monthResult, totalResult, presentResult] = await Promise.all([
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date = $1`, [today]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1`, [weekStart]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1`, [monthStart]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history`),
-        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`, [today]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date = $1${branchFilter}`, [today]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`, [weekStart]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`, [monthStart]),
+        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter}`),
+        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${branchFilter}`, [today]),
       ]);
 
       return {
@@ -388,20 +417,27 @@ export class AttendanceService {
     };
   }
 
-  async getCurrentlyPresentCount(gymId: number): Promise<number> {
+  async getCurrentlyPresentCount(gymId: number, branchId: number | null = null): Promise<number> {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`,
-        [today]
-      );
+      let query = `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`;
+      const values: any[] = [today];
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        query += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return parseInt(result.rows[0].count, 10);
     });
   }
 
   async getAllAttendance(
     gymId: number,
+    branchId: number | null = null,
     page: number = 1,
     limit: number = 50,
     startDate?: string,
@@ -413,6 +449,12 @@ export class AttendanceService {
       let whereClause = '1=1';
       const values: any[] = [];
       let paramIndex = 1;
+
+      // Branch filtering for non-admin users
+      if (branchId !== null) {
+        whereClause += ` AND ah.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
 
       if (startDate && endDate) {
         whereClause += ` AND ah.date >= $${paramIndex++} AND ah.date <= $${paramIndex++}`;
