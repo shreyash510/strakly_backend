@@ -1674,4 +1674,76 @@ export class AuthService {
   async registerAdmin(createUserDto: CreateUserDto): Promise<AuthResponse> {
     throw new Error('Direct admin registration not supported. Use registerAdminWithGym instead.');
   }
+
+  /**
+   * Impersonate a gym as superadmin
+   * Creates a temporary token that allows superadmin to access gym as admin
+   */
+  async impersonateGym(
+    superAdminId: number,
+    gymId: number,
+  ): Promise<{
+    accessToken: string;
+    gym: GymInfo;
+    expiresIn: number;
+  }> {
+    // Verify the user is a superadmin
+    const systemUser = await this.prisma.systemUser.findUnique({
+      where: { id: superAdminId },
+    });
+
+    if (!systemUser || systemUser.role !== 'superadmin') {
+      throw new UnauthorizedException('Only superadmins can impersonate gyms');
+    }
+
+    // Get the gym
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+    });
+
+    if (!gym) {
+      throw new NotFoundException(`Gym with ID ${gymId} not found`);
+    }
+
+    if (!gym.isActive) {
+      throw new BadRequestException('Cannot access inactive gym');
+    }
+
+    // Get gym subscription
+    const subscription = await this.getGymSubscription(gymId);
+
+    // Generate impersonation token with shorter expiry (2 hours)
+    const payload = {
+      sub: superAdminId,
+      email: systemUser.email,
+      name: systemUser.name,
+      role: 'admin', // Act as admin within the gym
+      gymId: gym.id,
+      tenantSchemaName: gym.tenantSchemaName,
+      branchId: null, // Access to all branches
+      isImpersonating: true,
+      originalRole: 'superadmin',
+      impersonatedGymId: gym.id,
+    };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '2h' });
+
+    return {
+      accessToken,
+      gym: {
+        id: gym.id,
+        name: gym.name,
+        logo: gym.logo || undefined,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
+        tenantSchemaName: gym.tenantSchemaName!,
+        subscription: subscription ? {
+          planCode: subscription.plan?.code,
+          planName: subscription.plan?.name,
+          status: subscription.status,
+        } : undefined,
+      },
+      expiresIn: 7200, // 2 hours in seconds
+    };
+  }
 }

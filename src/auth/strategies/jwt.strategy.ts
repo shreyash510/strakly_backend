@@ -15,6 +15,8 @@ export interface JwtPayload {
   branchId: number | null; // null = all branches access
   isSuperAdmin?: boolean;
   isAdmin?: boolean; // Admin users are in public.users, not tenant.users
+  isImpersonating?: boolean; // Superadmin impersonating a gym
+  originalRole?: string; // Original role when impersonating
 }
 
 export interface AuthenticatedUser {
@@ -26,6 +28,7 @@ export interface AuthenticatedUser {
   tenantSchemaName: string | null;
   branchId: number | null; // null = all branches access
   isSuperAdmin: boolean;
+  isImpersonating: boolean;
 }
 
 @Injectable()
@@ -49,6 +52,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const branchId = payload.branchId;
     const isSuperAdmin = payload.isSuperAdmin === true;
     const isAdmin = payload.isAdmin === true;
+    const isImpersonating = payload.isImpersonating === true;
 
     // Handle superadmin case - they don't have gym/tenant info
     if (isSuperAdmin) {
@@ -61,6 +65,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantSchemaName: null,
         branchId: null,
         isSuperAdmin: true,
+        isImpersonating: false,
+      };
+    }
+
+    // Handle impersonation case - superadmin acting as admin in a gym
+    if (isImpersonating) {
+      return {
+        userId: userId,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role || 'admin',
+        gymId: gymId,
+        tenantSchemaName: tenantSchemaName,
+        branchId: branchId,
+        isSuperAdmin: false,
+        isImpersonating: true,
       };
     }
 
@@ -101,6 +121,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantSchemaName: tenantSchemaName,
         branchId: branchId, // null for admin = all branches access
         isSuperAdmin: false,
+        isImpersonating: false,
       };
     }
 
@@ -138,6 +159,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantSchemaName: tenantSchemaName,
       branchId: branchId ?? userData.branch_id ?? null,
       isSuperAdmin: false,
+      isImpersonating: false,
     };
   }
 }

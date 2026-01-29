@@ -134,7 +134,7 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permissions' })
   getMyPermissions(@CurrentUser() user: AuthenticatedUser) {
-    return this.permissionsService.getUserPermissions(user.userId, user.gymId, user.role);
+    return this.permissionsService.getUserPermissions(user.userId, user.gymId, user.role, user.isImpersonating);
   }
 
   @Get('me/codes')
@@ -142,7 +142,7 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permission codes' })
   getMyPermissionCodes(@CurrentUser() user: AuthenticatedUser) {
-    return this.permissionsService.getUserPermissionCodes(user.userId, user.gymId, user.role);
+    return this.permissionsService.getUserPermissionCodes(user.userId, user.gymId, user.role, user.isImpersonating);
   }
 
   // ============ USER PERMISSIONS (admin - userId from header) ============
