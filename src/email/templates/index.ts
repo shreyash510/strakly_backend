@@ -5,3 +5,4 @@ export * from './welcome.template';
 export * from './membership-expiry.template';
 export * from './payment-receipt.template';
 export * from './email-verification.template';
+export * from './contact-request.template';

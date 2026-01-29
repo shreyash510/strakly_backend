@@ -4,8 +4,11 @@ import {
   Get,
   Patch,
   Body,
+  Param,
   Query,
   UseGuards,
+  ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -14,6 +17,8 @@ import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import {
   RequestPasswordResetDto,
@@ -185,5 +190,17 @@ export class AuthController {
   @ApiOperation({ summary: 'Check email verification status' })
   checkEmailVerification(@UserId() userId: number, @GymId() gymId: number) {
     return this.authService.checkEmailVerification(userId, false, gymId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('impersonate/:gymId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Impersonate a gym as superadmin' })
+  impersonateGym(
+    @UserId() userId: number,
+    @Param('gymId', ParseIntPipe) gymId: number,
+  ) {
+    return this.authService.impersonateGym(userId, gymId);
   }
 }

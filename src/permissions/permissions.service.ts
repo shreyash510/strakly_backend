@@ -199,7 +199,12 @@ export class PermissionsService {
 
   // ============ USER PERMISSIONS (via role) ============
 
-  async getUserPermissions(userId: number, gymId: number | null, role?: string) {
+  async getUserPermissions(userId: number, gymId: number | null, role?: string, isImpersonating?: boolean) {
+    // Handle impersonation case - superadmin acting as admin should have all permissions
+    if (isImpersonating) {
+      return this.getPermissionsByRole('superadmin');
+    }
+
     // Handle superadmin case - they don't have gymId
     if (gymId === null || role === 'superadmin') {
       // For superadmin, return all permissions or permissions for 'superadmin' role
@@ -230,8 +235,8 @@ export class PermissionsService {
     return this.getPermissionsByRole(roleCode);
   }
 
-  async getUserPermissionCodes(userId: number, gymId: number | null, role?: string) {
-    const permissions = await this.getUserPermissions(userId, gymId, role);
+  async getUserPermissionCodes(userId: number, gymId: number | null, role?: string, isImpersonating?: boolean) {
+    const permissions = await this.getUserPermissions(userId, gymId, role, isImpersonating);
     return permissions.map(p => p.code);
   }
 

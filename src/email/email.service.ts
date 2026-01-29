@@ -19,6 +19,8 @@ import {
   paymentReceiptPlainText,
   emailVerificationTemplate,
   emailVerificationPlainText,
+  contactRequestTemplate,
+  contactRequestPlainText,
 } from './templates';
 
 export interface EmailResponse {
@@ -391,6 +393,57 @@ export class EmailService {
     return this.sendEmail({
       to,
       subject: `Payment Receipt - ${gymName}`,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Send contact request notification to support
+   */
+  async sendContactRequestNotification(
+    name: string,
+    email: string,
+    phone: string | null,
+    subject: string | null,
+    message: string,
+    requestNumber: string,
+  ): Promise<EmailResponse> {
+    const submittedAt = new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const html = contactRequestTemplate({
+      name,
+      email,
+      phone,
+      subject,
+      message,
+      requestNumber,
+      submittedAt,
+    });
+    const text = contactRequestPlainText({
+      name,
+      email,
+      phone,
+      subject,
+      message,
+      requestNumber,
+      submittedAt,
+    });
+
+    const emailSubject = subject
+      ? `New Contact Request: ${requestNumber} - ${subject}`
+      : `New Contact Request: ${requestNumber}`;
+
+    return this.sendEmail({
+      to: 'support@strakly.com',
+      subject: emailSubject,
       html,
       text,
     });
