@@ -7,6 +7,7 @@
 export const ROLES = {
   SUPERADMIN: 'superadmin',
   ADMIN: 'admin',
+  BRANCH_ADMIN: 'branch_admin',
   MANAGER: 'manager',
   TRAINER: 'trainer',
   CLIENT: 'client',
@@ -15,7 +16,8 @@ export const ROLES = {
 export type UserRole = (typeof ROLES)[keyof typeof ROLES];
 
 export const ALL_ROLES = Object.values(ROLES);
-export const STAFF_ROLES = [ROLES.ADMIN, ROLES.MANAGER, ROLES.TRAINER] as const;
+export const STAFF_ROLES = [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as const;
+export const ADMIN_ROLES = [ROLES.ADMIN, ROLES.BRANCH_ADMIN] as const; // Admin-level roles in public.users
 export const TENANT_ROLES = [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT] as const;
 
 // User Status

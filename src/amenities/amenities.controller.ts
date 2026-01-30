@@ -65,7 +65,7 @@ export class AmenitiesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Create a new amenity' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the amenity (admin only)' })
   create(
@@ -79,7 +79,7 @@ export class AmenitiesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update an amenity' })
   update(
     @Request() req: any,
@@ -91,7 +91,7 @@ export class AmenitiesController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Delete an amenity (soft delete)' })
   delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.amenitiesService.delete(id, req.user.gymId);

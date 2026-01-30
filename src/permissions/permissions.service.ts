@@ -217,6 +217,11 @@ export class PermissionsService {
       return this.getPermissionsByRole('admin');
     }
 
+    // Handle branch_admin case - branch admins are in public.users with branch assignments
+    if (role === 'branch_admin') {
+      return this.getPermissionsByRole('branch_admin');
+    }
+
     // For tenant users (manager, trainer, client), get role from tenant schema
     const user = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(

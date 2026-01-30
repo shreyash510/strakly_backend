@@ -1,7 +1,7 @@
 // ============================================
 // USER CONSTANTS
 // ============================================
-export const USER_ROLES = ['superadmin', 'admin', 'manager', 'trainer', 'client'] as const;
+export const USER_ROLES = ['superadmin', 'admin', 'branch_admin', 'manager', 'trainer', 'client'] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 export const USER_STATUSES = ['active', 'inactive', 'suspended'] as const;

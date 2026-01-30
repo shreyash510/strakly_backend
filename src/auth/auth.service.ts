@@ -54,6 +54,7 @@ export interface UserResponse {
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
+  branchIds?: number[]; // For branch_admin with multiple branches
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -133,6 +134,7 @@ export class AuthService {
         } : undefined,
       } : undefined,
       gyms,
+      branchIds: user.branchIds, // For branch_admin with multiple branches
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
     };
@@ -574,10 +576,23 @@ export class AuthService {
             );
           });
 
-          // Get user's role from tenant schema (could be manager, trainer, or client)
+          // Get user's role from tenant schema (could be manager, trainer, branch_admin, or client)
           const userRole = tenantUser.role || 'client';
 
-          const user = this.toUserResponse({ ...tenantUser, role: userRole }, gym);
+          // For branch_admin, fetch their assigned branch IDs
+          let branchIds: number[] = [];
+          if (userRole === 'branch_admin') {
+            const branchAssignments = await this.tenantService.executeInTenant(gym.id, async (client) => {
+              const result = await client.query(
+                `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+                [tenantUser.id]
+              );
+              return result.rows;
+            });
+            branchIds = branchAssignments.map((a: any) => a.branch_id);
+          }
+
+          const user = this.toUserResponse({ ...tenantUser, role: userRole, branchIds }, gym);
           const accessToken = this.generateToken(user, {
             gymId: gym.id,
             branchId: tenantUser.branch_id ?? null, // User's assigned branch

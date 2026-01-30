@@ -66,8 +66,9 @@ export class UsersService {
     };
   }
 
-  private formatTenantUser(user: any, gym?: any) {
+  private formatTenantUser(user: any, gym?: any, branchAssignments?: any[]) {
     const role = user.role || 'client';
+    const branchIds = branchAssignments?.map(a => a.branch_id) || [];
     return {
       id: user.id,
       name: user.name,
@@ -89,6 +90,7 @@ export class UsersService {
       userType: role === 'client' ? 'client' : 'staff',
       gymId: gym?.id,
       branchId: user.branch_id || user.branchId || null,
+      branchIds: branchIds.length > 0 ? branchIds : (user.branch_id ? [user.branch_id] : []),
       gym: gym ? {
         id: gym.id,
         name: gym.name,
@@ -359,8 +361,8 @@ export class UsersService {
       return this.createAdmin(dto, gymId);
     }
 
-    if (!['manager', 'trainer'].includes(role)) {
-      throw new BadRequestException('Invalid role. Staff role must be manager or trainer.');
+    if (!['manager', 'trainer', 'branch_admin'].includes(role)) {
+      throw new BadRequestException('Invalid role. Staff role must be manager, trainer, or branch_admin.');
     }
 
     // Check if email already exists in public.users
@@ -396,6 +398,10 @@ export class UsersService {
 
     const passwordHash = await hashPassword(dto.password);
 
+    // Determine primary branch: use branchIds[0] if available, otherwise branchId
+    const branchIds = dto.branchIds || (dto.branchId ? [dto.branchId] : []);
+    const primaryBranchId = branchIds.length > 0 ? branchIds[0] : null;
+
     // Create staff in tenant schema
     const createdStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
@@ -421,14 +427,38 @@ export class UsersService {
           dto.state || null,
           dto.zipCode || null,
           new Date(),
-          dto.branchId || null,
+          primaryBranchId,
         ]
       );
-      return result.rows[0];
+
+      const user = result.rows[0];
+
+      // For branch_admin with multiple branches, create user_branch_xref entries
+      let branchAssignments: any[] = [];
+      if (role === 'branch_admin' && branchIds.length > 0) {
+        for (let i = 0; i < branchIds.length; i++) {
+          const branchId = branchIds[i];
+          const isPrimary = i === 0; // First branch is primary
+          await client.query(
+            `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
+             VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
+             ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
+            [user.id, branchId, isPrimary]
+          );
+        }
+        // Fetch the created assignments
+        const assignmentsResult = await client.query(
+          `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+          [user.id]
+        );
+        branchAssignments = assignmentsResult.rows;
+      }
+
+      return { user, branchAssignments };
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(createdStaff, gym);
+    return this.formatTenantUser(createdStaff.user, gym, createdStaff.branchAssignments);
   }
 
   /**
@@ -444,28 +474,36 @@ export class UsersService {
     }
 
     const { users, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ["role IN ('manager', 'trainer')"];
+      const conditions: string[] = ["u.role IN ('manager', 'trainer', 'branch_admin')"];
       const values: any[] = [];
       let paramIndex = 1;
 
       // Branch filtering: null = all branches, number = specific branch
+      // For branch_admin, also check user_branch_xref table
       if (branchId !== null && branchId !== undefined) {
-        conditions.push(`branch_id = $${paramIndex++}`);
+        conditions.push(`(
+          u.branch_id = $${paramIndex} OR
+          (u.role = 'branch_admin' AND EXISTS (
+            SELECT 1 FROM user_branch_xref ubx
+            WHERE ubx.user_id = u.id AND ubx.branch_id = $${paramIndex} AND ubx.is_active = TRUE
+          ))
+        )`);
         values.push(branchId);
+        paramIndex++;
       }
 
-      if (filters.role && filters.role !== 'all' && ['manager', 'trainer'].includes(filters.role)) {
-        conditions.push(`role = $${paramIndex++}`);
+      if (filters.role && filters.role !== 'all' && ['manager', 'trainer', 'branch_admin'].includes(filters.role)) {
+        conditions.push(`u.role = $${paramIndex++}`);
         values.push(filters.role);
       }
 
       if (filters.status && filters.status !== 'all') {
-        conditions.push(`status = $${paramIndex++}`);
+        conditions.push(`u.status = $${paramIndex++}`);
         values.push(filters.status);
       }
 
       if (filters.search) {
-        conditions.push(`(name ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
+        conditions.push(`(u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex} OR u.phone ILIKE $${paramIndex})`);
         values.push(`%${filters.search}%`);
         paramIndex++;
       }
@@ -474,14 +512,14 @@ export class UsersService {
 
       const [usersResult, countResult] = await Promise.all([
         client.query(
-          `SELECT * FROM users
+          `SELECT u.* FROM users u
            WHERE ${whereClause}
-           ORDER BY created_at DESC
+           ORDER BY u.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
           [...values, take, skip]
         ),
         client.query(
-          `SELECT COUNT(*) as count FROM users WHERE ${whereClause}`,
+          `SELECT COUNT(*) as count FROM users u WHERE ${whereClause}`,
           values
         ),
       ]);
@@ -504,12 +542,24 @@ export class UsersService {
    * Get a single staff member from tenant schema
    */
   async findOneStaff(id: number, gymId: number): Promise<any> {
-    const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
+    const { staffData, branchAssignments } = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer')`,
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'branch_admin')`,
         [id]
       );
-      return result.rows[0];
+      const staff = result.rows[0];
+
+      // Fetch branch assignments for branch_admin
+      let assignments: any[] = [];
+      if (staff && staff.role === 'branch_admin') {
+        const assignmentsResult = await client.query(
+          `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+          [id]
+        );
+        assignments = assignmentsResult.rows;
+      }
+
+      return { staffData: staff, branchAssignments: assignments };
     });
 
     if (!staffData) {
@@ -517,7 +567,7 @@ export class UsersService {
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(staffData, gym);
+    return this.formatTenantUser(staffData, gym, branchAssignments);
   }
 
   /**
@@ -550,7 +600,7 @@ export class UsersService {
       updates.push(`status = $${paramIndex++}`);
       values.push(updateDto.status);
     }
-    if (updateDto.role && ['manager', 'trainer'].includes(updateDto.role)) {
+    if (updateDto.role && ['manager', 'trainer', 'branch_admin'].includes(updateDto.role)) {
       updates.push(`role = $${paramIndex++}`);
       values.push(updateDto.role);
     }
@@ -590,21 +640,73 @@ export class UsersService {
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
-    const updatedStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-        values
-      );
+    const { updatedStaff, branchAssignments } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      if (updates.length > 0) {
+        await client.query(
+          `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+          values
+        );
+      }
 
       const result = await client.query(
         `SELECT * FROM users WHERE id = $1`,
         [id]
       );
-      return result.rows[0];
+      const user = result.rows[0];
+
+      // Handle branch assignments update for branch_admin
+      let assignments: any[] = [];
+      if (updateDto.branchIds && updateDto.branchIds.length > 0 && user.role === 'branch_admin') {
+        // Deactivate all existing assignments
+        await client.query(
+          `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
+          [id]
+        );
+
+        // Update primary branch_id in users table
+        await client.query(
+          `UPDATE users SET branch_id = $1, updated_at = NOW() WHERE id = $2`,
+          [updateDto.branchIds[0], id]
+        );
+
+        // Insert/update new assignments
+        for (let i = 0; i < updateDto.branchIds.length; i++) {
+          const branchId = updateDto.branchIds[i];
+          const isPrimary = i === 0;
+          await client.query(
+            `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
+             VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
+             ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
+            [id, branchId, isPrimary]
+          );
+        }
+
+        // Fetch updated assignments
+        const assignmentsResult = await client.query(
+          `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+          [id]
+        );
+        assignments = assignmentsResult.rows;
+      } else if (user.role === 'branch_admin') {
+        // Fetch existing assignments
+        const assignmentsResult = await client.query(
+          `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+          [id]
+        );
+        assignments = assignmentsResult.rows;
+      }
+
+      // Re-fetch user to get updated branch_id
+      const updatedResult = await client.query(
+        `SELECT * FROM users WHERE id = $1`,
+        [id]
+      );
+
+      return { updatedStaff: updatedResult.rows[0], branchAssignments: assignments };
     });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedStaff, gym);
+    return this.formatTenantUser(updatedStaff, gym, branchAssignments);
   }
 
   /**
@@ -613,7 +715,7 @@ export class UsersService {
   async removeStaff(id: number, gymId: number): Promise<{ success: boolean }> {
     const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer')`,
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'branch_admin')`,
         [id]
       );
       return result.rows[0];
@@ -625,6 +727,10 @@ export class UsersService {
 
     // Delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Delete user_branch_xref entries for branch_admin
+      if (staffData.role === 'branch_admin') {
+        await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]);
+      }
       await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
@@ -935,7 +1041,7 @@ export class UsersService {
     } else if (role === 'client') {
       return this.createClient(createUserDto as CreateClientDto, gymId);
     } else {
-      // manager or trainer
+      // manager, trainer, or branch_admin
       return this.createStaff(createUserDto as CreateStaffDto, gymId);
     }
   }
@@ -972,8 +1078,8 @@ export class UsersService {
       return this.findAllClients(filters);
     }
 
-    // If role is manager/trainer, only get staff from tenant.users
-    if (role && ['manager', 'trainer'].includes(role)) {
+    // If role is manager/trainer/branch_admin, only get staff from tenant.users
+    if (role && ['manager', 'trainer', 'branch_admin'].includes(role)) {
       return this.findAllStaff(filters);
     }
 

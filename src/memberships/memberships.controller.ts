@@ -47,7 +47,7 @@ export class MembershipsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
@@ -100,7 +100,7 @@ export class MembershipsController {
 
   @Get('overview')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get membership overview (stats, expiring, recent)' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })

@@ -52,7 +52,7 @@ export class DashboardController {
   }
 
   @Get('admin')
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get admin dashboard data for their gym(s)' })
   @ApiResponse({
     status: 200,

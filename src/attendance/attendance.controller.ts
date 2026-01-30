@@ -68,7 +68,7 @@ export class AttendanceController {
 
   @Post('mark')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Mark attendance (check-in) for a user at a gym' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
@@ -96,7 +96,7 @@ export class AttendanceController {
 
   @Patch('checkout/:id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Check out a user' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   async checkOut(
@@ -131,7 +131,7 @@ export class AttendanceController {
 
   @Get('today')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: "Get today's attendance records" })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
@@ -143,7 +143,7 @@ export class AttendanceController {
 
   @Get('date/:date')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get attendance records for a specific date' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
@@ -160,7 +160,7 @@ export class AttendanceController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: "Get a user's attendance history" })
   @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
@@ -183,7 +183,7 @@ export class AttendanceController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get attendance statistics' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
@@ -195,7 +195,7 @@ export class AttendanceController {
 
   @Get('present-count')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get currently present count' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
@@ -208,7 +208,7 @@ export class AttendanceController {
 
   @Get('all')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get all attendance records with pagination' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })

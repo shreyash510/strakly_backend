@@ -28,7 +28,7 @@ export class BranchController {
   constructor(private readonly branchService: BranchService) {}
 
   @Get()
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all branches for a gym' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
@@ -69,7 +69,7 @@ export class BranchController {
   }
 
   @Get('default')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get the default branch for a gym' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   async getDefaultBranch(@Param('gymId', ParseIntPipe) gymId: number) {
@@ -77,7 +77,7 @@ export class BranchController {
   }
 
   @Get(':id')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get a branch by ID' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   @ApiParam({ name: 'id', description: 'Branch ID' })
@@ -148,7 +148,7 @@ export class BranchController {
   }
 
   @Get('member/:memberId/branch')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get the current branch of a member' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   @ApiParam({ name: 'memberId', description: 'Member ID' })

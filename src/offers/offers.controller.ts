@@ -80,7 +80,7 @@ export class OffersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Create a new offer' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the offer (admin only)' })
   create(@Request() req: any, @Body() dto: CreateOfferDto, @Query('branchId') queryBranchId?: string) {
@@ -90,7 +90,7 @@ export class OffersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update an offer' })
   update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOfferDto) {
     return this.offersService.update(id, req.user.gymId, dto);
@@ -98,7 +98,7 @@ export class OffersController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Delete an offer (soft delete)' })
   delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.offersService.delete(id, req.user.gymId);
