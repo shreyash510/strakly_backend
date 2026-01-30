@@ -70,22 +70,29 @@ export class ReportsService {
     const salaryExpense = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `payment_status = 'paid'`;
+        let whereClause = `s.payment_status = 'paid'`;
         const values: any[] = [];
         let paramIndex = 1;
 
+        // Branch filtering via staff's branch_id
+        if (branchId !== null) {
+          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         if (month) {
-          whereClause += ` AND month = $${paramIndex++}`;
+          whereClause += ` AND s.month = $${paramIndex++}`;
           values.push(month);
         }
-        whereClause += ` AND year = $${paramIndex++}`;
+        whereClause += ` AND s.year = $${paramIndex++}`;
         values.push(year);
 
         const result = await client.query(
           `SELECT
-            COALESCE(SUM(net_amount), 0) as total,
+            COALESCE(SUM(s.net_amount), 0) as total,
             COUNT(*) as count
-          FROM staff_salaries
+          FROM staff_salaries s
+          JOIN users u ON u.id = s.staff_id
           WHERE ${whereClause}`,
           values,
         );
@@ -102,17 +109,26 @@ export class ReportsService {
     const incomeByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const values: any[] = [year];
+        let paramIndex = 2;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         const result = await client.query(
           `SELECT
             TO_CHAR(paid_at, 'Mon') as month,
             EXTRACT(MONTH FROM paid_at) as month_num,
             COALESCE(SUM(final_amount), 0) as amount
           FROM memberships
-          WHERE payment_status = 'paid'
-            AND EXTRACT(YEAR FROM paid_at) = $1
+          WHERE ${whereClause}
           GROUP BY TO_CHAR(paid_at, 'Mon'), EXTRACT(MONTH FROM paid_at)
           ORDER BY month_num`,
-          [year],
+          values,
         );
         return result.rows.map((r: any) => ({
           month: r.month,
@@ -125,22 +141,32 @@ export class ReportsService {
     const expenseByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        let whereClause = `s.payment_status = 'paid' AND s.year = $1`;
+        const values: any[] = [year];
+        let paramIndex = 2;
+
+        // Branch filtering via staff's branch_id
+        if (branchId !== null) {
+          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         const result = await client.query(
           `SELECT
-            CASE month
+            CASE s.month
               WHEN 1 THEN 'Jan' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
               WHEN 4 THEN 'Apr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
               WHEN 7 THEN 'Jul' WHEN 8 THEN 'Aug' WHEN 9 THEN 'Sep'
               WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dec'
             END as month,
-            month as month_num,
-            COALESCE(SUM(net_amount), 0) as amount
-          FROM staff_salaries
-          WHERE payment_status = 'paid'
-            AND year = $1
-          GROUP BY month
+            s.month as month_num,
+            COALESCE(SUM(s.net_amount), 0) as amount
+          FROM staff_salaries s
+          JOIN users u ON u.id = s.staff_id
+          WHERE ${whereClause}
+          GROUP BY s.month
           ORDER BY month_num`,
-          [year],
+          values,
         );
         return result.rows;
       },
@@ -150,17 +176,26 @@ export class ReportsService {
     const incomeByPaymentMethod = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const values: any[] = [year];
+        let paramIndex = 2;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         const result = await client.query(
           `SELECT
             COALESCE(payment_method, 'unknown') as method,
             COALESCE(SUM(final_amount), 0) as amount,
             COUNT(*) as count
           FROM memberships
-          WHERE payment_status = 'paid'
-            AND EXTRACT(YEAR FROM paid_at) = $1
+          WHERE ${whereClause}
           GROUP BY payment_method
           ORDER BY amount DESC`,
-          [year],
+          values,
         );
         return result.rows.map((r: any) => ({
           method: r.method,
@@ -302,6 +337,16 @@ export class ReportsService {
     const salesByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const values: any[] = [year];
+        let paramIndex = 2;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         const result = await client.query(
           `SELECT
             TO_CHAR(paid_at, 'Mon') as month,
@@ -309,11 +354,10 @@ export class ReportsService {
             COUNT(*) as count,
             COALESCE(SUM(final_amount), 0) as revenue
           FROM memberships
-          WHERE payment_status = 'paid'
-            AND EXTRACT(YEAR FROM paid_at) = $1
+          WHERE ${whereClause}
           GROUP BY TO_CHAR(paid_at, 'Mon'), EXTRACT(MONTH FROM paid_at)
           ORDER BY month_num`,
-          [year],
+          values,
         );
         return result.rows.map((r: any) => ({
           month: r.month,
@@ -396,6 +440,16 @@ export class ReportsService {
     const salaryDuesResult = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        let whereClause = `s.gym_id = $1 AND s.payment_status = 'pending'`;
+        const values: any[] = [gymId];
+        let paramIndex = 2;
+
+        // Branch filtering via staff's branch_id
+        if (branchId !== null) {
+          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
         const result = await client.query(
           `SELECT
             s.id,
@@ -407,9 +461,9 @@ export class ReportsService {
             s.net_amount as amount
           FROM staff_salaries s
           JOIN users u ON u.id = s.staff_id
-          WHERE s.gym_id = $1 AND s.payment_status = 'pending'
+          WHERE ${whereClause}
           ORDER BY s.year DESC, s.month DESC`,
-          [gymId],
+          values,
         );
 
         return result.rows.map((r: any) => ({

@@ -45,9 +45,18 @@ export class BodyMetricsService {
     };
   }
 
-  async getMetrics(userId: number, gymId: number) {
+  async getMetrics(userId: number, gymId: number, branchId?: number | null) {
     const metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM body_metrics WHERE user_id = $1`, [userId]);
+      let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+      const values: any[] = [userId];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        query += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -60,7 +69,16 @@ export class BodyMetricsService {
 
   async getOrCreateMetrics(userId: number, gymId: number, branchId?: number | null) {
     let metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM body_metrics WHERE user_id = $1`, [userId]);
+      let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+      const values: any[] = [userId];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        query += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -92,7 +110,16 @@ export class BodyMetricsService {
 
     // Check if metrics exist
     const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT id FROM body_metrics WHERE user_id = $1`, [userId]);
+      let query = `SELECT id FROM body_metrics WHERE user_id = $1`;
+      const values: any[] = [userId];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        query += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -206,7 +233,7 @@ export class BodyMetricsService {
   async getHistory(
     userId: number,
     gymId: number,
-    options?: { startDate?: Date; endDate?: Date; page?: number; limit?: number }
+    options?: { startDate?: Date; endDate?: Date; page?: number; limit?: number; branchId?: number | null }
   ) {
     const page = options?.page || 1;
     const limit = options?.limit || 10;
@@ -216,6 +243,12 @@ export class BodyMetricsService {
       let whereClause = 'user_id = $1';
       const values: any[] = [userId];
       let paramIndex = 2;
+
+      // Branch filtering
+      if (options?.branchId !== null && options?.branchId !== undefined) {
+        whereClause += ` AND branch_id = $${paramIndex++}`;
+        values.push(options.branchId);
+      }
 
       if (options?.startDate) {
         whereClause += ` AND measured_at >= $${paramIndex++}`;
@@ -282,18 +315,27 @@ export class BodyMetricsService {
     });
   }
 
-  async getProgress(userId: number, gymId: number) {
-    const current = await this.getMetrics(userId, gymId);
+  async getProgress(userId: number, gymId: number, branchId?: number | null) {
+    const current = await this.getMetrics(userId, gymId, branchId);
 
     if (!current) {
       return null;
     }
 
     const { firstRecord, latestRecord, totalRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = 'user_id = $1';
+      const values: any[] = [userId];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        whereClause += ` AND branch_id = $2`;
+        values.push(branchId);
+      }
+
       const [firstResult, latestResult, countResult] = await Promise.all([
-        client.query(`SELECT * FROM body_metrics_history WHERE user_id = $1 ORDER BY measured_at ASC LIMIT 1`, [userId]),
-        client.query(`SELECT * FROM body_metrics_history WHERE user_id = $1 ORDER BY measured_at DESC LIMIT 1`, [userId]),
-        client.query(`SELECT COUNT(*) as count FROM body_metrics_history WHERE user_id = $1`, [userId]),
+        client.query(`SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at ASC LIMIT 1`, values),
+        client.query(`SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT 1`, values),
+        client.query(`SELECT COUNT(*) as count FROM body_metrics_history WHERE ${whereClause}`, values),
       ]);
 
       return {

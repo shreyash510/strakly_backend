@@ -149,14 +149,20 @@ export class DietsService {
   /**
    * Find a single diet by ID
    */
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     await this.ensureTablesExist(gymId);
 
     const diet = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT d.* FROM diets d WHERE d.id = $1`,
-        [id]
-      );
+      let query = `SELECT d.* FROM diets d WHERE d.id = $1`;
+      const values: any[] = [id];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        query += ` AND d.branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -292,20 +298,30 @@ export class DietsService {
   /**
    * Get all assignments for a specific diet
    */
-  async getDietAssignments(dietId: number, gymId: number) {
+  async getDietAssignments(dietId: number, gymId: number, branchId?: number | null) {
     await this.ensureTablesExist(gymId);
     await this.findOne(dietId, gymId); // Verify diet exists
 
     const assignments = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
+      const values: any[] = [dietId];
+      let paramIndex = 2;
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        whereClause += ` AND da.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
+
       const result = await client.query(
         `SELECT da.*, d.title as diet_title, d.type as diet_type, d.category as diet_category,
                 u.id as user_id, u.name as user_name, u.email as user_email
          FROM diet_assignments da
          JOIN diets d ON d.id = da.diet_id
          JOIN users u ON u.id = da.user_id
-         WHERE da.diet_id = $1 AND da.status != 'cancelled'
+         WHERE ${whereClause}
          ORDER BY da.assigned_at DESC`,
-        [dietId]
+        values
       );
       return result.rows;
     });
