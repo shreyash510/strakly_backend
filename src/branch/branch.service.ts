@@ -77,7 +77,7 @@ export class BranchService {
   }
 
   /**
-   * Get a single branch by ID
+   * Get a single branch by ID with stats
    */
   async findOne(gymId: number, branchId: number) {
     const branch = await this.prisma.branch.findFirst({
@@ -88,7 +88,39 @@ export class BranchService {
       throw new NotFoundException(`Branch with ID ${branchId} not found in this gym`);
     }
 
-    return branch;
+    // Get all counts from tenant schema
+    const counts = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const [membersResult, staffResult, facilitiesResult, amenitiesResult] = await Promise.all([
+        client.query(
+          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
+          [branchId]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('trainer', 'manager') AND status = 'active'`,
+          [branchId]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+          [branchId]
+        ),
+        client.query(
+          `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+          [branchId]
+        ),
+      ]);
+
+      return {
+        membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
+        staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
+        facilitiesCount: parseInt(facilitiesResult.rows[0]?.count || '0', 10),
+        amenitiesCount: parseInt(amenitiesResult.rows[0]?.count || '0', 10),
+      };
+    });
+
+    return {
+      ...branch,
+      ...counts,
+    };
   }
 
   /**

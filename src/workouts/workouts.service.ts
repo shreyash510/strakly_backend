@@ -141,14 +141,20 @@ export class WorkoutsService {
   /**
    * Find a single workout plan by ID
    */
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     await this.ensureTablesExist(gymId);
 
     const workout = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT w.* FROM workout_plans w WHERE w.id = $1`,
-        [id]
-      );
+      let query = `SELECT w.* FROM workout_plans w WHERE w.id = $1`;
+      const values: any[] = [id];
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        query += ` AND w.branch_id = $2`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(query, values);
       return result.rows[0];
     });
 
@@ -301,20 +307,30 @@ export class WorkoutsService {
   /**
    * Get all assignments for a specific workout plan
    */
-  async getWorkoutAssignments(workoutPlanId: number, gymId: number) {
+  async getWorkoutAssignments(workoutPlanId: number, gymId: number, branchId?: number | null) {
     await this.ensureTablesExist(gymId);
     await this.findOne(workoutPlanId, gymId); // Verify workout exists
 
     const assignments = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = `wa.workout_plan_id = $1 AND wa.status != 'cancelled'`;
+      const values: any[] = [workoutPlanId];
+      let paramIndex = 2;
+
+      // Branch filtering
+      if (branchId !== null && branchId !== undefined) {
+        whereClause += ` AND wa.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
+
       const result = await client.query(
         `SELECT wa.*, w.title as workout_title, w.type as workout_type, w.category as workout_category,
                 u.id as user_id, u.name as user_name, u.email as user_email
          FROM workout_assignments wa
          JOIN workout_plans w ON w.id = wa.workout_plan_id
          JOIN users u ON u.id = wa.user_id
-         WHERE wa.workout_plan_id = $1 AND wa.status != 'cancelled'
+         WHERE ${whereClause}
          ORDER BY wa.assigned_at DESC`,
-        [workoutPlanId]
+        values
       );
       return result.rows;
     });
