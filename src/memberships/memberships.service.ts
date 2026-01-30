@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateMembershipDto,
   UpdateMembershipDto,
@@ -14,6 +15,7 @@ export class MembershipsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAll(gymId: number, branchId: number | null = null, filters?: {
@@ -322,6 +324,17 @@ export class MembershipsService {
     if (dto.amenityIds && dto.amenityIds.length > 0) {
       await this.saveMembershipAmenities(membership.id, dto.amenityIds, gymId);
     }
+
+    // Send membership renewed notification
+    await this.notificationsService.notifyMembershipRenewed(
+      dto.userId,
+      gymId,
+      membershipBranchId,
+      {
+        planName: plan.name,
+        endDate: endDate,
+      },
+    );
 
     return this.findOne(membership.id, gymId);
   }

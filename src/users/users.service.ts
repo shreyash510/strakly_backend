@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto } from './dto/create-user.dto';
 import { AssignClientDto, TrainerClientResponseDto } from './dto/trainer-client.dto';
 import {
@@ -25,6 +26,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private formatAdminUser(user: any, gymAssignments?: any[]) {
@@ -1450,6 +1452,17 @@ export class UsersService {
       return result.rows[0];
     });
 
+    // Send notification to client about trainer assignment
+    await this.notificationsService.notifyTrainerAssigned(
+      dto.clientId,
+      gymId,
+      null, // branchId can be added if needed
+      {
+        trainerId: trainer.id,
+        trainerName: trainer.name,
+      },
+    );
+
     return {
       id: assignment.id,
       trainerId: trainer.id,
@@ -1563,9 +1576,13 @@ export class UsersService {
     clientId: number,
     gymId: number,
   ): Promise<{ success: boolean }> {
+    // Get assignment with trainer details for notification
     const assignment = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id FROM trainer_client_xref WHERE trainer_id = $1 AND client_id = $2 AND is_active = true`,
+        `SELECT tc.id, t.name as trainer_name
+         FROM trainer_client_xref tc
+         JOIN users t ON t.id = tc.trainer_id
+         WHERE tc.trainer_id = $1 AND tc.client_id = $2 AND tc.is_active = true`,
         [trainerId, clientId],
       );
       return result.rows[0];
@@ -1581,6 +1598,17 @@ export class UsersService {
         [assignment.id],
       );
     });
+
+    // Send notification to client about trainer unassignment
+    await this.notificationsService.notifyTrainerUnassigned(
+      clientId,
+      gymId,
+      null, // branchId can be added if needed
+      {
+        trainerId,
+        trainerName: assignment.trainer_name,
+      },
+    );
 
     return { success: true };
   }

@@ -10,6 +10,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
 import { BranchService } from '../branch/branch.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -81,6 +82,7 @@ export class AuthService {
     private readonly tenantService: TenantService,
     private readonly emailService: EmailService,
     private readonly branchService: BranchService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -335,6 +337,15 @@ export class AuthService {
       this.VERIFICATION_EXPIRY_MINUTES,
     ).catch((error) => {
       console.error('Failed to send verification email:', error);
+    });
+
+    // Notify superadmins about new gym registration (non-blocking)
+    this.notificationsService.notifyNewGymRegistration({
+      gymId: gym.id,
+      gymName: dto.gym.name,
+      ownerName: dto.user.name,
+    }).catch((error) => {
+      console.error('Failed to send new gym notification:', error);
     });
 
     const gymAssignment: GymAssignment = {

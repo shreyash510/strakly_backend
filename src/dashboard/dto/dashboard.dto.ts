@@ -154,6 +154,9 @@ export class AdminDashboardStatsDto {
 
   @ApiProperty({ description: 'Memberships expiring this week' })
   expiringThisWeek: number;
+
+  @ApiProperty({ description: 'Pending onboarding requests' })
+  pendingOnboardingCount: number;
 }
 
 export class RecentClientDto {

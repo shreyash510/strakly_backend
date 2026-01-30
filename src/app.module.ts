@@ -30,6 +30,7 @@ import { DietsModule } from './diets/diets.module';
 import { FacilitiesModule } from './facilities/facilities.module';
 import { AmenitiesModule } from './amenities/amenities.module';
 import { WorkoutsModule } from './workouts/workouts.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { WorkoutsModule } from './workouts/workouts.module';
     FacilitiesModule,
     AmenitiesModule,
     WorkoutsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

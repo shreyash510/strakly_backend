@@ -212,6 +212,7 @@ export class DashboardService {
         thisMonthRevenueResult,
         presentTodayResult,
         expiringThisWeekResult,
+        pendingOnboardingResult,
       ] = await Promise.all([
         client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`),
         client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${userBranchFilter}`),
@@ -232,6 +233,7 @@ export class DashboardService {
           `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
           [now, endOfWeek]
         ),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'pending'${userBranchFilter}`),
       ]);
 
       return {
@@ -245,6 +247,7 @@ export class DashboardService {
         monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
         presentToday: parseInt(presentTodayResult.rows[0].count, 10),
         expiringThisWeek: parseInt(expiringThisWeekResult.rows[0].count, 10),
+        pendingOnboardingCount: parseInt(pendingOnboardingResult.rows[0].count, 10),
       };
     });
 
@@ -277,6 +280,7 @@ export class DashboardService {
       presentToday: stats.presentToday,
       openTickets,
       expiringThisWeek: stats.expiringThisWeek,
+      pendingOnboardingCount: stats.pendingOnboardingCount,
     };
   }
 
