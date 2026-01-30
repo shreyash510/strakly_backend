@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateContactRequestDto, UpdateContactRequestDto } from './dto/contact-request.dto';
 import {
   PaginationParams,
@@ -21,6 +22,7 @@ export class ContactRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private generateRequestNumber(): string {
@@ -108,6 +110,15 @@ export class ContactRequestsService {
       // Log error but don't fail the request - contact was still saved
       this.logger.error(`Failed to send contact request notification: ${error.message}`);
     }
+
+    // Notify superadmins about new contact request (non-blocking)
+    this.notificationsService.notifyNewContactRequest({
+      requestId: contactRequest.id,
+      requestNumber: contactRequest.requestNumber,
+      name: dto.name,
+    }).catch((error) => {
+      this.logger.error(`Failed to send contact request notification to superadmins: ${error.message}`);
+    });
 
     return contactRequest;
   }

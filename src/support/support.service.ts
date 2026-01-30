@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -28,6 +29,7 @@ export class SupportService {
   constructor(
     private prisma: PrismaService,
     private tenantService: TenantService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private generateTicketNumber(): string {
@@ -63,6 +65,16 @@ export class SupportService {
         senderName: userName,
         senderType: 'user',
       },
+    });
+
+    // Notify superadmins about new support ticket (non-blocking)
+    this.notificationsService.notifySupportTicketCreated({
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      priority: ticket.priority,
+    }).catch((error) => {
+      console.error('Failed to send support ticket notification:', error);
     });
 
     return this.findOne(ticket.id, userId, undefined, gymId);

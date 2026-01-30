@@ -79,6 +79,9 @@ export class TenantService implements OnModuleInit {
     // Create workout_plans and workout_assignments tables
     await this.createWorkoutTables(client, schemaName);
 
+    // Create notifications table
+    await this.createNotificationsTable(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -302,6 +305,40 @@ export class TenantService implements OnModuleInit {
       console.log(`Ensured 'workout_assignments' table exists in ${schemaName}`);
     } catch (error) {
       console.error(`Error creating workout_assignments table for ${schemaName}:`, error.message);
+    }
+  }
+
+  /**
+   * Create notifications table for a tenant schema (migration for existing schemas)
+   */
+  private async createNotificationsTable(client: any, schemaName: string): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."notifications" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          user_id INTEGER NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          data JSONB,
+          is_read BOOLEAN DEFAULT FALSE,
+          read_at TIMESTAMP,
+          action_url VARCHAR(500),
+          priority VARCHAR(20) DEFAULT 'normal',
+          expires_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`);
+      console.log(`Ensured 'notifications' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating notifications table for ${schemaName}:`, error.message);
     }
   }
 
@@ -736,6 +773,26 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // Notifications table (in-app notifications for all users)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."notifications" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        data JSONB,
+        is_read BOOLEAN DEFAULT FALSE,
+        read_at TIMESTAMP,
+        action_url VARCHAR(500),
+        priority VARCHAR(20) DEFAULT 'normal',
+        expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_by INTEGER
+      )
+    `);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }
@@ -825,6 +882,13 @@ export class TenantService implements OnModuleInit {
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`);
+
+    // Notifications indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`);
   }
 
   /**

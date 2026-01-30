@@ -25,7 +25,38 @@ model SystemUser {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  // Relations
+  notifications SystemNotification[]
+
   @@map("system_users")
+}
+
+// ============================================
+// SYSTEM NOTIFICATIONS (Superadmin notifications)
+// ============================================
+
+model SystemNotification {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  type        String    // new_gym, subscription_expiry, support_ticket, system_alert, etc.
+  title       String
+  message     String
+  data        Json?     // Additional data like gymId, ticketId, etc.
+  isRead      Boolean   @default(false) @map("is_read")
+  readAt      DateTime? @map("read_at")
+  actionUrl   String?   @map("action_url")
+  priority    String    @default("normal") // low, normal, high, urgent
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user        SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([type])
+  @@index([createdAt(sort: Desc)])
+  @@map("system_notifications")
 }
 
 // ============================================
