@@ -86,7 +86,7 @@ export class PlansController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Create a new plan' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the plan (admin only)' })
   create(@Request() req: any, @Body() dto: CreatePlanDto, @Query('branchId') queryBranchId?: string) {
@@ -96,7 +96,7 @@ export class PlansController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update a plan' })
   update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePlanDto) {
     return this.plansService.update(id, req.user.gymId, dto);
@@ -104,7 +104,7 @@ export class PlansController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
   delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.plansService.delete(id, req.user.gymId);

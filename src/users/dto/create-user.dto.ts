@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsEnum, IsInt, IsNotEmpty } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum, IsInt, IsNotEmpty, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
 import type { UserRole, UserStatus, Gender } from '../../constants';
@@ -91,9 +91,20 @@ export class CreateUserDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Branch IDs (for branch_admin with multiple branches)' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  branchIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Date of joining' })
+  @IsOptional()
+  @IsString()
+  joinDate?: string;
 }
 
-// DTO for creating staff (admin, manager, trainer) - stored in public.users
+// DTO for creating staff (admin, manager, trainer, branch_admin) - stored in public.users or tenant.users
 export class CreateStaffDto {
   @ApiProperty({ description: 'Staff name' })
   @IsString()
@@ -110,10 +121,10 @@ export class CreateStaffDto {
   @IsNotEmpty()
   password: string;
 
-  @ApiProperty({ description: 'Staff role', enum: ['admin', 'manager', 'trainer'] })
-  @IsEnum(['admin', 'manager', 'trainer'])
+  @ApiProperty({ description: 'Staff role', enum: ['admin', 'manager', 'trainer', 'branch_admin'] })
+  @IsEnum(['admin', 'manager', 'trainer', 'branch_admin'])
   @IsNotEmpty()
-  role: 'admin' | 'manager' | 'trainer';
+  role: 'admin' | 'manager' | 'trainer' | 'branch_admin';
 
   @ApiPropertyOptional({ description: 'Staff phone' })
   @IsOptional()
@@ -169,6 +180,12 @@ export class CreateStaffDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Branch IDs (for branch_admin with multiple branches)' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  branchIds?: number[];
 }
 
 // DTO for creating client (member) - stored in tenant.users
@@ -252,6 +269,11 @@ export class CreateClientDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Date of joining' })
+  @IsOptional()
+  @IsString()
+  joinDate?: string;
 }
 
 export class UpdateUserDto {
@@ -318,6 +340,15 @@ export class UpdateUserDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  branchIds?: number[];
+
+  @IsOptional()
+  @IsString()
+  joinDate?: string;
 }
 
 export class ResetPasswordDto {

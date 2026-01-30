@@ -30,7 +30,7 @@ export class GymController {
   constructor(private readonly gymService: GymService) {}
 
   @Get('profile')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym profile with branch details' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by specific branch' })
   async getProfile(
@@ -84,7 +84,7 @@ export class GymController {
   }
 
   @Get(':id')
-  @Roles('superadmin', 'admin', 'trainer', 'manager')
+  @Roles('superadmin', 'admin', 'branch_admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.gymService.findOne(id);

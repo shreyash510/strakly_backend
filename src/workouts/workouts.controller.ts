@@ -38,7 +38,7 @@ export class WorkoutsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all workout plans' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status' })
   @ApiQuery({ name: 'type', required: false, description: 'Filter by type' })
@@ -85,7 +85,7 @@ export class WorkoutsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get a workout plan by ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   findOne(
@@ -146,7 +146,7 @@ export class WorkoutsController {
 
   @Get(':id/assignments')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all users assigned to a workout plan' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getWorkoutAssignments(
@@ -167,7 +167,7 @@ export class WorkoutsController {
 
   @Get('user/:userId/assignments')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all workouts assigned to a user' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getUserWorkoutAssignments(

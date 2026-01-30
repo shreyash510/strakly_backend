@@ -1,5 +1,7 @@
-import { IsString, IsNotEmpty, IsEmail, MinLength, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, MinLength, IsOptional, IsNumber, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { GENDERS } from '../../constants';
+import type { Gender } from '../../constants';
 
 export class MemberRegistrationDto {
   @ApiProperty({ description: 'User full name' })
@@ -16,10 +18,15 @@ export class MemberRegistrationDto {
   @MinLength(6)
   password: string;
 
-  @ApiPropertyOptional({ description: 'Phone number' })
+  @ApiProperty({ description: 'Phone number' })
   @IsString()
-  @IsOptional()
-  phone?: string;
+  @IsNotEmpty()
+  phone: string;
+
+  @ApiProperty({ description: 'Gender', enum: GENDERS })
+  @IsEnum(GENDERS)
+  @IsNotEmpty()
+  gender: Gender;
 
   @ApiProperty({ description: 'Gym ID to register for' })
   @IsNumber()
@@ -30,4 +37,9 @@ export class MemberRegistrationDto {
   @IsNumber()
   @IsOptional()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Date of joining' })
+  @IsString()
+  @IsOptional()
+  joinDate?: string;
 }

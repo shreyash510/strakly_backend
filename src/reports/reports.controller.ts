@@ -26,7 +26,7 @@ export class ReportsController {
   }
 
   @Get('income-expense')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
   async getIncomeExpenseReport(@Query() filters: ReportFilterDto, @Req() req: any, @Query('branchId') queryBranchId?: string) {
     const gymId = req.user.gymId;
@@ -35,7 +35,7 @@ export class ReportsController {
   }
 
   @Get('membership-sales')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
   async getMembershipSalesReport(@Query() filters: ReportFilterDto, @Req() req: any, @Query('branchId') queryBranchId?: string) {
     const gymId = req.user.gymId;
@@ -44,7 +44,7 @@ export class ReportsController {
   }
 
   @Get('payment-dues')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
   async getPaymentDuesReport(@Req() req: any, @Query('branchId') queryBranchId?: string) {
     const gymId = req.user.gymId;

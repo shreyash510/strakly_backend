@@ -114,7 +114,7 @@ export class SaasSubscriptionsController {
   }
 
   @Get('me')
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym subscription' })
   getMySubscription(@Request() req: any) {
     const gymId = req.user.gymId;

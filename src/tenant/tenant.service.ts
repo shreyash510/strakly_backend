@@ -82,6 +82,9 @@ export class TenantService implements OnModuleInit {
     // Create notifications table
     await this.createNotificationsTable(client, schemaName);
 
+    // Create user_branch_xref table for multi-branch assignments
+    await this.createUserBranchXrefTable(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -339,6 +342,33 @@ export class TenantService implements OnModuleInit {
       console.log(`Ensured 'notifications' table exists in ${schemaName}`);
     } catch (error) {
       console.error(`Error creating notifications table for ${schemaName}:`, error.message);
+    }
+  }
+
+  /**
+   * Create user_branch_xref table for multi-branch assignments (for branch_admin)
+   */
+  private async createUserBranchXrefTable(client: any, schemaName: string): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."user_branch_xref" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          branch_id INTEGER NOT NULL,
+          is_primary BOOLEAN DEFAULT FALSE,
+          is_active BOOLEAN DEFAULT TRUE,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, branch_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`);
+      console.log(`Ensured 'user_branch_xref' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(`Error creating user_branch_xref table for ${schemaName}:`, error.message);
     }
   }
 
@@ -793,6 +823,21 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // User-Branch cross reference table (for branch_admin with multiple branches)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."user_branch_xref" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        branch_id INTEGER NOT NULL,
+        is_primary BOOLEAN DEFAULT FALSE,
+        is_active BOOLEAN DEFAULT TRUE,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, branch_id)
+      )
+    `);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }
@@ -889,6 +934,11 @@ export class TenantService implements OnModuleInit {
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`);
+
+    // User-Branch xref indexes (for branch_admin with multiple branches)
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`);
   }
 
   /**

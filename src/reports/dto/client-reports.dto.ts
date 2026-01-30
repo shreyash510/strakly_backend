@@ -9,6 +9,11 @@ export class ClientReportFilterDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  branchId?: number;
 }
 
 /* Progress Report DTOs */

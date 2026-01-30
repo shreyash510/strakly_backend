@@ -25,7 +25,7 @@ import { setPaginationHeaders } from '../common/pagination.util';
 @ApiTags('salary')
 @Controller('salary')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('superadmin', 'admin')
+@Roles('superadmin', 'admin', 'branch_admin')
 @ApiBearerAuth()
 export class SalaryController {
   constructor(private readonly salaryService: SalaryService) {}

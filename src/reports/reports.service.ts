@@ -440,9 +440,9 @@ export class ReportsService {
     const salaryDuesResult = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `s.gym_id = $1 AND s.payment_status = 'pending'`;
-        const values: any[] = [gymId];
-        let paramIndex = 2;
+        let whereClause = `s.payment_status = 'pending'`;
+        const values: any[] = [];
+        let paramIndex = 1;
 
         // Branch filtering via staff's branch_id
         if (branchId !== null) {

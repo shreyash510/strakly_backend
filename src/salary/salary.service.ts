@@ -73,11 +73,11 @@ export class SalaryService {
       throw new NotFoundException('Staff member not found in your gym');
     }
 
-    // Check if salary record already exists for this month/year (public schema with gym_id filter)
+    // Check if salary record already exists for this month/year
     const existingSalary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id FROM staff_salaries WHERE staff_id = $1 AND gym_id = $2 AND month = $3 AND year = $4`,
-        [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year]
+        `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+        [createSalaryDto.staffId, createSalaryDto.month, createSalaryDto.year]
       );
       return result.rows[0];
     });
@@ -95,10 +95,10 @@ export class SalaryService {
 
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO staff_salaries (staff_id, gym_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, NOW(), NOW())
+        `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, NOW(), NOW())
          RETURNING *`,
-        [createSalaryDto.staffId, gymId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, isRecurring, createSalaryDto.notes || null]
+        [createSalaryDto.staffId, createSalaryDto.month, createSalaryDto.year, createSalaryDto.baseSalary, bonus, deductions, netAmount, isRecurring, createSalaryDto.notes || null]
       );
       return result.rows[0];
     });
@@ -110,9 +110,9 @@ export class SalaryService {
     const { page, limit, skip, take } = getPaginationParams(filters);
 
     const { salaries, total, userMap } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let whereClause = `s.gym_id = $1`;
-      const values: any[] = [gymId];
-      let paramIndex = 2;
+      let whereClause = `1=1`;
+      const values: any[] = [];
+      let paramIndex = 1;
 
       // Branch filtering for non-admin users (filter by staff's branch)
       if (filters.branchId !== undefined && filters.branchId !== null) {
@@ -199,9 +199,9 @@ export class SalaryService {
         `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
          FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
-         WHERE s.staff_id = $1 AND s.gym_id = $2 AND s.year = $3
+         WHERE s.staff_id = $1 AND s.year = $2
          ORDER BY s.year DESC, s.month DESC`,
-        [staffId, gymId, currentYear]
+        [staffId, currentYear]
       );
       return result.rows;
     });
@@ -232,8 +232,8 @@ export class SalaryService {
         `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
          FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
-         WHERE s.id = $1 AND s.gym_id = $2`,
-        [salaryId, gymId]
+         WHERE s.id = $1`,
+        [salaryId]
       );
       return result.rows[0];
     });
@@ -264,8 +264,8 @@ export class SalaryService {
   async update(salaryId: number, updateSalaryDto: UpdateSalaryDto, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
-        [salaryId, gymId]
+        `SELECT * FROM staff_salaries WHERE id = $1`,
+        [salaryId]
       );
       return result.rows[0];
     });
@@ -286,8 +286,8 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, is_recurring = $5, notes = $6, updated_at = NOW() WHERE id = $7 AND gym_id = $8`,
-        [baseSalary, bonus, deductions, netAmount, isRecurring, updateSalaryDto.notes ?? salary.notes, salaryId, gymId]
+        `UPDATE staff_salaries SET base_salary = $1, bonus = $2, deductions = $3, net_amount = $4, is_recurring = $5, notes = $6, updated_at = NOW() WHERE id = $7`,
+        [baseSalary, bonus, deductions, netAmount, isRecurring, updateSalaryDto.notes ?? salary.notes, salaryId]
       );
     });
 
@@ -297,8 +297,8 @@ export class SalaryService {
   async paySalary(salaryId: number, paySalaryDto: PaySalaryDto, gymId: number, paidById: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
-        [salaryId, gymId]
+        `SELECT * FROM staff_salaries WHERE id = $1`,
+        [salaryId]
       );
       return result.rows[0];
     });
@@ -313,8 +313,8 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4 AND gym_id = $5`,
-        [paySalaryDto.paymentMethod, paySalaryDto.paymentRef || null, paidById, salaryId, gymId]
+        `UPDATE staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4`,
+        [paySalaryDto.paymentMethod, paySalaryDto.paymentRef || null, paidById, salaryId]
       );
     });
 
@@ -324,8 +324,8 @@ export class SalaryService {
   async remove(salaryId: number, gymId: number) {
     const salary = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
-        [salaryId, gymId]
+        `SELECT * FROM staff_salaries WHERE id = $1`,
+        [salaryId]
       );
       return result.rows[0];
     });
@@ -340,8 +340,8 @@ export class SalaryService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `DELETE FROM staff_salaries WHERE id = $1 AND gym_id = $2`,
-        [salaryId, gymId]
+        `DELETE FROM staff_salaries WHERE id = $1`,
+        [salaryId]
       );
     });
 
@@ -362,16 +362,15 @@ export class SalaryService {
 
       const [pendingResult, paidResult, currentMonthResult, staffCountResult] = await Promise.all([
         client.query(
-          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.payment_status = 'pending'${salaryBranchFilter}`,
-          [gymId]
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending'${salaryBranchFilter}`
         ),
         client.query(
-          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.payment_status = 'paid' AND s.year = $2${salaryBranchFilter}`,
-          [gymId, currentYear]
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1${salaryBranchFilter}`,
+          [currentYear]
         ),
         client.query(
-          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.gym_id = $1 AND s.month = $2 AND s.year = $3${salaryBranchFilter}`,
-          [gymId, currentMonth, currentYear]
+          `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2${salaryBranchFilter}`,
+          [currentMonth, currentYear]
         ),
         client.query(
           `SELECT COUNT(*) as count FROM users u
