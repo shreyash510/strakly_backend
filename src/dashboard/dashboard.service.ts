@@ -120,6 +120,52 @@ export class DashboardService {
     }));
   }
 
+  async getPaginatedGyms(page = 1, limit = 5): Promise<{
+    data: RecentGymDto[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const skip = (page - 1) * limit;
+
+    const [gyms, total] = await Promise.all([
+      this.prisma.gym.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          state: true,
+          isActive: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.gym.count(),
+    ]);
+
+    return {
+      data: gyms.map((gym) => ({
+        id: gym.id,
+        name: gym.name,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
+        isActive: gym.isActive,
+        createdAt: gym.createdAt,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   private async getRecentUsers(limit = 5): Promise<RecentUserDto[]> {
     // Get recent staff users from public.users with their gym assignments
     const recentStaff = await this.prisma.user.findMany({

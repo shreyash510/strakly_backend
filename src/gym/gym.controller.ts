@@ -29,6 +29,22 @@ import { setPaginationHeaders } from '../common/pagination.util';
 export class GymController {
   constructor(private readonly gymService: GymService) {}
 
+  @Get('profile')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get current user gym profile with branch details' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by specific branch' })
+  async getProfile(
+    @Request() req: any,
+    @Query('branchId') branchId?: string,
+  ) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new Error('No gym associated with this user');
+    }
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    return this.gymService.getProfile(gymId, parsedBranchId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all gyms with optional filters and pagination' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })

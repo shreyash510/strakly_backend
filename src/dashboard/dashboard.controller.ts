@@ -37,6 +37,20 @@ export class DashboardController {
     return this.dashboardService.getSuperadminDashboard();
   }
 
+  @Get('superadmin/gyms')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get paginated gyms for superadmin dashboard' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 5)' })
+  async getSuperadminGyms(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 5;
+    return this.dashboardService.getPaginatedGyms(pageNum, limitNum);
+  }
+
   @Get('admin')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get admin dashboard data for their gym(s)' })
