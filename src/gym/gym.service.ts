@@ -502,4 +502,107 @@ export class GymService {
       data: { role: newRole },
     });
   }
+
+  /**
+   * Get gym profile for authenticated user with branch details and stats
+   */
+  async getProfile(gymId: number, branchId?: number | null) {
+    // Get gym details
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      include: {
+        userAssignments: {
+          where: { role: 'admin', isActive: true },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!gym) {
+      throw new NotFoundException(`Gym with ID ${gymId} not found`);
+    }
+
+    // Get branches with stats
+    let branches: any[];
+    if (branchId) {
+      // Get single branch with stats
+      const branch = await this.branchService.findOne(gymId, branchId);
+      branches = branch ? [branch] : [];
+    } else {
+      // Get all branches with stats
+      const allBranches = await this.prisma.branch.findMany({
+        where: { gymId },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      });
+
+      // Fetch stats for each branch
+      branches = await Promise.all(
+        allBranches.map(async (branch) => {
+          const counts = await this.tenantService.executeInTenant(gymId, async (client) => {
+            const [membersResult, staffResult, facilitiesResult, amenitiesResult] = await Promise.all([
+              client.query(
+                `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
+                [branch.id]
+              ),
+              client.query(
+                `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('trainer', 'manager') AND status = 'active'`,
+                [branch.id]
+              ),
+              client.query(
+                `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+                [branch.id]
+              ),
+              client.query(
+                `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+                [branch.id]
+              ),
+            ]);
+            return {
+              membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
+              staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
+              facilitiesCount: parseInt(facilitiesResult.rows[0]?.count || '0', 10),
+              amenitiesCount: parseInt(amenitiesResult.rows[0]?.count || '0', 10),
+            };
+          });
+          return { ...branch, ...counts };
+        })
+      );
+    }
+
+    const adminAssignment = gym.userAssignments[0];
+
+    return {
+      id: gym.id,
+      name: gym.name,
+      description: gym.description,
+      logo: gym.logo,
+      phone: gym.phone,
+      email: gym.email,
+      website: gym.website,
+      address: gym.address,
+      city: gym.city,
+      state: gym.state,
+      zipCode: gym.zipCode,
+      country: gym.country,
+      openingTime: gym.openingTime,
+      closingTime: gym.closingTime,
+      capacity: gym.capacity,
+      amenities: gym.amenities,
+      isActive: gym.isActive,
+      tenantSchemaName: gym.tenantSchemaName,
+      createdAt: gym.createdAt,
+      updatedAt: gym.updatedAt,
+      owner: adminAssignment?.user || null,
+      branches,
+    };
+  }
 }
