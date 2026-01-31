@@ -223,6 +223,63 @@ export class MembershipsService {
     return memberships.map((m: any) => this.formatMembership(m));
   }
 
+  async getHistory(
+    userId: number,
+    gymId: number,
+    branchId: number | null = null,
+    options?: { page?: number; limit?: number },
+  ) {
+    const page = options?.page || 1;
+    const limit = options?.limit || 15;
+    const skip = (page - 1) * limit;
+
+    const { memberships, total } = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause =
+          'm.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)';
+        const values: any[] = [userId];
+        let paramIndex = 2;
+
+        // Branch filtering
+        if (branchId !== null) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
+        const [membershipsResult, countResult] = await Promise.all([
+          client.query(
+            `SELECT m.*, u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                    p.id as plan_id, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                    o.id as offer_id, o.code as offer_code, o.name as offer_name
+             FROM memberships m
+             JOIN users u ON u.id = m.user_id
+             LEFT JOIN plans p ON p.id = m.plan_id
+             LEFT JOIN offers o ON o.id = m.offer_id
+             WHERE ${whereClause}
+             ORDER BY m.created_at DESC
+             LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
+            [...values, limit, skip],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM memberships m WHERE ${whereClause}`,
+            values,
+          ),
+        ]);
+
+        return {
+          memberships: membershipsResult.rows,
+          total: parseInt(countResult.rows[0].count, 10),
+        };
+      },
+    );
+
+    return {
+      data: memberships.map((m: any) => this.formatMembership(m)),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
   async getActiveMembership(userId: number, gymId: number) {
     const now = new Date();
 
@@ -416,6 +473,7 @@ export class MembershipsService {
       {
         planName: plan.name,
         endDate: endDate,
+        membershipId: membership.id,
       },
     );
 

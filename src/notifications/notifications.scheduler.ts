@@ -106,6 +106,7 @@ export class NotificationsScheduler {
               planName: membership.plan_name || 'Membership',
               endDate: new Date(membership.end_date),
               daysRemaining: days,
+              membershipId: membership.id,
             },
           );
           notificationsSent++;

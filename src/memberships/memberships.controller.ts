@@ -193,6 +193,46 @@ export class MembershipsController {
     );
   }
 
+  @Get('history')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get membership history for a client' })
+  @ApiQuery({
+    name: 'clientId',
+    required: true,
+    type: Number,
+    description: 'Client user ID',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getHistory(
+    @Request() req: any,
+    @Query('clientId') clientId?: string,
+    @Query('branchId') queryBranchId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!clientId) {
+      throw new BadRequestException('clientId query parameter is required');
+    }
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.membershipsService.getHistory(
+      parseInt(clientId),
+      req.user.gymId,
+      branchId,
+      {
+        page: page ? parseInt(page) : undefined,
+        limit: limit ? parseInt(limit) : undefined,
+      },
+    );
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')

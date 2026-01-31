@@ -405,9 +405,11 @@ export class AttendanceService {
 
     const { activeRecords, historyRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
-        // Build branch filter
-        const branchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        // Build branch filter with table alias
+        const attendanceBranchFilter =
+          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
+        const historyBranchFilter =
+          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
         const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
         const [activeResult, historyResult] = await Promise.all([
@@ -415,7 +417,7 @@ export class AttendanceService {
             `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
-           WHERE a.date = $1${branchFilter}${softDeleteFilter.replace('is_deleted', 'a.is_deleted')}
+           WHERE a.date = $1${attendanceBranchFilter}${softDeleteFilter.replace('is_deleted', 'a.is_deleted')}
            ORDER BY a.check_in_time DESC`,
             [date],
           ),
@@ -423,7 +425,7 @@ export class AttendanceService {
             `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
-           WHERE ah.date = $1${branchFilter}${softDeleteFilter.replace('is_deleted', 'ah.is_deleted')}
+           WHERE ah.date = $1${historyBranchFilter}${softDeleteFilter.replace('is_deleted', 'ah.is_deleted')}
            ORDER BY ah.check_in_time DESC`,
             [date],
           ),
@@ -856,7 +858,9 @@ export class AttendanceService {
           };
         });
 
-        // 5. Top members
+        // 5. Top members (use ah.branch_id to avoid ambiguity with users.branch_id)
+        const topMembersBranchFilter =
+          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
         const topMembersResult = await client.query(
           `
         SELECT
@@ -865,7 +869,7 @@ export class AttendanceService {
           COUNT(*) as visits
         FROM attendance_history ah
         JOIN users u ON u.id = ah.user_id
-        WHERE ah.date >= $1 AND ah.date <= $2${branchFilter}
+        WHERE ah.date >= $1 AND ah.date <= $2${topMembersBranchFilter}
         GROUP BY ah.user_id, u.name
         ORDER BY visits DESC
         LIMIT 10
