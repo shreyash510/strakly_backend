@@ -22,11 +22,21 @@ export class MarkAttendanceDto {
   @Type(() => Number)
   staffId: number;
 
-  @ApiProperty({ description: 'Gym ID where attendance is being marked' })
+  @ApiPropertyOptional({
+    description: 'Gym ID where attendance is being marked (resolved from user context if not provided)',
+  })
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
   @Type(() => Number)
-  gymId: number;
+  gymId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Branch ID where attendance is being marked',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 
   @ApiPropertyOptional({
     description: 'Check-in method',
