@@ -47,10 +47,12 @@ export class NotificationsController {
     if (!user.gymId) {
       throw new ForbiddenException('Gym context required');
     }
+    // Use query branchId if provided, otherwise fall back to user's branchId
+    const branchId = query.branchId ?? user.branchId;
     return this.notificationsService.findAll(
       user.userId,
       user.gymId,
-      user.branchId,
+      branchId,
       query,
     );
   }

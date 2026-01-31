@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -34,13 +34,13 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() createUserDto: CreateUserDto) {
+  register(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.register(createUserDto);
   }
 
   @Post('register-admin')
   @ApiOperation({ summary: 'Register a new admin user' })
-  registerAdmin(@Body() createUserDto: CreateUserDto) {
+  registerAdmin(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.registerAdmin(createUserDto);
   }
 

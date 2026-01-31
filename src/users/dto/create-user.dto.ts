@@ -366,7 +366,7 @@ export class UpdateUserDto {
   joinDate?: string;
 }
 
-export class ResetPasswordDto {
+export class AdminResetPasswordDto {
   @IsString()
   newPassword: string;
 }

@@ -201,7 +201,7 @@ export class AttendanceService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), $4, $4::DATE, $5, $6, 'present', NOW(), NOW())
+         VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
          RETURNING *`,
           [
             attendanceBranchId,

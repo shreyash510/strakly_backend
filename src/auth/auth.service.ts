@@ -11,7 +11,7 @@ import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
 import { BranchService } from '../branch/branch.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import { hashPassword, comparePassword } from '../common/utils';
@@ -1885,13 +1885,13 @@ export class AuthService {
   // These will be removed after full migration to tenant-based architecture
   // ============================================
 
-  async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
+  async register(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
     throw new Error(
       'Direct registration not supported. Use registerAdminWithGym for new gyms or invite users to existing gyms.',
     );
   }
 
-  async registerAdmin(createUserDto: CreateUserDto): Promise<AuthResponse> {
+  async registerAdmin(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
     throw new Error(
       'Direct admin registration not supported. Use registerAdminWithGym instead.',
     );

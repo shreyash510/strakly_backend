@@ -26,7 +26,7 @@ import { UsersService } from './users.service';
 import {
   CreateUserDto,
   UpdateUserDto,
-  ResetPasswordDto,
+  AdminResetPasswordDto,
   ApproveRequestDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
@@ -349,7 +349,7 @@ export class UsersController {
   resetPasswordByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
-    @Body() dto: ResetPasswordDto,
+    @Body() dto: AdminResetPasswordDto,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
