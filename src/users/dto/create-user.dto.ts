@@ -292,75 +292,93 @@ export class CreateClientDto {
 }
 
 export class UpdateUserDto {
+  @ApiPropertyOptional({ description: 'User name' })
   @IsOptional()
   @IsString()
   name?: string;
 
+  @ApiPropertyOptional({ description: 'User email' })
   @IsOptional()
   @IsEmail()
   email?: string;
 
+  @ApiPropertyOptional({ description: 'User phone' })
   @IsOptional()
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ description: 'User avatar URL' })
   @IsOptional()
   @IsString()
   avatar?: string;
 
+  @ApiPropertyOptional({ description: 'User bio' })
   @IsOptional()
   @IsString()
   bio?: string;
 
+  @ApiPropertyOptional({ description: 'User role', enum: USER_ROLES })
   @IsOptional()
   @IsEnum(USER_ROLES)
   role?: UserRole;
 
+  @ApiPropertyOptional({ description: 'User status', enum: USER_STATUSES })
   @IsOptional()
   @IsEnum(USER_STATUSES)
   status?: UserStatus;
 
+  @ApiPropertyOptional({ description: 'Date of birth' })
   @IsOptional()
   @IsString()
   dateOfBirth?: string;
 
+  @ApiPropertyOptional({ description: 'Gender', enum: GENDERS })
   @IsOptional()
   @IsEnum(GENDERS)
   gender?: Gender;
 
+  @ApiPropertyOptional({ description: 'Address' })
   @IsOptional()
   @IsString()
   address?: string;
 
+  @ApiPropertyOptional({ description: 'City' })
   @IsOptional()
   @IsString()
   city?: string;
 
+  @ApiPropertyOptional({ description: 'State' })
   @IsOptional()
   @IsString()
   state?: string;
 
+  @ApiPropertyOptional({ description: 'ZIP code' })
   @IsOptional()
   @IsString()
   zipCode?: string;
 
+  @ApiPropertyOptional({ description: 'Gym ID' })
   @IsOptional()
   @IsInt()
   gymId?: number;
 
+  @ApiPropertyOptional({ description: 'Trainer ID' })
   @IsOptional()
   @IsInt()
   trainerId?: number;
 
+  @ApiPropertyOptional({ description: 'Branch ID' })
   @IsOptional()
   @IsInt()
   branchId?: number;
 
+  @ApiPropertyOptional({ description: 'Branch IDs (for users with multiple branches)' })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
   branchIds?: number[];
 
+  @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
   joinDate?: string;
