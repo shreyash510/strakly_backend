@@ -199,15 +199,43 @@ export class RecentAttendanceDto {
   status: string;
 }
 
+export class PaginationMetaDto {
+  @ApiProperty()
+  page: number;
+
+  @ApiProperty()
+  limit: number;
+
+  @ApiProperty()
+  total: number;
+
+  @ApiProperty()
+  totalPages: number;
+
+  @ApiProperty()
+  hasNext: boolean;
+
+  @ApiProperty()
+  hasPrev: boolean;
+}
+
+export class PaginatedClientsDto {
+  @ApiProperty({ type: [RecentClientDto] })
+  data: RecentClientDto[];
+
+  @ApiProperty({ type: PaginationMetaDto })
+  pagination: PaginationMetaDto;
+}
+
 export class AdminDashboardDto {
   @ApiProperty({ type: AdminDashboardStatsDto })
   stats: AdminDashboardStatsDto;
 
-  @ApiProperty({ type: [RecentClientDto] })
-  recentClients: RecentClientDto[];
+  @ApiProperty({ type: PaginatedClientsDto })
+  newClients: PaginatedClientsDto;
 
-  @ApiProperty({ type: [RecentAttendanceDto] })
-  recentAttendance: RecentAttendanceDto[];
+  @ApiProperty({ type: PaginatedClientsDto })
+  newInquiries: PaginatedClientsDto;
 
   @ApiProperty({ type: [RecentTicketDto] })
   recentTickets: RecentTicketDto[];

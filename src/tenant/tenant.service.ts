@@ -85,6 +85,9 @@ export class TenantService implements OnModuleInit {
     // Create user_branch_xref table for multi-branch assignments
     await this.createUserBranchXrefTable(client, schemaName);
 
+    // Add status_id column for lookup-based status
+    await this.addStatusIdColumn(client, schemaName);
+
     // Seed default plans if none exist
     try {
       const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
@@ -373,6 +376,22 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
+   * Add status_id column to users table for lookup-based status (migration for existing tenants)
+   */
+  private async addStatusIdColumn(client: any, schemaName: string): Promise<void> {
+    try {
+      await client.query(`
+        ALTER TABLE "${schemaName}"."users"
+        ADD COLUMN IF NOT EXISTS status_id INTEGER
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`);
+      console.log(`Ensured 'status_id' column exists in ${schemaName}.users`);
+    } catch (error) {
+      console.error(`Error adding status_id column to ${schemaName}:`, error.message);
+    }
+  }
+
+  /**
    * Get the tenant schema name for a gym
    */
   getTenantSchemaName(gymId: number): string {
@@ -436,6 +455,7 @@ export class TenantService implements OnModuleInit {
         emergency_contact_name VARCHAR(255),
         emergency_contact_phone VARCHAR(50),
         status VARCHAR(50) DEFAULT 'active',
+        status_id INTEGER,
         email_verified BOOLEAN DEFAULT false,
         attendance_code VARCHAR(20) UNIQUE,
         join_date TIMESTAMP,
@@ -850,6 +870,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_email" ON "${schemaName}"."users"(email)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`);
     await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch" ON "${schemaName}"."users"(branch_id)`);
 

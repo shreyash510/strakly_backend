@@ -4,7 +4,7 @@
 export const USER_ROLES = ['superadmin', 'admin', 'branch_admin', 'manager', 'trainer', 'client'] as const;
 export type UserRole = typeof USER_ROLES[number];
 
-export const USER_STATUSES = ['active', 'inactive', 'suspended'] as const;
+export const USER_STATUSES = ['onboarding', 'confirm', 'active', 'expired', 'inactive', 'rejected', 'archive', 'suspended'] as const;
 export type UserStatus = typeof USER_STATUSES[number];
 
 export const GENDERS = ['male', 'female', 'other'] as const;

@@ -145,9 +145,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Check if user is suspended
+    // Check user status based on role
     if (userData.status === 'suspended') {
       throw new UnauthorizedException('Your account has been suspended');
+    }
+
+    if (userData.status === 'inactive') {
+      throw new UnauthorizedException('Your account is inactive');
+    }
+
+    // For clients, also block onboarding/confirm/rejected/archive statuses
+    if (userData.role === 'client') {
+      if (userData.status === 'onboarding' || userData.status === 'confirm') {
+        throw new UnauthorizedException('Your account is pending approval');
+      }
+      if (userData.status === 'rejected') {
+        throw new UnauthorizedException('Your registration has been rejected');
+      }
+      if (userData.status === 'archive') {
+        throw new UnauthorizedException('Your account has been archived');
+      }
+      if (userData.status === 'expired') {
+        throw new UnauthorizedException('Your account has expired');
+      }
     }
 
     return {

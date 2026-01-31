@@ -554,8 +554,20 @@ export class AuthService {
             throw new UnauthorizedException('Your account is inactive');
           }
 
-          if (tenantUser.status === 'pending') {
+          if (tenantUser.status === 'onboarding' || tenantUser.status === 'confirm') {
             throw new UnauthorizedException('Your account is pending approval');
+          }
+
+          if (tenantUser.status === 'rejected') {
+            throw new UnauthorizedException('Your registration has been rejected');
+          }
+
+          if (tenantUser.status === 'archive') {
+            throw new UnauthorizedException('Your account has been archived');
+          }
+
+          if (tenantUser.status === 'expired') {
+            throw new UnauthorizedException('Your account has expired');
           }
 
           // Check password

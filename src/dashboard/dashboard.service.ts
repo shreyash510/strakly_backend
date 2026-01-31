@@ -218,18 +218,120 @@ export class DashboardService {
 
   // Admin Dashboard Methods
   async getAdminDashboard(userId: number, gymId: number, branchId: number | null = null): Promise<AdminDashboardDto> {
-    const [stats, recentClients, recentAttendance, recentTickets] = await Promise.all([
+    const [stats, newClients, newInquiries, recentTickets] = await Promise.all([
       this.getAdminStats(gymId, branchId),
-      this.getRecentClients(gymId, branchId),
-      this.getRecentAttendance(gymId, branchId),
+      this.getNewClients(gymId, branchId, 1, 5),
+      this.getNewInquiries(gymId, branchId, 1, 5),
       this.getRecentTicketsForGym(gymId),
     ]);
 
     return {
       stats,
-      recentClients,
-      recentAttendance,
+      newClients,
+      newInquiries,
       recentTickets,
+    };
+  }
+
+  // Get new clients (status = 'active') with pagination
+  async getNewClients(gymId: number, branchId: number | null = null, page: number = 1, limit: number = 5) {
+    const offset = (page - 1) * limit;
+
+    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
+      let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
+      const values: any[] = [];
+
+      if (branchId !== null) {
+        countQuery += ` AND branch_id = $1`;
+        dataQuery += ` AND branch_id = $1`;
+        values.push(branchId);
+      }
+
+      dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+
+      const [countResult, dataResult] = await Promise.all([
+        client.query(countQuery, values),
+        client.query(dataQuery, [...values, limit, offset]),
+      ]);
+
+      return {
+        data: dataResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+      };
+    });
+
+    const total = result.total;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: result.data.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        avatar: c.avatar || undefined,
+        status: c.status,
+        createdAt: c.created_at,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  // Get new inquiries (status = 'onboarding' or 'confirm') with pagination
+  async getNewInquiries(gymId: number, branchId: number | null = null, page: number = 1, limit: number = 5) {
+    const offset = (page - 1) * limit;
+
+    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
+      let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
+      let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
+      const values: any[] = [];
+
+      if (branchId !== null) {
+        countQuery += ` AND branch_id = $1`;
+        dataQuery += ` AND branch_id = $1`;
+        values.push(branchId);
+      }
+
+      dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+
+      const [countResult, dataResult] = await Promise.all([
+        client.query(countQuery, values),
+        client.query(dataQuery, [...values, limit, offset]),
+      ]);
+
+      return {
+        data: dataResult.rows,
+        total: parseInt(countResult.rows[0].count, 10),
+      };
+    });
+
+    const total = result.total;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: result.data.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        avatar: c.avatar || undefined,
+        status: c.status,
+        createdAt: c.created_at,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     };
   }
 
@@ -279,7 +381,7 @@ export class DashboardService {
           `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
           [now, endOfWeek]
         ),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'pending'${userBranchFilter}`),
+        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')${userBranchFilter}`),
       ]);
 
       return {

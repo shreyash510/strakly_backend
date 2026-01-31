@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { LookupsService } from '../lookups/lookups.service';
 import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto } from './dto/create-user.dto';
 import { AssignClientDto, TrainerClientResponseDto } from './dto/trainer-client.dto';
 import {
@@ -11,6 +12,8 @@ import {
   createPaginationMeta,
 } from '../common/pagination.util';
 import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
+
+const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
 export interface UserFilters extends PaginationParams {
   role?: string;
@@ -27,7 +30,24 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly notificationsService: NotificationsService,
+    private readonly lookupsService: LookupsService,
   ) {}
+
+  /**
+   * Get status ID from status code string
+   * Returns null if lookup not found
+   */
+  private async getStatusId(statusCode: string): Promise<number | null> {
+    return this.lookupsService.getLookupId(USER_STATUS_LOOKUP_TYPE, statusCode);
+  }
+
+  /**
+   * Get status code from status ID
+   * Returns null if lookup not found
+   */
+  private async getStatusCode(statusId: number): Promise<string | null> {
+    return this.lookupsService.getLookupCode(statusId);
+  }
 
   private formatAdminUser(user: any, gymAssignments?: any[]) {
     const primaryAssignment = gymAssignments?.find((a) => a.isPrimary) || gymAssignments?.[0];
@@ -149,6 +169,8 @@ export class UsersService {
     }
 
     const passwordHash = await hashPassword(dto.password);
+    const status = dto.status || 'active';
+    const statusId = await this.getStatusId(status);
 
     // Create admin in public.users
     const createdUser = await this.prisma.user.create({
@@ -165,7 +187,8 @@ export class UsersService {
         city: dto.city,
         state: dto.state,
         zipCode: dto.zipCode,
-        status: dto.status || 'active',
+        status,
+        statusId,
       },
     });
 
@@ -272,6 +295,12 @@ export class UsersService {
 
     const { role, ...updateData } = updateDto;
 
+    // Get status_id if status is being updated
+    let statusId: number | null | undefined = undefined;
+    if (updateData.status) {
+      statusId = await this.getStatusId(updateData.status);
+    }
+
     // Update user data
     await this.prisma.user.update({
       where: { id },
@@ -280,7 +309,7 @@ export class UsersService {
         ...(updateData.phone !== undefined && { phone: updateData.phone }),
         ...(updateData.avatar !== undefined && { avatar: updateData.avatar }),
         ...(updateData.bio !== undefined && { bio: updateData.bio }),
-        ...(updateData.status && { status: updateData.status }),
+        ...(updateData.status && { status: updateData.status, statusId }),
         ...(updateData.dateOfBirth !== undefined && {
           dateOfBirth: updateData.dateOfBirth ? new Date(updateData.dateOfBirth) : null,
         }),
@@ -397,6 +426,8 @@ export class UsersService {
     }
 
     const passwordHash = await hashPassword(dto.password);
+    const status = dto.status || 'active';
+    const statusId = await this.getStatusId(status);
 
     // Determine primary branch: use branchIds[0] if available, otherwise branchId
     const branchIds = dto.branchIds || (dto.branchId ? [dto.branchId] : []);
@@ -406,10 +437,10 @@ export class UsersService {
     const createdStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO users (
-          name, email, password_hash, phone, avatar, bio, role, status,
+          name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
           join_date, branch_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
         RETURNING *`,
         [
           dto.name,
@@ -419,7 +450,8 @@ export class UsersService {
           dto.avatar || null,
           dto.bio || null,
           role,
-          dto.status || 'active',
+          status,
+          statusId,
           dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           dto.gender || null,
           dto.address || null,
@@ -599,6 +631,11 @@ export class UsersService {
     if (updateDto.status) {
       updates.push(`status = $${paramIndex++}`);
       values.push(updateDto.status);
+      const statusId = await this.getStatusId(updateDto.status);
+      if (statusId !== null) {
+        updates.push(`status_id = $${paramIndex++}`);
+        values.push(statusId);
+      }
     }
     if (updateDto.role && ['manager', 'trainer', 'branch_admin'].includes(updateDto.role)) {
       updates.push(`role = $${paramIndex++}`);
@@ -779,20 +816,22 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    const [passwordHash, attendanceCode] = await Promise.all([
+    const status = dto.status || 'active';
+    const [passwordHash, attendanceCode, statusId] = await Promise.all([
       hashPassword(dto.password),
       generateUniqueAttendanceCode(gymId, this.tenantService),
+      this.getStatusId(status),
     ]);
 
     // Create client in tenant schema with role='client'
     const createdClient = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO users (
-          name, email, password_hash, phone, avatar, bio, role, status,
+          name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
           emergency_contact_name, emergency_contact_phone,
           join_date, attendance_code, branch_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
         RETURNING *`,
         [
           dto.name,
@@ -802,7 +841,8 @@ export class UsersService {
           dto.avatar || null,
           dto.bio || null,
           'client', // role is always 'client' for clients
-          dto.status || 'active',
+          status,
+          statusId,
           dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           dto.gender || null,
           dto.address || null,
@@ -936,6 +976,11 @@ export class UsersService {
     if (updateDto.status) {
       updates.push(`status = $${paramIndex++}`);
       values.push(updateDto.status);
+      const statusId = await this.getStatusId(updateDto.status);
+      if (statusId !== null) {
+        updates.push(`status_id = $${paramIndex++}`);
+        values.push(statusId);
+      }
     }
     if (updateDto.dateOfBirth !== undefined) {
       updates.push(`date_of_birth = $${paramIndex++}`);
@@ -1420,14 +1465,16 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (userData.status !== 'pending') {
-      throw new BadRequestException('Only pending requests can be approved');
+    if (userData.status !== 'onboarding' && userData.status !== 'confirm') {
+      throw new BadRequestException('Only onboarding or confirm requests can be approved');
     }
+
+    const statusId = await this.getStatusId('active');
 
     const updatedUser = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE users SET status = 'active', updated_at = NOW() WHERE id = $1`,
-        [userId]
+        `UPDATE users SET status = 'active', status_id = $2, updated_at = NOW() WHERE id = $1`,
+        [userId, statusId]
       );
 
       const result = await client.query(
@@ -1457,14 +1504,16 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (userData.status !== 'pending') {
-      throw new BadRequestException('Only pending requests can be rejected');
+    if (userData.status !== 'onboarding' && userData.status !== 'confirm') {
+      throw new BadRequestException('Only onboarding or confirm requests can be rejected');
     }
+
+    const statusId = await this.getStatusId('rejected');
 
     const updatedUser = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE users SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
-        [userId]
+        `UPDATE users SET status = 'rejected', status_id = $2, updated_at = NOW() WHERE id = $1`,
+        [userId, statusId]
       );
 
       const result = await client.query(

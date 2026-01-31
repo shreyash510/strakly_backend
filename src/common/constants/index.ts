@@ -21,15 +21,22 @@ export const ADMIN_ROLES = [ROLES.ADMIN, ROLES.BRANCH_ADMIN] as const; // Admin-
 export const TENANT_ROLES = [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT] as const;
 
 // User Status
+// Client statuses: onboarding, confirm, active, expired, inactive, rejected, archive
+// Staff statuses: active, inactive, suspended
 export const USER_STATUS = {
+  ONBOARDING: 'onboarding',
+  CONFIRM: 'confirm',
   ACTIVE: 'active',
+  EXPIRED: 'expired',
   INACTIVE: 'inactive',
-  PENDING: 'pending',
-  SUSPENDED: 'suspended',
   REJECTED: 'rejected',
+  ARCHIVE: 'archive',
+  SUSPENDED: 'suspended',
 } as const;
 
 export type UserStatus = (typeof USER_STATUS)[keyof typeof USER_STATUS];
+
+export const USER_STATUSES_ARRAY = Object.values(USER_STATUS);
 
 // Gym Status
 export const GYM_STATUS = {

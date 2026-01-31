@@ -78,11 +78,11 @@ export class PublicService {
       }
     }
 
-    /* Create the user in tenant schema as a pending client */
+    /* Create the user in tenant schema as an onboarding client */
     const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'client', 'pending', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
         [
           dto.name,
