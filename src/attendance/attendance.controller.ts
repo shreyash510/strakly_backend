@@ -119,8 +119,12 @@ export class AttendanceController {
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = this.resolveGymId(req, queryGymId);
-    const branchId = this.resolveBranchId(req, queryBranchId);
+    // Use body values if provided, otherwise fall back to query params
+    const gymIdParam = body.gymId?.toString() || queryGymId;
+    const branchIdParam = body.branchId?.toString() || queryBranchId;
+
+    const gymId = this.resolveGymId(req, gymIdParam);
+    const branchId = this.resolveBranchId(req, branchIdParam);
     const user = await this.attendanceService.searchUserByCode(
       body.code,
       gymId,

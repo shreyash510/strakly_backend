@@ -93,18 +93,27 @@ export class AttendanceService {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
-         FROM users
-         WHERE attendance_code = $1`;
-        const values: any[] = [code];
-
-        // Branch filtering for non-admin users
+        // If branchId is specified, check both users.branch_id and user_branch_xref
         if (branchId !== null) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
+          const query = `
+            SELECT DISTINCT u.id, u.name, u.email, u.phone, u.avatar, u.status,
+                   u.attendance_code, u.role, u.branch_id, u.created_at
+            FROM users u
+            LEFT JOIN user_branch_xref ubx ON ubx.user_id = u.id AND ubx.is_active = TRUE
+            WHERE u.attendance_code = $1
+              AND (u.branch_id = $2 OR ubx.branch_id = $2)
+          `;
+          const result = await client.query(query, [code, branchId]);
+          return result.rows[0];
         }
 
-        const result = await client.query(query, values);
+        // No branch filter - search all users
+        const query = `
+          SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
+          FROM users
+          WHERE attendance_code = $1
+        `;
+        const result = await client.query(query, [code]);
         return result.rows[0];
       },
     );
@@ -140,13 +149,26 @@ export class AttendanceService {
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
 
-    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    // Combine gym lookup and staff lookup into parallel calls
+    const [gym, staffUser] = await Promise.all([
+      this.prisma.gym.findUnique({ where: { id: gymId } }),
+      this.prisma.user.findUnique({
+        where: { id: staffId },
+        select: { name: true },
+      }),
+    ]);
+
     if (!gym) {
       throw new NotFoundException('Gym not found');
     }
 
-    const { existingRecord, activeMembership, userBranchId } =
-      await this.tenantService.executeInTenant(gymId, async (client) => {
+    const staffName = staffUser?.name;
+
+    // Single tenant query that checks existing record, membership, user branch, and inserts if valid
+    const result = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // First, check all conditions in parallel
         const [existingResult, membershipResult, userResult] =
           await Promise.all([
             client.query(
@@ -154,50 +176,35 @@ export class AttendanceService {
               [user.id, today],
             ),
             client.query(
-              `SELECT id FROM memberships WHERE user_id = $1 AND status = 'active'
-           AND start_date <= $2 AND end_date >= $2`,
-              [user.id, new Date()],
+              `SELECT id FROM memberships WHERE user_id = $1 AND LOWER(status) = 'active'
+               AND start_date::date <= CURRENT_DATE AND end_date::date >= CURRENT_DATE`,
+              [user.id],
             ),
             client.query(`SELECT branch_id FROM users WHERE id = $1`, [
               user.id,
             ]),
           ]);
 
-        return {
-          existingRecord: existingResult.rows[0],
-          activeMembership: membershipResult.rows[0],
-          userBranchId: userResult.rows[0]?.branch_id,
-        };
-      });
+        const existingRecord = existingResult.rows[0];
+        const activeMembership = membershipResult.rows[0];
+        const userBranchId = userResult.rows[0]?.branch_id;
 
-    // Get staff name from public.users (admin/staff)
-    const staffUser = await this.prisma.user.findUnique({
-      where: { id: staffId },
-    });
-    const staffName = staffUser?.name;
+        if (existingRecord) {
+          return { error: 'already_checked_in' };
+        }
 
-    if (existingRecord) {
-      throw new BadRequestException(
-        'User is already checked in at this gym today',
-      );
-    }
+        if (!activeMembership) {
+          return { error: 'no_active_membership' };
+        }
 
-    if (!activeMembership) {
-      throw new ForbiddenException(
-        'User does not have an active membership at this gym',
-      );
-    }
+        // Use user's branch if branchId not provided
+        const attendanceBranchId = branchId ?? userBranchId;
 
-    // Use user's branch if branchId not provided
-    const attendanceBranchId = branchId ?? userBranchId;
-
-    const attendance = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
+        // Insert attendance record
+        const insertResult = await client.query(
           `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
-         RETURNING *`,
+           VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
+           RETURNING *`,
           [
             attendanceBranchId,
             user.id,
@@ -207,20 +214,41 @@ export class AttendanceService {
             checkInMethod,
           ],
         );
-        return result.rows[0];
+
+        return {
+          attendance: insertResult.rows[0],
+          attendanceBranchId,
+        };
       },
     );
 
-    // Log activity
-    await this.activityLogsService.logAttendanceMarked(
-      gymId,
-      attendanceBranchId,
-      staffId,
-      'staff',
-      staffName || 'Staff',
-      user.id,
-      user.name,
-    );
+    // Handle errors
+    if (result.error === 'already_checked_in') {
+      throw new BadRequestException(
+        'User is already checked in at this gym today',
+      );
+    }
+
+    if (result.error === 'no_active_membership') {
+      throw new ForbiddenException(
+        'User does not have an active membership at this gym',
+      );
+    }
+
+    const { attendance, attendanceBranchId } = result;
+
+    // Log activity asynchronously (don't wait for it)
+    this.activityLogsService
+      .logAttendanceMarked(
+        gymId,
+        attendanceBranchId,
+        staffId,
+        'staff',
+        staffName || 'Staff',
+        user.id,
+        user.name,
+      )
+      .catch((err) => console.error('Failed to log attendance activity:', err));
 
     return {
       id: attendance.id,
