@@ -15,7 +15,8 @@ export async function generateUniqueAttendanceCode(
   gymId: number,
   tenantService: TenantService,
 ): Promise<string> {
-  const { BATCH_SIZE, MAX_ATTEMPTS, LENGTH, FALLBACK_LENGTH } = ATTENDANCE_CODE_CONFIG;
+  const { BATCH_SIZE, MAX_ATTEMPTS, LENGTH, FALLBACK_LENGTH } =
+    ATTENDANCE_CODE_CONFIG;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     /* Generate batch of random codes */
@@ -29,13 +30,16 @@ export async function generateUniqueAttendanceCode(
     }
 
     /* Check which codes already exist in tenant schema */
-    const existing = await tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
-        [candidates],
-      );
-      return result.rows.map((r: any) => r.attendance_code);
-    });
+    const existing = await tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
+          [candidates],
+        );
+        return result.rows.map((r: any) => r.attendance_code);
+      },
+    );
 
     const existingCodes = new Set(existing);
 
@@ -50,5 +54,7 @@ export async function generateUniqueAttendanceCode(
   /* Fallback: generate longer code if space is exhausted */
   const fallbackMin = Math.pow(10, FALLBACK_LENGTH - 1);
   const fallbackMax = Math.pow(10, FALLBACK_LENGTH) - 1;
-  return String(Math.floor(fallbackMin + Math.random() * (fallbackMax - fallbackMin + 1)));
+  return String(
+    Math.floor(fallbackMin + Math.random() * (fallbackMax - fallbackMin + 1)),
+  );
 }

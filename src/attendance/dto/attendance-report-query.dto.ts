@@ -3,12 +3,18 @@ import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AttendanceReportQueryDto {
-  @ApiPropertyOptional({ description: 'Start date for report (YYYY-MM-DD)', example: '2025-01-01' })
+  @ApiPropertyOptional({
+    description: 'Start date for report (YYYY-MM-DD)',
+    example: '2025-01-01',
+  })
   @IsOptional()
   @IsString()
   startDate?: string;
 
-  @ApiPropertyOptional({ description: 'End date for report (YYYY-MM-DD)', example: '2025-01-31' })
+  @ApiPropertyOptional({
+    description: 'End date for report (YYYY-MM-DD)',
+    example: '2025-01-31',
+  })
   @IsOptional()
   @IsString()
   endDate?: string;

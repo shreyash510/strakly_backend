@@ -87,10 +87,11 @@ export class NotificationsController {
   ) {
     // Superadmin notifications
     if (user.role === 'superadmin') {
-      const notification = await this.notificationsService.markSystemNotificationAsRead(
-        id,
-        user.userId,
-      );
+      const notification =
+        await this.notificationsService.markSystemNotificationAsRead(
+          id,
+          user.userId,
+        );
 
       if (!notification) {
         throw new NotFoundException('Notification not found');
@@ -117,13 +118,16 @@ export class NotificationsController {
 
   @Patch('mark-all-read')
   @ApiOperation({ summary: 'Mark all notifications as read' })
-  @ApiOkResponse({ description: 'Returns number of notifications marked as read' })
+  @ApiOkResponse({
+    description: 'Returns number of notifications marked as read',
+  })
   async markAllAsRead(@CurrentUser() user: AuthenticatedUser) {
     // Superadmin notifications
     if (user.role === 'superadmin') {
-      const count = await this.notificationsService.markAllSystemNotificationsAsRead(
-        user.userId,
-      );
+      const count =
+        await this.notificationsService.markAllSystemNotificationsAsRead(
+          user.userId,
+        );
       return { count };
     }
 

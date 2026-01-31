@@ -1,4 +1,12 @@
-import { IsNumber, IsOptional, IsString, IsEnum, IsBoolean, Min, Max } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsBoolean,
+  Min,
+  Max,
+} from 'class-validator';
 
 export const PAYMENT_STATUSES = ['pending', 'paid'] as const;
 export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'upi'] as const;

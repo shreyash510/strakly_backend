@@ -12,7 +12,9 @@ export interface PaymentReceiptTemplateOptions {
   validUntil?: string;
 }
 
-export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): string {
+export function paymentReceiptTemplate(
+  options: PaymentReceiptTemplateOptions,
+): string {
   const {
     userName,
     gymName,
@@ -51,12 +53,16 @@ export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): 
               <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">Amount paid</p>
               <p style="font-size: 24px; font-weight: 700; color: #059669; margin: 0;">${currency} ${amount}</p>
             </td>
-            ${invoiceNumber ? `
+            ${
+              invoiceNumber
+                ? `
             <td align="right">
               <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">Invoice</p>
               <p style="font-size: 14px; font-weight: 600; color: #334155; margin: 0;">#${invoiceNumber}</p>
             </td>
-            ` : ''}
+            `
+                : ''
+            }
           </tr>
         </table>
       </div>
@@ -88,7 +94,9 @@ export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): 
               <span style="font-size: 14px; font-weight: 500; color: #334155;">${paymentDate}</span>
             </td>
           </tr>
-          ${paymentMethod ? `
+          ${
+            paymentMethod
+              ? `
           <tr>
             <td style="padding: 8px 0; ${validUntil ? 'border-bottom: 1px solid #f1f5f9;' : ''}">
               <span style="font-size: 14px; color: #64748b;">Payment method</span>
@@ -97,8 +105,12 @@ export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): 
               <span style="font-size: 14px; font-weight: 500; color: #334155;">${paymentMethod}</span>
             </td>
           </tr>
-          ` : ''}
-          ${validUntil ? `
+          `
+              : ''
+          }
+          ${
+            validUntil
+              ? `
           <tr>
             <td style="padding: 8px 0;">
               <span style="font-size: 14px; color: #64748b;">Valid until</span>
@@ -107,7 +119,9 @@ export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): 
               <span style="font-size: 14px; font-weight: 500; color: #059669;">${validUntil}</span>
             </td>
           </tr>
-          ` : ''}
+          `
+              : ''
+          }
         </table>
       </div>
     </div>
@@ -120,12 +134,24 @@ export function paymentReceiptTemplate(options: PaymentReceiptTemplateOptions): 
   return baseTemplate({
     preheader: `Payment of ${currency} ${amount} received for ${planName}`,
     content,
-    footerText: 'This is your payment receipt. Please keep it for your records.',
+    footerText:
+      'This is your payment receipt. Please keep it for your records.',
   });
 }
 
-export function paymentReceiptPlainText(options: PaymentReceiptTemplateOptions): string {
-  const { userName, gymName, amount, currency, planName, paymentDate, invoiceNumber, validUntil } = options;
+export function paymentReceiptPlainText(
+  options: PaymentReceiptTemplateOptions,
+): string {
+  const {
+    userName,
+    gymName,
+    amount,
+    currency,
+    planName,
+    paymentDate,
+    invoiceNumber,
+    validUntil,
+  } = options;
 
   return `
 Payment received

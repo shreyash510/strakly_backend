@@ -120,7 +120,10 @@ export class DashboardService {
     }));
   }
 
-  async getPaginatedGyms(page = 1, limit = 5): Promise<{
+  async getPaginatedGyms(
+    page = 1,
+    limit = 5,
+  ): Promise<{
     data: RecentGymDto[];
     pagination: {
       page: number;
@@ -217,7 +220,11 @@ export class DashboardService {
   }
 
   // Admin Dashboard Methods
-  async getAdminDashboard(userId: number, gymId: number, branchId: number | null = null): Promise<AdminDashboardDto> {
+  async getAdminDashboard(
+    userId: number,
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AdminDashboardDto> {
     const [stats, newClients, newInquiries, recentTickets] = await Promise.all([
       this.getAdminStats(gymId, branchId),
       this.getNewClients(gymId, branchId, 1, 5),
@@ -234,32 +241,40 @@ export class DashboardService {
   }
 
   // Get new clients (status = 'active') with pagination
-  async getNewClients(gymId: number, branchId: number | null = null, page: number = 1, limit: number = 5) {
+  async getNewClients(
+    gymId: number,
+    branchId: number | null = null,
+    page: number = 1,
+    limit: number = 5,
+  ) {
     const offset = (page - 1) * limit;
 
-    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
-      let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
-      const values: any[] = [];
+    const result = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
+        const values: any[] = [];
 
-      if (branchId !== null) {
-        countQuery += ` AND branch_id = $1`;
-        dataQuery += ` AND branch_id = $1`;
-        values.push(branchId);
-      }
+        if (branchId !== null) {
+          countQuery += ` AND branch_id = $1`;
+          dataQuery += ` AND branch_id = $1`;
+          values.push(branchId);
+        }
 
-      dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+        dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
-      const [countResult, dataResult] = await Promise.all([
-        client.query(countQuery, values),
-        client.query(dataQuery, [...values, limit, offset]),
-      ]);
+        const [countResult, dataResult] = await Promise.all([
+          client.query(countQuery, values),
+          client.query(dataQuery, [...values, limit, offset]),
+        ]);
 
-      return {
-        data: dataResult.rows,
-        total: parseInt(countResult.rows[0].count, 10),
-      };
-    });
+        return {
+          data: dataResult.rows,
+          total: parseInt(countResult.rows[0].count, 10),
+        };
+      },
+    );
 
     const total = result.total;
     const totalPages = Math.ceil(total / limit);
@@ -285,32 +300,40 @@ export class DashboardService {
   }
 
   // Get new inquiries (status = 'onboarding' or 'confirm') with pagination
-  async getNewInquiries(gymId: number, branchId: number | null = null, page: number = 1, limit: number = 5) {
+  async getNewInquiries(
+    gymId: number,
+    branchId: number | null = null,
+    page: number = 1,
+    limit: number = 5,
+  ) {
     const offset = (page - 1) * limit;
 
-    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
-      let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
-      const values: any[] = [];
+    const result = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
+        const values: any[] = [];
 
-      if (branchId !== null) {
-        countQuery += ` AND branch_id = $1`;
-        dataQuery += ` AND branch_id = $1`;
-        values.push(branchId);
-      }
+        if (branchId !== null) {
+          countQuery += ` AND branch_id = $1`;
+          dataQuery += ` AND branch_id = $1`;
+          values.push(branchId);
+        }
 
-      dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+        dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
-      const [countResult, dataResult] = await Promise.all([
-        client.query(countQuery, values),
-        client.query(dataQuery, [...values, limit, offset]),
-      ]);
+        const [countResult, dataResult] = await Promise.all([
+          client.query(countQuery, values),
+          client.query(dataQuery, [...values, limit, offset]),
+        ]);
 
-      return {
-        data: dataResult.rows,
-        total: parseInt(countResult.rows[0].count, 10),
-      };
-    });
+        return {
+          data: dataResult.rows,
+          total: parseInt(countResult.rows[0].count, 10),
+        };
+      },
+    );
 
     const total = result.total;
     const totalPages = Math.ceil(total / limit);
@@ -335,7 +358,10 @@ export class DashboardService {
     };
   }
 
-  private async getAdminStats(gymId: number, branchId: number | null = null): Promise<AdminDashboardStatsDto> {
+  private async getAdminStats(
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AdminDashboardStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -343,61 +369,90 @@ export class DashboardService {
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Build branch filter clause
-      const userBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
-      const membershipBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
-      const attendanceBranchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+    const stats = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // Build branch filter clause
+        const userBranchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const membershipBranchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const attendanceBranchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
 
-      const [
-        totalMembersResult,
-        activeMembersResult,
-        totalTrainersResult,
-        activeMembershipsResult,
-        revenueResult,
-        cashRevenueResult,
-        lastMonthRevenueResult,
-        thisMonthRevenueResult,
-        presentTodayResult,
-        expiringThisWeekResult,
-        pendingOnboardingResult,
-      ] = await Promise.all([
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${userBranchFilter}`),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'trainer'${userBranchFilter}`),
-        client.query(`SELECT COUNT(*) as count FROM memberships WHERE status = 'active'${membershipBranchFilter}`),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'${membershipBranchFilter}`),
-        client.query(`SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'${membershipBranchFilter}`),
-        client.query(
-          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
-          [startOfLastMonth, endOfLastMonth]
-        ),
-        client.query(
-          `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1${membershipBranchFilter}`,
-          [startOfMonth]
-        ),
-        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${attendanceBranchFilter}`, [today]),
-        client.query(
-          `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
-          [now, endOfWeek]
-        ),
-        client.query(`SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')${userBranchFilter}`),
-      ]);
+        const [
+          totalMembersResult,
+          activeMembersResult,
+          totalTrainersResult,
+          activeMembershipsResult,
+          revenueResult,
+          cashRevenueResult,
+          lastMonthRevenueResult,
+          thisMonthRevenueResult,
+          presentTodayResult,
+          expiringThisWeekResult,
+          pendingOnboardingResult,
+        ] = await Promise.all([
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'trainer'${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active'${membershipBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'${membershipBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'${membershipBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
+            [startOfLastMonth, endOfLastMonth],
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1${membershipBranchFilter}`,
+            [startOfMonth],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${attendanceBranchFilter}`,
+            [today],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
+            [now, endOfWeek],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')${userBranchFilter}`,
+          ),
+        ]);
 
-      return {
-        totalMembers: parseInt(totalMembersResult.rows[0].count, 10),
-        activeMembers: parseInt(activeMembersResult.rows[0].count, 10),
-        totalTrainers: parseInt(totalTrainersResult.rows[0].count, 10),
-        activeMemberships: parseInt(activeMembershipsResult.rows[0].count, 10),
-        totalRevenue: parseFloat(revenueResult.rows[0].sum),
-        totalCashRevenue: parseFloat(cashRevenueResult.rows[0].sum),
-        lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
-        monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
-        presentToday: parseInt(presentTodayResult.rows[0].count, 10),
-        expiringThisWeek: parseInt(expiringThisWeekResult.rows[0].count, 10),
-        pendingOnboardingCount: parseInt(pendingOnboardingResult.rows[0].count, 10),
-      };
-    });
+        return {
+          totalMembers: parseInt(totalMembersResult.rows[0].count, 10),
+          activeMembers: parseInt(activeMembersResult.rows[0].count, 10),
+          totalTrainers: parseInt(totalTrainersResult.rows[0].count, 10),
+          activeMemberships: parseInt(
+            activeMembershipsResult.rows[0].count,
+            10,
+          ),
+          totalRevenue: parseFloat(revenueResult.rows[0].sum),
+          totalCashRevenue: parseFloat(cashRevenueResult.rows[0].sum),
+          lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
+          monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
+          presentToday: parseInt(presentTodayResult.rows[0].count, 10),
+          expiringThisWeek: parseInt(expiringThisWeekResult.rows[0].count, 10),
+          pendingOnboardingCount: parseInt(
+            pendingOnboardingResult.rows[0].count,
+            10,
+          ),
+        };
+      },
+    );
 
     // Get open tickets count from public schema
     const openTickets = await this.prisma.supportTicket.count({
@@ -410,7 +465,10 @@ export class DashboardService {
     // Calculate monthly growth
     let monthlyGrowth = 0;
     if (stats.lastMonthRevenue > 0) {
-      monthlyGrowth = ((stats.monthlyRevenue - stats.lastMonthRevenue) / stats.lastMonthRevenue) * 100;
+      monthlyGrowth =
+        ((stats.monthlyRevenue - stats.lastMonthRevenue) /
+          stats.lastMonthRevenue) *
+        100;
     } else if (stats.monthlyRevenue > 0) {
       monthlyGrowth = 100;
     }
@@ -432,22 +490,29 @@ export class DashboardService {
     };
   }
 
-  private async getRecentClients(gymId: number, branchId: number | null = null, limit = 5): Promise<RecentClientDto[]> {
-    const clients = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
-      const values: any[] = [];
+  private async getRecentClients(
+    gymId: number,
+    branchId: number | null = null,
+    limit = 5,
+  ): Promise<RecentClientDto[]> {
+    const clients = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
+        const values: any[] = [];
 
-      if (branchId !== null) {
-        query += ` AND branch_id = $1`;
-        values.push(branchId);
-      }
+        if (branchId !== null) {
+          query += ` AND branch_id = $1`;
+          values.push(branchId);
+        }
 
-      query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;
-      values.push(limit);
+        query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;
+        values.push(limit);
 
-      const result = await client.query(query, values);
-      return result.rows;
-    });
+        const result = await client.query(query, values);
+        return result.rows;
+      },
+    );
 
     return clients.map((c: any) => ({
       id: c.id,
@@ -459,24 +524,31 @@ export class DashboardService {
     }));
   }
 
-  private async getRecentAttendance(gymId: number, branchId: number | null = null, limit = 5): Promise<RecentAttendanceDto[]> {
-    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
+  private async getRecentAttendance(
+    gymId: number,
+    branchId: number | null = null,
+    limit = 5,
+  ): Promise<RecentAttendanceDto[]> {
+    const attendance = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id`;
-      const values: any[] = [];
+        const values: any[] = [];
 
-      if (branchId !== null) {
-        query += ` WHERE a.branch_id = $1`;
-        values.push(branchId);
-      }
+        if (branchId !== null) {
+          query += ` WHERE a.branch_id = $1`;
+          values.push(branchId);
+        }
 
-      query += ` ORDER BY a.created_at DESC LIMIT $${values.length + 1}`;
-      values.push(limit);
+        query += ` ORDER BY a.created_at DESC LIMIT $${values.length + 1}`;
+        values.push(limit);
 
-      const result = await client.query(query, values);
-      return result.rows;
-    });
+        const result = await client.query(query, values);
+        return result.rows;
+      },
+    );
 
     return attendance.map((record: any) => ({
       id: record.id,
@@ -498,7 +570,10 @@ export class DashboardService {
     }));
   }
 
-  private async getRecentTicketsForGym(gymId: number, limit = 5): Promise<RecentTicketDto[]> {
+  private async getRecentTicketsForGym(
+    gymId: number,
+    limit = 5,
+  ): Promise<RecentTicketDto[]> {
     const tickets = await this.prisma.supportTicket.findMany({
       where: { gymId },
       take: limit,
@@ -518,8 +593,18 @@ export class DashboardService {
   }
 
   // Client Dashboard Methods
-  async getClientDashboard(userId: number, gymId: number, branchId: number | null = null): Promise<ClientDashboardDto> {
-    const [user, subscription, attendanceStats, recentAttendance, activeOffers] = await Promise.all([
+  async getClientDashboard(
+    userId: number,
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<ClientDashboardDto> {
+    const [
+      user,
+      subscription,
+      attendanceStats,
+      recentAttendance,
+      activeOffers,
+    ] = await Promise.all([
       this.getClientUser(userId, gymId),
       this.getClientSubscription(userId, gymId),
       this.getClientAttendanceStats(userId, gymId),
@@ -546,23 +631,28 @@ export class DashboardService {
     let facilities: any[] = [];
     let amenities: any[] = [];
     if (subscription) {
-      const membershipExtras = await this.getClientMembershipFacilities(subscription.id, gymId);
+      const membershipExtras = await this.getClientMembershipFacilities(
+        subscription.id,
+        gymId,
+      );
       facilities = membershipExtras.facilities;
       amenities = membershipExtras.amenities;
     }
 
     return {
       attendanceCode: user?.attendance_code || '----',
-      gym: gym ? {
-        id: gym.id,
-        name: gym.name,
-        logo: gym.logo || undefined,
-        phone: gym.phone || undefined,
-        email: gym.email || undefined,
-        address: gym.address || undefined,
-        city: gym.city || undefined,
-        state: gym.state || undefined,
-      } : undefined,
+      gym: gym
+        ? {
+            id: gym.id,
+            name: gym.name,
+            logo: gym.logo || undefined,
+            phone: gym.phone || undefined,
+            email: gym.email || undefined,
+            address: gym.address || undefined,
+            city: gym.city || undefined,
+            state: gym.state || undefined,
+          }
+        : undefined,
       subscription,
       attendanceStats,
       recentAttendance,
@@ -572,7 +662,10 @@ export class DashboardService {
     };
   }
 
-  private async getClientMembershipFacilities(membershipId: number, gymId: number): Promise<{ facilities: any[]; amenities: any[] }> {
+  private async getClientMembershipFacilities(
+    membershipId: number,
+    gymId: number,
+  ): Promise<{ facilities: any[]; amenities: any[] }> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const [facilitiesResult, amenitiesResult] = await Promise.all([
         client.query(
@@ -581,7 +674,7 @@ export class DashboardService {
            JOIN facilities f ON f.id = mf.facility_id
            WHERE mf.membership_id = $1 AND f.is_active = true
            ORDER BY f.display_order`,
-          [membershipId]
+          [membershipId],
         ),
         client.query(
           `SELECT a.id, a.name, a.code, a.description, a.icon
@@ -589,7 +682,7 @@ export class DashboardService {
            JOIN amenities a ON a.id = ma.amenity_id
            WHERE ma.membership_id = $1 AND a.is_active = true
            ORDER BY a.display_order`,
-          [membershipId]
+          [membershipId],
         ),
       ]);
 
@@ -616,24 +709,30 @@ export class DashboardService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, attendance_code FROM users WHERE id = $1`,
-        [userId]
+        [userId],
       );
       return result.rows[0];
     });
   }
 
-  private async getClientSubscription(userId: number, gymId: number): Promise<ClientSubscriptionDto | undefined> {
-    const membership = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT m.*, p.name as plan_name
+  private async getClientSubscription(
+    userId: number,
+    gymId: number,
+  ): Promise<ClientSubscriptionDto | undefined> {
+    const membership = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT m.*, p.name as plan_name
          FROM memberships m
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE m.user_id = $1 AND m.status = 'active'
          ORDER BY m.created_at DESC LIMIT 1`,
-        [userId]
-      );
-      return result.rows[0];
-    });
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!membership) return undefined;
 
@@ -643,7 +742,10 @@ export class DashboardService {
 
     // Calculate days remaining
     const diffTime = endDate.getTime() - now.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil(diffTime / (1000 * 60 * 60 * 24)),
+    );
 
     // Calculate progress percentage
     let progress = 0;
@@ -672,7 +774,10 @@ export class DashboardService {
     };
   }
 
-  private async getClientAttendanceStats(userId: number, gymId: number): Promise<ClientAttendanceStatsDto> {
+  private async getClientAttendanceStats(
+    userId: number,
+    gymId: number,
+  ): Promise<ClientAttendanceStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
@@ -682,28 +787,32 @@ export class DashboardService {
     const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
     const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
 
-    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [thisMonthResult, thisWeekResult, totalResult] = await Promise.all([
-        client.query(
-          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
-          [userId, startOfMonthStr]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
-          [userId, startOfWeekStr]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND status = 'present'`,
-          [userId]
-        ),
-      ]);
+    const stats = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const [thisMonthResult, thisWeekResult, totalResult] =
+          await Promise.all([
+            client.query(
+              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+              [userId, startOfMonthStr],
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+              [userId, startOfWeekStr],
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND status = 'present'`,
+              [userId],
+            ),
+          ]);
 
-      return {
-        thisMonth: parseInt(thisMonthResult.rows[0].count, 10),
-        thisWeek: parseInt(thisWeekResult.rows[0].count, 10),
-        total: parseInt(totalResult.rows[0].count, 10),
-      };
-    });
+        return {
+          thisMonth: parseInt(thisMonthResult.rows[0].count, 10),
+          thisWeek: parseInt(thisWeekResult.rows[0].count, 10),
+          total: parseInt(totalResult.rows[0].count, 10),
+        };
+      },
+    );
 
     // Calculate current streak
     const currentStreak = await this.calculateCurrentStreak(userId, gymId);
@@ -716,15 +825,21 @@ export class DashboardService {
     };
   }
 
-  private async calculateCurrentStreak(userId: number, gymId: number): Promise<number> {
+  private async calculateCurrentStreak(
+    userId: number,
+    gymId: number,
+  ): Promise<number> {
     // Get all attendance records sorted by date descending
-    const attendanceRecords = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY date DESC LIMIT 60`,
-        [userId]
-      );
-      return result.rows;
-    });
+    const attendanceRecords = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY date DESC LIMIT 60`,
+          [userId],
+        );
+        return result.rows;
+      },
+    );
 
     if (attendanceRecords.length === 0) return 0;
 
@@ -745,16 +860,19 @@ export class DashboardService {
     if (diffDays > 1) return 0;
 
     // Count consecutive days
-    const uniqueDates = [...new Set(attendanceRecords.map((r: any) => r.date))] as string[];
+    const uniqueDates = [
+      ...new Set(attendanceRecords.map((r: any) => r.date)),
+    ] as string[];
     let expectedDate = new Date(uniqueDates[0]);
 
     for (const dateStr of uniqueDates) {
-      const currentDate = new Date(dateStr as string);
+      const currentDate = new Date(dateStr);
       currentDate.setHours(0, 0, 0, 0);
       expectedDate.setHours(0, 0, 0, 0);
 
       const dayDiff = Math.floor(
-        (expectedDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+        (expectedDate.getTime() - currentDate.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
 
       if (dayDiff <= 1) {
@@ -769,14 +887,21 @@ export class DashboardService {
     return streak;
   }
 
-  private async getClientRecentAttendance(userId: number, gymId: number, limit = 5): Promise<ClientRecentAttendanceDto[]> {
-    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY date DESC LIMIT $2`,
-        [userId, limit]
-      );
-      return result.rows;
-    });
+  private async getClientRecentAttendance(
+    userId: number,
+    gymId: number,
+    limit = 5,
+  ): Promise<ClientRecentAttendanceDto[]> {
+    const attendance = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY date DESC LIMIT $2`,
+          [userId, limit],
+        );
+        return result.rows;
+      },
+    );
 
     return attendance.map((record: any) => ({
       id: record.id,
@@ -797,33 +922,41 @@ export class DashboardService {
     }));
   }
 
-  private async getClientActiveOffers(gymId: number, branchId: number | null = null, limit = 3): Promise<ActiveOfferDto[]> {
+  private async getClientActiveOffers(
+    gymId: number,
+    branchId: number | null = null,
+    limit = 3,
+  ): Promise<ActiveOfferDto[]> {
     const now = new Date();
 
-    const offers = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const values: any[] = [now];
-      let query = `SELECT id, name, description, discount_type, discount_value, code, valid_to
+    const offers = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const values: any[] = [now];
+        let query = `SELECT id, name, description, discount_type, discount_value, code, valid_to
          FROM offers
          WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1`;
 
-      // Filter by branch: show offers for specific branch OR global offers (branch_id IS NULL)
-      if (branchId !== null) {
-        query += ` AND (branch_id = $${values.length + 1} OR branch_id IS NULL)`;
-        values.push(branchId);
-      }
+        // Filter by branch: show offers for specific branch OR global offers (branch_id IS NULL)
+        if (branchId !== null) {
+          query += ` AND (branch_id = $${values.length + 1} OR branch_id IS NULL)`;
+          values.push(branchId);
+        }
 
-      query += ` ORDER BY valid_to ASC LIMIT $${values.length + 1}`;
-      values.push(limit);
+        query += ` ORDER BY valid_to ASC LIMIT $${values.length + 1}`;
+        values.push(limit);
 
-      const result = await client.query(query, values);
-      return result.rows;
-    });
+        const result = await client.query(query, values);
+        return result.rows;
+      },
+    );
 
     return offers.map((offer: any) => ({
       id: offer.id,
       title: offer.name,
       description: offer.description || undefined,
-      discountPercentage: offer.discount_type === 'percentage' ? Number(offer.discount_value) : 0,
+      discountPercentage:
+        offer.discount_type === 'percentage' ? Number(offer.discount_value) : 0,
       code: offer.code || undefined,
       endDate: new Date(offer.valid_to).toISOString().split('T')[0],
     }));

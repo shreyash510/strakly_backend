@@ -16,12 +16,17 @@ export class NotificationQueryDto {
   @Type(() => Number)
   limit?: number = 20;
 
-  @ApiPropertyOptional({ enum: NotificationType, description: 'Filter by notification type' })
+  @ApiPropertyOptional({
+    enum: NotificationType,
+    description: 'Filter by notification type',
+  })
   @IsOptional()
   @IsEnum(NotificationType)
   type?: NotificationType;
 
-  @ApiPropertyOptional({ description: 'Filter to show only unread notifications' })
+  @ApiPropertyOptional({
+    description: 'Filter to show only unread notifications',
+  })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()

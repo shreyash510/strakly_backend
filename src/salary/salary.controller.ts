@@ -14,9 +14,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SalaryService } from './salary.service';
-import { CreateSalaryDto, UpdateSalaryDto, PaySalaryDto } from './dto/salary.dto';
+import {
+  CreateSalaryDto,
+  UpdateSalaryDto,
+  PaySalaryDto,
+} from './dto/salary.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -33,7 +42,9 @@ export class SalaryController {
   private resolveGymId(req: any, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
       if (!queryGymId) {
-        throw new BadRequestException('gymId query parameter is required for superadmin');
+        throw new BadRequestException(
+          'gymId query parameter is required for superadmin',
+        );
       }
       return parseInt(queryGymId);
     }
@@ -54,14 +65,25 @@ export class SalaryController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new salary record' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  create(@Request() req: any, @Body() createSalaryDto: CreateSalaryDto, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  create(
+    @Request() req: any,
+    @Body() createSalaryDto: CreateSalaryDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.salaryService.create(createSalaryDto, gymId, req.user.userId);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all salary records with optional filters and pagination' })
+  @ApiOperation({
+    summary: 'Get all salary records with optional filters and pagination',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
@@ -70,8 +92,18 @@ export class SalaryController {
   @ApiQuery({ name: 'year', required: false, type: Number })
   @ApiQuery({ name: 'paymentStatus', required: false, type: String })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   async findAll(
     @Request() req: any,
     @Query('page') page?: string,
@@ -114,10 +146,7 @@ export class SalaryController {
   @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get current user salary records' })
   @ApiQuery({ name: 'year', required: false, type: Number })
-  async findMySalaries(
-    @Request() req: any,
-    @Query('year') year?: string,
-  ) {
+  async findMySalaries(@Request() req: any, @Query('year') year?: string) {
     return this.salaryService.findByStaffId(
       req.user.userId,
       req.user.gymId,
@@ -127,9 +156,23 @@ export class SalaryController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get salary statistics' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  getStats(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  getStats(
+    @Request() req: any,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.salaryService.getStats(gymId, branchId);
@@ -137,9 +180,23 @@ export class SalaryController {
 
   @Get('staff')
   @ApiOperation({ summary: 'Get staff list for salary management' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  getStaffList(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  getStaffList(
+    @Request() req: any,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.salaryService.getStaffList(gymId, branchId);
@@ -147,15 +204,29 @@ export class SalaryController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single salary record' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  findOne(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('gymId') queryGymId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.salaryService.findOne(id, gymId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a salary record' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   update(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
@@ -168,7 +239,12 @@ export class SalaryController {
 
   @Patch(':id/pay')
   @ApiOperation({ summary: 'Mark salary as paid' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   paySalary(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
@@ -176,13 +252,27 @@ export class SalaryController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.paySalary(id, paySalaryDto, gymId, req.user.userId);
+    return this.salaryService.paySalary(
+      id,
+      paySalaryDto,
+      gymId,
+      req.user.userId,
+    );
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a salary record' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  remove(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  remove(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('gymId') queryGymId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.salaryService.remove(id, gymId);
   }

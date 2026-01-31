@@ -1,4 +1,12 @@
-import { Controller, Get, Query, UseGuards, Req, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  Req,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ApiQuery, ApiParam, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -27,8 +35,17 @@ export class ReportsController {
 
   @Get('income-expense')
   @Roles('admin', 'branch_admin', 'manager')
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getIncomeExpenseReport(@Query() filters: ReportFilterDto, @Req() req: any, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getIncomeExpenseReport(
+    @Query() filters: ReportFilterDto,
+    @Req() req: any,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = req.user.gymId;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getIncomeExpenseReport(gymId, filters, branchId);
@@ -36,17 +53,38 @@ export class ReportsController {
 
   @Get('membership-sales')
   @Roles('admin', 'branch_admin', 'manager')
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getMembershipSalesReport(@Query() filters: ReportFilterDto, @Req() req: any, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getMembershipSalesReport(
+    @Query() filters: ReportFilterDto,
+    @Req() req: any,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = req.user.gymId;
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getMembershipSalesReport(gymId, filters, branchId);
+    return this.reportsService.getMembershipSalesReport(
+      gymId,
+      filters,
+      branchId,
+    );
   }
 
   @Get('payment-dues')
   @Roles('admin', 'branch_admin', 'manager')
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getPaymentDuesReport(@Req() req: any, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getPaymentDuesReport(
+    @Req() req: any,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = req.user.gymId;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getPaymentDuesReport(gymId, branchId);
@@ -58,22 +96,49 @@ export class ReportsController {
 
   @Get('trainer/clients/summary')
   @Roles('trainer', 'admin', 'manager')
-  @ApiOperation({ summary: 'Get summary of all trainer\'s clients' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
-  async getTrainerClientsSummary(@Req() req: any, @Query('branchId') queryBranchId?: string) {
+  @ApiOperation({ summary: "Get summary of all trainer's clients" })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
+  async getTrainerClientsSummary(
+    @Req() req: any,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = req.user.gymId;
     const trainerId = req.user.id;
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getTrainerClientsSummary(trainerId, gymId, branchId);
+    return this.reportsService.getTrainerClientsSummary(
+      trainerId,
+      gymId,
+      branchId,
+    );
   }
 
   @Get('trainer/clients/:clientId/progress')
   @Roles('trainer', 'admin', 'manager')
   @ApiOperation({ summary: 'Get progress report for a specific client' })
   @ApiParam({ name: 'clientId', type: Number, description: 'Client ID' })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Start date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'End date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Start date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'End date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
   async getClientProgressReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
@@ -83,16 +148,37 @@ export class ReportsController {
     const gymId = req.user.gymId;
     const trainerId = req.user.id;
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getClientProgressReport(trainerId, clientId, gymId, filters, branchId);
+    return this.reportsService.getClientProgressReport(
+      trainerId,
+      clientId,
+      gymId,
+      filters,
+      branchId,
+    );
   }
 
   @Get('trainer/clients/:clientId/attendance')
   @Roles('trainer', 'admin', 'manager')
   @ApiOperation({ summary: 'Get attendance report for a specific client' })
   @ApiParam({ name: 'clientId', type: Number, description: 'Client ID' })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Start date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'End date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Start date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'End date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
   async getClientAttendanceReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
@@ -102,6 +188,12 @@ export class ReportsController {
     const gymId = req.user.gymId;
     const trainerId = req.user.id;
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getClientAttendanceReport(trainerId, clientId, gymId, filters, branchId);
+    return this.reportsService.getClientAttendanceReport(
+      trainerId,
+      clientId,
+      gymId,
+      filters,
+      branchId,
+    );
   }
 }

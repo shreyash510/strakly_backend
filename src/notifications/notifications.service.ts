@@ -282,7 +282,10 @@ export class NotificationsService {
   /**
    * Delete old notifications (cleanup job)
    */
-  async deleteOldNotifications(gymId: number, daysOld: number): Promise<number> {
+  async deleteOldNotifications(
+    gymId: number,
+    daysOld: number,
+  ): Promise<number> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `
@@ -501,7 +504,9 @@ export class NotificationsService {
         },
       });
     } catch (error) {
-      this.logger.error(`Failed to create system notification: ${error.message}`);
+      this.logger.error(
+        `Failed to create system notification: ${error.message}`,
+      );
       throw error;
     }
   }
@@ -559,10 +564,7 @@ export class NotificationsService {
       userId,
       ...(query.unreadOnly && { isRead: false }),
       ...(query.type && { type: query.type }),
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: new Date() } },
-      ],
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
     };
 
     const [notifications, total] = await Promise.all([
@@ -606,10 +608,7 @@ export class NotificationsService {
       where: {
         userId,
         isRead: false,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
-        ],
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
   }

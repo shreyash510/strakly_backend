@@ -6,7 +6,9 @@ export interface EmailVerificationTemplateOptions {
   expiryMinutes: number;
 }
 
-export function emailVerificationTemplate(options: EmailVerificationTemplateOptions): string {
+export function emailVerificationTemplate(
+  options: EmailVerificationTemplateOptions,
+): string {
   const { userName, otp, expiryMinutes } = options;
 
   const content = `
@@ -56,7 +58,9 @@ export function emailVerificationTemplate(options: EmailVerificationTemplateOpti
   });
 }
 
-export function emailVerificationPlainText(options: EmailVerificationTemplateOptions): string {
+export function emailVerificationPlainText(
+  options: EmailVerificationTemplateOptions,
+): string {
   const { userName, otp, expiryMinutes } = options;
 
   return `

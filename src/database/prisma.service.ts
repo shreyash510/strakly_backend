@@ -4,7 +4,10 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   private pool: Pool;
 
   constructor() {
@@ -19,7 +22,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
 
     if (!databaseUrl) {
-      throw new Error(`Database URL not configured for environment: ${env}. Set DATABASE_URL_${env === 'prod' ? 'PROD' : 'DEV'} or DATABASE_URL`);
+      throw new Error(
+        `Database URL not configured for environment: ${env}. Set DATABASE_URL_${env === 'prod' ? 'PROD' : 'DEV'} or DATABASE_URL`,
+      );
     }
 
     console.log(`Connecting to ${env} database...`);

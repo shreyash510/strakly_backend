@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsArray, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreatePlanDto {
@@ -17,7 +24,7 @@ export class CreatePlanDto {
   durationValue: number;
 
   @IsString()
-  durationType: string;  // day, month, year
+  durationType: string; // day, month, year
 
   @IsNumber()
   @Min(0)

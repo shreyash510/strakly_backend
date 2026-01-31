@@ -1,5 +1,20 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail, IsNotEmpty, ValidateNested, MinLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsArray,
+  IsEmail,
+  IsNotEmpty,
+  ValidateNested,
+  MinLength,
+} from 'class-validator';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  PartialType,
+  OmitType,
+} from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 // Admin user details for creating a new gym
@@ -87,12 +102,18 @@ export class CreateGymDto {
   @IsString()
   country?: string;
 
-  @ApiPropertyOptional({ description: 'Opening time (HH:MM format)', example: '06:00' })
+  @ApiPropertyOptional({
+    description: 'Opening time (HH:MM format)',
+    example: '06:00',
+  })
   @IsOptional()
   @IsString()
   openingTime?: string;
 
-  @ApiPropertyOptional({ description: 'Closing time (HH:MM format)', example: '22:00' })
+  @ApiPropertyOptional({
+    description: 'Closing time (HH:MM format)',
+    example: '22:00',
+  })
   @IsOptional()
   @IsString()
   closingTime?: string;
@@ -114,4 +135,6 @@ export class CreateGymDto {
 }
 
 // UpdateGymDto excludes admin (can't change admin on update)
-export class UpdateGymDto extends PartialType(OmitType(CreateGymDto, ['admin'] as const)) {}
+export class UpdateGymDto extends PartialType(
+  OmitType(CreateGymDto, ['admin'] as const),
+) {}

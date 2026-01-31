@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEnum, IsOptional, IsNotEmpty, IsInt, IsArray, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsNotEmpty,
+  IsInt,
+  IsArray,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class WorkoutExerciseDto {
@@ -13,12 +22,16 @@ export class WorkoutExerciseDto {
   @IsOptional()
   sets?: number;
 
-  @ApiPropertyOptional({ description: 'Number of reps or rep range (e.g., "10-12")' })
+  @ApiPropertyOptional({
+    description: 'Number of reps or rep range (e.g., "10-12")',
+  })
   @IsString()
   @IsOptional()
   reps?: string;
 
-  @ApiPropertyOptional({ description: 'Duration in seconds for timed exercises' })
+  @ApiPropertyOptional({
+    description: 'Duration in seconds for timed exercises',
+  })
   @IsInt()
   @IsOptional()
   duration?: number;
@@ -40,7 +53,10 @@ export class CreateWorkoutPlanDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ enum: ['strength', 'cardio', 'flexibility', 'hiit', 'mixed'], description: 'Workout type' })
+  @ApiProperty({
+    enum: ['strength', 'cardio', 'flexibility', 'hiit', 'mixed'],
+    description: 'Workout type',
+  })
   @IsEnum(['strength', 'cardio', 'flexibility', 'hiit', 'mixed'])
   type: 'strength' | 'cardio' | 'flexibility' | 'hiit' | 'mixed';
 
@@ -49,12 +65,17 @@ export class CreateWorkoutPlanDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ description: 'Workout category (e.g., weight_loss, muscle_gain)' })
+  @ApiProperty({
+    description: 'Workout category (e.g., weight_loss, muscle_gain)',
+  })
   @IsString()
   @IsNotEmpty()
   category: string;
 
-  @ApiPropertyOptional({ enum: ['beginner', 'intermediate', 'advanced'], default: 'beginner' })
+  @ApiPropertyOptional({
+    enum: ['beginner', 'intermediate', 'advanced'],
+    default: 'beginner',
+  })
   @IsEnum(['beginner', 'intermediate', 'advanced'])
   @IsOptional()
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
@@ -72,19 +93,28 @@ export class CreateWorkoutPlanDto {
   @IsOptional()
   sessionsPerWeek?: number;
 
-  @ApiPropertyOptional({ description: 'Estimated session duration in minutes', default: 45 })
+  @ApiPropertyOptional({
+    description: 'Estimated session duration in minutes',
+    default: 45,
+  })
   @IsInt()
   @Min(10)
   @IsOptional()
   estimatedSessionDuration?: number;
 
-  @ApiPropertyOptional({ description: 'List of exercises', type: [WorkoutExerciseDto] })
+  @ApiPropertyOptional({
+    description: 'List of exercises',
+    type: [WorkoutExerciseDto],
+  })
   @IsArray()
   @IsOptional()
   @Type(() => WorkoutExerciseDto)
   exercises?: WorkoutExerciseDto[];
 
-  @ApiPropertyOptional({ enum: ['draft', 'active', 'archived'], default: 'draft' })
+  @ApiPropertyOptional({
+    enum: ['draft', 'active', 'archived'],
+    default: 'draft',
+  })
   @IsEnum(['draft', 'active', 'archived'])
   @IsOptional()
   status?: 'draft' | 'active' | 'archived';
@@ -96,7 +126,9 @@ export class UpdateWorkoutPlanDto {
   @IsOptional()
   title?: string;
 
-  @ApiPropertyOptional({ enum: ['strength', 'cardio', 'flexibility', 'hiit', 'mixed'] })
+  @ApiPropertyOptional({
+    enum: ['strength', 'cardio', 'flexibility', 'hiit', 'mixed'],
+  })
   @IsEnum(['strength', 'cardio', 'flexibility', 'hiit', 'mixed'])
   @IsOptional()
   type?: 'strength' | 'cardio' | 'flexibility' | 'hiit' | 'mixed';
@@ -135,7 +167,10 @@ export class UpdateWorkoutPlanDto {
   @IsOptional()
   estimatedSessionDuration?: number;
 
-  @ApiPropertyOptional({ description: 'List of exercises', type: [WorkoutExerciseDto] })
+  @ApiPropertyOptional({
+    description: 'List of exercises',
+    type: [WorkoutExerciseDto],
+  })
   @IsArray()
   @IsOptional()
   @Type(() => WorkoutExerciseDto)

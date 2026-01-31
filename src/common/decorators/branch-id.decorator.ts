@@ -1,4 +1,8 @@
-import { createParamDecorator, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { AuthenticatedUser } from '../../auth/strategies/jwt.strategy';
 
 /**
@@ -19,7 +23,9 @@ export const BranchId = createParamDecorator(
     const user = request.user as AuthenticatedUser;
 
     if (user?.branchId === null || user?.branchId === undefined) {
-      throw new ForbiddenException('Branch context required for this operation');
+      throw new ForbiddenException(
+        'Branch context required for this operation',
+      );
     }
 
     return user.branchId;

@@ -27,20 +27,27 @@ export class PublicService {
     }
 
     if (!gym.isActive) {
-      throw new BadRequestException('This gym is not accepting new registrations');
+      throw new BadRequestException(
+        'This gym is not accepting new registrations',
+      );
     }
 
     /* Check if email already exists in tenant schema */
-    const existingClient = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id FROM users WHERE email = $1`,
-        [dto.email.toLowerCase()]
-      );
-      return result.rows[0];
-    });
+    const existingClient = await this.tenantService.executeInTenant(
+      dto.gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id FROM users WHERE email = $1`,
+          [dto.email.toLowerCase()],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (existingClient) {
-      throw new ConflictException('A user with this email already exists in this gym');
+      throw new ConflictException(
+        'A user with this email already exists in this gym',
+      );
     }
 
     /* Also check public.users (staff) and system_users */
@@ -49,7 +56,9 @@ export class PublicService {
     });
 
     if (existingStaff) {
-      throw new ConflictException('This email is already registered as a staff member');
+      throw new ConflictException(
+        'This email is already registered as a staff member',
+      );
     }
 
     const existingSystemUser = await this.prisma.systemUser.findUnique({
@@ -61,17 +70,23 @@ export class PublicService {
     }
 
     /* Generate unique attendance code */
-    const attendanceCode = await generateUniqueAttendanceCode(dto.gymId, this.tenantService);
+    const attendanceCode = await generateUniqueAttendanceCode(
+      dto.gymId,
+      this.tenantService,
+    );
 
     /* Validate branch if provided */
     if (dto.branchId) {
-      const branchExists = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
-        const result = await client.query(
-          `SELECT id FROM branches WHERE id = $1 AND is_active = true`,
-          [dto.branchId]
-        );
-        return result.rows[0];
-      });
+      const branchExists = await this.tenantService.executeInTenant(
+        dto.gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT id FROM branches WHERE id = $1 AND is_active = true`,
+            [dto.branchId],
+          );
+          return result.rows[0];
+        },
+      );
 
       if (!branchExists) {
         throw new BadRequestException('Invalid branch selected');
@@ -79,28 +94,32 @@ export class PublicService {
     }
 
     /* Create the user in tenant schema as an onboarding client */
-    const user = await this.tenantService.executeInTenant(dto.gymId, async (client) => {
-      const result = await client.query(
-        `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
+    const user = await this.tenantService.executeInTenant(
+      dto.gymId,
+      async (client) => {
+        const result = await client.query(
+          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
-        [
-          dto.name,
-          dto.email.toLowerCase(),
-          await hashPassword(dto.password),
-          dto.phone,
-          dto.gender,
-          dto.joinDate || null,
-          attendanceCode,
-          dto.branchId || null,
-        ]
-      );
-      return result.rows[0];
-    });
+          [
+            dto.name,
+            dto.email.toLowerCase(),
+            await hashPassword(dto.password),
+            dto.phone,
+            dto.gender,
+            dto.joinDate || null,
+            attendanceCode,
+            dto.branchId || null,
+          ],
+        );
+        return result.rows[0];
+      },
+    );
 
     return {
       success: true,
-      message: 'Registration submitted successfully. Please wait for admin approval.',
+      message:
+        'Registration submitted successfully. Please wait for admin approval.',
       user: {
         id: user.id,
         name: user.name,
@@ -128,7 +147,9 @@ export class PublicService {
     }
 
     if (!gym.isActive) {
-      throw new BadRequestException('This gym is not accepting new registrations');
+      throw new BadRequestException(
+        'This gym is not accepting new registrations',
+      );
     }
 
     return gym;
@@ -146,16 +167,21 @@ export class PublicService {
     }
 
     if (!gym.isActive) {
-      throw new BadRequestException('This gym is not accepting new registrations');
+      throw new BadRequestException(
+        'This gym is not accepting new registrations',
+      );
     }
 
-    const branch = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, address, city, state, phone FROM branches WHERE id = $1 AND is_active = true`,
-        [branchId]
-      );
-      return result.rows[0];
-    });
+    const branch = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, name, address, city, state, phone FROM branches WHERE id = $1 AND is_active = true`,
+          [branchId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!branch) {
       throw new NotFoundException('Branch not found');

@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsEmail, MinLength, IsOptional, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  MinLength,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class UserDto {

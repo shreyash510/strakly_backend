@@ -1,7 +1,15 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
-import { CreatePermissionDto, UpdatePermissionDto, AssignRolePermissionsDto } from './dto/permission.dto';
+import {
+  CreatePermissionDto,
+  UpdatePermissionDto,
+  AssignRolePermissionsDto,
+} from './dto/permission.dto';
 
 @Injectable()
 export class PermissionsService {
@@ -44,7 +52,9 @@ export class PermissionsService {
     });
 
     if (existing) {
-      throw new ConflictException(`Permission with code ${dto.code} already exists`);
+      throw new ConflictException(
+        `Permission with code ${dto.code} already exists`,
+      );
     }
 
     return this.prisma.permission.create({
@@ -80,12 +90,12 @@ export class PermissionsService {
       },
     });
 
-    return rolePermissions.map(rp => rp.permission);
+    return rolePermissions.map((rp) => rp.permission);
   }
 
   async getPermissionCodesByRole(role: string) {
     const permissions = await this.getPermissionsByRole(role);
-    return permissions.map(p => p.code);
+    return permissions.map((p) => p.code);
   }
 
   async getAllRolesWithPermissions() {
@@ -155,7 +165,9 @@ export class PermissionsService {
     });
 
     if (existing) {
-      throw new ConflictException(`Role ${role} already has permission ${permissionCode}`);
+      throw new ConflictException(
+        `Role ${role} already has permission ${permissionCode}`,
+      );
     }
 
     return this.prisma.rolePermissionXref.create({
@@ -182,7 +194,9 @@ export class PermissionsService {
     });
 
     if (!existing) {
-      throw new NotFoundException(`Role ${role} does not have permission ${permissionCode}`);
+      throw new NotFoundException(
+        `Role ${role} does not have permission ${permissionCode}`,
+      );
     }
 
     await this.prisma.rolePermissionXref.delete({
@@ -199,7 +213,12 @@ export class PermissionsService {
 
   // ============ USER PERMISSIONS (via role) ============
 
-  async getUserPermissions(userId: number, gymId: number | null, role?: string, isImpersonating?: boolean) {
+  async getUserPermissions(
+    userId: number,
+    gymId: number | null,
+    role?: string,
+    isImpersonating?: boolean,
+  ) {
     // Handle impersonation case - superadmin acting as admin should have all permissions
     if (isImpersonating) {
       return this.getPermissionsByRole('superadmin');
@@ -223,13 +242,16 @@ export class PermissionsService {
     }
 
     // For tenant users (manager, trainer, client), get role from tenant schema
-    const user = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, role FROM users WHERE id = $1`,
-        [userId]
-      );
-      return result.rows[0];
-    });
+    const user = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, role FROM users WHERE id = $1`,
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -240,12 +262,26 @@ export class PermissionsService {
     return this.getPermissionsByRole(roleCode);
   }
 
-  async getUserPermissionCodes(userId: number, gymId: number | null, role?: string, isImpersonating?: boolean) {
-    const permissions = await this.getUserPermissions(userId, gymId, role, isImpersonating);
-    return permissions.map(p => p.code);
+  async getUserPermissionCodes(
+    userId: number,
+    gymId: number | null,
+    role?: string,
+    isImpersonating?: boolean,
+  ) {
+    const permissions = await this.getUserPermissions(
+      userId,
+      gymId,
+      role,
+      isImpersonating,
+    );
+    return permissions.map((p) => p.code);
   }
 
-  async userHasPermission(userId: number, gymId: number, permissionCode: string): Promise<boolean> {
+  async userHasPermission(
+    userId: number,
+    gymId: number,
+    permissionCode: string,
+  ): Promise<boolean> {
     const permissionCodes = await this.getUserPermissionCodes(userId, gymId);
     return permissionCodes.includes(permissionCode);
   }

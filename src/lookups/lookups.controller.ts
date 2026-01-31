@@ -11,7 +11,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LookupsService } from './lookups.service';
-import { CreateLookupTypeDto, UpdateLookupTypeDto } from './dto/create-lookup-type.dto';
+import {
+  CreateLookupTypeDto,
+  UpdateLookupTypeDto,
+} from './dto/create-lookup-type.dto';
 import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -84,7 +87,10 @@ export class LookupsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create multiple lookup values for a type' })
-  createBulk(@Param('typeCode') typeCode: string, @Body() dtos: CreateLookupDto[]) {
+  createBulk(
+    @Param('typeCode') typeCode: string,
+    @Body() dtos: CreateLookupDto[],
+  ) {
     return this.lookupsService.createBulkLookups(typeCode, dtos);
   }
 

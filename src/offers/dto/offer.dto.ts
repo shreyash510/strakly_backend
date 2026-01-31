@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsDateString, IsArray, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsDateString,
+  IsArray,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateOfferDto {
@@ -13,7 +21,7 @@ export class CreateOfferDto {
   description?: string;
 
   @IsString()
-  discountType: string;  // percentage, fixed
+  discountType: string; // percentage, fixed
 
   @IsNumber()
   @Min(0)
@@ -50,7 +58,7 @@ export class CreateOfferDto {
   @IsArray()
   @IsNumber({}, { each: true })
   @Type(() => Number)
-  planIds?: number[];  // Plan IDs this offer applies to (if not applicableToAll)
+  planIds?: number[]; // Plan IDs this offer applies to (if not applicableToAll)
 }
 
 export class UpdateOfferDto {

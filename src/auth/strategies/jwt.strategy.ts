@@ -41,12 +41,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'strakly-secret-key-change-in-production',
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') ||
+        'strakly-secret-key-change-in-production',
     });
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
+    const userId =
+      typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
     const gymId = payload.gymId;
     const tenantSchemaName = payload.tenantSchemaName;
     const branchId = payload.branchId;
@@ -127,19 +130,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // For tenant users (manager, trainer, client), require tenant information
     if (!gymId || !tenantSchemaName) {
-      throw new UnauthorizedException('Invalid token: missing tenant information');
+      throw new UnauthorizedException(
+        'Invalid token: missing tenant information',
+      );
     }
 
     // Verify user still exists in tenant schema
-    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, email, name, status, role, branch_id
+    const userData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, email, name, status, role, branch_id
          FROM users
          WHERE id = $1`,
-        [userId]
-      );
-      return result.rows[0];
-    });
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!userData) {
       throw new UnauthorizedException('User not found');

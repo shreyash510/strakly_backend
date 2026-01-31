@@ -10,9 +10,18 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiHeader,
+} from '@nestjs/swagger';
 import { PermissionsService } from './permissions.service';
-import { CreatePermissionDto, UpdatePermissionDto, AssignRolePermissionsDto } from './dto/permission.dto';
+import {
+  CreatePermissionDto,
+  UpdatePermissionDto,
+  AssignRolePermissionsDto,
+} from './dto/permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
@@ -124,7 +133,10 @@ export class PermissionsController {
     @Param('role') role: string,
     @Param('permissionCode') permissionCode: string,
   ) {
-    return this.permissionsService.removePermissionFromRole(role, permissionCode);
+    return this.permissionsService.removePermissionFromRole(
+      role,
+      permissionCode,
+    );
   }
 
   // ============ CURRENT USER PERMISSIONS ============
@@ -134,7 +146,12 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permissions' })
   getMyPermissions(@CurrentUser() user: AuthenticatedUser) {
-    return this.permissionsService.getUserPermissions(user.userId, user.gymId, user.role, user.isImpersonating);
+    return this.permissionsService.getUserPermissions(
+      user.userId,
+      user.gymId,
+      user.role,
+      user.isImpersonating,
+    );
   }
 
   @Get('me/codes')
@@ -142,7 +159,12 @@ export class PermissionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permission codes' })
   getMyPermissionCodes(@CurrentUser() user: AuthenticatedUser) {
-    return this.permissionsService.getUserPermissionCodes(user.userId, user.gymId, user.role, user.isImpersonating);
+    return this.permissionsService.getUserPermissionCodes(
+      user.userId,
+      user.gymId,
+      user.role,
+      user.isImpersonating,
+    );
   }
 
   // ============ USER PERMISSIONS (admin - userId from header) ============
@@ -152,10 +174,20 @@ export class PermissionsController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permissions for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissions(@CurrentUser() user: AuthenticatedUser, @Headers('x-user-id') userId: string) {
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  getUserPermissions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-user-id') userId: string,
+  ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissions(parseInt(userId), user.gymId);
+    return this.permissionsService.getUserPermissions(
+      parseInt(userId),
+      user.gymId,
+    );
   }
 
   @Get('user/codes')
@@ -163,9 +195,19 @@ export class PermissionsController {
   @Roles('superadmin', 'admin', 'manager')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get permission codes for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  getUserPermissionCodes(@CurrentUser() user: AuthenticatedUser, @Headers('x-user-id') userId: string) {
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  getUserPermissionCodes(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-user-id') userId: string,
+  ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.permissionsService.getUserPermissionCodes(parseInt(userId), user.gymId);
+    return this.permissionsService.getUserPermissionCodes(
+      parseInt(userId),
+      user.gymId,
+    );
   }
 }

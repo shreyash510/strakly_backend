@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { TenantModule } from './tenant/tenant.module';
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { LookupsModule } from './lookups/lookups.module';
@@ -31,6 +32,9 @@ import { FacilitiesModule } from './facilities/facilities.module';
 import { AmenitiesModule } from './amenities/amenities.module';
 import { WorkoutsModule } from './workouts/workouts.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
+import { ActivityLogsModule } from './activity-logs/activity-logs.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 @Module({
   imports: [
@@ -44,6 +48,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     }),
     DatabaseModule,
     TenantModule,
+    CommonModule,
     AuthModule,
     UsersModule,
     LookupsModule,
@@ -68,6 +73,9 @@ import { NotificationsModule } from './notifications/notifications.module';
     AmenitiesModule,
     WorkoutsModule,
     NotificationsModule,
+    PaymentsModule,
+    ActivityLogsModule,
+    AnnouncementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsNumber, IsDateString, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateBodyMetricsDto {
@@ -8,14 +15,14 @@ export class UpdateBodyMetricsDto {
   @Min(50)
   @Max(300)
   @Type(() => Number)
-  height?: number;  // cm
+  height?: number; // cm
 
   @IsOptional()
   @IsNumber()
   @Min(20)
   @Max(500)
   @Type(() => Number)
-  weight?: number;  // kg
+  weight?: number; // kg
 
   // Body composition
   @IsOptional()
@@ -23,28 +30,28 @@ export class UpdateBodyMetricsDto {
   @Min(1)
   @Max(70)
   @Type(() => Number)
-  bodyFat?: number;  // percentage
+  bodyFat?: number; // percentage
 
   @IsOptional()
   @IsNumber()
   @Min(10)
   @Max(150)
   @Type(() => Number)
-  muscleMass?: number;  // kg
+  muscleMass?: number; // kg
 
   @IsOptional()
   @IsNumber()
   @Min(1)
   @Max(10)
   @Type(() => Number)
-  boneMass?: number;  // kg
+  boneMass?: number; // kg
 
   @IsOptional()
   @IsNumber()
   @Min(30)
   @Max(80)
   @Type(() => Number)
-  waterPercentage?: number;  // percentage
+  waterPercentage?: number; // percentage
 
   // Measurements (cm)
   @IsOptional()
@@ -109,7 +116,7 @@ export class UpdateBodyMetricsDto {
   @Min(40)
   @Max(200)
   @Type(() => Number)
-  restingHeartRate?: number;  // bpm
+  restingHeartRate?: number; // bpm
 
   @IsOptional()
   @IsNumber()

@@ -1,4 +1,11 @@
-import { Controller, Post, Get, Body, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PublicService } from './public.service';
 import { MemberRegistrationDto } from './dto/member-registration.dto';
@@ -9,7 +16,9 @@ export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
   @Post('register')
-  @ApiOperation({ summary: 'Register as a new member (public - no auth required)' })
+  @ApiOperation({
+    summary: 'Register as a new member (public - no auth required)',
+  })
   registerMember(@Body() dto: MemberRegistrationDto) {
     return this.publicService.registerMember(dto);
   }

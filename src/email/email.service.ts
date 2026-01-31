@@ -53,8 +53,11 @@ export class EmailService {
 
   constructor(private readonly configService: ConfigService) {
     // Use native ZeptoMail API endpoint
-    this.zeptoMailApiUrl = this.configService.get<string>('ZEPTOMAIL_API_URL') || 'https://api.zeptomail.in/v1.1/email';
-    this.zeptoMailApiKey = this.configService.get<string>('ZEPTOMAIL_API_KEY') || '';
+    this.zeptoMailApiUrl =
+      this.configService.get<string>('ZEPTOMAIL_API_URL') ||
+      'https://api.zeptomail.in/v1.1/email';
+    this.zeptoMailApiKey =
+      this.configService.get<string>('ZEPTOMAIL_API_KEY') || '';
 
     if (this.zeptoMailApiKey) {
       this.logger.log('ZeptoMail API configured');
@@ -62,8 +65,11 @@ export class EmailService {
       this.logger.warn('ZeptoMail API key not configured');
     }
 
-    this.defaultFromEmail = this.configService.get<string>('ZEPTOMAIL_FROM_EMAIL') || 'support@strakly.com';
-    this.defaultFromName = this.configService.get<string>('ZEPTOMAIL_FROM_NAME') || 'Strakly';
+    this.defaultFromEmail =
+      this.configService.get<string>('ZEPTOMAIL_FROM_EMAIL') ||
+      'support@strakly.com';
+    this.defaultFromName =
+      this.configService.get<string>('ZEPTOMAIL_FROM_NAME') || 'Strakly';
   }
 
   /**
@@ -101,26 +107,30 @@ export class EmailService {
 
       // Add CC recipients
       if (dto.cc && dto.cc.length > 0) {
-        emailPayload.cc = dto.cc.map(email => ({
+        emailPayload.cc = dto.cc.map((email) => ({
           email_address: { address: email, name: email },
         }));
       }
 
       // Add BCC recipients
       if (dto.bcc && dto.bcc.length > 0) {
-        emailPayload.bcc = dto.bcc.map(email => ({
+        emailPayload.bcc = dto.bcc.map((email) => ({
           email_address: { address: email, name: email },
         }));
       }
 
-      this.logger.debug(`Sending email to ${dto.to} with subject: ${dto.subject}`);
-      this.logger.debug(`Email payload: ${JSON.stringify(emailPayload, null, 2)}`);
+      this.logger.debug(
+        `Sending email to ${dto.to} with subject: ${dto.subject}`,
+      );
+      this.logger.debug(
+        `Email payload: ${JSON.stringify(emailPayload, null, 2)}`,
+      );
 
       const response = await axios.post(this.zeptoMailApiUrl, emailPayload, {
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': this.zeptoMailApiKey,
+          Authorization: this.zeptoMailApiKey,
         },
       });
 
@@ -141,9 +151,14 @@ export class EmailService {
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || error.message;
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error?.message ||
+        error.message;
       this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
-      this.logger.error(`Full API Response: ${JSON.stringify(error.response?.data)}`);
+      this.logger.error(
+        `Full API Response: ${JSON.stringify(error.response?.data)}`,
+      );
       this.logger.error(`Status Code: ${error.response?.status}`);
       return {
         success: false,
@@ -164,7 +179,7 @@ export class EmailService {
           address: dto.from || this.defaultFromEmail,
           name: dto.fromName || this.defaultFromName,
         },
-        to: dto.to.map(email => ({
+        to: dto.to.map((email) => ({
           email_address: { address: email, name: email },
         })),
         subject: dto.subject,
@@ -182,9 +197,9 @@ export class EmailService {
 
       const response = await axios.post(this.zeptoMailApiUrl, emailPayload, {
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': this.zeptoMailApiKey,
+          Authorization: this.zeptoMailApiKey,
         },
       });
 
@@ -199,13 +214,18 @@ export class EmailService {
         };
       }
 
-      this.logger.log(`Bulk email sent successfully to ${dto.to.length} recipients`);
+      this.logger.log(
+        `Bulk email sent successfully to ${dto.to.length} recipients`,
+      );
       return {
         success: true,
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || error.message;
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error?.message ||
+        error.message;
       this.logger.error(`Failed to send bulk email: ${errorMessage}`);
       return {
         success: false,
@@ -218,10 +238,13 @@ export class EmailService {
    * Send email using template
    */
   async sendTemplateEmail(dto: SendTemplateEmailDto): Promise<EmailResponse> {
-    this.logger.warn('ZeptoMail template emails require template setup in ZeptoMail dashboard.');
+    this.logger.warn(
+      'ZeptoMail template emails require template setup in ZeptoMail dashboard.',
+    );
     return {
       success: false,
-      error: 'Template emails require ZeptoMail template setup. Use sendEmail with HTML instead.',
+      error:
+        'Template emails require ZeptoMail template setup. Use sendEmail with HTML instead.',
     };
   }
 
@@ -272,9 +295,17 @@ export class EmailService {
     to: string,
     userName: string,
   ): Promise<EmailResponse> {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://app.strakly.com';
-    const html = passwordResetSuccessTemplate({ userName, loginUrl: `${frontendUrl}/login` });
-    const text = passwordResetSuccessPlainText({ userName, loginUrl: `${frontendUrl}/login` });
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://app.strakly.com';
+    const html = passwordResetSuccessTemplate({
+      userName,
+      loginUrl: `${frontendUrl}/login`,
+    });
+    const text = passwordResetSuccessPlainText({
+      userName,
+      loginUrl: `${frontendUrl}/login`,
+    });
 
     return this.sendEmail({
       to,
@@ -292,9 +323,19 @@ export class EmailService {
     clientName: string,
     gymName: string,
   ): Promise<EmailResponse> {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://app.strakly.com';
-    const html = welcomeTemplate({ userName: clientName, gymName, loginUrl: `${frontendUrl}/login` });
-    const text = welcomePlainText({ userName: clientName, gymName, loginUrl: `${frontendUrl}/login` });
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://app.strakly.com';
+    const html = welcomeTemplate({
+      userName: clientName,
+      gymName,
+      loginUrl: `${frontendUrl}/login`,
+    });
+    const text = welcomePlainText({
+      userName: clientName,
+      gymName,
+      loginUrl: `${frontendUrl}/login`,
+    });
 
     return this.sendEmail({
       to,

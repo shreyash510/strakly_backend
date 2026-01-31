@@ -13,9 +13,20 @@ import {
   BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiHeader,
+} from '@nestjs/swagger';
 import { DietsService } from './diets.service';
-import { CreateDietDto, UpdateDietDto, AssignDietDto, UpdateDietAssignmentDto } from './dto/diet.dto';
+import {
+  CreateDietDto,
+  UpdateDietDto,
+  AssignDietDto,
+  UpdateDietAssignmentDto,
+} from './dto/diet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -34,21 +45,45 @@ export class DietsController {
     if (req.user.role === 'superadmin') {
       return queryBranchId ? parseInt(queryBranchId) : null;
     }
-    return queryBranchId ? parseInt(queryBranchId) : (req.user.branchId ?? null);
+    return queryBranchId
+      ? parseInt(queryBranchId)
+      : (req.user.branchId ?? null);
   }
 
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all diet plans' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status',
+  })
   @ApiQuery({ name: 'type', required: false, description: 'Filter by type' })
-  @ApiQuery({ name: 'category', required: false, description: 'Filter by category' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by title or description' })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'Filter by category',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by title or description',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
   findAll(
     @Request() req: any,
     @Query('status') status?: string,
@@ -60,9 +95,12 @@ export class DietsController {
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.role === 'superadmin'
-      ? (queryGymId ? parseInt(queryGymId) : null)
-      : req.user.gymId;
+    const gymId =
+      req.user.role === 'superadmin'
+        ? queryGymId
+          ? parseInt(queryGymId)
+          : null
+        : req.user.gymId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -91,9 +129,12 @@ export class DietsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = req.user.role === 'superadmin'
-      ? (queryGymId ? parseInt(queryGymId) : null)
-      : req.user.gymId;
+    const gymId =
+      req.user.role === 'superadmin'
+        ? queryGymId
+          ? parseInt(queryGymId)
+          : null
+        : req.user.gymId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -108,7 +149,12 @@ export class DietsController {
   @ApiOperation({ summary: 'Create a new diet plan' })
   create(@Request() req: any, @Body() dto: CreateDietDto) {
     const branchId = req.user.branchId ?? null;
-    return this.dietsService.create(dto, req.user.gymId, req.user.userId, branchId);
+    return this.dietsService.create(
+      dto,
+      req.user.gymId,
+      req.user.userId,
+      branchId,
+    );
   }
 
   @Patch(':id')
@@ -139,7 +185,12 @@ export class DietsController {
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
   assignDiet(@Request() req: any, @Body() dto: AssignDietDto) {
     const branchId = req.user.branchId ?? null;
-    return this.dietsService.assignDiet(dto, req.user.gymId, req.user.userId, branchId);
+    return this.dietsService.assignDiet(
+      dto,
+      req.user.gymId,
+      req.user.userId,
+      branchId,
+    );
   }
 
   @Get(':id/assignments')
@@ -152,9 +203,12 @@ export class DietsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = req.user.role === 'superadmin'
-      ? (queryGymId ? parseInt(queryGymId) : null)
-      : req.user.gymId;
+    const gymId =
+      req.user.role === 'superadmin'
+        ? queryGymId
+          ? parseInt(queryGymId)
+          : null
+        : req.user.gymId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -173,9 +227,12 @@ export class DietsController {
     @Param('userId', ParseIntPipe) userId: number,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = req.user.role === 'superadmin'
-      ? (queryGymId ? parseInt(queryGymId) : null)
-      : req.user.gymId;
+    const gymId =
+      req.user.role === 'superadmin'
+        ? queryGymId
+          ? parseInt(queryGymId)
+          : null
+        : req.user.gymId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');

@@ -13,9 +13,17 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { ContactRequestsService } from './contact-requests.service';
-import { CreateContactRequestDto, UpdateContactRequestDto } from './dto/contact-request.dto';
+import {
+  CreateContactRequestDto,
+  UpdateContactRequestDto,
+} from './dto/contact-request.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -24,7 +32,9 @@ import { setPaginationHeaders } from '../common/pagination.util';
 @ApiTags('contact-requests')
 @Controller('contact-requests')
 export class ContactRequestsController {
-  constructor(private readonly contactRequestsService: ContactRequestsService) {}
+  constructor(
+    private readonly contactRequestsService: ContactRequestsService,
+  ) {}
 
   // Public endpoint - no auth required
   @Post()
@@ -42,7 +52,12 @@ export class ContactRequestsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status (new/read/replied/closed)' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by status (new/read/replied/closed)',
+  })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
   async findAll(
     @Query('page') page?: string,

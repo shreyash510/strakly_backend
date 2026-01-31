@@ -93,22 +93,33 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-
-  private generateToken(user: UserResponse, gymAssignment?: GymAssignment, isAdmin: boolean = false): string {
+  private generateToken(
+    user: UserResponse,
+    gymAssignment?: GymAssignment,
+    isAdmin: boolean = false,
+  ): string {
     const payload = {
       sub: user.id,
       email: user.email,
       name: user.name,
       role: gymAssignment?.role || user.role || 'client',
       gymId: gymAssignment?.gymId || user.gymId || null,
-      tenantSchemaName: gymAssignment?.gym?.tenantSchemaName || user.gym?.tenantSchemaName || null,
+      tenantSchemaName:
+        gymAssignment?.gym?.tenantSchemaName ||
+        user.gym?.tenantSchemaName ||
+        null,
       branchId: gymAssignment?.branchId ?? null, // null = all branches access
       isAdmin, // Admin users are in public.users, not tenant.users
     };
     return this.jwtService.sign(payload);
   }
 
-  private toUserResponse(user: any, gym?: any, gyms?: GymAssignment[], subscription?: any): UserResponse {
+  private toUserResponse(
+    user: any,
+    gym?: any,
+    gyms?: GymAssignment[],
+    subscription?: any,
+  ): UserResponse {
     return {
       id: user.id,
       name: user.name,
@@ -120,19 +131,23 @@ export class AuthService {
       emailVerified: user.emailVerified ?? user.email_verified ?? false,
       attendanceCode: user.attendance_code || user.attendanceCode,
       gymId: gym?.id,
-      gym: gym ? {
-        id: gym.id,
-        name: gym.name,
-        logo: gym.logo || undefined,
-        city: gym.city || undefined,
-        state: gym.state || undefined,
-        tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
-        subscription: subscription ? {
-          planCode: subscription.plan?.code,
-          planName: subscription.plan?.name,
-          status: subscription.status,
-        } : undefined,
-      } : undefined,
+      gym: gym
+        ? {
+            id: gym.id,
+            name: gym.name,
+            logo: gym.logo || undefined,
+            city: gym.city || undefined,
+            state: gym.state || undefined,
+            tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
+            subscription: subscription
+              ? {
+                  planCode: subscription.plan?.code,
+                  planName: subscription.plan?.name,
+                  status: subscription.status,
+                }
+              : undefined,
+          }
+        : undefined,
       gyms,
       branchIds: user.branchIds, // For branch_admin with multiple branches
       createdAt: user.created_at || user.createdAt,
@@ -151,7 +166,9 @@ export class AuthService {
   /**
    * Register a new admin with their gym (creates tenant schema)
    */
-  async registerAdminWithGym(dto: RegisterAdminWithGymDto): Promise<AuthResponse> {
+  async registerAdminWithGym(
+    dto: RegisterAdminWithGymDto,
+  ): Promise<AuthResponse> {
     // Check if user already exists in public.users
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.user.email },
@@ -162,7 +179,14 @@ export class AuthService {
 
     // Block if user exists AND has verified email (completed signup properly)
     if (existingUser) {
-      console.log('Found existing user:', existingUser.id, 'emailVerified:', existingUser.emailVerified, 'gymAssignments:', existingUser.gymAssignments?.length);
+      console.log(
+        'Found existing user:',
+        existingUser.id,
+        'emailVerified:',
+        existingUser.emailVerified,
+        'gymAssignments:',
+        existingUser.gymAssignments?.length,
+      );
 
       if (existingUser.emailVerified) {
         throw new ConflictException('User with this email already exists');
@@ -173,21 +197,32 @@ export class AuthService {
       console.log('Cleaning up incomplete user:', existingUser.id);
 
       // Delete gym assignments first
-      if (existingUser.gymAssignments && existingUser.gymAssignments.length > 0) {
+      if (
+        existingUser.gymAssignments &&
+        existingUser.gymAssignments.length > 0
+      ) {
         for (const assignment of existingUser.gymAssignments) {
           // Delete the gym and its tenant schema
           try {
-            const gym = await this.prisma.gym.findUnique({ where: { id: assignment.gymId } });
+            const gym = await this.prisma.gym.findUnique({
+              where: { id: assignment.gymId },
+            });
             if (gym?.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
               await this.tenantService.dropTenantSchema(assignment.gymId);
             }
             // Delete subscriptions
-            await this.prisma.saasGymSubscription.deleteMany({ where: { gymId: assignment.gymId } });
+            await this.prisma.saasGymSubscription.deleteMany({
+              where: { gymId: assignment.gymId },
+            });
             // Delete the gym
             await this.prisma.gym.delete({ where: { id: assignment.gymId } });
             console.log('Cleaned up orphaned gym:', assignment.gymId);
           } catch (cleanupError) {
-            console.error('Failed to cleanup gym:', assignment.gymId, cleanupError);
+            console.error(
+              'Failed to cleanup gym:',
+              assignment.gymId,
+              cleanupError,
+            );
           }
         }
       }
@@ -200,7 +235,9 @@ export class AuthService {
         console.log('Deleted incomplete user:', existingUser.id);
       } catch (deleteError) {
         console.error('Failed to delete incomplete user:', deleteError);
-        throw new ConflictException('User with this email already exists. Please try again later.');
+        throw new ConflictException(
+          'User with this email already exists. Please try again later.',
+        );
       }
     }
 
@@ -318,7 +355,9 @@ export class AuthService {
 
     // Generate and send email verification OTP
     const verificationOtp = this.generateOtp();
-    const verificationExpiry = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+    const verificationExpiry = new Date(
+      Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     await this.prisma.emailVerification.create({
       data: {
@@ -332,23 +371,27 @@ export class AuthService {
     });
 
     // Send verification email (non-blocking)
-    this.emailService.sendEmailVerificationEmail(
-      dto.user.email,
-      dto.user.name,
-      verificationOtp,
-      this.VERIFICATION_EXPIRY_MINUTES,
-    ).catch((error) => {
-      console.error('Failed to send verification email:', error);
-    });
+    this.emailService
+      .sendEmailVerificationEmail(
+        dto.user.email,
+        dto.user.name,
+        verificationOtp,
+        this.VERIFICATION_EXPIRY_MINUTES,
+      )
+      .catch((error) => {
+        console.error('Failed to send verification email:', error);
+      });
 
     // Notify superadmins about new gym registration (non-blocking)
-    this.notificationsService.notifyNewGymRegistration({
-      gymId: gym.id,
-      gymName: dto.gym.name,
-      ownerName: dto.user.name,
-    }).catch((error) => {
-      console.error('Failed to send new gym notification:', error);
-    });
+    this.notificationsService
+      .notifyNewGymRegistration({
+        gymId: gym.id,
+        gymName: dto.gym.name,
+        ownerName: dto.user.name,
+      })
+      .catch((error) => {
+        console.error('Failed to send new gym notification:', error);
+      });
 
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
@@ -365,7 +408,11 @@ export class AuthService {
       },
     };
 
-    const user = this.toUserResponse({ ...createdUser, role: 'admin', emailVerified: false }, updatedGym, [gymAssignment]);
+    const user = this.toUserResponse(
+      { ...createdUser, role: 'admin', emailVerified: false },
+      updatedGym,
+      [gymAssignment],
+    );
     const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
 
     return {
@@ -483,33 +530,36 @@ export class AuthService {
       });
 
       // Build gym assignments list
-      const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
-        gymId: assignment.gymId,
-        branchId: assignment.branchId, // null = all branches access
-        role: assignment.role,
-        isPrimary: assignment.isPrimary,
-        gym: {
-          id: assignment.gym.id,
-          name: assignment.gym.name,
-          logo: assignment.gym.logo || undefined,
-          city: assignment.gym.city || undefined,
-          state: assignment.gym.state || undefined,
-          tenantSchemaName: assignment.gym.tenantSchemaName!,
-        },
-      }));
+      const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
+        (assignment) => ({
+          gymId: assignment.gymId,
+          branchId: assignment.branchId, // null = all branches access
+          role: assignment.role,
+          isPrimary: assignment.isPrimary,
+          gym: {
+            id: assignment.gym.id,
+            name: assignment.gym.name,
+            logo: assignment.gym.logo || undefined,
+            city: assignment.gym.city || undefined,
+            state: assignment.gym.state || undefined,
+            tenantSchemaName: assignment.gym.tenantSchemaName!,
+          },
+        }),
+      );
 
       if (gymAssignments.length === 0) {
         throw new UnauthorizedException('You are not assigned to any gym');
       }
 
       // Find primary gym or use first gym
-      const primaryAssignment = gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
+      const primaryAssignment =
+        gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
       const hasMultipleGyms = gymAssignments.length > 1;
 
       const user = this.toUserResponse(
         { ...adminUser, role: primaryAssignment.role },
         primaryAssignment.gym,
-        gymAssignments
+        gymAssignments,
       );
 
       const accessToken = this.generateToken(user, primaryAssignment, true); // isAdmin = true
@@ -533,16 +583,21 @@ export class AuthService {
 
     for (const gym of gyms) {
       try {
-        const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+        const schemaExists = await this.tenantService.tenantSchemaExists(
+          gym.id,
+        );
         if (!schemaExists) continue;
 
-        const tenantUser = await this.tenantService.executeInTenant(gym.id, async (client) => {
-          const result = await client.query(
-            `SELECT * FROM users WHERE email = $1`,
-            [loginDto.email]
-          );
-          return result.rows[0];
-        });
+        const tenantUser = await this.tenantService.executeInTenant(
+          gym.id,
+          async (client) => {
+            const result = await client.query(
+              `SELECT * FROM users WHERE email = $1`,
+              [loginDto.email],
+            );
+            return result.rows[0];
+          },
+        );
 
         if (tenantUser) {
           // Check user status
@@ -554,12 +609,17 @@ export class AuthService {
             throw new UnauthorizedException('Your account is inactive');
           }
 
-          if (tenantUser.status === 'onboarding' || tenantUser.status === 'confirm') {
+          if (
+            tenantUser.status === 'onboarding' ||
+            tenantUser.status === 'confirm'
+          ) {
             throw new UnauthorizedException('Your account is pending approval');
           }
 
           if (tenantUser.status === 'rejected') {
-            throw new UnauthorizedException('Your registration has been rejected');
+            throw new UnauthorizedException(
+              'Your registration has been rejected',
+            );
           }
 
           if (tenantUser.status === 'archive') {
@@ -584,7 +644,7 @@ export class AuthService {
           await this.tenantService.executeInTenant(gym.id, async (client) => {
             await client.query(
               `UPDATE users SET last_login_at = NOW() WHERE id = $1`,
-              [tenantUser.id]
+              [tenantUser.id],
             );
           });
 
@@ -594,17 +654,23 @@ export class AuthService {
           // For branch_admin, fetch their assigned branch IDs
           let branchIds: number[] = [];
           if (userRole === 'branch_admin') {
-            const branchAssignments = await this.tenantService.executeInTenant(gym.id, async (client) => {
-              const result = await client.query(
-                `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
-                [tenantUser.id]
-              );
-              return result.rows;
-            });
+            const branchAssignments = await this.tenantService.executeInTenant(
+              gym.id,
+              async (client) => {
+                const result = await client.query(
+                  `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+                  [tenantUser.id],
+                );
+                return result.rows;
+              },
+            );
             branchIds = branchAssignments.map((a: any) => a.branch_id);
           }
 
-          const user = this.toUserResponse({ ...tenantUser, role: userRole, branchIds }, gym);
+          const user = this.toUserResponse(
+            { ...tenantUser, role: userRole, branchIds },
+            gym,
+          );
           const accessToken = this.generateToken(user, {
             gymId: gym.id,
             branchId: tenantUser.branch_id ?? null, // User's assigned branch
@@ -659,35 +725,45 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const targetAssignment = user.gymAssignments.find((a) => a.gymId === targetGymId);
+    const targetAssignment = user.gymAssignments.find(
+      (a) => a.gymId === targetGymId,
+    );
     if (!targetAssignment) {
       throw new UnauthorizedException('You are not assigned to this gym');
     }
 
-    const gymAssignments: GymAssignment[] = user.gymAssignments.map((assignment) => ({
-      gymId: assignment.gymId,
-      branchId: assignment.branchId, // null = all branches access
-      role: assignment.role,
-      isPrimary: assignment.isPrimary,
-      gym: {
-        id: assignment.gym.id,
-        name: assignment.gym.name,
-        logo: assignment.gym.logo || undefined,
-        city: assignment.gym.city || undefined,
-        state: assignment.gym.state || undefined,
-        tenantSchemaName: assignment.gym.tenantSchemaName!,
-      },
-    }));
+    const gymAssignments: GymAssignment[] = user.gymAssignments.map(
+      (assignment) => ({
+        gymId: assignment.gymId,
+        branchId: assignment.branchId, // null = all branches access
+        role: assignment.role,
+        isPrimary: assignment.isPrimary,
+        gym: {
+          id: assignment.gym.id,
+          name: assignment.gym.name,
+          logo: assignment.gym.logo || undefined,
+          city: assignment.gym.city || undefined,
+          state: assignment.gym.state || undefined,
+          tenantSchemaName: assignment.gym.tenantSchemaName!,
+        },
+      }),
+    );
 
-    const selectedAssignment = gymAssignments.find((g) => g.gymId === targetGymId)!;
+    const selectedAssignment = gymAssignments.find(
+      (g) => g.gymId === targetGymId,
+    )!;
 
     const userResponse = this.toUserResponse(
       { ...user, role: selectedAssignment.role },
       selectedAssignment.gym,
-      gymAssignments
+      gymAssignments,
     );
 
-    const accessToken = this.generateToken(userResponse, selectedAssignment, true); // isAdmin = true (only admins can switch gyms)
+    const accessToken = this.generateToken(
+      userResponse,
+      selectedAssignment,
+      true,
+    ); // isAdmin = true (only admins can switch gyms)
 
     return {
       user: userResponse,
@@ -704,7 +780,11 @@ export class AuthService {
    * Get user profile - handles admin (public.users) and tenant users (manager/trainer/client in tenant.users)
    * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
-  async getProfile(userId: number, gymId?: number, isTenantUser: boolean = false): Promise<UserResponse> {
+  async getProfile(
+    userId: number,
+    gymId?: number,
+    isTenantUser: boolean = false,
+  ): Promise<UserResponse> {
     if (isTenantUser && gymId) {
       // Tenant user profile (manager, trainer, or client) from tenant schema
       const gym = await this.prisma.gym.findUnique({
@@ -715,13 +795,16 @@ export class AuthService {
         throw new UnauthorizedException('Gym not found');
       }
 
-      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT * FROM users WHERE id = $1`,
-          [userId]
-        );
-        return result.rows[0];
-      });
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT * FROM users WHERE id = $1`,
+            [userId],
+          );
+          return result.rows[0];
+        },
+      );
 
       if (!tenantUser) {
         throw new UnauthorizedException('User not found');
@@ -733,7 +816,12 @@ export class AuthService {
       // Get subscription for gym
       const subscription = await this.getGymSubscription(gymId);
 
-      return this.toUserResponse({ ...tenantUser, role: userRole }, gym, undefined, subscription);
+      return this.toUserResponse(
+        { ...tenantUser, role: userRole },
+        gym,
+        undefined,
+        subscription,
+      );
     }
 
     // Admin profile from public.users
@@ -751,23 +839,25 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map((assignment) => ({
-      gymId: assignment.gymId,
-      branchId: assignment.branchId, // null = all branches access
-      role: assignment.role,
-      isPrimary: assignment.isPrimary,
-      gym: {
-        id: assignment.gym.id,
-        name: assignment.gym.name,
-        logo: assignment.gym.logo || undefined,
-        city: assignment.gym.city || undefined,
-        state: assignment.gym.state || undefined,
-        tenantSchemaName: assignment.gym.tenantSchemaName!,
-      },
-    }));
+    const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
+      (assignment) => ({
+        gymId: assignment.gymId,
+        branchId: assignment.branchId, // null = all branches access
+        role: assignment.role,
+        isPrimary: assignment.isPrimary,
+        gym: {
+          id: assignment.gym.id,
+          name: assignment.gym.name,
+          logo: assignment.gym.logo || undefined,
+          city: assignment.gym.city || undefined,
+          state: assignment.gym.state || undefined,
+          tenantSchemaName: assignment.gym.tenantSchemaName!,
+        },
+      }),
+    );
 
     // Find the specific gym assignment if gymId is provided
-    let currentAssignment = gymId
+    const currentAssignment = gymId
       ? gymAssignments.find((g) => g.gymId === gymId)
       : gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
 
@@ -780,7 +870,7 @@ export class AuthService {
       { ...adminUser, role: currentAssignment?.role || 'admin' },
       currentAssignment?.gym,
       gymAssignments,
-      subscription
+      subscription,
     );
   }
 
@@ -828,18 +918,21 @@ export class AuthService {
       updates.push(`updated_at = NOW()`);
       values.push(userId);
 
-      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(
-          `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-          values
-        );
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          await client.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+            values,
+          );
 
-        const result = await client.query(
-          `SELECT * FROM users WHERE id = $1`,
-          [userId]
-        );
-        return result.rows[0];
-      });
+          const result = await client.query(
+            `SELECT * FROM users WHERE id = $1`,
+            [userId],
+          );
+          return result.rows[0];
+        },
+      );
 
       const userRole = tenantUser.role || 'client';
       return this.toUserResponse({ ...tenantUser, role: userRole }, gym);
@@ -863,20 +956,22 @@ export class AuthService {
       },
     });
 
-    const gymAssignments: GymAssignment[] = updatedUser.gymAssignments.map((assignment) => ({
-      gymId: assignment.gymId,
-      branchId: assignment.branchId, // null = all branches access
-      role: assignment.role,
-      isPrimary: assignment.isPrimary,
-      gym: {
-        id: assignment.gym.id,
-        name: assignment.gym.name,
-        logo: assignment.gym.logo || undefined,
-        city: assignment.gym.city || undefined,
-        state: assignment.gym.state || undefined,
-        tenantSchemaName: assignment.gym.tenantSchemaName!,
-      },
-    }));
+    const gymAssignments: GymAssignment[] = updatedUser.gymAssignments.map(
+      (assignment) => ({
+        gymId: assignment.gymId,
+        branchId: assignment.branchId, // null = all branches access
+        role: assignment.role,
+        isPrimary: assignment.isPrimary,
+        gym: {
+          id: assignment.gym.id,
+          name: assignment.gym.name,
+          logo: assignment.gym.logo || undefined,
+          city: assignment.gym.city || undefined,
+          state: assignment.gym.state || undefined,
+          tenantSchemaName: assignment.gym.tenantSchemaName!,
+        },
+      }),
+    );
 
     const currentAssignment = gymId
       ? gymAssignments.find((g) => g.gymId === gymId)
@@ -885,7 +980,7 @@ export class AuthService {
     return this.toUserResponse(
       { ...updatedUser, role: currentAssignment?.role || 'admin' },
       currentAssignment?.gym,
-      gymAssignments
+      gymAssignments,
     );
   }
 
@@ -902,13 +997,16 @@ export class AuthService {
   ): Promise<{ success: boolean }> {
     if (isTenantUser && gymId) {
       // Change password for tenant user (manager, trainer, or client) in tenant schema
-      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT * FROM users WHERE id = $1`,
-          [userId]
-        );
-        return result.rows[0];
-      });
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT * FROM users WHERE id = $1`,
+            [userId],
+          );
+          return result.rows[0];
+        },
+      );
 
       if (!tenantUser) {
         throw new UnauthorizedException('User not found');
@@ -927,7 +1025,7 @@ export class AuthService {
       await this.tenantService.executeInTenant(gymId, async (client) => {
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-          [newPasswordHash, userId]
+          [newPasswordHash, userId],
         );
       });
 
@@ -964,12 +1062,17 @@ export class AuthService {
   /**
    * Refresh token
    */
-  async refreshToken(userId: number, gymId?: number, isTenantUser: boolean = false): Promise<{ accessToken: string }> {
+  async refreshToken(
+    userId: number,
+    gymId?: number,
+    isTenantUser: boolean = false,
+  ): Promise<{ accessToken: string }> {
     const user = await this.getProfile(userId, gymId, isTenantUser);
 
-    const gymAssignment = gymId && user.gyms
-      ? user.gyms.find((g) => g.gymId === gymId)
-      : user.gyms?.[0];
+    const gymAssignment =
+      gymId && user.gyms
+        ? user.gyms.find((g) => g.gymId === gymId)
+        : user.gyms?.[0];
 
     // Admin users (not tenant users) need isAdmin flag
     const isAdmin = !isTenantUser && user.role === 'admin';
@@ -989,7 +1092,12 @@ export class AuthService {
     gymId: number,
     page: number = 1,
     limit: number = 20,
-  ): Promise<{ users: UserResponse[]; hasMore: boolean; page: number; total?: number }> {
+  ): Promise<{
+    users: UserResponse[];
+    hasMore: boolean;
+    page: number;
+    total?: number;
+  }> {
     if (!query || query.length < 2) {
       return { users: [], hasMore: false, page: 1 };
     }
@@ -1018,17 +1126,20 @@ export class AuthService {
     });
 
     // Search staff (branch_admin/manager/trainer) in tenant.users
-    const tenantStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT * FROM users
+    const tenantStaff = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT * FROM users
          WHERE id != $1
          AND role IN ('branch_admin', 'manager', 'trainer')
          AND (name ILIKE $2 OR email ILIKE $2)
          ORDER BY name ASC`,
-        [currentUserId, searchPattern]
-      );
-      return result.rows;
-    });
+          [currentUserId, searchPattern],
+        );
+        return result.rows;
+      },
+    );
 
     // Combine results
     const allUsers: UserResponse[] = [
@@ -1077,7 +1188,9 @@ export class AuthService {
    * Request password reset - sends OTP to email
    * Architecture: admin in public.users, manager/trainer/client in tenant.users
    */
-  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string; emailFound: boolean }> {
+  async requestPasswordReset(
+    email: string,
+  ): Promise<{ success: boolean; message: string; emailFound: boolean }> {
     // Find user in any location
     const userInfo = await this.findUserByEmail(email);
 
@@ -1097,7 +1210,9 @@ export class AuthService {
 
     // Generate and save new OTP
     const otp = this.generateOtp();
-    const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     await this.prisma.emailVerification.create({
       data: {
@@ -1128,7 +1243,10 @@ export class AuthService {
   /**
    * Verify OTP without resetting password
    */
-  async verifyOtp(email: string, otp: string): Promise<{ success: boolean; valid: boolean }> {
+  async verifyOtp(
+    email: string,
+    otp: string,
+  ): Promise<{ success: boolean; valid: boolean }> {
     const otpRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
@@ -1155,7 +1273,9 @@ export class AuthService {
         });
 
         if (anyOtpRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
-          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+          throw new BadRequestException(
+            'Too many failed attempts. Please request a new code.',
+          );
         }
       }
 
@@ -1199,7 +1319,9 @@ export class AuthService {
         });
 
         if (anyOtpRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
-          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+          throw new BadRequestException(
+            'Too many failed attempts. Please request a new code.',
+          );
         }
       }
 
@@ -1236,16 +1358,22 @@ export class AuthService {
       });
     } else if (userInfo.gymId) {
       // Update in tenant schema
-      await this.tenantService.executeInTenant(userInfo.gymId, async (client) => {
-        await client.query(
-          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2`,
-          [newPasswordHash, email]
-        );
-      });
+      await this.tenantService.executeInTenant(
+        userInfo.gymId,
+        async (client) => {
+          await client.query(
+            `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2`,
+            [newPasswordHash, email],
+          );
+        },
+      );
     }
 
     // Send success email
-    await this.emailService.sendPasswordResetSuccessEmail(email, userInfo.userName);
+    await this.emailService.sendPasswordResetSuccessEmail(
+      email,
+      userInfo.userName,
+    );
 
     // Cleanup old OTPs for this email
     await this.prisma.emailVerification.deleteMany({
@@ -1296,16 +1424,21 @@ export class AuthService {
 
     for (const gym of gyms) {
       try {
-        const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+        const schemaExists = await this.tenantService.tenantSchemaExists(
+          gym.id,
+        );
         if (!schemaExists) continue;
 
-        const tenantUser = await this.tenantService.executeInTenant(gym.id, async (client) => {
-          const result = await client.query(
-            `SELECT name, role FROM users WHERE email = $1`,
-            [email]
-          );
-          return result.rows[0];
-        });
+        const tenantUser = await this.tenantService.executeInTenant(
+          gym.id,
+          async (client) => {
+            const result = await client.query(
+              `SELECT name, role FROM users WHERE email = $1`,
+              [email],
+            );
+            return result.rows[0];
+          },
+        );
 
         if (tenantUser) {
           return {
@@ -1325,7 +1458,9 @@ export class AuthService {
   /**
    * Resend OTP for password reset
    */
-  async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
+  async resendOtp(
+    email: string,
+  ): Promise<{ success: boolean; message: string }> {
     // Check if there's a recent OTP (less than 1 minute old)
     const recentOtp = await this.prisma.emailVerification.findFirst({
       where: {
@@ -1337,7 +1472,9 @@ export class AuthService {
     });
 
     if (recentOtp) {
-      throw new BadRequestException('Please wait before requesting a new code.');
+      throw new BadRequestException(
+        'Please wait before requesting a new code.',
+      );
     }
 
     // Use the same logic as requestPasswordReset
@@ -1380,7 +1517,9 @@ export class AuthService {
         });
 
         if (anyRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
-          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+          throw new BadRequestException(
+            'Too many failed attempts. Please request a new code.',
+          );
         }
       }
 
@@ -1402,12 +1541,15 @@ export class AuthService {
       });
     } else if (verificationRecord.gymId) {
       // Update in tenant schema (for staff/clients)
-      await this.tenantService.executeInTenant(verificationRecord.gymId, async (client) => {
-        await client.query(
-          `UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1`,
-          [verificationRecord.userId]
-        );
-      });
+      await this.tenantService.executeInTenant(
+        verificationRecord.gymId,
+        async (client) => {
+          await client.query(
+            `UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1`,
+            [verificationRecord.userId],
+          );
+        },
+      );
     }
 
     // Cleanup old verification records for this email
@@ -1427,7 +1569,9 @@ export class AuthService {
   /**
    * Resend email verification OTP
    */
-  async resendVerificationEmail(email: string): Promise<{ success: boolean; message: string }> {
+  async resendVerificationEmail(
+    email: string,
+  ): Promise<{ success: boolean; message: string }> {
     // Check if there's a recent verification (less than 1 minute old)
     const recentVerification = await this.prisma.emailVerification.findFirst({
       where: {
@@ -1438,7 +1582,9 @@ export class AuthService {
     });
 
     if (recentVerification) {
-      throw new BadRequestException('Please wait before requesting a new code.');
+      throw new BadRequestException(
+        'Please wait before requesting a new code.',
+      );
     }
 
     // Find user
@@ -1450,7 +1596,8 @@ export class AuthService {
       // Don't reveal if user exists
       return {
         success: true,
-        message: 'If an account exists with this email, you will receive a verification code shortly.',
+        message:
+          'If an account exists with this email, you will receive a verification code shortly.',
       };
     }
 
@@ -1466,7 +1613,9 @@ export class AuthService {
 
     // Generate new OTP
     const verificationOtp = this.generateOtp();
-    const verificationExpiry = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+    const verificationExpiry = new Date(
+      Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     await this.prisma.emailVerification.create({
       data: {
@@ -1496,7 +1645,10 @@ export class AuthService {
   /**
    * Send signup verification OTP (before registration)
    */
-  async sendSignupVerificationOtp(email: string, name: string): Promise<{ success: boolean; message: string }> {
+  async sendSignupVerificationOtp(
+    email: string,
+    name: string,
+  ): Promise<{ success: boolean; message: string }> {
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
@@ -1526,7 +1678,9 @@ export class AuthService {
     });
 
     if (recentOtp) {
-      throw new BadRequestException('Please wait before requesting a new code.');
+      throw new BadRequestException(
+        'Please wait before requesting a new code.',
+      );
     }
 
     // Invalidate any existing OTPs
@@ -1537,7 +1691,9 @@ export class AuthService {
 
     // Generate new OTP
     const otp = this.generateOtp();
-    const expiresAt = new Date(Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
+    );
 
     await this.prisma.emailVerification.create({
       data: {
@@ -1561,11 +1717,15 @@ export class AuthService {
 
       if (!emailResult.success) {
         console.error('Email sending failed:', emailResult.error);
-        throw new BadRequestException('Failed to send verification email. Please try again.');
+        throw new BadRequestException(
+          'Failed to send verification email. Please try again.',
+        );
       }
     } catch (error) {
       console.error('Email sending error:', error);
-      throw new BadRequestException('Failed to send verification email. Please try again.');
+      throw new BadRequestException(
+        'Failed to send verification email. Please try again.',
+      );
     }
 
     return {
@@ -1577,7 +1737,10 @@ export class AuthService {
   /**
    * Verify signup OTP (before registration)
    */
-  async verifySignupOtp(email: string, otp: string): Promise<{ success: boolean; valid: boolean }> {
+  async verifySignupOtp(
+    email: string,
+    otp: string,
+  ): Promise<{ success: boolean; valid: boolean }> {
     const verificationRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
@@ -1602,7 +1765,9 @@ export class AuthService {
         });
 
         if (anyRecord.attempts >= this.MAX_OTP_ATTEMPTS) {
-          throw new BadRequestException('Too many failed attempts. Please request a new code.');
+          throw new BadRequestException(
+            'Too many failed attempts. Please request a new code.',
+          );
         }
       }
 
@@ -1622,7 +1787,9 @@ export class AuthService {
    * TEMPORARY: Get OTP from database for testing
    * Remove this method when email service is working
    */
-  async getSignupOtpTemporary(email: string): Promise<{ success: boolean; otp?: string; message: string }> {
+  async getSignupOtpTemporary(
+    email: string,
+  ): Promise<{ success: boolean; otp?: string; message: string }> {
     const verificationRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
@@ -1636,14 +1803,16 @@ export class AuthService {
     if (!verificationRecord) {
       return {
         success: false,
-        message: 'No active OTP found for this email. Please request a new code.',
+        message:
+          'No active OTP found for this email. Please request a new code.',
       };
     }
 
     return {
       success: true,
       otp: verificationRecord.otp,
-      message: 'Email service is temporarily unavailable. Use this OTP to verify.',
+      message:
+        'Email service is temporarily unavailable. Use this OTP to verify.',
     };
   }
 
@@ -1651,7 +1820,9 @@ export class AuthService {
    * TEMPORARY: Get password reset OTP from database for testing
    * Remove this method when email service is working
    */
-  async getPasswordResetOtpTemporary(email: string): Promise<{ success: boolean; otp?: string; message: string }> {
+  async getPasswordResetOtpTemporary(
+    email: string,
+  ): Promise<{ success: boolean; otp?: string; message: string }> {
     const otpRecord = await this.prisma.emailVerification.findFirst({
       where: {
         email,
@@ -1665,29 +1836,38 @@ export class AuthService {
     if (!otpRecord) {
       return {
         success: false,
-        message: 'No active OTP found for this email. Please request a new code.',
+        message:
+          'No active OTP found for this email. Please request a new code.',
       };
     }
 
     return {
       success: true,
       otp: otpRecord.otp,
-      message: 'Email service is temporarily unavailable. Use this OTP to verify.',
+      message:
+        'Email service is temporarily unavailable. Use this OTP to verify.',
     };
   }
 
   /**
    * Check if user's email is verified
    */
-  async checkEmailVerification(userId: number, isTenantUser: boolean = false, gymId?: number): Promise<{ verified: boolean }> {
+  async checkEmailVerification(
+    userId: number,
+    isTenantUser: boolean = false,
+    gymId?: number,
+  ): Promise<{ verified: boolean }> {
     if (isTenantUser && gymId) {
-      const tenantUser = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT email_verified FROM users WHERE id = $1`,
-          [userId]
-        );
-        return result.rows[0];
-      });
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT email_verified FROM users WHERE id = $1`,
+            [userId],
+          );
+          return result.rows[0];
+        },
+      );
 
       return { verified: tenantUser?.email_verified ?? false };
     }
@@ -1706,11 +1886,15 @@ export class AuthService {
   // ============================================
 
   async register(createUserDto: CreateUserDto): Promise<AuthResponse> {
-    throw new Error('Direct registration not supported. Use registerAdminWithGym for new gyms or invite users to existing gyms.');
+    throw new Error(
+      'Direct registration not supported. Use registerAdminWithGym for new gyms or invite users to existing gyms.',
+    );
   }
 
   async registerAdmin(createUserDto: CreateUserDto): Promise<AuthResponse> {
-    throw new Error('Direct admin registration not supported. Use registerAdminWithGym instead.');
+    throw new Error(
+      'Direct admin registration not supported. Use registerAdminWithGym instead.',
+    );
   }
 
   /**
@@ -1775,11 +1959,13 @@ export class AuthService {
         city: gym.city || undefined,
         state: gym.state || undefined,
         tenantSchemaName: gym.tenantSchemaName!,
-        subscription: subscription ? {
-          planCode: subscription.plan?.code,
-          planName: subscription.plan?.name,
-          status: subscription.status,
-        } : undefined,
+        subscription: subscription
+          ? {
+              planCode: subscription.plan?.code,
+              planName: subscription.plan?.name,
+              status: subscription.status,
+            }
+          : undefined,
       },
       expiresIn: 7200, // 2 hours in seconds
     };

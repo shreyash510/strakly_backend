@@ -1,6 +1,13 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { CreateLookupTypeDto, UpdateLookupTypeDto } from './dto/create-lookup-type.dto';
+import {
+  CreateLookupTypeDto,
+  UpdateLookupTypeDto,
+} from './dto/create-lookup-type.dto';
 import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 
 @Injectable()
@@ -46,7 +53,9 @@ export class LookupsService {
     });
 
     if (existing) {
-      throw new ConflictException(`LookupType with code ${dto.code} already exists`);
+      throw new ConflictException(
+        `LookupType with code ${dto.code} already exists`,
+      );
     }
 
     return this.prisma.lookupType.create({
@@ -178,7 +187,10 @@ export class LookupsService {
    * Get lookup ID by type code and value code
    * Returns null if not found
    */
-  async getLookupId(typeCode: string, lookupCode: string): Promise<number | null> {
+  async getLookupId(
+    typeCode: string,
+    lookupCode: string,
+  ): Promise<number | null> {
     const lookup = await this.findLookupByTypeAndCode(typeCode, lookupCode);
     return lookup?.id ?? null;
   }
