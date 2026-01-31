@@ -28,6 +28,8 @@ import {
   UpdateUserDto,
   AdminResetPasswordDto,
   ApproveRequestDto,
+  BulkUpdateUserDto,
+  BulkDeleteUserDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -530,6 +532,64 @@ export class UsersController {
       throw new BadRequestException('Gym ID is required for this operation');
     }
     return this.usersService.getClientTrainer(clientId, user.gymId);
+  }
+
+  // ============ BULK OPERATIONS ============
+
+  @Patch('bulk/update')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Bulk update users (move to branch, update status)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async bulkUpdate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkUpdateUserDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.bulkUpdate(
+      dto.userIds,
+      { branchIds: dto.branchIds, status: dto.status },
+      gymId,
+      user.role,
+    );
+  }
+
+  @Delete('bulk/delete')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Bulk delete users' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async bulkDelete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkDeleteUserDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.bulkDelete(
+      dto.userIds,
+      gymId,
+      user.role,
+      user.userId,
+    );
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============

@@ -397,3 +397,30 @@ export class ApproveRequestDto {
   @IsString()
   notes?: string;
 }
+
+export class BulkUpdateUserDto {
+  @ApiProperty({ description: 'Array of user IDs to update' })
+  @IsArray()
+  @IsInt({ each: true })
+  @IsNotEmpty()
+  userIds: number[];
+
+  @ApiPropertyOptional({ description: 'Branch IDs to assign' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  branchIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Status to set', enum: USER_STATUSES })
+  @IsOptional()
+  @IsEnum(USER_STATUSES)
+  status?: UserStatus;
+}
+
+export class BulkDeleteUserDto {
+  @ApiProperty({ description: 'Array of user IDs to delete' })
+  @IsArray()
+  @IsInt({ each: true })
+  @IsNotEmpty()
+  userIds: number[];
+}

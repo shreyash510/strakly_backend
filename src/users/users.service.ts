@@ -2416,4 +2416,187 @@ export class UsersService {
       notes: a.notes,
     }));
   }
+
+  // ============================================
+  // BULK OPERATIONS
+  // ============================================
+
+  /**
+   * Bulk update users - move to branch or update status
+   * Skips users that cannot be updated (e.g., admins, users from other gyms)
+   */
+  async bulkUpdate(
+    userIds: number[],
+    updateData: { branchIds?: number[]; status?: string },
+    gymId: number,
+    callerRole: string,
+  ): Promise<{ success: number; failed: number; skipped: number; errors: string[] }> {
+    const results = {
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const userId of userIds) {
+      try {
+        // Get user to check their role
+        const user = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT id, name, role FROM users WHERE id = $1 AND is_deleted = FALSE`,
+              [userId],
+            );
+            return result.rows[0];
+          },
+        );
+
+        if (!user) {
+          results.skipped++;
+          results.errors.push(`User ${userId}: Not found or deleted`);
+          continue;
+        }
+
+        // Check role hierarchy - skip users that caller cannot manage
+        if (!this.canManageRole(callerRole, user.role)) {
+          results.skipped++;
+          results.errors.push(`User ${userId} (${user.name}): Cannot update ${user.role} users`);
+          continue;
+        }
+
+        // Perform update
+        if (updateData.branchIds && updateData.branchIds.length > 0) {
+          // Update branch assignments
+          await this.tenantService.executeInTenant(gymId, async (client) => {
+            // Update primary branch_id
+            await client.query(
+              `UPDATE users SET branch_id = $1, updated_at = NOW() WHERE id = $2`,
+              [updateData.branchIds![0], userId],
+            );
+
+            // Deactivate existing branch assignments
+            await client.query(
+              `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
+              [userId],
+            );
+
+            // Insert/update new branch assignments
+            for (let i = 0; i < updateData.branchIds!.length; i++) {
+              const branchId = updateData.branchIds![i];
+              const isPrimary = i === 0;
+              await client.query(
+                `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
+                 VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
+                 ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
+                [userId, branchId, isPrimary],
+              );
+            }
+          });
+        }
+
+        if (updateData.status) {
+          const statusId = await this.getStatusId(updateData.status);
+          if (statusId) {
+            await this.tenantService.executeInTenant(gymId, async (client) => {
+              await client.query(
+                `UPDATE users SET status_id = $1, updated_at = NOW() WHERE id = $2`,
+                [statusId, userId],
+              );
+            });
+          }
+        }
+
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push(`User ${userId}: ${error.message}`);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Bulk delete users
+   * Skips users that cannot be deleted (e.g., admins, users with active memberships)
+   */
+  async bulkDelete(
+    userIds: number[],
+    gymId: number,
+    callerRole: string,
+    deletedById?: number,
+  ): Promise<{ success: number; failed: number; skipped: number; errors: string[] }> {
+    const results = {
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const userId of userIds) {
+      try {
+        // Get user to check their role
+        const user = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT id, name, role FROM users WHERE id = $1 AND is_deleted = FALSE`,
+              [userId],
+            );
+            return result.rows[0];
+          },
+        );
+
+        if (!user) {
+          results.skipped++;
+          results.errors.push(`User ${userId}: Not found or already deleted`);
+          continue;
+        }
+
+        // Check role hierarchy - skip users that caller cannot manage
+        if (!this.canManageRole(callerRole, user.role)) {
+          results.skipped++;
+          results.errors.push(`User ${userId} (${user.name}): Cannot delete ${user.role} users`);
+          continue;
+        }
+
+        // Check for active memberships (for clients)
+        if (user.role === 'client') {
+          const activeMembership = await this.tenantService.executeInTenant(
+            gymId,
+            async (client) => {
+              const result = await client.query(
+                `SELECT id FROM member_subscriptions
+                 WHERE user_id = $1 AND status IN ('active', 'pending')`,
+                [userId],
+              );
+              return result.rows[0];
+            },
+          );
+
+          if (activeMembership) {
+            results.skipped++;
+            results.errors.push(`User ${userId} (${user.name}): Has active membership`);
+            continue;
+          }
+        }
+
+        // Soft delete the user
+        await this.tenantService.executeInTenant(gymId, async (client) => {
+          await client.query(
+            `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
+            [userId, deletedById || null],
+          );
+        });
+
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push(`User ${userId}: ${error.message}`);
+      }
+    }
+
+    return results;
+  }
 }
