@@ -1,4 +1,10 @@
-import { IsString, IsEmail, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -16,7 +22,9 @@ export class AttachmentDto {
   @IsString()
   type?: string;
 
-  @ApiPropertyOptional({ description: 'Content disposition (attachment or inline)' })
+  @ApiPropertyOptional({
+    description: 'Content disposition (attachment or inline)',
+  })
   @IsOptional()
   @IsString()
   disposition?: string;
@@ -46,7 +54,9 @@ export class SendEmailDto {
   @IsString()
   html?: string;
 
-  @ApiPropertyOptional({ description: 'Sender email address (defaults to configured from address)' })
+  @ApiPropertyOptional({
+    description: 'Sender email address (defaults to configured from address)',
+  })
   @IsOptional()
   @IsEmail()
   from?: string;
@@ -73,7 +83,10 @@ export class SendEmailDto {
   @IsEmail({}, { each: true })
   bcc?: string[];
 
-  @ApiPropertyOptional({ description: 'Email attachments', type: [AttachmentDto] })
+  @ApiPropertyOptional({
+    description: 'Email attachments',
+    type: [AttachmentDto],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

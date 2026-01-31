@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import {
@@ -388,7 +392,10 @@ export class ReportsService {
     };
   }
 
-  async getPaymentDuesReport(gymId: number, branchId: number | null = null): Promise<PaymentDuesReportDto> {
+  async getPaymentDuesReport(
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<PaymentDuesReportDto> {
     // Get membership dues (pending payments)
     const membershipDues = await this.tenantService.executeInTenant(
       gymId,
@@ -513,16 +520,19 @@ export class ReportsService {
     clientId: number,
     gymId: number,
   ): Promise<{ clientName: string; clientEmail: string }> {
-    const assignment = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT tc.id, c.name as client_name, c.email as client_email
+    const assignment = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT tc.id, c.name as client_name, c.email as client_email
          FROM trainer_client_xref tc
          JOIN users c ON c.id = tc.client_id
          WHERE tc.trainer_id = $1 AND tc.client_id = $2 AND tc.is_active = true`,
-        [trainerId, clientId],
-      );
-      return result.rows[0];
-    });
+          [trainerId, clientId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!assignment) {
       throw new ForbiddenException('You do not have access to this client');
@@ -545,68 +555,100 @@ export class ReportsService {
     branchId?: number | null,
   ): Promise<ClientProgressReportDto> {
     // Verify trainer has access to this client
-    const { clientName, clientEmail } = await this.verifyTrainerClientAccess(trainerId, clientId, gymId);
+    const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
+      trainerId,
+      clientId,
+      gymId,
+    );
 
     const now = new Date();
     const defaultStartDate = new Date(now.getFullYear(), now.getMonth() - 6, 1); // 6 months ago
-    const startDate = filters?.startDate ? new Date(filters.startDate) : defaultStartDate;
+    const startDate = filters?.startDate
+      ? new Date(filters.startDate)
+      : defaultStartDate;
     const endDate = filters?.endDate ? new Date(filters.endDate) : now;
 
     // Get body metrics history
-    const metricsData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let whereClause = 'user_id = $1 AND measured_at >= $2 AND measured_at <= $3';
-      const values: any[] = [clientId, startDate, endDate];
-      let paramIndex = 4;
+    const metricsData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause =
+          'user_id = $1 AND measured_at >= $2 AND measured_at <= $3';
+        const values: any[] = [clientId, startDate, endDate];
+        let paramIndex = 4;
 
-      if (branchId !== null && branchId !== undefined) {
-        whereClause += ` AND branch_id = $${paramIndex++}`;
-        values.push(branchId);
-      }
+        if (branchId !== null && branchId !== undefined) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
-      // Get all history records
-      const historyResult = await client.query(
-        `SELECT id, measured_at, weight, bmi, body_fat, muscle_mass, waist, chest, hips
+        // Get all history records
+        const historyResult = await client.query(
+          `SELECT id, measured_at, weight, bmi, body_fat, muscle_mass, waist, chest, hips
          FROM body_metrics_history
          WHERE ${whereClause}
          ORDER BY measured_at ASC`,
-        values,
-      );
+          values,
+        );
 
-      // Get first and last records for comparison
-      const firstRecord = historyResult.rows[0];
-      const lastRecord = historyResult.rows[historyResult.rows.length - 1];
+        // Get first and last records for comparison
+        const firstRecord = historyResult.rows[0];
+        const lastRecord = historyResult.rows[historyResult.rows.length - 1];
 
-      // Get current metrics
-      const currentMetricsResult = await client.query(
-        `SELECT weight, bmi, waist, chest, hips, biceps, thighs, calves, shoulders
+        // Get current metrics
+        const currentMetricsResult = await client.query(
+          `SELECT weight, bmi, waist, chest, hips, biceps, thighs, calves, shoulders
          FROM body_metrics WHERE user_id = $1`,
-        [clientId],
-      );
-      const currentMetrics = currentMetricsResult.rows[0];
+          [clientId],
+        );
+        const currentMetrics = currentMetricsResult.rows[0];
 
-      return {
-        history: historyResult.rows,
-        firstRecord,
-        lastRecord,
-        currentMetrics,
-        totalRecords: historyResult.rows.length,
-      };
-    });
+        return {
+          history: historyResult.rows,
+          firstRecord,
+          lastRecord,
+          currentMetrics,
+          totalRecords: historyResult.rows.length,
+        };
+      },
+    );
 
     // Calculate metrics changes
-    const startWeight = metricsData.firstRecord?.weight ? Number(metricsData.firstRecord.weight) : null;
-    const currentWeight = metricsData.currentMetrics?.weight ? Number(metricsData.currentMetrics.weight) : null;
-    const weightChange = startWeight && currentWeight ? currentWeight - startWeight : null;
-    const weightChangePercent = startWeight && weightChange ? (weightChange / startWeight) * 100 : null;
+    const startWeight = metricsData.firstRecord?.weight
+      ? Number(metricsData.firstRecord.weight)
+      : null;
+    const currentWeight = metricsData.currentMetrics?.weight
+      ? Number(metricsData.currentMetrics.weight)
+      : null;
+    const weightChange =
+      startWeight && currentWeight ? currentWeight - startWeight : null;
+    const weightChangePercent =
+      startWeight && weightChange ? (weightChange / startWeight) * 100 : null;
 
-    const startBMI = metricsData.firstRecord?.bmi ? Number(metricsData.firstRecord.bmi) : null;
-    const currentBMI = metricsData.currentMetrics?.bmi ? Number(metricsData.currentMetrics.bmi) : null;
+    const startBMI = metricsData.firstRecord?.bmi
+      ? Number(metricsData.firstRecord.bmi)
+      : null;
+    const currentBMI = metricsData.currentMetrics?.bmi
+      ? Number(metricsData.currentMetrics.bmi)
+      : null;
 
     // Calculate measurement changes
-    const measurementFields = ['waist', 'chest', 'hips', 'biceps', 'thighs', 'calves', 'shoulders'];
+    const measurementFields = [
+      'waist',
+      'chest',
+      'hips',
+      'biceps',
+      'thighs',
+      'calves',
+      'shoulders',
+    ];
     const measurements = measurementFields.map((field) => {
-      const start = metricsData.firstRecord?.[field] ? Number(metricsData.firstRecord[field]) : null;
-      const current = metricsData.currentMetrics?.[field] ? Number(metricsData.currentMetrics[field]) : null;
+      const start = metricsData.firstRecord?.[field]
+        ? Number(metricsData.firstRecord[field])
+        : null;
+      const current = metricsData.currentMetrics?.[field]
+        ? Number(metricsData.currentMetrics[field])
+        : null;
       return {
         name: field.charAt(0).toUpperCase() + field.slice(1),
         start,
@@ -627,7 +669,9 @@ export class ReportsService {
         startWeight,
         currentWeight,
         weightChange,
-        weightChangePercent: weightChangePercent ? Math.round(weightChangePercent * 100) / 100 : null,
+        weightChangePercent: weightChangePercent
+          ? Math.round(weightChangePercent * 100) / 100
+          : null,
         startBMI,
         currentBMI,
         measurements,
@@ -658,36 +702,45 @@ export class ReportsService {
     branchId?: number | null,
   ): Promise<ClientAttendanceReportDto> {
     // Verify trainer has access to this client
-    const { clientName, clientEmail } = await this.verifyTrainerClientAccess(trainerId, clientId, gymId);
+    const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
+      trainerId,
+      clientId,
+      gymId,
+    );
 
     const now = new Date();
     const defaultStartDate = new Date(now.getFullYear(), now.getMonth() - 3, 1); // 3 months ago
-    const startDate = filters?.startDate ? new Date(filters.startDate) : defaultStartDate;
+    const startDate = filters?.startDate
+      ? new Date(filters.startDate)
+      : defaultStartDate;
     const endDate = filters?.endDate ? new Date(filters.endDate) : now;
 
-    const attendanceData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let whereClause = 'user_id = $1 AND check_in_time >= $2 AND check_in_time <= $3';
-      const values: any[] = [clientId, startDate, endDate];
-      let paramIndex = 4;
+    const attendanceData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause =
+          'user_id = $1 AND check_in_time >= $2 AND check_in_time <= $3';
+        const values: any[] = [clientId, startDate, endDate];
+        let paramIndex = 4;
 
-      if (branchId !== null && branchId !== undefined) {
-        whereClause += ` AND branch_id = $${paramIndex++}`;
-        values.push(branchId);
-      }
+        if (branchId !== null && branchId !== undefined) {
+          whereClause += ` AND branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
-      // Get all attendance records
-      const attendanceResult = await client.query(
-        `SELECT id, check_in_time, check_out_time,
+        // Get all attendance records
+        const attendanceResult = await client.query(
+          `SELECT id, check_in_time, check_out_time,
                 EXTRACT(EPOCH FROM (check_out_time - check_in_time))/60 as duration_minutes
          FROM attendance
          WHERE ${whereClause}
          ORDER BY check_in_time DESC`,
-        values,
-      );
+          values,
+        );
 
-      // Get weekly pattern (day of week distribution)
-      const weeklyPatternResult = await client.query(
-        `SELECT
+        // Get weekly pattern (day of week distribution)
+        const weeklyPatternResult = await client.query(
+          `SELECT
            TRIM(TO_CHAR(check_in_time, 'Day')) as day_name,
            EXTRACT(DOW FROM check_in_time) as day_num,
            COUNT(*) as visits
@@ -695,12 +748,12 @@ export class ReportsService {
          WHERE ${whereClause}
          GROUP BY day_name, day_num
          ORDER BY day_num`,
-        values,
-      );
+          values,
+        );
 
-      // Get monthly trend
-      const monthlyTrendResult = await client.query(
-        `SELECT
+        // Get monthly trend
+        const monthlyTrendResult = await client.query(
+          `SELECT
            TO_CHAR(check_in_time, 'Mon YYYY') as month,
            EXTRACT(YEAR FROM check_in_time) as year,
            EXTRACT(MONTH FROM check_in_time) as month_num,
@@ -709,25 +762,29 @@ export class ReportsService {
          WHERE ${whereClause}
          GROUP BY month, year, month_num
          ORDER BY year, month_num`,
-        values,
-      );
+          values,
+        );
 
-      // Get unique days count
-      const uniqueDaysResult = await client.query(
-        `SELECT COUNT(DISTINCT DATE(check_in_time)) as unique_days
+        // Get unique days count
+        const uniqueDaysResult = await client.query(
+          `SELECT COUNT(DISTINCT DATE(check_in_time)) as unique_days
          FROM attendance
          WHERE ${whereClause}`,
-        values,
-      );
+          values,
+        );
 
-      return {
-        records: attendanceResult.rows,
-        weeklyPattern: weeklyPatternResult.rows,
-        monthlyTrend: monthlyTrendResult.rows,
-        uniqueDays: parseInt(uniqueDaysResult.rows[0]?.unique_days || '0', 10),
-        totalVisits: attendanceResult.rows.length,
-      };
-    });
+        return {
+          records: attendanceResult.rows,
+          weeklyPattern: weeklyPatternResult.rows,
+          monthlyTrend: monthlyTrendResult.rows,
+          uniqueDays: parseInt(
+            uniqueDaysResult.rows[0]?.unique_days || '0',
+            10,
+          ),
+          totalVisits: attendanceResult.rows.length,
+        };
+      },
+    );
 
     // Calculate streaks
     const { longestStreak, currentStreak } = this.calculateStreaks(
@@ -735,12 +792,22 @@ export class ReportsService {
     );
 
     // Calculate avg visits per week
-    const weeksDiff = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
-    const avgVisitsPerWeek = Math.round((attendanceData.totalVisits / weeksDiff) * 100) / 100;
+    const weeksDiff = Math.max(
+      1,
+      Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000),
+      ),
+    );
+    const avgVisitsPerWeek =
+      Math.round((attendanceData.totalVisits / weeksDiff) * 100) / 100;
 
     // Calculate missed days this month
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysInMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+    ).getDate();
     const daysPassed = now.getDate();
     const visitsThisMonth = attendanceData.records.filter(
       (r: any) => new Date(r.check_in_time) >= currentMonthStart,
@@ -748,9 +815,19 @@ export class ReportsService {
     const missedDaysThisMonth = Math.max(0, daysPassed - visitsThisMonth);
 
     // Fill in all days of week for pattern
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
     const weeklyPattern = dayNames.map((day, index) => {
-      const found = attendanceData.weeklyPattern.find((p: any) => parseInt(p.day_num, 10) === index);
+      const found = attendanceData.weeklyPattern.find(
+        (p: any) => parseInt(p.day_num, 10) === index,
+      );
       return {
         day,
         visits: found ? parseInt(found.visits, 10) : 0,
@@ -781,8 +858,12 @@ export class ReportsService {
       recentVisits: attendanceData.records.slice(0, 20).map((r: any) => ({
         id: r.id,
         checkInTime: new Date(r.check_in_time).toISOString(),
-        checkOutTime: r.check_out_time ? new Date(r.check_out_time).toISOString() : null,
-        duration: r.duration_minutes ? Math.round(Number(r.duration_minutes)) : null,
+        checkOutTime: r.check_out_time
+          ? new Date(r.check_out_time).toISOString()
+          : null,
+        duration: r.duration_minutes
+          ? Math.round(Number(r.duration_minutes))
+          : null,
       })),
     };
   }
@@ -795,112 +876,131 @@ export class ReportsService {
     gymId: number,
     branchId?: number | null,
   ): Promise<TrainerClientsSummaryDto> {
-    const summary = await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Get all assigned clients
-      const clientsResult = await client.query(
-        `SELECT tc.client_id, c.name as client_name
+    const summary = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // Get all assigned clients
+        const clientsResult = await client.query(
+          `SELECT tc.client_id, c.name as client_name
          FROM trainer_client_xref tc
          JOIN users c ON c.id = tc.client_id
          WHERE tc.trainer_id = $1 AND tc.is_active = true`,
-        [trainerId],
-      );
+          [trainerId],
+        );
 
-      const clients = clientsResult.rows;
-      const totalClients = clients.length;
+        const clients = clientsResult.rows;
+        const totalClients = clients.length;
 
-      if (totalClients === 0) {
-        return {
-          totalClients: 0,
-          activeThisWeek: 0,
-          avgAttendanceRate: 0,
-          clientsWithProgress: 0,
-          topPerformers: [],
-        };
-      }
+        if (totalClients === 0) {
+          return {
+            totalClients: 0,
+            activeThisWeek: 0,
+            avgAttendanceRate: 0,
+            clientsWithProgress: 0,
+            topPerformers: [],
+          };
+        }
 
-      const clientIds = clients.map((c: any) => c.client_id);
+        const clientIds = clients.map((c: any) => c.client_id);
 
-      // Get clients active this week
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
+        // Get clients active this week
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
 
-      let activeQuery = `
+        let activeQuery = `
         SELECT COUNT(DISTINCT user_id) as active_count
         FROM attendance
         WHERE user_id = ANY($1) AND check_in_time >= $2
       `;
-      const activeValues: any[] = [clientIds, weekAgo];
+        const activeValues: any[] = [clientIds, weekAgo];
 
-      if (branchId !== null && branchId !== undefined) {
-        activeQuery += ` AND branch_id = $3`;
-        activeValues.push(branchId);
-      }
+        if (branchId !== null && branchId !== undefined) {
+          activeQuery += ` AND branch_id = $3`;
+          activeValues.push(branchId);
+        }
 
-      const activeResult = await client.query(activeQuery, activeValues);
-      const activeThisWeek = parseInt(activeResult.rows[0]?.active_count || '0', 10);
+        const activeResult = await client.query(activeQuery, activeValues);
+        const activeThisWeek = parseInt(
+          activeResult.rows[0]?.active_count || '0',
+          10,
+        );
 
-      // Get average attendance rate (visits in last 30 days / clients)
-      const monthAgo = new Date();
-      monthAgo.setDate(monthAgo.getDate() - 30);
+        // Get average attendance rate (visits in last 30 days / clients)
+        const monthAgo = new Date();
+        monthAgo.setDate(monthAgo.getDate() - 30);
 
-      let avgQuery = `
+        let avgQuery = `
         SELECT COUNT(*) as total_visits
         FROM attendance
         WHERE user_id = ANY($1) AND check_in_time >= $2
       `;
-      const avgValues: any[] = [clientIds, monthAgo];
+        const avgValues: any[] = [clientIds, monthAgo];
 
-      if (branchId !== null && branchId !== undefined) {
-        avgQuery += ` AND branch_id = $3`;
-        avgValues.push(branchId);
-      }
+        if (branchId !== null && branchId !== undefined) {
+          avgQuery += ` AND branch_id = $3`;
+          avgValues.push(branchId);
+        }
 
-      const avgResult = await client.query(avgQuery, avgValues);
-      const totalVisits = parseInt(avgResult.rows[0]?.total_visits || '0', 10);
-      const avgAttendanceRate = totalClients > 0 ? Math.round((totalVisits / (totalClients * 30)) * 100) : 0;
+        const avgResult = await client.query(avgQuery, avgValues);
+        const totalVisits = parseInt(
+          avgResult.rows[0]?.total_visits || '0',
+          10,
+        );
+        const avgAttendanceRate =
+          totalClients > 0
+            ? Math.round((totalVisits / (totalClients * 30)) * 100)
+            : 0;
 
-      // Get clients with progress (have more than 1 body metrics history record)
-      const progressResult = await client.query(
-        `SELECT COUNT(DISTINCT user_id) as progress_count
+        // Get clients with progress (have more than 1 body metrics history record)
+        const progressResult = await client.query(
+          `SELECT COUNT(DISTINCT user_id) as progress_count
          FROM body_metrics_history
          WHERE user_id = ANY($1)
          GROUP BY user_id
          HAVING COUNT(*) > 1`,
-        [clientIds],
-      );
-      const clientsWithProgress = progressResult.rows.length;
+          [clientIds],
+        );
+        const clientsWithProgress = progressResult.rows.length;
 
-      // Get top performers (best weight loss, most attendance)
-      const topPerformers: Array<{ clientId: number; clientName: string; metric: string; value: string }> = [];
+        // Get top performers (best weight loss, most attendance)
+        const topPerformers: Array<{
+          clientId: number;
+          clientName: string;
+          metric: string;
+          value: string;
+        }> = [];
 
-      // Top by attendance this month
-      let topAttendanceQuery = `
+        // Top by attendance this month
+        let topAttendanceQuery = `
         SELECT a.user_id, c.name, COUNT(*) as visits
         FROM attendance a
         JOIN users c ON c.id = a.user_id
         WHERE a.user_id = ANY($1) AND a.check_in_time >= $2
       `;
-      const topAttValues: any[] = [clientIds, monthAgo];
+        const topAttValues: any[] = [clientIds, monthAgo];
 
-      if (branchId !== null && branchId !== undefined) {
-        topAttendanceQuery += ` AND a.branch_id = $3`;
-        topAttValues.push(branchId);
-      }
+        if (branchId !== null && branchId !== undefined) {
+          topAttendanceQuery += ` AND a.branch_id = $3`;
+          topAttValues.push(branchId);
+        }
 
-      topAttendanceQuery += ` GROUP BY a.user_id, c.name ORDER BY visits DESC LIMIT 1`;
+        topAttendanceQuery += ` GROUP BY a.user_id, c.name ORDER BY visits DESC LIMIT 1`;
 
-      const topAttendanceResult = await client.query(topAttendanceQuery, topAttValues);
-      if (topAttendanceResult.rows[0]) {
-        topPerformers.push({
-          clientId: topAttendanceResult.rows[0].user_id,
-          clientName: topAttendanceResult.rows[0].name,
-          metric: 'Most Active',
-          value: `${topAttendanceResult.rows[0].visits} visits`,
-        });
-      }
+        const topAttendanceResult = await client.query(
+          topAttendanceQuery,
+          topAttValues,
+        );
+        if (topAttendanceResult.rows[0]) {
+          topPerformers.push({
+            clientId: topAttendanceResult.rows[0].user_id,
+            clientName: topAttendanceResult.rows[0].name,
+            metric: 'Most Active',
+            value: `${topAttendanceResult.rows[0].visits} visits`,
+          });
+        }
 
-      // Top by weight loss (comparing first and latest record)
-      const weightLossQuery = `
+        // Top by weight loss (comparing first and latest record)
+        const weightLossQuery = `
         WITH first_last AS (
           SELECT
             h.user_id,
@@ -918,24 +1018,30 @@ export class ReportsService {
         ORDER BY weight_lost DESC
         LIMIT 1
       `;
-      const weightLossResult = await client.query(weightLossQuery, [clientIds]);
-      if (weightLossResult.rows[0] && weightLossResult.rows[0].weight_lost > 0) {
-        topPerformers.push({
-          clientId: weightLossResult.rows[0].user_id,
-          clientName: weightLossResult.rows[0].name,
-          metric: 'Weight Loss',
-          value: `-${Number(weightLossResult.rows[0].weight_lost).toFixed(1)} kg`,
-        });
-      }
+        const weightLossResult = await client.query(weightLossQuery, [
+          clientIds,
+        ]);
+        if (
+          weightLossResult.rows[0] &&
+          weightLossResult.rows[0].weight_lost > 0
+        ) {
+          topPerformers.push({
+            clientId: weightLossResult.rows[0].user_id,
+            clientName: weightLossResult.rows[0].name,
+            metric: 'Weight Loss',
+            value: `-${Number(weightLossResult.rows[0].weight_lost).toFixed(1)} kg`,
+          });
+        }
 
-      return {
-        totalClients,
-        activeThisWeek,
-        avgAttendanceRate,
-        clientsWithProgress,
-        topPerformers,
-      };
-    });
+        return {
+          totalClients,
+          activeThisWeek,
+          avgAttendanceRate,
+          clientsWithProgress,
+          topPerformers,
+        };
+      },
+    );
 
     return summary;
   }
@@ -943,13 +1049,18 @@ export class ReportsService {
   /**
    * Calculate attendance streaks
    */
-  private calculateStreaks(dates: Date[]): { longestStreak: number; currentStreak: number } {
+  private calculateStreaks(dates: Date[]): {
+    longestStreak: number;
+    currentStreak: number;
+  } {
     if (dates.length === 0) {
       return { longestStreak: 0, currentStreak: 0 };
     }
 
     // Sort dates in ascending order and get unique dates
-    const uniqueDates = [...new Set(dates.map((d) => d.toISOString().split('T')[0]))].sort();
+    const uniqueDates = [
+      ...new Set(dates.map((d) => d.toISOString().split('T')[0])),
+    ].sort();
 
     let longestStreak = 1;
     let currentStreak = 1;
@@ -958,7 +1069,9 @@ export class ReportsService {
     for (let i = 1; i < uniqueDates.length; i++) {
       const prevDate = new Date(uniqueDates[i - 1]);
       const currDate = new Date(uniqueDates[i]);
-      const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (24 * 60 * 60 * 1000));
+      const diffDays = Math.round(
+        (currDate.getTime() - prevDate.getTime()) / (24 * 60 * 60 * 1000),
+      );
 
       if (diffDays === 1) {
         tempStreak++;
@@ -970,7 +1083,9 @@ export class ReportsService {
 
     // Check if current streak is active (last visit was yesterday or today)
     const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
     const lastVisit = uniqueDates[uniqueDates.length - 1];
 
     if (lastVisit === today || lastVisit === yesterday) {
@@ -979,7 +1094,9 @@ export class ReportsService {
       for (let i = uniqueDates.length - 2; i >= 0; i--) {
         const prevDate = new Date(uniqueDates[i]);
         const currDate = new Date(uniqueDates[i + 1]);
-        const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (24 * 60 * 60 * 1000));
+        const diffDays = Math.round(
+          (currDate.getTime() - prevDate.getTime()) / (24 * 60 * 60 * 1000),
+        );
         if (diffDays === 1) {
           currentStreak++;
         } else {

@@ -13,7 +13,13 @@ import {
   BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiHeader,
+} from '@nestjs/swagger';
 import { BodyMetricsService } from './body-metrics.service';
 import { UpdateBodyMetricsDto, RecordMetricsDto } from './dto/body-metrics.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -33,27 +39,51 @@ export class BodyMetricsController {
   @ApiOperation({ summary: 'Get current user body metrics' })
   getMyMetrics(@Request() req: any) {
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.getOrCreateMetrics(req.user.userId, req.user.gymId, branchId);
+    return this.bodyMetricsService.getOrCreateMetrics(
+      req.user.userId,
+      req.user.gymId,
+      branchId,
+    );
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user body metrics' })
   updateMyMetrics(@Request() req: any, @Body() dto: UpdateBodyMetricsDto) {
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.updateMetrics(req.user.userId, req.user.gymId, dto, branchId);
+    return this.bodyMetricsService.updateMetrics(
+      req.user.userId,
+      req.user.gymId,
+      dto,
+      branchId,
+    );
   }
 
   @Post('me/record')
   @ApiOperation({ summary: 'Record body metrics and save to history' })
   recordMyMetrics(@Request() req: any, @Body() dto: RecordMetricsDto) {
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.recordMetrics(req.user.userId, req.user.gymId, dto, branchId);
+    return this.bodyMetricsService.recordMetrics(
+      req.user.userId,
+      req.user.gymId,
+      dto,
+      branchId,
+    );
   }
 
   @Get('me/history')
   @ApiOperation({ summary: 'Get current user metrics history' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10)',
+  })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   getMyHistory(
@@ -79,8 +109,15 @@ export class BodyMetricsController {
 
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
-  deleteMyHistoryRecord(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.bodyMetricsService.deleteHistoryRecord(id, req.user.userId, req.user.gymId);
+  deleteMyHistoryRecord(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.bodyMetricsService.deleteHistoryRecord(
+      id,
+      req.user.userId,
+      req.user.gymId,
+    );
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============
@@ -90,18 +127,30 @@ export class BodyMetricsController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get body metrics for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
   getUserMetrics(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.getOrCreateMetrics(parseInt(userId), req.user.gymId, branchId);
+    return this.bodyMetricsService.getOrCreateMetrics(
+      parseInt(userId),
+      req.user.gymId,
+      branchId,
+    );
   }
 
   @Patch('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update body metrics for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
   updateUserMetrics(
     @Request() req: any,
     @Headers('x-user-id') userId: string,
@@ -109,14 +158,23 @@ export class BodyMetricsController {
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.updateMetrics(parseInt(userId), req.user.gymId, dto, branchId);
+    return this.bodyMetricsService.updateMetrics(
+      parseInt(userId),
+      req.user.gymId,
+      dto,
+      branchId,
+    );
   }
 
   @Post('user/record')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Record body metrics for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
   recordUserMetrics(
     @Request() req: any,
     @Headers('x-user-id') userId: string,
@@ -124,16 +182,35 @@ export class BodyMetricsController {
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.recordMetrics(parseInt(userId), req.user.gymId, dto, branchId);
+    return this.bodyMetricsService.recordMetrics(
+      parseInt(userId),
+      req.user.gymId,
+      dto,
+      branchId,
+    );
   }
 
   @Get('user/history')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get metrics history for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10)',
+  })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   async getUserHistory(
@@ -145,21 +222,32 @@ export class BodyMetricsController {
     @Query('endDate') endDate?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getHistory(parseInt(userId), req.user.gymId, {
-      page: page ? parseInt(page) : undefined,
-      limit: limit ? parseInt(limit) : undefined,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined,
-    });
+    return this.bodyMetricsService.getHistory(
+      parseInt(userId),
+      req.user.gymId,
+      {
+        page: page ? parseInt(page) : undefined,
+        limit: limit ? parseInt(limit) : undefined,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      },
+    );
   }
 
   @Get('user/progress')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get progress for a specific user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
   getUserProgress(@Request() req: any, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.bodyMetricsService.getProgress(parseInt(userId), req.user.gymId);
+    return this.bodyMetricsService.getProgress(
+      parseInt(userId),
+      req.user.gymId,
+    );
   }
 }

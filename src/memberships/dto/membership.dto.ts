@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsDateString, IsNumber, Min, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsNumber,
+  Min,
+  IsArray,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateMembershipDto {

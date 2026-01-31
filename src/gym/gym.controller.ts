@@ -13,7 +13,12 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { GymService } from './gym.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -32,11 +37,13 @@ export class GymController {
   @Get('profile')
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym profile with branch details' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by specific branch' })
-  async getProfile(
-    @Request() req: any,
-    @Query('branchId') branchId?: string,
-  ) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Filter by specific branch',
+  })
+  async getProfile(@Request() req: any, @Query('branchId') branchId?: string) {
     const gymId = req.user?.gymId;
     if (!gymId) {
       throw new Error('No gym associated with this user');
@@ -46,13 +53,45 @@ export class GymController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all gyms with optional filters and pagination' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, phone, or city' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status (active/inactive)' })
-  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean, description: 'Include inactive gyms' })
-  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
+  @ApiOperation({
+    summary: 'Get all gyms with optional filters and pagination',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by name, email, phone, or city',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by status (active/inactive)',
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+    type: Boolean,
+    description: 'Include inactive gyms',
+  })
+  @ApiQuery({
+    name: 'noPagination',
+    required: false,
+    type: Boolean,
+    description: 'Disable pagination',
+  })
   async findAll(
     @Request() req: any,
     @Query('page') page?: string,

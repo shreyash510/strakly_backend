@@ -50,12 +50,16 @@ export class CreateNotificationDto {
   @IsEnum(NotificationPriority)
   priority?: NotificationPriority;
 
-  @ApiPropertyOptional({ description: 'Expiry date for time-sensitive notifications' })
+  @ApiPropertyOptional({
+    description: 'Expiry date for time-sensitive notifications',
+  })
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
 
-  @ApiPropertyOptional({ description: 'ID of user who triggered this notification' })
+  @ApiPropertyOptional({
+    description: 'ID of user who triggered this notification',
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
@@ -63,7 +67,10 @@ export class CreateNotificationDto {
 }
 
 export class CreateBulkNotificationDto {
-  @ApiProperty({ description: 'User IDs to receive the notification', type: [Number] })
+  @ApiProperty({
+    description: 'User IDs to receive the notification',
+    type: [Number],
+  })
   @IsArray()
   @IsNumber({}, { each: true })
   @Type(() => Number)
@@ -102,12 +109,16 @@ export class CreateBulkNotificationDto {
   @IsEnum(NotificationPriority)
   priority?: NotificationPriority;
 
-  @ApiPropertyOptional({ description: 'Expiry date for time-sensitive notifications' })
+  @ApiPropertyOptional({
+    description: 'Expiry date for time-sensitive notifications',
+  })
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
 
-  @ApiPropertyOptional({ description: 'ID of user who triggered this notification' })
+  @ApiPropertyOptional({
+    description: 'ID of user who triggered this notification',
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)

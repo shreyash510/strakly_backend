@@ -282,7 +282,10 @@ export class NotificationsService {
   /**
    * Delete old notifications (cleanup job)
    */
-  async deleteOldNotifications(gymId: number, daysOld: number): Promise<number> {
+  async deleteOldNotifications(
+    gymId: number,
+    daysOld: number,
+  ): Promise<number> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `
@@ -304,7 +307,7 @@ export class NotificationsService {
     userId: number,
     gymId: number,
     branchId: number | null,
-    membershipData: { planName: string; endDate: Date; daysRemaining: number },
+    membershipData: { planName: string; endDate: Date; daysRemaining: number; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
@@ -318,6 +321,8 @@ export class NotificationsService {
             entityType: 'membership',
             daysRemaining: membershipData.daysRemaining,
             endDate: membershipData.endDate.toISOString(),
+            membershipId: membershipData.membershipId,
+            userId,
           },
           actionUrl: '/my-subscription',
           priority:
@@ -341,7 +346,7 @@ export class NotificationsService {
     userId: number,
     gymId: number,
     branchId: number | null,
-    membershipData: { planName: string; endDate: Date },
+    membershipData: { planName: string; endDate: Date; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
@@ -354,6 +359,8 @@ export class NotificationsService {
           data: {
             entityType: 'membership',
             endDate: membershipData.endDate.toISOString(),
+            membershipId: membershipData.membershipId,
+            userId,
           },
           actionUrl: '/my-subscription',
           priority: NotificationPriority.NORMAL,
@@ -501,7 +508,9 @@ export class NotificationsService {
         },
       });
     } catch (error) {
-      this.logger.error(`Failed to create system notification: ${error.message}`);
+      this.logger.error(
+        `Failed to create system notification: ${error.message}`,
+      );
       throw error;
     }
   }
@@ -559,10 +568,7 @@ export class NotificationsService {
       userId,
       ...(query.unreadOnly && { isRead: false }),
       ...(query.type && { type: query.type }),
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: new Date() } },
-      ],
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
     };
 
     const [notifications, total] = await Promise.all([
@@ -606,10 +612,7 @@ export class NotificationsService {
       where: {
         userId,
         isRead: false,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
-        ],
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
   }

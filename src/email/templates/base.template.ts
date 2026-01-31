@@ -9,7 +9,11 @@ export interface BaseTemplateOptions {
 }
 
 export function baseTemplate(options: BaseTemplateOptions): string {
-  const { preheader = '', content, footerText = 'This is an automated message from Strakly.' } = options;
+  const {
+    preheader = '',
+    content,
+    footerText = 'This is an automated message from Strakly.',
+  } = options;
 
   return `
 <!DOCTYPE html>

@@ -36,8 +36,12 @@ export class BranchService {
   /**
    * Get all branches for a gym
    */
-  async findAll(gymId: number, filters: BranchFilters = {}): Promise<PaginatedResponse<any>> {
-    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+  async findAll(
+    gymId: number,
+    filters: BranchFilters = {},
+  ): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } =
+      getPaginationParams(filters);
 
     // Verify gym exists
     await this.verifyGymExists(gymId);
@@ -85,37 +89,43 @@ export class BranchService {
     });
 
     if (!branch) {
-      throw new NotFoundException(`Branch with ID ${branchId} not found in this gym`);
+      throw new NotFoundException(
+        `Branch with ID ${branchId} not found in this gym`,
+      );
     }
 
     // Get all counts from tenant schema
-    const counts = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [membersResult, staffResult, facilitiesResult, amenitiesResult] = await Promise.all([
-        client.query(
-          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
-          [branchId]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
-          [branchId]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
-          [branchId]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
-          [branchId]
-        ),
-      ]);
+    const counts = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
+          await Promise.all([
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
+              [branchId],
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
+              [branchId],
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+              [branchId],
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+              [branchId],
+            ),
+          ]);
 
-      return {
-        membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
-        staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
-        facilitiesCount: parseInt(facilitiesResult.rows[0]?.count || '0', 10),
-        amenitiesCount: parseInt(amenitiesResult.rows[0]?.count || '0', 10),
-      };
-    });
+        return {
+          membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
+          staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
+          facilitiesCount: parseInt(facilitiesResult.rows[0]?.count || '0', 10),
+          amenitiesCount: parseInt(amenitiesResult.rows[0]?.count || '0', 10),
+        };
+      },
+    );
 
     return {
       ...branch,
@@ -146,7 +156,9 @@ export class BranchService {
     });
 
     if (existingBranch) {
-      throw new ConflictException(`Branch with code "${dto.code}" already exists for this gym`);
+      throw new ConflictException(
+        `Branch with code "${dto.code}" already exists for this gym`,
+      );
     }
 
     // Create the branch
@@ -184,7 +196,9 @@ export class BranchService {
       });
 
       if (existingBranch) {
-        throw new ConflictException(`Branch with code "${dto.code}" already exists for this gym`);
+        throw new ConflictException(
+          `Branch with code "${dto.code}" already exists for this gym`,
+        );
       }
     }
 
@@ -212,7 +226,9 @@ export class BranchService {
 
     // Cannot delete the default branch
     if (branch.isDefault) {
-      throw new BadRequestException('Cannot delete the default branch. Set another branch as default first.');
+      throw new BadRequestException(
+        'Cannot delete the default branch. Set another branch as default first.',
+      );
     }
 
     // Check if branch has any active data (users, memberships, etc.)
@@ -363,7 +379,9 @@ export class BranchService {
       where: { id: dto.fromBranchId, gymId },
     });
     if (!fromBranch) {
-      throw new NotFoundException(`Source branch with ID ${dto.fromBranchId} not found`);
+      throw new NotFoundException(
+        `Source branch with ID ${dto.fromBranchId} not found`,
+      );
     }
 
     // Verify destination branch exists and is active
@@ -371,22 +389,29 @@ export class BranchService {
       where: { id: dto.toBranchId, gymId, isActive: true },
     });
     if (!toBranch) {
-      throw new NotFoundException(`Destination branch with ID ${dto.toBranchId} not found or is inactive`);
+      throw new NotFoundException(
+        `Destination branch with ID ${dto.toBranchId} not found or is inactive`,
+      );
     }
 
     // Cannot transfer to the same branch
     if (dto.fromBranchId === dto.toBranchId) {
-      throw new BadRequestException('Source and destination branches cannot be the same');
+      throw new BadRequestException(
+        'Source and destination branches cannot be the same',
+      );
     }
 
     // Verify member exists in source branch
-    const member = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, email, branch_id FROM users WHERE id = $1 AND role = 'client'`,
-        [dto.memberId],
-      );
-      return result.rows[0];
-    });
+    const member = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, name, email, branch_id FROM users WHERE id = $1 AND role = 'client'`,
+          [dto.memberId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!member) {
       throw new NotFoundException(`Member with ID ${dto.memberId} not found`);
@@ -400,7 +425,8 @@ export class BranchService {
 
     let membershipsAffected = 0;
     let attendanceRecordsUpdated = 0;
-    const membershipAction = dto.membershipAction || MembershipTransferAction.TRANSFER;
+    const membershipAction =
+      dto.membershipAction || MembershipTransferAction.TRANSFER;
 
     // Perform the transfer in a transaction-like manner
     await this.tenantService.executeInTenant(gymId, async (client) => {
@@ -465,13 +491,16 @@ export class BranchService {
    * Get member's current branch
    */
   async getMemberBranch(gymId: number, memberId: number): Promise<any | null> {
-    const member = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, email, branch_id FROM users WHERE id = $1 AND role = 'client'`,
-        [memberId],
-      );
-      return result.rows[0];
-    });
+    const member = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, name, email, branch_id FROM users WHERE id = $1 AND role = 'client'`,
+          [memberId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!member) {
       throw new NotFoundException(`Member with ID ${memberId} not found`);
@@ -490,7 +519,11 @@ export class BranchService {
    * Migrate existing gyms to have default branches
    * This should be run once to set up branches for existing gyms
    */
-  async migrateExistingGyms(): Promise<{ migrated: number; skipped: number; errors: string[] }> {
+  async migrateExistingGyms(): Promise<{
+    migrated: number;
+    skipped: number;
+    errors: string[];
+  }> {
     const gyms = await this.prisma.gym.findMany({
       where: {
         branches: { none: {} }, // Gyms without any branches
@@ -522,38 +555,40 @@ export class BranchService {
         });
 
         // Update tenant data with branch_id
-        const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+        const schemaExists = await this.tenantService.tenantSchemaExists(
+          gym.id,
+        );
         if (schemaExists) {
           await this.tenantService.executeInTenant(gym.id, async (client) => {
             // Update users
             await client.query(
               `UPDATE users SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
             // Update plans
             await client.query(
               `UPDATE plans SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
             // Update offers
             await client.query(
               `UPDATE offers SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
             // Update memberships
             await client.query(
               `UPDATE memberships SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
             // Update attendance
             await client.query(
               `UPDATE attendance SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
             // Update staff_salaries
             await client.query(
               `UPDATE staff_salaries SET branch_id = $1 WHERE branch_id IS NULL`,
-              [branch.id]
+              [branch.id],
             );
           });
         }
@@ -571,7 +606,9 @@ export class BranchService {
         });
 
         migrated++;
-        console.log(`Migrated gym ${gym.id} (${gym.name}) with branch ${branch.id}`);
+        console.log(
+          `Migrated gym ${gym.id} (${gym.name}) with branch ${branch.id}`,
+        );
       } catch (error: any) {
         errors.push(`Gym ${gym.id} (${gym.name}): ${error.message}`);
         console.error(`Failed to migrate gym ${gym.id}:`, error.message);

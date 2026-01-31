@@ -28,7 +28,8 @@ export function getPaginationParams(query: any): {
 } {
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 10));
-  const noPagination = query.noPagination === 'true' || query.noPagination === true;
+  const noPagination =
+    query.noPagination === 'true' || query.noPagination === true;
 
   return {
     page,
@@ -43,7 +44,7 @@ export function createPaginationMeta(
   total: number,
   page: number,
   limit: number,
-  noPagination: boolean = false
+  noPagination: boolean = false,
 ): PaginationMeta {
   return {
     total,
@@ -53,7 +54,10 @@ export function createPaginationMeta(
   };
 }
 
-export function setPaginationHeaders(res: Response, pagination: PaginationMeta): void {
+export function setPaginationHeaders(
+  res: Response,
+  pagination: PaginationMeta,
+): void {
   res.setHeader('X-Total-Count', pagination.total.toString());
   res.setHeader('X-Page', pagination.page.toString());
   res.setHeader('X-Per-Page', pagination.limit.toString());
@@ -62,6 +66,6 @@ export function setPaginationHeaders(res: Response, pagination: PaginationMeta):
   // Allow these headers to be read by frontend
   res.setHeader(
     'Access-Control-Expose-Headers',
-    'X-Total-Count, X-Page, X-Per-Page, X-Total-Pages'
+    'X-Total-Count, X-Page, X-Per-Page, X-Total-Pages',
   );
 }

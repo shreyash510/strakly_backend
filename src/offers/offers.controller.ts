@@ -11,7 +11,12 @@ import {
   Request,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { OffersService } from './offers.service';
 import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -40,15 +45,33 @@ export class OffersController {
   @Get()
   @ApiOperation({ summary: 'Get all offers' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findAll(@Request() req: any, @Query('includeInactive') includeInactive?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findAll(
+    @Request() req: any,
+    @Query('includeInactive') includeInactive?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findAll(req.user.gymId, branchId, includeInactive === 'true');
+    return this.offersService.findAll(
+      req.user.gymId,
+      branchId,
+      includeInactive === 'true',
+    );
   }
 
   @Get('active')
   @ApiOperation({ summary: 'Get currently active offers' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   findActive(@Request() req: any, @Query('branchId') queryBranchId?: string) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findActive(req.user.gymId, branchId);
@@ -56,24 +79,51 @@ export class OffersController {
 
   @Get('validate/:code')
   @ApiOperation({ summary: 'Validate an offer code' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  validateCode(@Request() req: any, @Param('code') code: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  validateCode(
+    @Request() req: any,
+    @Param('code') code: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.validateOfferCode(code, req.user.gymId, branchId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get offer by ID' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findOne(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findOne(id, req.user.gymId, branchId);
   }
 
   @Get('code/:code')
   @ApiOperation({ summary: 'Get offer by code' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findByCode(@Request() req: any, @Param('code') code: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findByCode(
+    @Request() req: any,
+    @Param('code') code: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findByCode(code, req.user.gymId, branchId);
   }
@@ -82,8 +132,17 @@ export class OffersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Create a new offer' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the offer (admin only)' })
-  create(@Request() req: any, @Body() dto: CreateOfferDto, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for the offer (admin only)',
+  })
+  create(
+    @Request() req: any,
+    @Body() dto: CreateOfferDto,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.create(dto, req.user.gymId, branchId);
   }
@@ -92,7 +151,11 @@ export class OffersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update an offer' })
-  update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOfferDto) {
+  update(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateOfferDto,
+  ) {
     return this.offersService.update(id, req.user.gymId, dto);
   }
 

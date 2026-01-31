@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { BranchService } from '../branch/branch.service';
@@ -27,7 +34,8 @@ export class GymService {
   ) {}
 
   async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<any>> {
-    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+    const { page, limit, skip, take, noPagination } =
+      getPaginationParams(filters);
 
     const where: any = {};
 
@@ -220,7 +228,10 @@ export class GymService {
     await this.tenantService.createTenantSchema(gym.id);
 
     // Create default branch for this gym
-    const defaultBranch = await this.branchService.createDefaultBranch(gym.id, gym);
+    const defaultBranch = await this.branchService.createDefaultBranch(
+      gym.id,
+      gym,
+    );
 
     // Create admin user in PUBLIC.users
     const createdUser = await this.prisma.user.create({
@@ -302,12 +313,15 @@ export class GymService {
     try {
       const schemaExists = await this.tenantService.tenantSchemaExists(id);
       if (schemaExists) {
-        const clientCount = await this.tenantService.executeInTenant(id, async (client) => {
-          const result = await client.query(
-            `SELECT COUNT(*) as count FROM users`
-          );
-          return parseInt(result.rows[0].count, 10);
-        });
+        const clientCount = await this.tenantService.executeInTenant(
+          id,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*) as count FROM users`,
+            );
+            return parseInt(result.rows[0].count, 10);
+          },
+        );
 
         if (clientCount > 0) {
           throw new BadRequestException(
@@ -316,12 +330,15 @@ export class GymService {
         }
 
         // Check for active memberships
-        const activeMemberships = await this.tenantService.executeInTenant(id, async (client) => {
-          const result = await client.query(
-            `SELECT COUNT(*) as count FROM memberships WHERE status IN ('active', 'pending')`
-          );
-          return parseInt(result.rows[0].count, 10);
-        });
+        const activeMemberships = await this.tenantService.executeInTenant(
+          id,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*) as count FROM memberships WHERE status IN ('active', 'pending')`,
+            );
+            return parseInt(result.rows[0].count, 10);
+          },
+        );
 
         if (activeMemberships > 0) {
           throw new BadRequestException(
@@ -382,10 +399,7 @@ export class GymService {
           },
         },
       },
-      orderBy: [
-        { role: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ role: 'asc' }, { createdAt: 'desc' }],
     });
 
     return staffAssignments.map((assignment) => ({
@@ -468,7 +482,9 @@ export class GymService {
 
     // Don't allow removing the primary admin
     if (assignment.role === 'admin' && assignment.isPrimary) {
-      throw new BadRequestException('Cannot remove the primary admin from the gym');
+      throw new BadRequestException(
+        'Cannot remove the primary admin from the gym',
+      );
     }
 
     // Soft delete by setting isActive to false
@@ -493,8 +509,14 @@ export class GymService {
     }
 
     // Don't allow changing the primary admin's role
-    if (assignment.role === 'admin' && assignment.isPrimary && newRole !== 'admin') {
-      throw new BadRequestException('Cannot change the role of the primary admin');
+    if (
+      assignment.role === 'admin' &&
+      assignment.isPrimary &&
+      newRole !== 'admin'
+    ) {
+      throw new BadRequestException(
+        'Cannot change the role of the primary admin',
+      );
     }
 
     return this.prisma.userGymXref.update({
@@ -547,34 +569,48 @@ export class GymService {
       // Fetch stats for each branch
       branches = await Promise.all(
         allBranches.map(async (branch) => {
-          const counts = await this.tenantService.executeInTenant(gymId, async (client) => {
-            const [membersResult, staffResult, facilitiesResult, amenitiesResult] = await Promise.all([
-              client.query(
-                `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
-                [branch.id]
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
-                [branch.id]
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
-                [branch.id]
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
-                [branch.id]
-              ),
-            ]);
-            return {
-              membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
-              staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
-              facilitiesCount: parseInt(facilitiesResult.rows[0]?.count || '0', 10),
-              amenitiesCount: parseInt(amenitiesResult.rows[0]?.count || '0', 10),
-            };
-          });
+          const counts = await this.tenantService.executeInTenant(
+            gymId,
+            async (client) => {
+              const [
+                membersResult,
+                staffResult,
+                facilitiesResult,
+                amenitiesResult,
+              ] = await Promise.all([
+                client.query(
+                  `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role = 'client' AND status = 'active'`,
+                  [branch.id],
+                ),
+                client.query(
+                  `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
+                  [branch.id],
+                ),
+                client.query(
+                  `SELECT COUNT(*) as count FROM facilities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+                  [branch.id],
+                ),
+                client.query(
+                  `SELECT COUNT(*) as count FROM amenities WHERE (branch_id = $1 OR branch_id IS NULL) AND is_active = true`,
+                  [branch.id],
+                ),
+              ]);
+              return {
+                membersCount: parseInt(membersResult.rows[0]?.count || '0', 10),
+                staffCount: parseInt(staffResult.rows[0]?.count || '0', 10),
+                facilitiesCount: parseInt(
+                  facilitiesResult.rows[0]?.count || '0',
+                  10,
+                ),
+                amenitiesCount: parseInt(
+                  amenitiesResult.rows[0]?.count || '0',
+                  10,
+                ),
+              };
+            },
+          );
           return { ...branch, ...counts };
-        })
+        }),
       );
     }
 

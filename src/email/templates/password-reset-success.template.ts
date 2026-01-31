@@ -5,7 +5,9 @@ export interface PasswordResetSuccessTemplateOptions {
   loginUrl?: string;
 }
 
-export function passwordResetSuccessTemplate(options: PasswordResetSuccessTemplateOptions): string {
+export function passwordResetSuccessTemplate(
+  options: PasswordResetSuccessTemplateOptions,
+): string {
   const { userName, loginUrl = 'https://app.strakly.com/login' } = options;
 
   const content = `
@@ -56,7 +58,9 @@ export function passwordResetSuccessTemplate(options: PasswordResetSuccessTempla
   });
 }
 
-export function passwordResetSuccessPlainText(options: PasswordResetSuccessTemplateOptions): string {
+export function passwordResetSuccessPlainText(
+  options: PasswordResetSuccessTemplateOptions,
+): string {
   const { userName, loginUrl = 'https://app.strakly.com/login' } = options;
 
   return `

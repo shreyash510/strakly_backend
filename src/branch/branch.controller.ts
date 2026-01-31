@@ -12,9 +12,19 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import { BranchService } from './branch.service';
-import { CreateBranchDto, UpdateBranchDto, TransferMemberDto } from './dto/branch.dto';
+import {
+  CreateBranchDto,
+  UpdateBranchDto,
+  TransferMemberDto,
+} from './dto/branch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -31,11 +41,36 @@ export class BranchController {
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all branches for a gym' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, code, or city' })
-  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean, description: 'Include inactive branches' })
-  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by name, code, or city',
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+    type: Boolean,
+    description: 'Include inactive branches',
+  })
+  @ApiQuery({
+    name: 'noPagination',
+    required: false,
+    type: Boolean,
+    description: 'Disable pagination',
+  })
   async findAll(
     @Param('gymId', ParseIntPipe) gymId: number,
     @Query('page') page?: string,
@@ -170,7 +205,9 @@ export class BranchMigrationController {
 
   @Post('migrate-existing-gyms')
   @Roles('superadmin')
-  @ApiOperation({ summary: 'Migrate existing gyms to have default branches (superadmin only)' })
+  @ApiOperation({
+    summary: 'Migrate existing gyms to have default branches (superadmin only)',
+  })
   async migrateExistingGyms() {
     return this.branchService.migrateExistingGyms();
   }

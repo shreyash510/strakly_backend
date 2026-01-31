@@ -46,7 +46,9 @@ export class NotificationsScheduler {
         `Membership expiry notification job completed. Sent ${totalNotificationsSent} notifications.`,
       );
     } catch (error) {
-      this.logger.error(`Membership expiry notification job failed: ${error.message}`);
+      this.logger.error(
+        `Membership expiry notification job failed: ${error.message}`,
+      );
     }
   }
 
@@ -104,6 +106,7 @@ export class NotificationsScheduler {
               planName: membership.plan_name || 'Membership',
               endDate: new Date(membership.end_date),
               daysRemaining: days,
+              membershipId: membership.id,
             },
           );
           notificationsSent++;
@@ -126,17 +129,20 @@ export class NotificationsScheduler {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const queryResult = await client.query(
-        `SELECT id FROM notifications
+    const result = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const queryResult = await client.query(
+          `SELECT id FROM notifications
          WHERE user_id = $1
            AND type = 'membership_expiry'
            AND created_at >= $2
            AND data->>'daysRemaining' = $3`,
-        [userId, today, String(daysRemaining)],
-      );
-      return queryResult.rows.length > 0;
-    });
+          [userId, today, String(daysRemaining)],
+        );
+        return queryResult.rows.length > 0;
+      },
+    );
 
     return result;
   }
@@ -164,35 +170,37 @@ export class NotificationsScheduler {
         const endOfDay = new Date(targetDate);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const expiringSubscriptions = await this.prisma.saasGymSubscription.findMany({
-          where: {
-            status: { in: ['active', 'trial'] },
-            endDate: {
-              gte: startOfDay,
-              lte: endOfDay,
+        const expiringSubscriptions =
+          await this.prisma.saasGymSubscription.findMany({
+            where: {
+              status: { in: ['active', 'trial'] },
+              endDate: {
+                gte: startOfDay,
+                lte: endOfDay,
+              },
             },
-          },
-          include: {
-            gym: true,
-            plan: true,
-          },
-        });
+            include: {
+              gym: true,
+              plan: true,
+            },
+          });
 
         for (const subscription of expiringSubscriptions) {
           // Check if we already sent this notification today
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          const alreadyNotified = await this.prisma.systemNotification.findFirst({
-            where: {
-              type: 'gym_subscription_expiry',
-              createdAt: { gte: today },
-              data: {
-                path: ['gymId'],
-                equals: subscription.gymId,
+          const alreadyNotified =
+            await this.prisma.systemNotification.findFirst({
+              where: {
+                type: 'gym_subscription_expiry',
+                createdAt: { gte: today },
+                data: {
+                  path: ['gymId'],
+                  equals: subscription.gymId,
+                },
               },
-            },
-          });
+            });
 
           if (!alreadyNotified) {
             await this.notificationsService.notifyAllSuperadmins({
@@ -218,7 +226,9 @@ export class NotificationsScheduler {
         `Gym subscription expiry notification job completed. Sent ${totalNotificationsSent} notifications.`,
       );
     } catch (error) {
-      this.logger.error(`Gym subscription expiry notification job failed: ${error.message}`);
+      this.logger.error(
+        `Gym subscription expiry notification job failed: ${error.message}`,
+      );
     }
   }
 
@@ -241,10 +251,11 @@ export class NotificationsScheduler {
       // Clean up tenant notifications
       for (const gym of gyms) {
         try {
-          const deleted = await this.notificationsService.deleteOldNotifications(
-            gym.id,
-            30, // Delete notifications older than 30 days
-          );
+          const deleted =
+            await this.notificationsService.deleteOldNotifications(
+              gym.id,
+              30, // Delete notifications older than 30 days
+            );
           totalDeleted += deleted;
         } catch (error) {
           this.logger.error(
@@ -255,11 +266,16 @@ export class NotificationsScheduler {
 
       // Clean up superadmin notifications
       try {
-        const systemDeleted = await this.notificationsService.deleteOldSystemNotifications(30);
+        const systemDeleted =
+          await this.notificationsService.deleteOldSystemNotifications(30);
         totalDeleted += systemDeleted;
-        this.logger.log(`Deleted ${systemDeleted} old superadmin notifications.`);
+        this.logger.log(
+          `Deleted ${systemDeleted} old superadmin notifications.`,
+        );
       } catch (error) {
-        this.logger.error(`Failed to clean up superadmin notifications: ${error.message}`);
+        this.logger.error(
+          `Failed to clean up superadmin notifications: ${error.message}`,
+        );
       }
 
       this.logger.log(

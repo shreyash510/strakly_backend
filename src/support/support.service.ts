@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -38,7 +42,14 @@ export class SupportService {
     return `TKT-${timestamp}-${random}`;
   }
 
-  async create(userId: number, gymId: number, userName: string, userEmail: string, userType: string, createTicketDto: CreateTicketDto) {
+  async create(
+    userId: number,
+    gymId: number,
+    userName: string,
+    userEmail: string,
+    userType: string,
+    createTicketDto: CreateTicketDto,
+  ) {
     const ticketNumber = this.generateTicketNumber();
 
     const ticket = await this.prisma.supportTicket.create({
@@ -68,14 +79,16 @@ export class SupportService {
     });
 
     // Notify superadmins about new support ticket (non-blocking)
-    this.notificationsService.notifySupportTicketCreated({
-      ticketId: ticket.id,
-      ticketNumber: ticket.ticketNumber,
-      subject: ticket.subject,
-      priority: ticket.priority,
-    }).catch((error) => {
-      console.error('Failed to send support ticket notification:', error);
-    });
+    this.notificationsService
+      .notifySupportTicketCreated({
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        subject: ticket.subject,
+        priority: ticket.priority,
+      })
+      .catch((error) => {
+        console.error('Failed to send support ticket notification:', error);
+      });
 
     return this.findOne(ticket.id, userId, undefined, gymId);
   }
@@ -84,9 +97,10 @@ export class SupportService {
     filters: SupportFilters,
     userRole: string,
     userId?: number,
-    userGymId?: number
+    userGymId?: number,
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+    const { page, limit, skip, take, noPagination } =
+      getPaginationParams(filters);
     const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
@@ -146,11 +160,7 @@ export class SupportService {
     /* Get paginated data with gym relation included */
     const tickets = await this.prisma.supportTicket.findMany({
       where,
-      orderBy: [
-        { status: 'asc' },
-        { priority: 'desc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
       include: {
         gym: {
           select: {
@@ -175,7 +185,7 @@ export class SupportService {
       take,
     });
 
-    const ticketsWithUserInfo = tickets.map(ticket => ({
+    const ticketsWithUserInfo = tickets.map((ticket) => ({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       subject: ticket.subject,
@@ -205,7 +215,12 @@ export class SupportService {
     };
   }
 
-  async findOne(ticketId: number, userId?: number, userRole?: string, userGymId?: number) {
+  async findOne(
+    ticketId: number,
+    userId?: number,
+    userRole?: string,
+    userGymId?: number,
+  ) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
       include: {
@@ -237,7 +252,7 @@ export class SupportService {
       throw new ForbiddenException('You can only view your own tickets');
     }
 
-    const messagesWithSenderInfo = ticket.messages.map(message => ({
+    const messagesWithSenderInfo = ticket.messages.map((message) => ({
       id: message.id,
       message: message.message,
       senderId: message.senderId,
@@ -351,11 +366,15 @@ export class SupportService {
 
     // Multi-tenancy access control
     if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
-      throw new ForbiddenException('You can only add messages to tickets from your gym');
+      throw new ForbiddenException(
+        'You can only add messages to tickets from your gym',
+      );
     }
 
     if (!isAdmin && ticket.userId !== senderId) {
-      throw new ForbiddenException('You can only add messages to your own tickets');
+      throw new ForbiddenException(
+        'You can only add messages to your own tickets',
+      );
     }
 
     const senderType = isAdmin ? 'admin' : 'user';
@@ -381,7 +400,12 @@ export class SupportService {
     return this.findOne(ticketId, senderId, userRole, userGymId);
   }
 
-  async remove(ticketId: number, userId: number, userRole: string, userGymId?: number) {
+  async remove(
+    ticketId: number,
+    userId: number,
+    userRole: string,
+    userGymId?: number,
+  ) {
     const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
@@ -421,9 +445,15 @@ export class SupportService {
     const [total, open, inProgress, resolved, closed] = await Promise.all([
       this.prisma.supportTicket.count({ where }),
       this.prisma.supportTicket.count({ where: { ...where, status: 'open' } }),
-      this.prisma.supportTicket.count({ where: { ...where, status: 'in_progress' } }),
-      this.prisma.supportTicket.count({ where: { ...where, status: 'resolved' } }),
-      this.prisma.supportTicket.count({ where: { ...where, status: 'closed' } }),
+      this.prisma.supportTicket.count({
+        where: { ...where, status: 'in_progress' },
+      }),
+      this.prisma.supportTicket.count({
+        where: { ...where, status: 'resolved' },
+      }),
+      this.prisma.supportTicket.count({
+        where: { ...where, status: 'closed' },
+      }),
     ]);
 
     const byCategory = await this.prisma.supportTicket.groupBy({

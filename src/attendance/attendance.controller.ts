@@ -13,9 +13,19 @@ import {
   Request,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiHeader,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, CheckOutDto, AttendanceReportQueryDto } from './dto';
+import {
+  MarkAttendanceDto,
+  CheckOutDto,
+  AttendanceReportQueryDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
@@ -30,7 +40,9 @@ export class AttendanceController {
   private resolveGymId(req: any, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
       if (!queryGymId) {
-        throw new BadRequestException('gymId query parameter is required for superadmin');
+        throw new BadRequestException(
+          'gymId query parameter is required for superadmin',
+        );
       }
       return parseInt(queryGymId);
     }
@@ -54,12 +66,31 @@ export class AttendanceController {
 
   @Get('search/:code')
   @ApiOperation({ summary: 'Search user by attendance code' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async searchUserByCode(@Request() req: any, @Param('code') code: string, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async searchUserByCode(
+    @Request() req: any,
+    @Param('code') code: string,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
-    const user = await this.attendanceService.searchUserByCode(code, gymId, branchId);
+    const user = await this.attendanceService.searchUserByCode(
+      code,
+      gymId,
+      branchId,
+    );
     if (!user) {
       return null;
     }
@@ -70,12 +101,31 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Mark attendance (check-in) for a user at a gym' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async markAttendance(@Request() req: any, @Body() body: MarkAttendanceDto, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async markAttendance(
+    @Request() req: any,
+    @Body() body: MarkAttendanceDto,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
-    const user = await this.attendanceService.searchUserByCode(body.code, gymId, branchId);
+    const user = await this.attendanceService.searchUserByCode(
+      body.code,
+      gymId,
+      branchId,
+    );
     if (!user) {
       throw new BadRequestException('Invalid attendance code');
     }
@@ -98,7 +148,12 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Check out a user' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   async checkOut(
     @Request() req: any,
     @Param('id', ParseIntPipe) attendanceId: number,
@@ -106,17 +161,23 @@ export class AttendanceController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.checkOut(
-      attendanceId,
-      gymId,
-      body?.staffId,
-    );
+    return this.attendanceService.checkOut(attendanceId, gymId, body?.staffId);
   }
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user attendance history' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Records per page' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Records per page',
+  })
   async getMyAttendance(
     @UserId() userId: number,
     @GymId() gymId: number,
@@ -133,9 +194,23 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: "Get today's attendance records" })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getTodayAttendance(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getTodayAttendance(
+    @Request() req: any,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.attendanceService.getTodayAttendance(gymId, branchId);
@@ -145,8 +220,18 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get attendance records for a specific date' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   async getAttendanceByDate(
     @Request() req: any,
     @Param('date') date: string,
@@ -162,10 +247,29 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: "Get a user's attendance history" })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Records per page' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Records per page',
+  })
   async getUserAttendance(
     @Request() req: any,
     @Headers('x-user-id') userId: string,
@@ -185,9 +289,23 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get attendance statistics' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getAttendanceStats(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getAttendanceStats(
+    @Request() req: any,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.attendanceService.getAttendanceStats(gymId, branchId);
@@ -197,12 +315,29 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get currently present count' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  async getCurrentlyPresentCount(@Request() req: any, @Query('gymId') queryGymId?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  async getCurrentlyPresentCount(
+    @Request() req: any,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const branchId = this.resolveBranchId(req, queryBranchId);
-    const count = await this.attendanceService.getCurrentlyPresentCount(gymId, branchId);
+    const count = await this.attendanceService.getCurrentlyPresentCount(
+      gymId,
+      branchId,
+    );
     return { count };
   }
 
@@ -210,17 +345,40 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get attendance reports with analytics data' })
-  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'End date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    description: 'Start date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    description: 'End date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
   async getReports(
     @Request() req: any,
     @Query() query: AttendanceReportQueryDto,
   ) {
     const gymId = this.resolveGymId(req, query.gymId?.toString());
     const branchId = this.resolveBranchId(req, query.branchId?.toString());
-    return this.attendanceService.getReports(gymId, branchId, query.startDate, query.endDate);
+    return this.attendanceService.getReports(
+      gymId,
+      branchId,
+      query.startDate,
+      query.endDate,
+    );
   }
 
   @Get('all')
@@ -231,8 +389,18 @@ export class AttendanceController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   async getAllAttendance(
     @Request() req: any,
     @Query('page') page?: number,
@@ -258,10 +426,22 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an attendance record' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
-  async deleteAttendance(@Request() req: any, @Param('id', ParseIntPipe) attendanceId: number, @Query('gymId') queryGymId?: string) {
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async deleteAttendance(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) attendanceId: number,
+    @Query('gymId') queryGymId?: string,
+  ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const result = await this.attendanceService.deleteAttendance(attendanceId, gymId);
+    const result = await this.attendanceService.deleteAttendance(
+      attendanceId,
+      gymId,
+    );
     return { success: result };
   }
 }

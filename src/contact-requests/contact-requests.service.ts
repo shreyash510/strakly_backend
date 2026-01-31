@@ -2,7 +2,10 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreateContactRequestDto, UpdateContactRequestDto } from './dto/contact-request.dto';
+import {
+  CreateContactRequestDto,
+  UpdateContactRequestDto,
+} from './dto/contact-request.dto';
 import {
   PaginationParams,
   PaginatedResponse,
@@ -31,8 +34,11 @@ export class ContactRequestsService {
     return `REQ-${timestamp}-${random}`;
   }
 
-  async findAll(filters: ContactRequestFilters = {}): Promise<PaginatedResponse<any>> {
-    const { page, limit, skip, take, noPagination } = getPaginationParams(filters);
+  async findAll(
+    filters: ContactRequestFilters = {},
+  ): Promise<PaginatedResponse<any>> {
+    const { page, limit, skip, take, noPagination } =
+      getPaginationParams(filters);
 
     const where: any = {};
 
@@ -108,17 +114,23 @@ export class ContactRequestsService {
       this.logger.log(`Contact request notification sent for ${requestNumber}`);
     } catch (error) {
       // Log error but don't fail the request - contact was still saved
-      this.logger.error(`Failed to send contact request notification: ${error.message}`);
+      this.logger.error(
+        `Failed to send contact request notification: ${error.message}`,
+      );
     }
 
     // Notify superadmins about new contact request (non-blocking)
-    this.notificationsService.notifyNewContactRequest({
-      requestId: contactRequest.id,
-      requestNumber: contactRequest.requestNumber,
-      name: dto.name,
-    }).catch((error) => {
-      this.logger.error(`Failed to send contact request notification to superadmins: ${error.message}`);
-    });
+    this.notificationsService
+      .notifyNewContactRequest({
+        requestId: contactRequest.id,
+        requestNumber: contactRequest.requestNumber,
+        name: dto.name,
+      })
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send contact request notification to superadmins: ${error.message}`,
+        );
+      });
 
     return contactRequest;
   }
@@ -167,13 +179,14 @@ export class ContactRequestsService {
   }
 
   async getStats() {
-    const [total, newCount, readCount, repliedCount, closedCount] = await Promise.all([
-      this.prisma.contactRequest.count(),
-      this.prisma.contactRequest.count({ where: { status: 'new' } }),
-      this.prisma.contactRequest.count({ where: { status: 'read' } }),
-      this.prisma.contactRequest.count({ where: { status: 'replied' } }),
-      this.prisma.contactRequest.count({ where: { status: 'closed' } }),
-    ]);
+    const [total, newCount, readCount, repliedCount, closedCount] =
+      await Promise.all([
+        this.prisma.contactRequest.count(),
+        this.prisma.contactRequest.count({ where: { status: 'new' } }),
+        this.prisma.contactRequest.count({ where: { status: 'read' } }),
+        this.prisma.contactRequest.count({ where: { status: 'replied' } }),
+        this.prisma.contactRequest.count({ where: { status: 'closed' } }),
+      ]);
 
     return {
       total,

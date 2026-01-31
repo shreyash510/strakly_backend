@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -34,13 +34,13 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() createUserDto: CreateUserDto) {
+  register(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.register(createUserDto);
   }
 
   @Post('register-admin')
   @ApiOperation({ summary: 'Register a new admin user' })
-  registerAdmin(@Body() createUserDto: CreateUserDto) {
+  registerAdmin(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.registerAdmin(createUserDto);
   }
 
@@ -122,17 +122,20 @@ export class AuthController {
   ) {
     const pageNum = parseInt(page || '1', 10) || 1;
     const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50);
-    return this.authService.searchStaff(query, userId, gymId, pageNum, limitNum);
+    return this.authService.searchStaff(
+      query,
+      userId,
+      gymId,
+      pageNum,
+      limitNum,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('switch-gym')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Switch to a different gym (for multi-gym staff)' })
-  switchGym(
-    @UserId() userId: number,
-    @Body('gymId') targetGymId: number,
-  ) {
+  switchGym(@UserId() userId: number, @Body('gymId') targetGymId: number) {
     return this.authService.switchGym(userId, targetGymId);
   }
 
@@ -151,7 +154,11 @@ export class AuthController {
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP verification' })
   resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPasswordWithOtp(dto.email, dto.otp, dto.newPassword);
+    return this.authService.resetPasswordWithOtp(
+      dto.email,
+      dto.otp,
+      dto.newPassword,
+    );
   }
 
   @Post('resend-otp')

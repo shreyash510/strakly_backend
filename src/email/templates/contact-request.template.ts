@@ -10,8 +10,11 @@ export interface ContactRequestTemplateOptions {
   submittedAt: string;
 }
 
-export function contactRequestTemplate(options: ContactRequestTemplateOptions): string {
-  const { name, email, phone, subject, message, requestNumber, submittedAt } = options;
+export function contactRequestTemplate(
+  options: ContactRequestTemplateOptions,
+): string {
+  const { name, email, phone, subject, message, requestNumber, submittedAt } =
+    options;
 
   const content = `
     <h1 style="font-size: 22px; font-weight: 600; color: #0f172a; margin: 0 0 8px 0; text-align: center;">
@@ -42,22 +45,30 @@ export function contactRequestTemplate(options: ContactRequestTemplateOptions): 
             <a href="mailto:${email}" style="font-size: 15px; color: #2563eb; margin: 0; text-decoration: none;">${email}</a>
           </td>
         </tr>
-        ${phone ? `
+        ${
+          phone
+            ? `
         <tr>
           <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
             <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">Phone</p>
             <a href="tel:${phone}" style="font-size: 15px; color: #2563eb; margin: 0; text-decoration: none;">${phone}</a>
           </td>
         </tr>
-        ` : ''}
-        ${subject ? `
+        `
+            : ''
+        }
+        ${
+          subject
+            ? `
         <tr>
           <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
             <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">Subject</p>
             <p style="font-size: 15px; color: #0f172a; margin: 0; font-weight: 500;">${subject}</p>
           </td>
         </tr>
-        ` : ''}
+        `
+            : ''
+        }
         <tr>
           <td style="padding-top: 16px;">
             <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">Submitted At</p>
@@ -95,8 +106,11 @@ export function contactRequestTemplate(options: ContactRequestTemplateOptions): 
   });
 }
 
-export function contactRequestPlainText(options: ContactRequestTemplateOptions): string {
-  const { name, email, phone, subject, message, requestNumber, submittedAt } = options;
+export function contactRequestPlainText(
+  options: ContactRequestTemplateOptions,
+): string {
+  const { name, email, phone, subject, message, requestNumber, submittedAt } =
+    options;
 
   return `
 NEW CONTACT REQUEST

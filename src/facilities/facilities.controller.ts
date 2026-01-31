@@ -11,7 +11,12 @@ import {
   Request,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { FacilitiesService } from './facilities.service';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
@@ -41,19 +46,33 @@ export class FacilitiesController {
   @Get()
   @ApiOperation({ summary: 'Get all facilities' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   findAll(
     @Request() req: any,
     @Query('includeInactive') includeInactive?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.facilitiesService.findAll(req.user.gymId, branchId, includeInactive === 'true');
+    return this.facilitiesService.findAll(
+      req.user.gymId,
+      branchId,
+      includeInactive === 'true',
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get facility by ID' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   findOne(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
@@ -67,7 +86,12 @@ export class FacilitiesController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Create a new facility' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the facility (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for the facility (admin only)',
+  })
   create(
     @Request() req: any,
     @Body() dto: CreateFacilityDto,

@@ -15,7 +15,9 @@ import { BranchModule } from '../branch/branch.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'strakly-secret-key-change-in-production',
+        secret:
+          configService.get<string>('JWT_SECRET') ||
+          'strakly-secret-key-change-in-production',
         signOptions: {
           expiresIn: '7d' as const,
         },
