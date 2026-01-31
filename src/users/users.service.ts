@@ -3,7 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LookupsService } from '../lookups/lookups.service';
-import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto, CreateStaffDto, CreateClientDto, ApproveRequestDto } from './dto/create-user.dto';
 import { AssignClientDto, TrainerClientResponseDto } from './dto/trainer-client.dto';
 import {
   PaginationParams,
@@ -1450,9 +1450,9 @@ export class UsersService {
   }
 
   /**
-   * Approve pending user request (typically clients)
+   * Approve pending user request (typically clients) with optional membership
    */
-  async approveRequest(userId: number, gymId: number): Promise<any> {
+  async approveRequest(userId: number, gymId: number, dto?: ApproveRequestDto): Promise<any> {
     const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT * FROM users WHERE id = $1`,
@@ -1484,8 +1484,70 @@ export class UsersService {
       return result.rows[0];
     });
 
+    // Create membership if planId is provided
+    if (dto?.planId) {
+      await this.createMembershipForApprovedUser(userId, gymId, dto, userData.branch_id);
+    }
+
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
     return this.formatTenantUser(updatedUser, gym);
+  }
+
+  /**
+   * Create membership for approved user
+   */
+  private async createMembershipForApprovedUser(
+    userId: number,
+    gymId: number,
+    dto: ApproveRequestDto,
+    branchId: number | null,
+  ): Promise<void> {
+    // Get plan details
+    const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM plans WHERE id = $1 AND is_active = true`,
+        [dto.planId]
+      );
+      return result.rows[0];
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`Plan with ID ${dto.planId} not found or inactive`);
+    }
+
+    const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + plan.duration_days);
+
+    const baseAmount = parseFloat(plan.price) || 0;
+    const taxAmount = baseAmount * 0.18; // 18% GST
+    const finalAmount = baseAmount + taxAmount;
+
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `INSERT INTO memberships (
+          user_id, plan_id, branch_id, start_date, end_date,
+          base_amount, tax_amount, discount_amount, final_amount,
+          status, payment_status, payment_method, notes,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`,
+        [
+          userId,
+          dto.planId,
+          branchId,
+          startDate,
+          endDate,
+          baseAmount,
+          taxAmount,
+          0, // discount_amount
+          finalAmount,
+          'active',
+          'pending',
+          dto.paymentMethod || null,
+          dto.notes || null,
+        ]
+      );
+    });
   }
 
   /**

@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto, ResetPasswordDto, ApproveRequestDto } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -263,15 +263,16 @@ export class UsersController {
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
   @Roles('admin', 'branch_admin', 'manager')
-  @ApiOperation({ summary: 'Approve a pending registration request' })
+  @ApiOperation({ summary: 'Approve a pending registration request with optional membership' })
   approveRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ApproveRequestDto,
   ) {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    return this.usersService.approveRequest(id, user.gymId);
+    return this.usersService.approveRequest(id, user.gymId, dto);
   }
 
   @Patch(':id/reject')

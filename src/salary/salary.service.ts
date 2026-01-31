@@ -394,18 +394,19 @@ export class SalaryService {
 
   async getStaffList(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, name, email, avatar, phone, role, branch_id
-         FROM users
-         WHERE status = 'active' AND role IN ('trainer', 'manager')`;
+      let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.role, u.branch_id, b.name as branch_name
+         FROM users u
+         LEFT JOIN branches b ON b.id = u.branch_id
+         WHERE u.status = 'active' AND u.role IN ('trainer', 'manager')`;
       const values: any[] = [];
 
       // Branch filtering for non-admin users
       if (branchId !== null) {
-        query += ` AND branch_id = $1`;
+        query += ` AND u.branch_id = $1`;
         values.push(branchId);
       }
 
-      query += ` ORDER BY name ASC`;
+      query += ` ORDER BY u.name ASC`;
 
       const result = await client.query(query, values);
 
@@ -416,6 +417,7 @@ export class SalaryService {
         avatar: u.avatar,
         phone: u.phone,
         branchId: u.branch_id,
+        branchName: u.branch_name,
         role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
       }));
     });

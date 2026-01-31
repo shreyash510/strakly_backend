@@ -355,3 +355,25 @@ export class ResetPasswordDto {
   @IsString()
   newPassword: string;
 }
+
+export class ApproveRequestDto {
+  @ApiPropertyOptional({ description: 'Plan ID for membership (optional - skip to approve without membership)' })
+  @IsOptional()
+  @IsInt()
+  planId?: number;
+
+  @ApiPropertyOptional({ description: 'Start date for membership (defaults to today)' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'Payment method' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ description: 'Notes' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
