@@ -9,6 +9,20 @@ export interface AttendanceStats {
   thisMonthPresent: number;
 }
 
+export interface AttendanceReportData {
+  summary: {
+    totalCheckIns: number;
+    avgDailyCheckIns: number;
+    uniqueMembers: number;
+    avgDuration: number; // in minutes
+  };
+  dailyTrend: Array<{ date: string; count: number }>;
+  weeklyPattern: Array<{ day: string; count: number }>;
+  hourlyDistribution: Array<{ hour: number; count: number }>;
+  topMembers: Array<{ userId: number; name: string; visits: number }>;
+  branchComparison?: Array<{ branchId: number; branchName: string; count: number }>;
+}
+
 export interface AttendanceRecord {
   id: number;
   branchId: number | null;
@@ -544,5 +558,155 @@ export class AttendanceService {
         return false;
       }
     }
+  }
+
+  async getReports(
+    gymId: number,
+    branchId: number | null = null,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<AttendanceReportData> {
+    // Default to last 30 days if no dates provided
+    const end = endDate || this.getTodayDate();
+    const start = startDate || (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return d.toLocaleDateString('en-CA');
+    })();
+
+    const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
+    const reportData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      // 1. Summary stats
+      const summaryResult = await client.query(`
+        SELECT
+          COUNT(*) as total_checkins,
+          COUNT(DISTINCT user_id) as unique_members,
+          COALESCE(AVG(duration), 0) as avg_duration
+        FROM attendance_history
+        WHERE date >= $1 AND date <= $2${branchFilter}
+      `, [start, end]);
+
+      // Calculate days in range
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const daysInRange = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+      const summary = {
+        totalCheckIns: parseInt(summaryResult.rows[0]?.total_checkins || '0', 10),
+        uniqueMembers: parseInt(summaryResult.rows[0]?.unique_members || '0', 10),
+        avgDuration: Math.round(parseFloat(summaryResult.rows[0]?.avg_duration || '0')),
+        avgDailyCheckIns: 0,
+      };
+      summary.avgDailyCheckIns = Math.round(summary.totalCheckIns / daysInRange);
+
+      // 2. Daily trend
+      const dailyTrendResult = await client.query(`
+        SELECT date, COUNT(*) as count
+        FROM attendance_history
+        WHERE date >= $1 AND date <= $2${branchFilter}
+        GROUP BY date
+        ORDER BY date ASC
+      `, [start, end]);
+
+      const dailyTrend = dailyTrendResult.rows.map((row: any) => ({
+        date: row.date,
+        count: parseInt(row.count, 10),
+      }));
+
+      // 3. Weekly pattern (day of week distribution)
+      const weeklyPatternResult = await client.query(`
+        SELECT
+          EXTRACT(DOW FROM check_in_time) as day_num,
+          COUNT(*) as count
+        FROM attendance_history
+        WHERE date >= $1 AND date <= $2${branchFilter}
+        GROUP BY EXTRACT(DOW FROM check_in_time)
+        ORDER BY day_num
+      `, [start, end]);
+
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const weeklyPattern = dayNames.map((day, index) => {
+        const found = weeklyPatternResult.rows.find((r: any) => parseInt(r.day_num) === index);
+        return {
+          day,
+          count: found ? parseInt(found.count, 10) : 0,
+        };
+      });
+
+      // 4. Hourly distribution
+      const hourlyResult = await client.query(`
+        SELECT
+          EXTRACT(HOUR FROM check_in_time) as hour,
+          COUNT(*) as count
+        FROM attendance_history
+        WHERE date >= $1 AND date <= $2${branchFilter}
+        GROUP BY EXTRACT(HOUR FROM check_in_time)
+        ORDER BY hour
+      `, [start, end]);
+
+      const hourlyDistribution = Array.from({ length: 24 }, (_, i) => {
+        const found = hourlyResult.rows.find((r: any) => parseInt(r.hour) === i);
+        return {
+          hour: i,
+          count: found ? parseInt(found.count, 10) : 0,
+        };
+      });
+
+      // 5. Top members
+      const topMembersResult = await client.query(`
+        SELECT
+          ah.user_id,
+          u.name,
+          COUNT(*) as visits
+        FROM attendance_history ah
+        JOIN users u ON u.id = ah.user_id
+        WHERE ah.date >= $1 AND ah.date <= $2${branchFilter}
+        GROUP BY ah.user_id, u.name
+        ORDER BY visits DESC
+        LIMIT 10
+      `, [start, end]);
+
+      const topMembers = topMembersResult.rows.map((row: any) => ({
+        userId: row.user_id,
+        name: row.name,
+        visits: parseInt(row.visits, 10),
+      }));
+
+      // 6. Branch comparison (only if no specific branch filter)
+      let branchComparison: Array<{ branchId: number; branchName: string; count: number }> | undefined;
+      if (branchId === null) {
+        const branchResult = await client.query(`
+          SELECT
+            ah.branch_id,
+            b.name as branch_name,
+            COUNT(*) as count
+          FROM attendance_history ah
+          LEFT JOIN branches b ON b.id = ah.branch_id
+          WHERE ah.date >= $1 AND ah.date <= $2
+          GROUP BY ah.branch_id, b.name
+          ORDER BY count DESC
+        `, [start, end]);
+
+        branchComparison = branchResult.rows
+          .filter((row: any) => row.branch_id !== null)
+          .map((row: any) => ({
+            branchId: row.branch_id,
+            branchName: row.branch_name || `Branch ${row.branch_id}`,
+            count: parseInt(row.count, 10),
+          }));
+      }
+
+      return {
+        summary,
+        dailyTrend,
+        weeklyPattern,
+        hourlyDistribution,
+        topMembers,
+        branchComparison,
+      };
+    });
+
+    return reportData;
   }
 }

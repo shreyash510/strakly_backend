@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
-import { MarkAttendanceDto, CheckOutDto } from './dto';
+import { MarkAttendanceDto, CheckOutDto, AttendanceReportQueryDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
@@ -204,6 +204,23 @@ export class AttendanceController {
     const branchId = this.resolveBranchId(req, queryBranchId);
     const count = await this.attendanceService.getCurrentlyPresentCount(gymId, branchId);
     return { count };
+  }
+
+  @Get('reports')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get attendance reports with analytics data' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  async getReports(
+    @Request() req: any,
+    @Query() query: AttendanceReportQueryDto,
+  ) {
+    const gymId = this.resolveGymId(req, query.gymId?.toString());
+    const branchId = this.resolveBranchId(req, query.branchId?.toString());
+    return this.attendanceService.getReports(gymId, branchId, query.startDate, query.endDate);
   }
 
   @Get('all')
