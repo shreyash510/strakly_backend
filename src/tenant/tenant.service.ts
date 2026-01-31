@@ -33,14 +33,19 @@ export class TenantService implements OnModuleInit {
         WHERE schema_name LIKE 'tenant_%'
       `);
 
-      console.log(`Found ${schemasResult.rows.length} tenant schemas to migrate`);
+      console.log(
+        `Found ${schemasResult.rows.length} tenant schemas to migrate`,
+      );
 
       for (const row of schemasResult.rows) {
         const schemaName = row.schema_name;
         try {
           await this.migrateTenantSchema(client, schemaName);
         } catch (error) {
-          console.error(`Failed to migrate schema ${schemaName}:`, error.message);
+          console.error(
+            `Failed to migrate schema ${schemaName}:`,
+            error.message,
+          );
         }
       }
 
@@ -53,7 +58,10 @@ export class TenantService implements OnModuleInit {
   /**
    * Apply migrations to a single tenant schema
    */
-  private async migrateTenantSchema(client: any, schemaName: string): Promise<void> {
+  private async migrateTenantSchema(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     console.log(`Migrating schema: ${schemaName}`);
 
     // Always try to add the role column (IF NOT EXISTS handles the case where it already exists)
@@ -64,7 +72,10 @@ export class TenantService implements OnModuleInit {
       `);
       console.log(`Ensured 'role' column exists in ${schemaName}.users`);
     } catch (error) {
-      console.error(`Error adding role column to ${schemaName}:`, error.message);
+      console.error(
+        `Error adding role column to ${schemaName}:`,
+        error.message,
+      );
     }
 
     // Add branch_id columns to all tenant tables
@@ -85,9 +96,38 @@ export class TenantService implements OnModuleInit {
     // Create user_branch_xref table for multi-branch assignments
     await this.createUserBranchXrefTable(client, schemaName);
 
+    // Add status_id column for lookup-based status
+    await this.addStatusIdColumn(client, schemaName);
+
+    // Add soft delete columns to key tables
+    await this.addSoftDeleteColumns(client, schemaName);
+
+    // Migrate date columns from VARCHAR to DATE type
+    await this.migrateDateColumns(client, schemaName);
+
+    // Add status CHECK constraints
+    await this.addStatusConstraints(client, schemaName);
+
+    // Add performance indexes for common query patterns
+    await this.addPerformanceIndexes(client, schemaName);
+
+    // Create payments table for centralized payment tracking
+    await this.createPaymentsTable(client, schemaName);
+
+    // Create history tables for audit trail
+    await this.createHistoryTables(client, schemaName);
+
+    // Create activity logs table
+    await this.createActivityLogsTable(client, schemaName);
+
+    // Create announcements table
+    await this.createAnnouncementsTable(client, schemaName);
+
     // Seed default plans if none exist
     try {
-      const plansResult = await client.query(`SELECT COUNT(*) as count FROM "${schemaName}".plans`);
+      const plansResult = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}".plans`,
+      );
       if (parseInt(plansResult.rows[0].count) === 0) {
         await this.seedDefaultPlans(client, schemaName);
       }
@@ -99,7 +139,10 @@ export class TenantService implements OnModuleInit {
   /**
    * Add branch_id columns to existing tenant tables (migration for multi-branch support)
    */
-  private async addBranchIdColumns(client: any, schemaName: string): Promise<void> {
+  private async addBranchIdColumns(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     const tablesToMigrate = [
       'users',
       'plans',
@@ -121,9 +164,14 @@ export class TenantService implements OnModuleInit {
           ALTER TABLE "${schemaName}"."${table}"
           ADD COLUMN IF NOT EXISTS branch_id INTEGER
         `);
-        console.log(`Ensured 'branch_id' column exists in ${schemaName}.${table}`);
+        console.log(
+          `Ensured 'branch_id' column exists in ${schemaName}.${table}`,
+        );
       } catch (error) {
-        console.error(`Error adding branch_id to ${schemaName}.${table}:`, error.message);
+        console.error(
+          `Error adding branch_id to ${schemaName}.${table}:`,
+          error.message,
+        );
       }
     }
 
@@ -156,7 +204,10 @@ export class TenantService implements OnModuleInit {
   /**
    * Create facilities and amenities tables if they don't exist (migration for existing tenants)
    */
-  private async createFacilitiesAndAmenitiesTables(client: any, schemaName: string): Promise<void> {
+  private async createFacilitiesAndAmenitiesTables(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     // Create facilities table
     try {
       await client.query(`
@@ -174,12 +225,21 @@ export class TenantService implements OnModuleInit {
           UNIQUE(branch_id, code)
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`,
+      );
       console.log(`Ensured 'facilities' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(`Error creating facilities table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating facilities table for ${schemaName}:`,
+        error.message,
+      );
     }
 
     // Create amenities table
@@ -199,19 +259,31 @@ export class TenantService implements OnModuleInit {
           UNIQUE(branch_id, code)
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`,
+      );
       console.log(`Ensured 'amenities' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(`Error creating amenities table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating amenities table for ${schemaName}:`,
+        error.message,
+      );
     }
   }
 
   /**
    * Create membership_facilities and membership_amenities junction tables (migration for existing tenants)
    */
-  private async createMembershipFacilityTables(client: any, schemaName: string): Promise<void> {
+  private async createMembershipFacilityTables(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     // Create membership_facilities table
     try {
       await client.query(`
@@ -223,11 +295,20 @@ export class TenantService implements OnModuleInit {
           UNIQUE(membership_id, facility_id)
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`);
-      console.log(`Ensured 'membership_facilities' table exists in ${schemaName}`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`,
+      );
+      console.log(
+        `Ensured 'membership_facilities' table exists in ${schemaName}`,
+      );
     } catch (error) {
-      console.error(`Error creating membership_facilities table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating membership_facilities table for ${schemaName}:`,
+        error.message,
+      );
     }
 
     // Create membership_amenities table
@@ -241,18 +322,30 @@ export class TenantService implements OnModuleInit {
           UNIQUE(membership_id, amenity_id)
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`);
-      console.log(`Ensured 'membership_amenities' table exists in ${schemaName}`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`,
+      );
+      console.log(
+        `Ensured 'membership_amenities' table exists in ${schemaName}`,
+      );
     } catch (error) {
-      console.error(`Error creating membership_amenities table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating membership_amenities table for ${schemaName}:`,
+        error.message,
+      );
     }
   }
 
   /**
    * Create workout_plans and workout_assignments tables (migration for existing tenants)
    */
-  private async createWorkoutTables(client: any, schemaName: string): Promise<void> {
+  private async createWorkoutTables(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     // Create workout_plans table
     try {
       await client.query(`
@@ -274,14 +367,27 @@ export class TenantService implements OnModuleInit {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`,
+      );
       console.log(`Ensured 'workout_plans' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(`Error creating workout_plans table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating workout_plans table for ${schemaName}:`,
+        error.message,
+      );
     }
 
     // Create workout_assignments table
@@ -301,20 +407,36 @@ export class TenantService implements OnModuleInit {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`);
-      console.log(`Ensured 'workout_assignments' table exists in ${schemaName}`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`,
+      );
+      console.log(
+        `Ensured 'workout_assignments' table exists in ${schemaName}`,
+      );
     } catch (error) {
-      console.error(`Error creating workout_assignments table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating workout_assignments table for ${schemaName}:`,
+        error.message,
+      );
     }
   }
 
   /**
    * Create notifications table for a tenant schema (migration for existing schemas)
    */
-  private async createNotificationsTable(client: any, schemaName: string): Promise<void> {
+  private async createNotificationsTable(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."notifications" (
@@ -334,21 +456,37 @@ export class TenantService implements OnModuleInit {
           created_by INTEGER
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`,
+      );
       console.log(`Ensured 'notifications' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(`Error creating notifications table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating notifications table for ${schemaName}:`,
+        error.message,
+      );
     }
   }
 
   /**
    * Create user_branch_xref table for multi-branch assignments (for branch_admin)
    */
-  private async createUserBranchXrefTable(client: any, schemaName: string): Promise<void> {
+  private async createUserBranchXrefTable(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."user_branch_xref" (
@@ -363,12 +501,576 @@ export class TenantService implements OnModuleInit {
           UNIQUE(user_id, branch_id)
         )
       `);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`,
+      );
       console.log(`Ensured 'user_branch_xref' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(`Error creating user_branch_xref table for ${schemaName}:`, error.message);
+      console.error(
+        `Error creating user_branch_xref table for ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Add status_id column to users table for lookup-based status (migration for existing tenants)
+   */
+  private async addStatusIdColumn(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      await client.query(`
+        ALTER TABLE "${schemaName}"."users"
+        ADD COLUMN IF NOT EXISTS status_id INTEGER
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`,
+      );
+      console.log(`Ensured 'status_id' column exists in ${schemaName}.users`);
+    } catch (error) {
+      console.error(
+        `Error adding status_id column to ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Add soft delete columns to tenant tables (users, plans, memberships, offers, attendance, staff_salaries, announcements)
+   */
+  private async addSoftDeleteColumns(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    const tablesToMigrate = [
+      'users',
+      'plans',
+      'memberships',
+      'offers',
+      'attendance',
+      'attendance_history',
+      'staff_salaries',
+      'announcements',
+    ];
+
+    for (const table of tablesToMigrate) {
+      try {
+        // Add is_deleted column
+        await client.query(`
+          ALTER TABLE "${schemaName}"."${table}"
+          ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE
+        `);
+
+        // Add deleted_at column
+        await client.query(`
+          ALTER TABLE "${schemaName}"."${table}"
+          ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
+        `);
+
+        // Add deleted_by column (references the user who deleted)
+        await client.query(`
+          ALTER TABLE "${schemaName}"."${table}"
+          ADD COLUMN IF NOT EXISTS deleted_by INTEGER
+        `);
+
+        // Create partial index for efficient filtering of non-deleted records
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS "idx_${schemaName}_${table}_not_deleted"
+          ON "${schemaName}"."${table}"(is_deleted) WHERE is_deleted = FALSE
+        `);
+
+        console.log(
+          `Ensured soft delete columns exist in ${schemaName}.${table}`,
+        );
+      } catch (error) {
+        console.error(
+          `Error adding soft delete columns to ${schemaName}.${table}:`,
+          error.message,
+        );
+      }
+    }
+  }
+
+  /**
+   * Migrate date columns from VARCHAR to DATE type
+   * Adds new DATE column alongside existing VARCHAR for backward compatibility
+   */
+  private async migrateDateColumns(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      // Add attendance_date column to attendance table
+      await client.query(`
+        ALTER TABLE "${schemaName}"."attendance"
+        ADD COLUMN IF NOT EXISTS attendance_date DATE
+      `);
+
+      // Migrate existing data from VARCHAR date to DATE attendance_date
+      await client.query(`
+        UPDATE "${schemaName}"."attendance"
+        SET attendance_date = date::DATE
+        WHERE attendance_date IS NULL AND date IS NOT NULL
+      `);
+
+      // Add index on attendance_date
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date"
+        ON "${schemaName}"."attendance"(attendance_date)
+      `);
+
+      // Add attendance_date column to attendance_history table
+      await client.query(`
+        ALTER TABLE "${schemaName}"."attendance_history"
+        ADD COLUMN IF NOT EXISTS attendance_date DATE
+      `);
+
+      // Migrate existing data in attendance_history
+      await client.query(`
+        UPDATE "${schemaName}"."attendance_history"
+        SET attendance_date = date::DATE
+        WHERE attendance_date IS NULL AND date IS NOT NULL
+      `);
+
+      // Add index on attendance_history attendance_date
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date"
+        ON "${schemaName}"."attendance_history"(attendance_date)
+      `);
+
+      console.log(`Migrated date columns for ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error migrating date columns in ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Add CHECK constraints for status fields to enforce valid values
+   */
+  private async addStatusConstraints(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      // Add CHECK constraint for users.status
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'chk_${schemaName.replace(/_/g, '')}_users_status'
+          ) THEN
+            ALTER TABLE "${schemaName}"."users"
+            ADD CONSTRAINT "chk_${schemaName.replace(/_/g, '')}_users_status"
+            CHECK (status IN ('onboarding', 'confirm', 'active', 'expired', 'inactive', 'rejected', 'archive'));
+          END IF;
+        END $$;
+      `);
+
+      // Add CHECK constraint for memberships.status
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'chk_${schemaName.replace(/_/g, '')}_memberships_status'
+          ) THEN
+            ALTER TABLE "${schemaName}"."memberships"
+            ADD CONSTRAINT "chk_${schemaName.replace(/_/g, '')}_memberships_status"
+            CHECK (status IN ('pending', 'active', 'expired', 'cancelled', 'suspended'));
+          END IF;
+        END $$;
+      `);
+
+      console.log(`Added status CHECK constraints for ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error adding status constraints in ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Add performance indexes for common query patterns
+   */
+  private async addPerformanceIndexes(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    const indexes = [
+      // Memberships composite indexes
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_branch_status_end"
+       ON "${schemaName}"."memberships"(branch_id, status, end_date)`,
+
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_user_active"
+       ON "${schemaName}"."memberships"(user_id, status) WHERE status = 'active'`,
+
+      // Attendance composite indexes
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_branch_date_composite"
+       ON "${schemaName}"."attendance"(branch_id, date)`,
+
+      // Staff salaries composite indexes
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch_status_composite"
+       ON "${schemaName}"."staff_salaries"(branch_id, payment_status)`,
+
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period_status"
+       ON "${schemaName}"."staff_salaries"(year, month, payment_status)`,
+
+      // Users composite indexes
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch_role_active"
+       ON "${schemaName}"."users"(branch_id, role, status) WHERE is_deleted = FALSE OR is_deleted IS NULL`,
+    ];
+
+    for (const indexQuery of indexes) {
+      try {
+        await client.query(indexQuery);
+      } catch (error) {
+        console.error(
+          `Error creating performance index in ${schemaName}:`,
+          error.message,
+        );
+      }
+    }
+    console.log(`Created performance indexes for ${schemaName}`);
+  }
+
+  /**
+   * Create payments table for centralized payment tracking
+   */
+  private async createPaymentsTable(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."payments" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+
+          -- Payment source (what is being paid for)
+          payment_type VARCHAR(50) NOT NULL,
+          reference_id INTEGER NOT NULL,
+          reference_table VARCHAR(50) NOT NULL,
+
+          -- Payer info
+          payer_type VARCHAR(20) NOT NULL,
+          payer_id INTEGER NOT NULL,
+          payer_name VARCHAR(255),
+
+          -- Payee info (optional, for salaries)
+          payee_type VARCHAR(20),
+          payee_id INTEGER,
+          payee_name VARCHAR(255),
+
+          -- Amount details
+          amount DECIMAL(10, 2) NOT NULL,
+          currency VARCHAR(10) DEFAULT 'INR',
+          tax_amount DECIMAL(10, 2) DEFAULT 0,
+          discount_amount DECIMAL(10, 2) DEFAULT 0,
+          net_amount DECIMAL(10, 2) NOT NULL,
+
+          -- Payment details
+          payment_method VARCHAR(50) NOT NULL,
+          payment_ref VARCHAR(255),
+          payment_gateway VARCHAR(50),
+          payment_gateway_ref VARCHAR(255),
+
+          -- Status
+          status VARCHAR(50) DEFAULT 'pending',
+          failure_reason TEXT,
+
+          -- Audit
+          processed_at TIMESTAMP,
+          processed_by INTEGER,
+          notes TEXT,
+          metadata JSONB,
+
+          -- Timestamps
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_branch" ON "${schemaName}"."payments"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_type" ON "${schemaName}"."payments"(payment_type)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_ref" ON "${schemaName}"."payments"(reference_table, reference_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_status" ON "${schemaName}"."payments"(status)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_payer" ON "${schemaName}"."payments"(payer_type, payer_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_created" ON "${schemaName}"."payments"(created_at DESC)`,
+      );
+
+      console.log(`Ensured 'payments' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating payments table for ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Create history tables for audit trail (user_history, plan_history, salary_history)
+   */
+  private async createHistoryTables(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    // User history table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."user_history" (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          change_type VARCHAR(50) NOT NULL,
+          old_values JSONB,
+          new_values JSONB,
+          changed_fields TEXT[],
+          changed_by INTEGER,
+          changed_by_type VARCHAR(20),
+          change_reason TEXT,
+          ip_address VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_history_user" ON "${schemaName}"."user_history"(user_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_history_type" ON "${schemaName}"."user_history"(change_type)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_history_created" ON "${schemaName}"."user_history"(created_at DESC)`,
+      );
+      console.log(`Ensured 'user_history' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating user_history table for ${schemaName}:`,
+        error.message,
+      );
+    }
+
+    // Plan history table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."plan_history" (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL,
+          change_type VARCHAR(50) NOT NULL,
+          old_price DECIMAL(10, 2),
+          new_price DECIMAL(10, 2),
+          old_features JSONB,
+          new_features JSONB,
+          old_values JSONB,
+          new_values JSONB,
+          changed_by INTEGER,
+          change_reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_history_plan" ON "${schemaName}"."plan_history"(plan_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_history_created" ON "${schemaName}"."plan_history"(created_at DESC)`,
+      );
+      console.log(`Ensured 'plan_history' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating plan_history table for ${schemaName}:`,
+        error.message,
+      );
+    }
+
+    // Salary history table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."salary_history" (
+          id SERIAL PRIMARY KEY,
+          salary_id INTEGER NOT NULL,
+          staff_id INTEGER NOT NULL,
+          change_type VARCHAR(50) NOT NULL,
+          old_values JSONB,
+          new_values JSONB,
+          payment_method VARCHAR(50),
+          payment_ref VARCHAR(255),
+          changed_by INTEGER,
+          change_reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_salary_history_salary" ON "${schemaName}"."salary_history"(salary_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_salary_history_staff" ON "${schemaName}"."salary_history"(staff_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_salary_history_created" ON "${schemaName}"."salary_history"(created_at DESC)`,
+      );
+      console.log(`Ensured 'salary_history' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating salary_history table for ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Create activity logs table for user action audit trail
+   */
+  private async createActivityLogsTable(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."activity_logs" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+
+          -- Actor (who performed the action)
+          actor_id INTEGER NOT NULL,
+          actor_type VARCHAR(20) NOT NULL,
+          actor_name VARCHAR(255),
+
+          -- Action
+          action VARCHAR(100) NOT NULL,
+          action_category VARCHAR(50),
+
+          -- Target (what was affected)
+          target_type VARCHAR(50),
+          target_id INTEGER,
+          target_name VARCHAR(255),
+
+          -- Details
+          description TEXT,
+          old_values JSONB,
+          new_values JSONB,
+          metadata JSONB,
+
+          -- Request context
+          ip_address VARCHAR(50),
+          user_agent TEXT,
+          request_id VARCHAR(100),
+
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_actor" ON "${schemaName}"."activity_logs"(actor_id, actor_type)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_action" ON "${schemaName}"."activity_logs"(action)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_category" ON "${schemaName}"."activity_logs"(action_category)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_target" ON "${schemaName}"."activity_logs"(target_type, target_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_created" ON "${schemaName}"."activity_logs"(created_at DESC)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_branch_created" ON "${schemaName}"."activity_logs"(branch_id, created_at DESC)`,
+      );
+
+      console.log(`Ensured 'activity_logs' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating activity_logs table for ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Create announcements table for gym-wide announcements
+   */
+  private async createAnnouncementsTable(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."announcements" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+
+          title VARCHAR(255) NOT NULL,
+          content TEXT NOT NULL,
+          type VARCHAR(50) DEFAULT 'general',
+          priority VARCHAR(20) DEFAULT 'normal',
+
+          -- Targeting
+          target_audience VARCHAR(50) DEFAULT 'all',
+          target_user_ids INTEGER[],
+
+          -- Display settings
+          start_date TIMESTAMP DEFAULT NOW(),
+          end_date TIMESTAMP,
+          is_pinned BOOLEAN DEFAULT FALSE,
+          display_on_dashboard BOOLEAN DEFAULT TRUE,
+          display_on_mobile BOOLEAN DEFAULT TRUE,
+
+          -- Attachments
+          attachments JSONB,
+
+          -- Audit
+          created_by INTEGER NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          is_deleted BOOLEAN DEFAULT FALSE,
+          deleted_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_branch" ON "${schemaName}"."announcements"(branch_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_active" ON "${schemaName}"."announcements"(is_active, start_date, end_date)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_pinned" ON "${schemaName}"."announcements"(is_pinned, created_at DESC)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_type" ON "${schemaName}"."announcements"(type)`,
+      );
+
+      console.log(`Ensured 'announcements' table exists in ${schemaName}`);
+    } catch (error) {
+      console.error(
+        `Error creating announcements table for ${schemaName}:`,
+        error.message,
+      );
     }
   }
 
@@ -414,7 +1116,10 @@ export class TenantService implements OnModuleInit {
    * Note: Staff (manager, trainer) and Clients are stored in tenant schema
    * Only Admin (gym owner) is in public.users
    */
-  private async createTenantTables(client: any, schemaName: string): Promise<void> {
+  private async createTenantTables(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     // Users table (STAFF: manager, trainer + CLIENTS: members)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."users" (
@@ -436,10 +1141,14 @@ export class TenantService implements OnModuleInit {
         emergency_contact_name VARCHAR(255),
         emergency_contact_phone VARCHAR(50),
         status VARCHAR(50) DEFAULT 'active',
+        status_id INTEGER,
         email_verified BOOLEAN DEFAULT false,
         attendance_code VARCHAR(20) UNIQUE,
         join_date TIMESTAMP,
         last_login_at TIMESTAMP,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -461,6 +1170,9 @@ export class TenantService implements OnModuleInit {
         display_order INTEGER DEFAULT 0,
         is_featured BOOLEAN DEFAULT FALSE,
         is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(branch_id, code)
@@ -485,6 +1197,9 @@ export class TenantService implements OnModuleInit {
         min_purchase_amount DECIMAL(10, 2),
         applicable_to_all BOOLEAN DEFAULT TRUE,
         is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(branch_id, code)
@@ -527,6 +1242,9 @@ export class TenantService implements OnModuleInit {
         notes TEXT,
         created_by INTEGER, -- public.users.id (staff who created)
         is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -845,106 +1563,227 @@ export class TenantService implements OnModuleInit {
   /**
    * Create indexes for tenant tables
    */
-  private async createTenantIndexes(client: any, schemaName: string): Promise<void> {
+  private async createTenantIndexes(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     // Users indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_email" ON "${schemaName}"."users"(email)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch" ON "${schemaName}"."users"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_email" ON "${schemaName}"."users"(email)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_role" ON "${schemaName}"."users"(role)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status" ON "${schemaName}"."users"(status)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_attendance_code" ON "${schemaName}"."users"(attendance_code)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_branch" ON "${schemaName}"."users"(branch_id)`,
+    );
 
     // Plans indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plans_branch" ON "${schemaName}"."plans"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plans_branch" ON "${schemaName}"."plans"(branch_id)`,
+    );
 
     // Offers indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_offers_branch" ON "${schemaName}"."offers"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_offers_branch" ON "${schemaName}"."offers"(branch_id)`,
+    );
 
     // Memberships indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_user" ON "${schemaName}"."memberships"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_status" ON "${schemaName}"."memberships"(status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_dates" ON "${schemaName}"."memberships"(start_date, end_date)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_branch" ON "${schemaName}"."memberships"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_user" ON "${schemaName}"."memberships"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_status" ON "${schemaName}"."memberships"(status)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_dates" ON "${schemaName}"."memberships"(start_date, end_date)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_branch" ON "${schemaName}"."memberships"(branch_id)`,
+    );
 
     // Attendance indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_user" ON "${schemaName}"."attendance"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date" ON "${schemaName}"."attendance"(date)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_marked_by" ON "${schemaName}"."attendance"(marked_by)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_branch" ON "${schemaName}"."attendance"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_user" ON "${schemaName}"."attendance"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date" ON "${schemaName}"."attendance"(date)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_marked_by" ON "${schemaName}"."attendance"(marked_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_branch" ON "${schemaName}"."attendance"(branch_id)`,
+    );
 
     // Attendance history indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_user" ON "${schemaName}"."attendance_history"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date" ON "${schemaName}"."attendance_history"(date)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_branch" ON "${schemaName}"."attendance_history"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_user" ON "${schemaName}"."attendance_history"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date" ON "${schemaName}"."attendance_history"(date)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_branch" ON "${schemaName}"."attendance_history"(branch_id)`,
+    );
 
     // Membership history indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_history_branch" ON "${schemaName}"."membership_history"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_history_branch" ON "${schemaName}"."membership_history"(branch_id)`,
+    );
 
     // Body metrics indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_branch" ON "${schemaName}"."body_metrics"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_branch" ON "${schemaName}"."body_metrics_history"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_branch" ON "${schemaName}"."body_metrics"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_branch" ON "${schemaName}"."body_metrics_history"(branch_id)`,
+    );
 
     // Trainer-client indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_branch" ON "${schemaName}"."trainer_client_xref"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_trainer" ON "${schemaName}"."trainer_client_xref"(trainer_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_client" ON "${schemaName}"."trainer_client_xref"(client_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_client_branch" ON "${schemaName}"."trainer_client_xref"(branch_id)`,
+    );
 
     // Plan-offer indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_offer_xref_branch" ON "${schemaName}"."plan_offer_xref"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_offer_xref_branch" ON "${schemaName}"."plan_offer_xref"(branch_id)`,
+    );
 
     // Staff salaries indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_staff" ON "${schemaName}"."staff_salaries"(staff_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_status" ON "${schemaName}"."staff_salaries"(payment_status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period" ON "${schemaName}"."staff_salaries"(year, month)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch" ON "${schemaName}"."staff_salaries"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_staff" ON "${schemaName}"."staff_salaries"(staff_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_status" ON "${schemaName}"."staff_salaries"(payment_status)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_period" ON "${schemaName}"."staff_salaries"(year, month)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_branch" ON "${schemaName}"."staff_salaries"(branch_id)`,
+    );
 
     // Facilities indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_branch" ON "${schemaName}"."facilities"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_code" ON "${schemaName}"."facilities"(code)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`,
+    );
 
     // Amenities indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_branch" ON "${schemaName}"."amenities"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_code" ON "${schemaName}"."amenities"(code)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`,
+    );
 
     // Membership-Facility indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_membership" ON "${schemaName}"."membership_facilities"(membership_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`,
+    );
 
     // Membership-Amenity indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_membership" ON "${schemaName}"."membership_amenities"(membership_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`,
+    );
 
     // Workout Plans indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_branch" ON "${schemaName}"."workout_plans"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_status" ON "${schemaName}"."workout_plans"(status)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_type" ON "${schemaName}"."workout_plans"(type)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_category" ON "${schemaName}"."workout_plans"(category)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`,
+    );
 
     // Workout Assignments indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_branch" ON "${schemaName}"."workout_assignments"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_workout" ON "${schemaName}"."workout_assignments"(workout_plan_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_user" ON "${schemaName}"."workout_assignments"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`,
+    );
 
     // Notifications indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_user" ON "${schemaName}"."notifications"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_unread" ON "${schemaName}"."notifications"(user_id, is_read) WHERE is_read = FALSE`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_type" ON "${schemaName}"."notifications"(type)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created" ON "${schemaName}"."notifications"(created_at DESC)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`,
+    );
 
     // User-Branch xref indexes (for branch_admin with multiple branches)
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_branch" ON "${schemaName}"."user_branch_xref"(branch_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`,
+    );
   }
 
   /**
    * Seed default membership plans for a new tenant
    */
-  private async seedDefaultPlans(client: any, schemaName: string): Promise<void> {
+  private async seedDefaultPlans(
+    client: any,
+    schemaName: string,
+  ): Promise<void> {
     const defaultPlans = [
       {
         code: 'monthly',
@@ -965,7 +1804,8 @@ export class TenantService implements OnModuleInit {
       {
         code: 'quarterly',
         name: 'Quarterly Plan',
-        description: 'Our most popular plan with great value for committed members',
+        description:
+          'Our most popular plan with great value for committed members',
         duration_value: 90,
         duration_type: 'days',
         price: 2499,
@@ -1006,25 +1846,28 @@ export class TenantService implements OnModuleInit {
       // Check if plan already exists (with NULL branch_id)
       const existing = await client.query(
         `SELECT id FROM "${schemaName}"."plans" WHERE code = $1 AND branch_id IS NULL`,
-        [plan.code]
+        [plan.code],
       );
 
       if (existing.rows.length === 0) {
-        await client.query(`
+        await client.query(
+          `
           INSERT INTO "${schemaName}"."plans"
           (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
-        `, [
-          plan.code,
-          plan.name,
-          plan.description,
-          plan.duration_value,
-          plan.duration_type,
-          plan.price,
-          plan.features,
-          plan.display_order,
-          plan.is_featured,
-        ]);
+        `,
+          [
+            plan.code,
+            plan.name,
+            plan.description,
+            plan.duration_value,
+            plan.duration_type,
+            plan.price,
+            plan.features,
+            plan.display_order,
+            plan.is_featured,
+          ],
+        );
       }
     }
 
@@ -1053,7 +1896,7 @@ export class TenantService implements OnModuleInit {
     const schemaName = this.getTenantSchemaName(gymId);
     const result = await this.pool.query(
       `SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`,
-      [schemaName]
+      [schemaName],
     );
     return result.rows.length > 0;
   }
@@ -1061,7 +1904,10 @@ export class TenantService implements OnModuleInit {
   /**
    * Execute a query in a specific tenant schema
    */
-  async executeInTenant<T>(gymId: number, callback: (client: any, schemaName: string) => Promise<T>): Promise<T> {
+  async executeInTenant<T>(
+    gymId: number,
+    callback: (client: any, schemaName: string) => Promise<T>,
+  ): Promise<T> {
     const schemaName = this.getTenantSchemaName(gymId);
     const client = await this.pool.connect();
 

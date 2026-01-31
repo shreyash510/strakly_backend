@@ -15,14 +15,29 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiHeader,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, ResetPasswordDto } from './dto/create-user.dto';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  AdminResetPasswordDto,
+  ApproveRequestDto,
+} from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
-import { setPaginationHeaders, resolveGymId, resolveOptionalGymId } from '../common';
+import {
+  setPaginationHeaders,
+  resolveGymId,
+  resolveOptionalGymId,
+} from '../common';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('users')
@@ -53,15 +68,58 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get all users with optional filters and pagination' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or phone' })
-  @ApiQuery({ name: 'role', required: false, type: String, description: 'Filter by role' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
-  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (optional for superadmin - omit to see all gyms)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only, pass "all" for all branches)' })
+  @ApiOperation({
+    summary: 'Get all users with optional filters and pagination',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by name, email, or phone',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    type: String,
+    description: 'Filter by role',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by status',
+  })
+  @ApiQuery({
+    name: 'noPagination',
+    required: false,
+    type: Boolean,
+    description: 'Disable pagination',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (optional for superadmin - omit to see all gyms)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description:
+      'Branch ID for filtering (admin only, pass "all" for all branches)',
+  })
   async findAll(
     @Request() req: any,
     @CurrentUser() user: AuthenticatedUser,
@@ -79,11 +137,15 @@ export class UsersController {
     // For superadmin, gymId is optional (can view all gyms)
     // For others, use their assigned gymId or query param
     const gymId = isSuperAdmin
-      ? (queryGymId ? parseInt(queryGymId) : undefined)
+      ? queryGymId
+        ? parseInt(queryGymId)
+        : undefined
       : resolveGymId(user.gymId, queryGymId, false);
 
     // Resolve branchId for filtering (non-superadmin only)
-    const branchId = isSuperAdmin ? null : this.resolveBranchId(req, queryBranchId);
+    const branchId = isSuperAdmin
+      ? null
+      : this.resolveBranchId(req, queryBranchId);
 
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
@@ -108,14 +170,27 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Create a new user' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() createUserDto: CreateUserDto,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.create(createUserDto, gymId);
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.create(createUserDto, gymId, user.role, {
+      id: user.userId,
+      name: user.name || user.email,
+      role: user.role,
+    });
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -142,15 +217,28 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get single user by ID (header)' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   findOneByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     return this.usersService.findOne(parseInt(userId), gymId);
   }
 
@@ -158,8 +246,17 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update user (header)' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   updateByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
@@ -167,7 +264,11 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     return this.usersService.update(parseInt(userId), gymId, updateUserDto);
   }
 
@@ -175,15 +276,28 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete user (header)' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   removeByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     return this.usersService.remove(parseInt(userId), gymId);
   }
 
@@ -191,8 +305,17 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update user status (header)' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   updateStatusByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
@@ -200,7 +323,11 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     return this.usersService.updateStatus(parseInt(userId), gymId, body.status);
   }
 
@@ -208,32 +335,62 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Reset user password (admin)' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   resetPasswordByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
-    @Body() dto: ResetPasswordDto,
+    @Body() dto: AdminResetPasswordDto,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.resetPassword(parseInt(userId), gymId, dto.newPassword);
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.resetPassword(
+      parseInt(userId),
+      gymId,
+      dto.newPassword,
+    );
   }
 
   @Post('user/regenerate-attendance-code')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Regenerate attendance code for user' })
-  @ApiHeader({ name: 'x-user-id', required: true, description: 'Target user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    required: true,
+    description: 'Target user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   regenerateAttendanceCode(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Query('gymId') queryGymId?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     return this.usersService.regenerateAttendanceCode(parseInt(userId), gymId);
   }
 
@@ -241,14 +398,23 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get users by role' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   async findByRole(
     @CurrentUser() user: AuthenticatedUser,
     @Param('role') role: string,
     @Query('gymId') queryGymId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
     const result = await this.usersService.findByRole(role, gymId);
 
     if (res && result.pagination) {
@@ -263,15 +429,18 @@ export class UsersController {
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
   @Roles('admin', 'branch_admin', 'manager')
-  @ApiOperation({ summary: 'Approve a pending registration request' })
+  @ApiOperation({
+    summary: 'Approve a pending registration request with optional membership',
+  })
   approveRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ApproveRequestDto,
   ) {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    return this.usersService.approveRequest(id, user.gymId);
+    return this.usersService.approveRequest(id, user.gymId, dto);
   }
 
   @Patch(':id/reject')
@@ -342,7 +511,11 @@ export class UsersController {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    return this.usersService.removeClientFromTrainer(trainerId, clientId, user.gymId);
+    return this.usersService.removeClientFromTrainer(
+      trainerId,
+      clientId,
+      user.gymId,
+    );
   }
 
   @Get('clients/:clientId/trainer')
@@ -365,16 +538,22 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get user by ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (optional for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (optional for superadmin)',
+  })
   findById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
     // Superadmin can view any user without specifying gymId
-    const gymId = user.role === 'superadmin'
-      ? resolveOptionalGymId(user.gymId, queryGymId)
-      : resolveGymId(user.gymId, queryGymId, false);
+    const gymId =
+      user.role === 'superadmin'
+        ? resolveOptionalGymId(user.gymId, queryGymId)
+        : resolveGymId(user.gymId, queryGymId, false);
     return this.usersService.findOne(id, gymId as number);
   }
 
@@ -382,28 +561,52 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update user by ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   updateById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.update(id, gymId, updateUserDto);
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.update(
+      id,
+      gymId,
+      updateUserDto,
+      undefined,
+      user.role,
+    );
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Delete user by ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
   removeById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
-    const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.remove(id, gymId);
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.remove(id, gymId, undefined, user.role);
   }
 }

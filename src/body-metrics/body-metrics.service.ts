@@ -46,19 +46,22 @@ export class BodyMetricsService {
   }
 
   async getMetrics(userId: number, gymId: number, branchId?: number | null) {
-    const metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
-      const values: any[] = [userId];
+    const metrics = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+        const values: any[] = [userId];
 
-      // Branch filtering
-      if (branchId !== null && branchId !== undefined) {
-        query += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering
+        if (branchId !== null && branchId !== undefined) {
+          query += ` AND branch_id = $2`;
+          values.push(branchId);
+        }
 
-      const result = await client.query(query, values);
-      return result.rows[0];
-    });
+        const result = await client.query(query, values);
+        return result.rows[0];
+      },
+    );
 
     if (!metrics) {
       return null;
@@ -67,40 +70,61 @@ export class BodyMetricsService {
     return this.formatMetrics(metrics);
   }
 
-  async getOrCreateMetrics(userId: number, gymId: number, branchId?: number | null) {
-    let metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
-      const values: any[] = [userId];
+  async getOrCreateMetrics(
+    userId: number,
+    gymId: number,
+    branchId?: number | null,
+  ) {
+    let metrics = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+        const values: any[] = [userId];
 
-      // Branch filtering
-      if (branchId !== null && branchId !== undefined) {
-        query += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering
+        if (branchId !== null && branchId !== undefined) {
+          query += ` AND branch_id = $2`;
+          values.push(branchId);
+        }
 
-      const result = await client.query(query, values);
-      return result.rows[0];
-    });
+        const result = await client.query(query, values);
+        return result.rows[0];
+      },
+    );
 
     if (!metrics) {
-      metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
-          [userId, branchId ?? null]
-        );
-        return result.rows[0];
-      });
+      metrics = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
+            [userId, branchId ?? null],
+          );
+          return result.rows[0];
+        },
+      );
     }
 
     return this.formatMetrics(metrics);
   }
 
-  async updateMetrics(userId: number, gymId: number, dto: UpdateBodyMetricsDto, branchId?: number | null) {
+  async updateMetrics(
+    userId: number,
+    gymId: number,
+    dto: UpdateBodyMetricsDto,
+    branchId?: number | null,
+  ) {
     // Verify user exists
-    const user = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-      return result.rows[0];
-    });
+    const user = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id FROM users WHERE id = $1`,
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -109,63 +133,133 @@ export class BodyMetricsService {
     const bmi = this.calculateBMI(dto.weight, dto.height);
 
     // Check if metrics exist
-    const existing = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id FROM body_metrics WHERE user_id = $1`;
-      const values: any[] = [userId];
+    const existing = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT id FROM body_metrics WHERE user_id = $1`;
+        const values: any[] = [userId];
 
-      // Branch filtering
-      if (branchId !== null && branchId !== undefined) {
-        query += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering
+        if (branchId !== null && branchId !== undefined) {
+          query += ` AND branch_id = $2`;
+          values.push(branchId);
+        }
 
-      const result = await client.query(query, values);
-      return result.rows[0];
-    });
+        const result = await client.query(query, values);
+        return result.rows[0];
+      },
+    );
 
-    const metrics = await this.tenantService.executeInTenant(gymId, async (client) => {
-      if (existing) {
-        const updates: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+    const metrics = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        if (existing) {
+          const updates: string[] = [];
+          const values: any[] = [];
+          let paramIndex = 1;
 
-        if (dto.height !== undefined) { updates.push(`height = $${paramIndex++}`); values.push(dto.height); }
-        if (dto.weight !== undefined) { updates.push(`weight = $${paramIndex++}`); values.push(dto.weight); }
-        if (bmi !== null) { updates.push(`bmi = $${paramIndex++}`); values.push(bmi); }
-        if (dto.bodyFat !== undefined) { updates.push(`body_fat = $${paramIndex++}`); values.push(dto.bodyFat); }
-        if (dto.muscleMass !== undefined) { updates.push(`muscle_mass = $${paramIndex++}`); values.push(dto.muscleMass); }
-        if (dto.boneMass !== undefined) { updates.push(`bone_mass = $${paramIndex++}`); values.push(dto.boneMass); }
-        if (dto.waterPercentage !== undefined) { updates.push(`water_percentage = $${paramIndex++}`); values.push(dto.waterPercentage); }
-        if (dto.chest !== undefined) { updates.push(`chest = $${paramIndex++}`); values.push(dto.chest); }
-        if (dto.waist !== undefined) { updates.push(`waist = $${paramIndex++}`); values.push(dto.waist); }
-        if (dto.hips !== undefined) { updates.push(`hips = $${paramIndex++}`); values.push(dto.hips); }
-        if (dto.biceps !== undefined) { updates.push(`biceps = $${paramIndex++}`); values.push(dto.biceps); }
-        if (dto.thighs !== undefined) { updates.push(`thighs = $${paramIndex++}`); values.push(dto.thighs); }
-        if (dto.calves !== undefined) { updates.push(`calves = $${paramIndex++}`); values.push(dto.calves); }
-        if (dto.shoulders !== undefined) { updates.push(`shoulders = $${paramIndex++}`); values.push(dto.shoulders); }
-        if (dto.neck !== undefined) { updates.push(`neck = $${paramIndex++}`); values.push(dto.neck); }
+          if (dto.height !== undefined) {
+            updates.push(`height = $${paramIndex++}`);
+            values.push(dto.height);
+          }
+          if (dto.weight !== undefined) {
+            updates.push(`weight = $${paramIndex++}`);
+            values.push(dto.weight);
+          }
+          if (bmi !== null) {
+            updates.push(`bmi = $${paramIndex++}`);
+            values.push(bmi);
+          }
+          if (dto.bodyFat !== undefined) {
+            updates.push(`body_fat = $${paramIndex++}`);
+            values.push(dto.bodyFat);
+          }
+          if (dto.muscleMass !== undefined) {
+            updates.push(`muscle_mass = $${paramIndex++}`);
+            values.push(dto.muscleMass);
+          }
+          if (dto.boneMass !== undefined) {
+            updates.push(`bone_mass = $${paramIndex++}`);
+            values.push(dto.boneMass);
+          }
+          if (dto.waterPercentage !== undefined) {
+            updates.push(`water_percentage = $${paramIndex++}`);
+            values.push(dto.waterPercentage);
+          }
+          if (dto.chest !== undefined) {
+            updates.push(`chest = $${paramIndex++}`);
+            values.push(dto.chest);
+          }
+          if (dto.waist !== undefined) {
+            updates.push(`waist = $${paramIndex++}`);
+            values.push(dto.waist);
+          }
+          if (dto.hips !== undefined) {
+            updates.push(`hips = $${paramIndex++}`);
+            values.push(dto.hips);
+          }
+          if (dto.biceps !== undefined) {
+            updates.push(`biceps = $${paramIndex++}`);
+            values.push(dto.biceps);
+          }
+          if (dto.thighs !== undefined) {
+            updates.push(`thighs = $${paramIndex++}`);
+            values.push(dto.thighs);
+          }
+          if (dto.calves !== undefined) {
+            updates.push(`calves = $${paramIndex++}`);
+            values.push(dto.calves);
+          }
+          if (dto.shoulders !== undefined) {
+            updates.push(`shoulders = $${paramIndex++}`);
+            values.push(dto.shoulders);
+          }
+          if (dto.neck !== undefined) {
+            updates.push(`neck = $${paramIndex++}`);
+            values.push(dto.neck);
+          }
 
-        updates.push(`last_measured_at = NOW()`);
-        updates.push(`updated_at = NOW()`);
-        values.push(userId);
+          updates.push(`last_measured_at = NOW()`);
+          updates.push(`updated_at = NOW()`);
+          values.push(userId);
 
-        await client.query(`UPDATE body_metrics SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`, values);
-      } else {
-        await client.query(
-          `INSERT INTO body_metrics (user_id, branch_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
+          await client.query(
+            `UPDATE body_metrics SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`,
+            values,
+          );
+        } else {
+          await client.query(
+            `INSERT INTO body_metrics (user_id, branch_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
-          [userId, branchId ?? null, dto.height, dto.weight, bmi, dto.bodyFat, dto.muscleMass]
-        );
-      }
+            [
+              userId,
+              branchId ?? null,
+              dto.height,
+              dto.weight,
+              bmi,
+              dto.bodyFat,
+              dto.muscleMass,
+            ],
+          );
+        }
 
-      const result = await client.query(`SELECT * FROM body_metrics WHERE user_id = $1`, [userId]);
-      return result.rows[0];
-    });
+        const result = await client.query(
+          `SELECT * FROM body_metrics WHERE user_id = $1`,
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     return this.formatMetrics(metrics);
   }
 
-  async recordMetrics(userId: number, gymId: number, dto: RecordMetricsDto, branchId?: number | null) {
+  async recordMetrics(
+    userId: number,
+    gymId: number,
+    dto: RecordMetricsDto,
+    branchId?: number | null,
+  ) {
     // Update current metrics
     await this.updateMetrics(userId, gymId, dto, branchId);
 
@@ -175,28 +269,31 @@ export class BodyMetricsService {
     const measuredAt = dto.measuredAt ? new Date(dto.measuredAt) : new Date();
 
     // Insert into history and return the new record
-    const historyRecord = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
+    const historyRecord = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
          RETURNING *`,
-        [
-          userId,
-          branchId ?? null,
-          measuredAt,
-          dto.height || null,
-          dto.weight || null,
-          bmi,
-          dto.bodyFat || null,
-          dto.muscleMass || null,
-          dto.waist || null,
-          dto.chest || null,
-          dto.hips || null,
-          dto.notes || null,
-        ]
-      );
-      return result.rows[0];
-    });
+          [
+            userId,
+            branchId ?? null,
+            measuredAt,
+            dto.height || null,
+            dto.weight || null,
+            bmi,
+            dto.bodyFat || null,
+            dto.muscleMass || null,
+            dto.waist || null,
+            dto.chest || null,
+            dto.hips || null,
+            dto.notes || null,
+          ],
+        );
+        return result.rows[0];
+      },
+    );
 
     // Return the history record in the expected format
     return {
@@ -233,7 +330,13 @@ export class BodyMetricsService {
   async getHistory(
     userId: number,
     gymId: number,
-    options?: { startDate?: Date; endDate?: Date; page?: number; limit?: number; branchId?: number | null }
+    options?: {
+      startDate?: Date;
+      endDate?: Date;
+      page?: number;
+      limit?: number;
+      branchId?: number | null;
+    },
   ) {
     const page = options?.page || 1;
     const limit = options?.limit || 10;
@@ -262,7 +365,7 @@ export class BodyMetricsService {
       // Get total count
       const countResult = await client.query(
         `SELECT COUNT(*) as count FROM body_metrics_history WHERE ${whereClause}`,
-        values
+        values,
       );
       const total = parseInt(countResult.rows[0].count, 10);
 
@@ -270,7 +373,7 @@ export class BodyMetricsService {
       const dataValues = [...values, limit, skip];
       const result = await client.query(
         `SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
-        dataValues
+        dataValues,
       );
 
       const data = result.rows.map((h: any) => ({
@@ -322,28 +425,38 @@ export class BodyMetricsService {
       return null;
     }
 
-    const { firstRecord, latestRecord, totalRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let whereClause = 'user_id = $1';
-      const values: any[] = [userId];
+    const { firstRecord, latestRecord, totalRecords } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        let whereClause = 'user_id = $1';
+        const values: any[] = [userId];
 
-      // Branch filtering
-      if (branchId !== null && branchId !== undefined) {
-        whereClause += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering
+        if (branchId !== null && branchId !== undefined) {
+          whereClause += ` AND branch_id = $2`;
+          values.push(branchId);
+        }
 
-      const [firstResult, latestResult, countResult] = await Promise.all([
-        client.query(`SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at ASC LIMIT 1`, values),
-        client.query(`SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT 1`, values),
-        client.query(`SELECT COUNT(*) as count FROM body_metrics_history WHERE ${whereClause}`, values),
-      ]);
+        const [firstResult, latestResult, countResult] = await Promise.all([
+          client.query(
+            `SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at ASC LIMIT 1`,
+            values,
+          ),
+          client.query(
+            `SELECT * FROM body_metrics_history WHERE ${whereClause} ORDER BY measured_at DESC LIMIT 1`,
+            values,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM body_metrics_history WHERE ${whereClause}`,
+            values,
+          ),
+        ]);
 
-      return {
-        firstRecord: firstResult.rows[0],
-        latestRecord: latestResult.rows[0],
-        totalRecords: parseInt(countResult.rows[0].count, 10),
-      };
-    });
+        return {
+          firstRecord: firstResult.rows[0],
+          latestRecord: latestResult.rows[0],
+          totalRecords: parseInt(countResult.rows[0].count, 10),
+        };
+      });
 
     if (!firstRecord) {
       return { current, progress: null, firstRecord: null, totalRecords: 0 };
@@ -356,7 +469,10 @@ export class BodyMetricsService {
         initial: Number(firstRecord.weight),
         current: Number(current.weight),
         change: Number(current.weight) - Number(firstRecord.weight),
-        changePercent: ((Number(current.weight) - Number(firstRecord.weight)) / Number(firstRecord.weight)) * 100,
+        changePercent:
+          ((Number(current.weight) - Number(firstRecord.weight)) /
+            Number(firstRecord.weight)) *
+          100,
       };
     }
 
@@ -367,22 +483,33 @@ export class BodyMetricsService {
       progress,
       totalRecords,
       startDate: firstRecord.measured_at,
-      daysSinceStart: Math.floor((Date.now() - new Date(firstRecord.measured_at).getTime()) / (1000 * 60 * 60 * 24)),
+      daysSinceStart: Math.floor(
+        (Date.now() - new Date(firstRecord.measured_at).getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
     };
   }
 
   async deleteHistoryRecord(id: number, userId: number, gymId: number) {
-    const record = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(`SELECT * FROM body_metrics_history WHERE id = $1`, [id]);
-      return result.rows[0];
-    });
+    const record = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT * FROM body_metrics_history WHERE id = $1`,
+          [id],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!record || record.user_id !== userId) {
       throw new NotFoundException(`History record with ID ${id} not found`);
     }
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(`DELETE FROM body_metrics_history WHERE id = $1`, [id]);
+      await client.query(`DELETE FROM body_metrics_history WHERE id = $1`, [
+        id,
+      ]);
     });
 
     return { success: true };

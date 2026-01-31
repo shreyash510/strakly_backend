@@ -1,6 +1,13 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { CreateLookupTypeDto, UpdateLookupTypeDto } from './dto/create-lookup-type.dto';
+import {
+  CreateLookupTypeDto,
+  UpdateLookupTypeDto,
+} from './dto/create-lookup-type.dto';
 import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 
 @Injectable()
@@ -46,7 +53,9 @@ export class LookupsService {
     });
 
     if (existing) {
-      throw new ConflictException(`LookupType with code ${dto.code} already exists`);
+      throw new ConflictException(
+        `LookupType with code ${dto.code} already exists`,
+      );
     }
 
     return this.prisma.lookupType.create({
@@ -144,6 +153,57 @@ export class LookupsService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  // ============ HELPER METHODS ============
+
+  /**
+   * Get a lookup by type code and value code
+   * Used for validating and getting lookup ID from string value
+   */
+  async findLookupByTypeAndCode(typeCode: string, lookupCode: string) {
+    const lookupType = await this.prisma.lookupType.findUnique({
+      where: { code: typeCode },
+    });
+
+    if (!lookupType) {
+      return null;
+    }
+
+    const lookup = await this.prisma.lookup.findUnique({
+      where: {
+        lookupTypeId_code: {
+          lookupTypeId: lookupType.id,
+          code: lookupCode,
+        },
+      },
+      include: { lookupType: true },
+    });
+
+    return lookup;
+  }
+
+  /**
+   * Get lookup ID by type code and value code
+   * Returns null if not found
+   */
+  async getLookupId(
+    typeCode: string,
+    lookupCode: string,
+  ): Promise<number | null> {
+    const lookup = await this.findLookupByTypeAndCode(typeCode, lookupCode);
+    return lookup?.id ?? null;
+  }
+
+  /**
+   * Get lookup code by ID
+   * Returns null if not found
+   */
+  async getLookupCode(lookupId: number): Promise<string | null> {
+    const lookup = await this.prisma.lookup.findUnique({
+      where: { id: lookupId },
+    });
+    return lookup?.code ?? null;
   }
 
   // ============ BULK OPERATIONS ============

@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  Length,
+  IsNumber,
+  IsOptional,
+  IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -21,7 +28,11 @@ export class MarkAttendanceDto {
   @Type(() => Number)
   gymId: number;
 
-  @ApiPropertyOptional({ description: 'Check-in method', enum: ['code', 'qr', 'manual', 'self'], default: 'code' })
+  @ApiPropertyOptional({
+    description: 'Check-in method',
+    enum: ['code', 'qr', 'manual', 'self'],
+    default: 'code',
+  })
   @IsOptional()
   @IsString()
   @IsIn(['code', 'qr', 'manual', 'self'])

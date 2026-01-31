@@ -1,4 +1,12 @@
-import { IsString, IsEmail, IsOptional, IsEnum, IsInt, IsNotEmpty, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsArray,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
 import type { UserRole, UserStatus, Gender } from '../../constants';
@@ -92,7 +100,9 @@ export class CreateUserDto {
   @IsInt()
   branchId?: number;
 
-  @ApiPropertyOptional({ description: 'Branch IDs (for branch_admin with multiple branches)' })
+  @ApiPropertyOptional({
+    description: 'Branch IDs (for branch_admin with multiple branches)',
+  })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
@@ -121,7 +131,10 @@ export class CreateStaffDto {
   @IsNotEmpty()
   password: string;
 
-  @ApiProperty({ description: 'Staff role', enum: ['admin', 'manager', 'trainer', 'branch_admin'] })
+  @ApiProperty({
+    description: 'Staff role',
+    enum: ['admin', 'manager', 'trainer', 'branch_admin'],
+  })
   @IsEnum(['admin', 'manager', 'trainer', 'branch_admin'])
   @IsNotEmpty()
   role: 'admin' | 'manager' | 'trainer' | 'branch_admin';
@@ -181,7 +194,9 @@ export class CreateStaffDto {
   @IsInt()
   branchId?: number;
 
-  @ApiPropertyOptional({ description: 'Branch IDs (for branch_admin with multiple branches)' })
+  @ApiPropertyOptional({
+    description: 'Branch IDs (for branch_admin with multiple branches)',
+  })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
@@ -351,7 +366,34 @@ export class UpdateUserDto {
   joinDate?: string;
 }
 
-export class ResetPasswordDto {
+export class AdminResetPasswordDto {
   @IsString()
   newPassword: string;
+}
+
+export class ApproveRequestDto {
+  @ApiPropertyOptional({
+    description:
+      'Plan ID for membership (optional - skip to approve without membership)',
+  })
+  @IsOptional()
+  @IsInt()
+  planId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Start date for membership (defaults to today)',
+  })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'Payment method' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ description: 'Notes' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

@@ -1,4 +1,10 @@
-import { IsInt, IsOptional, IsString, IsBoolean, IsEnum } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AssignClientDto {

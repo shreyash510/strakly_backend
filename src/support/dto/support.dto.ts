@@ -1,8 +1,19 @@
 import { IsString, IsOptional, IsEnum, IsInt } from 'class-validator';
 
-export const TICKET_CATEGORIES = ['general', 'technical', 'billing', 'feedback', 'complaint'] as const;
+export const TICKET_CATEGORIES = [
+  'general',
+  'technical',
+  'billing',
+  'feedback',
+  'complaint',
+] as const;
 export const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
-export const TICKET_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
+export const TICKET_STATUSES = [
+  'open',
+  'in_progress',
+  'resolved',
+  'closed',
+] as const;
 
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];

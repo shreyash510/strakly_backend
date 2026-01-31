@@ -41,12 +41,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'strakly-secret-key-change-in-production',
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') ||
+        'strakly-secret-key-change-in-production',
     });
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    const userId = typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
+    const userId =
+      typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
     const gymId = payload.gymId;
     const tenantSchemaName = payload.tenantSchemaName;
     const branchId = payload.branchId;
@@ -127,27 +130,52 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // For tenant users (manager, trainer, client), require tenant information
     if (!gymId || !tenantSchemaName) {
-      throw new UnauthorizedException('Invalid token: missing tenant information');
+      throw new UnauthorizedException(
+        'Invalid token: missing tenant information',
+      );
     }
 
     // Verify user still exists in tenant schema
-    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, email, name, status, role, branch_id
+    const userData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT id, email, name, status, role, branch_id
          FROM users
          WHERE id = $1`,
-        [userId]
-      );
-      return result.rows[0];
-    });
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
 
     if (!userData) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Check if user is suspended
+    // Check user status based on role
     if (userData.status === 'suspended') {
       throw new UnauthorizedException('Your account has been suspended');
+    }
+
+    if (userData.status === 'inactive') {
+      throw new UnauthorizedException('Your account is inactive');
+    }
+
+    // For clients, also block onboarding/confirm/rejected/archive statuses
+    if (userData.role === 'client') {
+      if (userData.status === 'onboarding' || userData.status === 'confirm') {
+        throw new UnauthorizedException('Your account is pending approval');
+      }
+      if (userData.status === 'rejected') {
+        throw new UnauthorizedException('Your registration has been rejected');
+      }
+      if (userData.status === 'archive') {
+        throw new UnauthorizedException('Your account has been archived');
+      }
+      if (userData.status === 'expired') {
+        throw new UnauthorizedException('Your account has expired');
+      }
     }
 
     return {

@@ -1,12 +1,31 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 export interface AttendanceStats {
   totalPresent: number;
   todayPresent: number;
   thisWeekPresent: number;
   thisMonthPresent: number;
+}
+
+export interface AttendanceReportData {
+  summary: {
+    totalCheckIns: number;
+    avgDailyCheckIns: number;
+    uniqueMembers: number;
+    avgDuration: number; // in minutes
+  };
+  dailyTrend: Array<{ date: string; count: number }>;
+  weeklyPattern: Array<{ day: string; count: number }>;
+  genderDistribution: { male: number; female: number; other: number };
+  topMembers: Array<{ userId: number; name: string; visits: number }>;
 }
 
 export interface AttendanceRecord {
@@ -45,6 +64,7 @@ export class AttendanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
   private getTodayDate(): string {
@@ -65,22 +85,29 @@ export class AttendanceService {
     return monthStart.toLocaleDateString('en-CA');
   }
 
-  async searchUserByCode(code: string, gymId: number, branchId: number | null = null): Promise<SearchUserResult | null> {
-    const userData = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
+  async searchUserByCode(
+    code: string,
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<SearchUserResult | null> {
+    const userData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
          FROM users
          WHERE attendance_code = $1`;
-      const values: any[] = [code];
+        const values: any[] = [code];
 
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering for non-admin users
+        if (branchId !== null) {
+          query += ` AND branch_id = $2`;
+          values.push(branchId);
+        }
 
-      const result = await client.query(query, values);
-      return result.rows[0];
-    });
+        const result = await client.query(query, values);
+        return result.rows[0];
+      },
+    );
 
     if (!userData) {
       return null;
@@ -100,7 +127,12 @@ export class AttendanceService {
   }
 
   async markAttendance(
-    user: { id: number; name: string; email: string; attendanceCode?: string | null },
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      attendanceCode?: string | null;
+    },
     staffId: number,
     gymId: number,
     branchId: number | null = null,
@@ -113,51 +145,82 @@ export class AttendanceService {
       throw new NotFoundException('Gym not found');
     }
 
-    const { existingRecord, activeMembership, userBranchId } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [existingResult, membershipResult, userResult] = await Promise.all([
-        client.query(
-          `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
-          [user.id, today]
-        ),
-        client.query(
-          `SELECT id FROM memberships WHERE user_id = $1 AND status = 'active'
+    const { existingRecord, activeMembership, userBranchId } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        const [existingResult, membershipResult, userResult] =
+          await Promise.all([
+            client.query(
+              `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
+              [user.id, today],
+            ),
+            client.query(
+              `SELECT id FROM memberships WHERE user_id = $1 AND status = 'active'
            AND start_date <= $2 AND end_date >= $2`,
-          [user.id, new Date()]
-        ),
-        client.query(`SELECT branch_id FROM users WHERE id = $1`, [user.id]),
-      ]);
+              [user.id, new Date()],
+            ),
+            client.query(`SELECT branch_id FROM users WHERE id = $1`, [
+              user.id,
+            ]),
+          ]);
 
-      return {
-        existingRecord: existingResult.rows[0],
-        activeMembership: membershipResult.rows[0],
-        userBranchId: userResult.rows[0]?.branch_id,
-      };
-    });
+        return {
+          existingRecord: existingResult.rows[0],
+          activeMembership: membershipResult.rows[0],
+          userBranchId: userResult.rows[0]?.branch_id,
+        };
+      });
 
     // Get staff name from public.users (admin/staff)
-    const staffUser = await this.prisma.user.findUnique({ where: { id: staffId } });
+    const staffUser = await this.prisma.user.findUnique({
+      where: { id: staffId },
+    });
     const staffName = staffUser?.name;
 
     if (existingRecord) {
-      throw new BadRequestException('User is already checked in at this gym today');
+      throw new BadRequestException(
+        'User is already checked in at this gym today',
+      );
     }
 
     if (!activeMembership) {
-      throw new ForbiddenException('User does not have an active membership at this gym');
+      throw new ForbiddenException(
+        'User does not have an active membership at this gym',
+      );
     }
 
     // Use user's branch if branchId not provided
     const attendanceBranchId = branchId ?? userBranchId;
 
-    const attendance = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, marked_by, check_in_method, status, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), $4, $5, $6, 'present', NOW(), NOW())
+    const attendance = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
          RETURNING *`,
-        [attendanceBranchId, user.id, activeMembership.id, today, staffId, checkInMethod]
-      );
-      return result.rows[0];
-    });
+          [
+            attendanceBranchId,
+            user.id,
+            activeMembership.id,
+            today,
+            staffId,
+            checkInMethod,
+          ],
+        );
+        return result.rows[0];
+      },
+    );
+
+    // Log activity
+    await this.activityLogsService.logAttendanceMarked(
+      gymId,
+      attendanceBranchId,
+      staffId,
+      'staff',
+      staffName || 'Staff',
+      user.id,
+      user.name,
+    );
 
     return {
       id: attendance.id,
@@ -179,29 +242,38 @@ export class AttendanceService {
     };
   }
 
-  async checkOut(attendanceId: number, gymId: number, staffId?: number): Promise<AttendanceRecord> {
+  async checkOut(
+    attendanceId: number,
+    gymId: number,
+    staffId?: number,
+  ): Promise<AttendanceRecord> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
     if (!gym) {
       throw new NotFoundException('Gym not found');
     }
 
-    const { attendance, user } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const attResult = await client.query(
-        `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+    const { attendance, user } = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const attResult = await client.query(
+          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          WHERE a.id = $1`,
-        [attendanceId]
-      );
-      return {
-        attendance: attResult.rows[0],
-        user: attResult.rows[0] ? {
-          name: attResult.rows[0].user_name,
-          email: attResult.rows[0].user_email,
-          attendanceCode: attResult.rows[0].attendance_code,
-        } : null,
-      };
-    });
+          [attendanceId],
+        );
+        return {
+          attendance: attResult.rows[0],
+          user: attResult.rows[0]
+            ? {
+                name: attResult.rows[0].user_name,
+                email: attResult.rows[0].user_email,
+                attendanceCode: attResult.rows[0].attendance_code,
+              }
+            : null,
+        };
+      },
+    );
 
     if (!attendance) {
       throw new NotFoundException('Attendance record not found');
@@ -213,23 +285,37 @@ export class AttendanceService {
 
     const checkOutTime = new Date();
     const checkInTime = new Date(attendance.check_in_time).getTime();
-    const duration = Math.round((checkOutTime.getTime() - checkInTime) / (1000 * 60));
+    const duration = Math.round(
+      (checkOutTime.getTime() - checkInTime) / (1000 * 60),
+    );
     const checkedOutById = staffId || attendance.marked_by;
 
     // Get staff name from public.users
-    const staffUserForCheckout = await this.prisma.user.findUnique({ where: { id: checkedOutById } });
+    const staffUserForCheckout = await this.prisma.user.findUnique({
+      where: { id: checkedOutById },
+    });
     const staffName = staffUserForCheckout?.name;
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'checked_out', NOW())`,
-        [attendance.user_id, attendance.membership_id, attendance.check_in_time, checkOutTime, attendance.date, duration, attendance.marked_by, checkedOutById, attendance.check_in_method]
+        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, 'checked_out', NOW())`,
+        [
+          attendance.user_id,
+          attendance.membership_id,
+          attendance.check_in_time,
+          checkOutTime,
+          attendance.date,
+          duration,
+          attendance.marked_by,
+          checkedOutById,
+          attendance.check_in_method,
+        ],
       );
 
       await client.query(
         `UPDATE attendance SET status = 'checked_out', check_out_time = $1, updated_at = NOW() WHERE id = $2`,
-        [checkOutTime, attendanceId]
+        [checkOutTime, attendanceId],
       );
     });
 
@@ -273,59 +359,78 @@ export class AttendanceService {
     };
   }
 
-  async getTodayAttendance(gymId: number, branchId: number | null = null): Promise<AttendanceRecord[]> {
+  async getTodayAttendance(
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const records = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+    const records = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
          FROM attendance a
          JOIN users u ON u.id = a.user_id
-         WHERE a.date = $1`;
-      const values: any[] = [today];
+         WHERE a.date = $1 AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
+        const values: any[] = [today];
 
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND a.branch_id = $2`;
-        values.push(branchId);
-      }
+        // Branch filtering for non-admin users
+        if (branchId !== null) {
+          query += ` AND a.branch_id = $2`;
+          values.push(branchId);
+        }
 
-      query += ` ORDER BY a.check_in_time DESC`;
+        query += ` ORDER BY a.check_in_time DESC`;
 
-      const result = await client.query(query, values);
-      return result.rows;
-    });
+        const result = await client.query(query, values);
+        return result.rows;
+      },
+    );
 
     return records.map((r: any) => this.formatAttendanceRecord(r, gym));
   }
 
-  async getAttendanceByDate(date: string, gymId: number, branchId: number | null = null): Promise<AttendanceRecord[]> {
+  async getAttendanceByDate(
+    date: string,
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AttendanceRecord[]> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const { activeRecords, historyRecords } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Build branch filter
-      const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+    const { activeRecords, historyRecords } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        // Build filters with table aliases
+        const attendanceBranchFilter =
+          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
+        const historyBranchFilter =
+          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
+        const attendanceSoftDeleteFilter = ` AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
+        const historySoftDeleteFilter = ` AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)`;
 
-      const [activeResult, historyResult] = await Promise.all([
-        client.query(
-          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+        const [activeResult, historyResult] = await Promise.all([
+          client.query(
+            `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
-           WHERE a.date = $1${branchFilter}
+           WHERE a.date = $1${attendanceBranchFilter}${attendanceSoftDeleteFilter}
            ORDER BY a.check_in_time DESC`,
-          [date]
-        ),
-        client.query(
-          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+            [date],
+          ),
+          client.query(
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
-           WHERE ah.date = $1${branchFilter}
+           WHERE ah.date = $1${historyBranchFilter}${historySoftDeleteFilter}
            ORDER BY ah.check_in_time DESC`,
-          [date]
-        ),
-      ]);
-      return { activeRecords: activeResult.rows, historyRecords: historyResult.rows };
-    });
+            [date],
+          ),
+        ]);
+        return {
+          activeRecords: activeResult.rows,
+          historyRecords: historyResult.rows,
+        };
+      });
 
     const allRecords = [...activeRecords, ...historyRecords];
     const uniqueMap = new Map();
@@ -337,49 +442,62 @@ export class AttendanceService {
       }
     }
 
-    return Array.from(uniqueMap.values()).map((r: any) => this.formatAttendanceRecord(r, gym));
+    return Array.from(uniqueMap.values()).map((r: any) =>
+      this.formatAttendanceRecord(r, gym),
+    );
   }
 
   async getUserAttendance(
     userId: number,
     gymId: number,
-    options: { page?: number; limit?: number } = {}
-  ): Promise<{ data: AttendanceRecord[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
+    options: { page?: number; limit?: number } = {},
+  ): Promise<{
+    data: AttendanceRecord[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+  }> {
     const page = options.page || 1;
     const limit = options.limit || 10;
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const { activeRecords, historyRecords, totalCount } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const [activeResult, historyResult, countResult] = await Promise.all([
-        client.query(
-          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+    const { activeRecords, historyRecords, totalCount } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        const [activeResult, historyResult, countResult] = await Promise.all([
+          client.query(
+            `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            WHERE a.user_id = $1
            ORDER BY a.check_in_time DESC`,
-          [userId]
-        ),
-        client.query(
-          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+            [userId],
+          ),
+          client.query(
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            WHERE ah.user_id = $1
            ORDER BY ah.check_in_time DESC`,
-          [userId]
-        ),
-        client.query(
-          `SELECT
+            [userId],
+          ),
+          client.query(
+            `SELECT
             (SELECT COUNT(*) FROM attendance WHERE user_id = $1) +
             (SELECT COUNT(*) FROM attendance_history WHERE user_id = $1) as total`,
-          [userId]
-        ),
-      ]);
-      return {
-        activeRecords: activeResult.rows,
-        historyRecords: historyResult.rows,
-        totalCount: parseInt(countResult.rows[0]?.total || '0', 10),
-      };
-    });
+            [userId],
+          ),
+        ]);
+        return {
+          activeRecords: activeResult.rows,
+          historyRecords: historyResult.rows,
+          totalCount: parseInt(countResult.rows[0]?.total || '0', 10),
+        };
+      });
 
     const allRecords = [...activeRecords, ...historyRecords];
     const uniqueMap = new Map();
@@ -391,8 +509,11 @@ export class AttendanceService {
       }
     }
 
-    const sortedRecords = Array.from(uniqueMap.values())
-      .sort((a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime());
+    const sortedRecords = Array.from(uniqueMap.values()).sort(
+      (a, b) =>
+        new Date(b.check_in_time).getTime() -
+        new Date(a.check_in_time).getTime(),
+    );
 
     const total = sortedRecords.length;
     const totalPages = Math.ceil(total / limit);
@@ -400,7 +521,9 @@ export class AttendanceService {
     const paginatedRecords = sortedRecords.slice(offset, offset + limit);
 
     return {
-      data: paginatedRecords.map((r: any) => this.formatAttendanceRecord(r, gym)),
+      data: paginatedRecords.map((r: any) =>
+        this.formatAttendanceRecord(r, gym),
+      ),
       pagination: {
         page,
         limit,
@@ -412,31 +535,58 @@ export class AttendanceService {
     };
   }
 
-  async getAttendanceStats(gymId: number, branchId: number | null = null): Promise<AttendanceStats> {
+  async getAttendanceStats(
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
     const monthStart = this.getMonthStartDate();
 
-    const stats = await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Build branch filter clause
-      const branchFilter = branchId !== null ? ` AND branch_id = ${branchId}` : '';
+    const stats = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // Build branch filter clause
+        const branchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
 
-      const [todayResult, weekResult, monthResult, totalResult, presentResult] = await Promise.all([
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date = $1${branchFilter}`, [today]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`, [weekStart]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`, [monthStart]),
-        client.query(`SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter}`),
-        client.query(`SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${branchFilter}`, [today]),
-      ]);
+        const [
+          todayResult,
+          weekResult,
+          monthResult,
+          totalResult,
+          presentResult,
+        ] = await Promise.all([
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance_history WHERE date = $1${branchFilter}`,
+            [today],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`,
+            [weekStart],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`,
+            [monthStart],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${branchFilter}`,
+            [today],
+          ),
+        ]);
 
-      return {
-        todayCount: parseInt(todayResult.rows[0].count, 10),
-        weekCount: parseInt(weekResult.rows[0].count, 10),
-        monthCount: parseInt(monthResult.rows[0].count, 10),
-        totalCount: parseInt(totalResult.rows[0].count, 10),
-        currentlyPresent: parseInt(presentResult.rows[0].count, 10),
-      };
-    });
+        return {
+          todayCount: parseInt(todayResult.rows[0].count, 10),
+          weekCount: parseInt(weekResult.rows[0].count, 10),
+          monthCount: parseInt(monthResult.rows[0].count, 10),
+          totalCount: parseInt(totalResult.rows[0].count, 10),
+          currentlyPresent: parseInt(presentResult.rows[0].count, 10),
+        };
+      },
+    );
 
     return {
       totalPresent: stats.totalCount,
@@ -446,7 +596,10 @@ export class AttendanceService {
     };
   }
 
-  async getCurrentlyPresentCount(gymId: number, branchId: number | null = null): Promise<number> {
+  async getCurrentlyPresentCount(
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<number> {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -471,54 +624,62 @@ export class AttendanceService {
     limit: number = 50,
     startDate?: string,
     endDate?: string,
-  ): Promise<{ records: AttendanceRecord[]; total: number; page: number; pages: number }> {
+  ): Promise<{
+    records: AttendanceRecord[];
+    total: number;
+    page: number;
+    pages: number;
+  }> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
-    const { records, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      let whereClause = '1=1';
-      const values: any[] = [];
-      let paramIndex = 1;
+    const { records, total } = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = '1=1';
+        const values: any[] = [];
+        let paramIndex = 1;
 
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        whereClause += ` AND ah.branch_id = $${paramIndex++}`;
-        values.push(branchId);
-      }
+        // Branch filtering for non-admin users
+        if (branchId !== null) {
+          whereClause += ` AND ah.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
 
-      if (startDate && endDate) {
-        whereClause += ` AND ah.date >= $${paramIndex++} AND ah.date <= $${paramIndex++}`;
-        values.push(startDate, endDate);
-      } else if (startDate) {
-        whereClause += ` AND ah.date >= $${paramIndex++}`;
-        values.push(startDate);
-      } else if (endDate) {
-        whereClause += ` AND ah.date <= $${paramIndex++}`;
-        values.push(endDate);
-      }
+        if (startDate && endDate) {
+          whereClause += ` AND ah.date >= $${paramIndex++} AND ah.date <= $${paramIndex++}`;
+          values.push(startDate, endDate);
+        } else if (startDate) {
+          whereClause += ` AND ah.date >= $${paramIndex++}`;
+          values.push(startDate);
+        } else if (endDate) {
+          whereClause += ` AND ah.date <= $${paramIndex++}`;
+          values.push(endDate);
+        }
 
-      const offset = (page - 1) * limit;
+        const offset = (page - 1) * limit;
 
-      const [recordsResult, countResult] = await Promise.all([
-        client.query(
-          `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
+        const [recordsResult, countResult] = await Promise.all([
+          client.query(
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            WHERE ${whereClause}
            ORDER BY ah.check_in_time DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
-          [...values, limit, offset]
-        ),
-        client.query(
-          `SELECT COUNT(*) as count FROM attendance_history ah WHERE ${whereClause}`,
-          values
-        ),
-      ]);
+            [...values, limit, offset],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance_history ah WHERE ${whereClause}`,
+            values,
+          ),
+        ]);
 
-      return {
-        records: recordsResult.rows,
-        total: parseInt(countResult.rows[0].count, 10),
-      };
-    });
+        return {
+          records: recordsResult.rows,
+          total: parseInt(countResult.rows[0].count, 10),
+        };
+      },
+    );
 
     return {
       records: records.map((r: any) => this.formatAttendanceRecord(r, gym)),
@@ -528,21 +689,234 @@ export class AttendanceService {
     };
   }
 
-  async deleteAttendance(attendanceId: number, gymId: number): Promise<boolean> {
+  async deleteAttendance(
+    attendanceId: number,
+    gymId: number,
+    deletedById?: number,
+  ): Promise<boolean> {
     try {
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(`DELETE FROM attendance WHERE id = $1`, [attendanceId]);
-      });
-      return true;
+      // Try soft delete from attendance table first
+      const result = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const res = await client.query(
+            `UPDATE attendance SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1 RETURNING id`,
+            [attendanceId, deletedById || null],
+          );
+          return res.rowCount > 0;
+        },
+      );
+      if (result) return true;
+
+      // If not found in attendance, try attendance_history
+      const historyResult = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const res = await client.query(
+            `UPDATE attendance_history SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1 RETURNING id`,
+            [attendanceId, deletedById || null],
+          );
+          return res.rowCount > 0;
+        },
+      );
+      return historyResult;
     } catch {
-      try {
-        await this.tenantService.executeInTenant(gymId, async (client) => {
-          await client.query(`DELETE FROM attendance_history WHERE id = $1`, [attendanceId]);
-        });
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
+  }
+
+  async getReports(
+    gymId: number,
+    branchId: number | null = null,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<AttendanceReportData> {
+    // Default to last 30 days if no dates provided
+    const end = endDate || this.getTodayDate();
+    const start =
+      startDate ||
+      (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d.toLocaleDateString('en-CA');
+      })();
+
+    const branchFilter =
+      branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
+    const reportData = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // Use UNION ALL to combine attendance (current check-ins) and attendance_history (completed)
+        // This ensures we capture all attendance data regardless of checkout status
+
+        // 1. Summary stats - combine both tables
+        const summaryResult = await client.query(
+          `
+        SELECT
+          COUNT(*) as total_checkins,
+          COUNT(DISTINCT user_id) as unique_members,
+          COALESCE(AVG(duration), 0) as avg_duration
+        FROM (
+          SELECT user_id, NULL as duration FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT user_id, duration FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
+      `,
+          [start, end],
+        );
+
+        // Calculate days in range
+        const startDateObj = new Date(start);
+        const endDateObj = new Date(end);
+        const daysInRange = Math.max(
+          1,
+          Math.ceil(
+            (endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24),
+          ) + 1,
+        );
+
+        const summary = {
+          totalCheckIns: parseInt(
+            summaryResult.rows[0]?.total_checkins || '0',
+            10,
+          ),
+          uniqueMembers: parseInt(
+            summaryResult.rows[0]?.unique_members || '0',
+            10,
+          ),
+          avgDuration: Math.round(
+            parseFloat(summaryResult.rows[0]?.avg_duration || '0'),
+          ),
+          avgDailyCheckIns: 0,
+        };
+        summary.avgDailyCheckIns = Math.round(
+          summary.totalCheckIns / daysInRange,
+        );
+
+        // 2. Daily trend - combine both tables
+        const dailyTrendResult = await client.query(
+          `
+        SELECT date, COUNT(*) as count
+        FROM (
+          SELECT date FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT date FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
+        GROUP BY date
+        ORDER BY date ASC
+      `,
+          [start, end],
+        );
+
+        const dailyTrend = dailyTrendResult.rows.map((row: any) => ({
+          date: row.date,
+          count: parseInt(row.count, 10),
+        }));
+
+        // 3. Weekly pattern (day of week distribution) - combine both tables
+        const weeklyPatternResult = await client.query(
+          `
+        SELECT
+          EXTRACT(DOW FROM check_in_time) as day_num,
+          COUNT(*) as count
+        FROM (
+          SELECT check_in_time FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT check_in_time FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
+        GROUP BY EXTRACT(DOW FROM check_in_time)
+        ORDER BY day_num
+      `,
+          [start, end],
+        );
+
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const weeklyPattern = dayNames.map((day, index) => {
+          const found = weeklyPatternResult.rows.find(
+            (r: any) => parseInt(r.day_num) === index,
+          );
+          return {
+            day,
+            count: found ? parseInt(found.count, 10) : 0,
+          };
+        });
+
+        // 4. Gender distribution - combine both tables and join with users
+        const genderResult = await client.query(
+          `
+        SELECT
+          COALESCE(LOWER(u.gender), 'other') as gender,
+          COUNT(*) as count
+        FROM (
+          SELECT user_id FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT user_id FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
+        JOIN users u ON u.id = combined.user_id
+        GROUP BY COALESCE(LOWER(u.gender), 'other')
+      `,
+          [start, end],
+        );
+
+        const genderDistribution = { male: 0, female: 0, other: 0 };
+        genderResult.rows.forEach((row: any) => {
+          const gender = row.gender?.toLowerCase();
+          const count = parseInt(row.count, 10);
+          if (gender === 'male') {
+            genderDistribution.male = count;
+          } else if (gender === 'female') {
+            genderDistribution.female = count;
+          } else {
+            genderDistribution.other += count;
+          }
+        });
+
+        // 5. Top members - combine both tables
+        const topMembersBranchFilter =
+          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
+        const topMembersResult = await client.query(
+          `
+        SELECT
+          user_id,
+          name,
+          SUM(visits) as visits
+        FROM (
+          SELECT a.user_id, u.name, COUNT(*) as visits
+          FROM attendance a
+          JOIN users u ON u.id = a.user_id
+          WHERE a.date >= $1 AND a.date <= $2${topMembersBranchFilter}
+          GROUP BY a.user_id, u.name
+          UNION ALL
+          SELECT ah.user_id, u.name, COUNT(*) as visits
+          FROM attendance_history ah
+          JOIN users u ON u.id = ah.user_id
+          WHERE ah.date >= $1 AND ah.date <= $2${topMembersBranchFilter.replace('a.branch_id', 'ah.branch_id')}
+          GROUP BY ah.user_id, u.name
+        ) combined
+        GROUP BY user_id, name
+        ORDER BY visits DESC
+        LIMIT 10
+      `,
+          [start, end],
+        );
+
+        const topMembers = topMembersResult.rows.map((row: any) => ({
+          userId: row.user_id,
+          name: row.name,
+          visits: parseInt(row.visits, 10),
+        }));
+
+        return {
+          summary,
+          dailyTrend,
+          weeklyPattern,
+          genderDistribution,
+          topMembers,
+        };
+      },
+    );
+
+    return reportData;
   }
 }

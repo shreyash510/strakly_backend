@@ -6,7 +6,9 @@ export interface PasswordResetOtpTemplateOptions {
   expiryMinutes: number;
 }
 
-export function passwordResetOtpTemplate(options: PasswordResetOtpTemplateOptions): string {
+export function passwordResetOtpTemplate(
+  options: PasswordResetOtpTemplateOptions,
+): string {
   const { userName, otp, expiryMinutes } = options;
 
   const content = `
@@ -52,11 +54,14 @@ export function passwordResetOtpTemplate(options: PasswordResetOtpTemplateOption
   return baseTemplate({
     preheader: `Your password reset code is ${otp}`,
     content,
-    footerText: 'You received this email because a password reset was requested for your account.',
+    footerText:
+      'You received this email because a password reset was requested for your account.',
   });
 }
 
-export function passwordResetOtpPlainText(options: PasswordResetOtpTemplateOptions): string {
+export function passwordResetOtpPlainText(
+  options: PasswordResetOtpTemplateOptions,
+): string {
   const { userName, otp, expiryMinutes } = options;
 
   return `

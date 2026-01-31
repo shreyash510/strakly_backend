@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEnum, IsOptional, IsNotEmpty, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsNotEmpty,
+  IsInt,
+} from 'class-validator';
 
 export class CreateDietDto {
   @ApiProperty({ description: 'Diet title' })
@@ -7,7 +13,9 @@ export class CreateDietDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ enum: ['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'] })
+  @ApiProperty({
+    enum: ['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'],
+  })
   @IsEnum(['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'])
   type: 'meal_plan' | 'nutrition_guide' | 'supplement_plan' | 'custom';
 
@@ -16,7 +24,10 @@ export class CreateDietDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ description: 'Diet category (e.g., weight_loss, muscle_gain, maintenance, general_health)' })
+  @ApiProperty({
+    description:
+      'Diet category (e.g., weight_loss, muscle_gain, maintenance, general_health)',
+  })
   @IsString()
   @IsNotEmpty()
   category: string;
@@ -26,10 +37,18 @@ export class CreateDietDto {
   @IsNotEmpty()
   content: string;
 
-  @ApiPropertyOptional({ enum: ['draft', 'active', 'archived'], default: 'draft' })
+  @ApiPropertyOptional({
+    enum: ['draft', 'active', 'archived'],
+    default: 'active',
+  })
   @IsEnum(['draft', 'active', 'archived'])
   @IsOptional()
   status?: 'draft' | 'active' | 'archived';
+
+  @ApiPropertyOptional({ description: 'Branch ID for the diet' })
+  @IsInt()
+  @IsOptional()
+  branchId?: number;
 }
 
 export class UpdateDietDto {
@@ -38,7 +57,9 @@ export class UpdateDietDto {
   @IsOptional()
   title?: string;
 
-  @ApiPropertyOptional({ enum: ['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'] })
+  @ApiPropertyOptional({
+    enum: ['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'],
+  })
   @IsEnum(['meal_plan', 'nutrition_guide', 'supplement_plan', 'custom'])
   @IsOptional()
   type?: 'meal_plan' | 'nutrition_guide' | 'supplement_plan' | 'custom';

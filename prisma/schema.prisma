@@ -77,11 +77,13 @@ model User {
   city          String?
   state         String?
   zipCode       String?   @map("zip_code")
-  status        String    @default("active") // active, inactive, suspended
+  status        String    @default("active") // onboarding, confirm, active, expired, inactive, rejected, archive
+  statusId      Int?      @map("status_id") // Reference to lookups.id for status
   emailVerified Boolean   @default(false) @map("email_verified")
   lastLoginAt   DateTime? @map("last_login_at")
   isDeleted     Boolean   @default(false) @map("is_deleted") // Soft delete
   deletedAt     DateTime? @map("deleted_at")
+  deletedBy     Int?      @map("deleted_by") // User ID who performed the deletion
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

@@ -8,8 +8,16 @@ export interface MembershipExpiryTemplateOptions {
   renewUrl?: string;
 }
 
-export function membershipExpiryTemplate(options: MembershipExpiryTemplateOptions): string {
-  const { userName, gymName, expiryDate, daysRemaining, renewUrl = '#' } = options;
+export function membershipExpiryTemplate(
+  options: MembershipExpiryTemplateOptions,
+): string {
+  const {
+    userName,
+    gymName,
+    expiryDate,
+    daysRemaining,
+    renewUrl = '#',
+  } = options;
 
   const isUrgent = daysRemaining <= 3;
   const alertColor = isUrgent ? '#dc2626' : '#f59e0b';
@@ -75,7 +83,9 @@ export function membershipExpiryTemplate(options: MembershipExpiryTemplateOption
   });
 }
 
-export function membershipExpiryPlainText(options: MembershipExpiryTemplateOptions): string {
+export function membershipExpiryPlainText(
+  options: MembershipExpiryTemplateOptions,
+): string {
   const { userName, gymName, expiryDate, daysRemaining } = options;
 
   return `

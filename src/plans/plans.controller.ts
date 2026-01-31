@@ -11,7 +11,12 @@ import {
   Request,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -40,15 +45,33 @@ export class PlansController {
   @Get()
   @ApiOperation({ summary: 'Get all active plans' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findAll(@Request() req: any, @Query('includeInactive') includeInactive?: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findAll(
+    @Request() req: any,
+    @Query('includeInactive') includeInactive?: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.plansService.findAll(req.user.gymId, branchId, includeInactive === 'true');
+    return this.plansService.findAll(
+      req.user.gymId,
+      branchId,
+      includeInactive === 'true',
+    );
   }
 
   @Get('featured')
   @ApiOperation({ summary: 'Get featured plans' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   findFeatured(@Request() req: any, @Query('branchId') queryBranchId?: string) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.plansService.findFeatured(req.user.gymId, branchId);
@@ -56,16 +79,34 @@ export class PlansController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get plan by ID' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findOne(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.plansService.findOne(id, req.user.gymId, branchId);
   }
 
   @Get('code/:code')
   @ApiOperation({ summary: 'Get plan by code' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
-  findByCode(@Request() req: any, @Param('code') code: string, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
+  findByCode(
+    @Request() req: any,
+    @Param('code') code: string,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.plansService.findByCode(code, req.user.gymId, branchId);
   }
@@ -73,7 +114,12 @@ export class PlansController {
   @Get(':id/price')
   @ApiOperation({ summary: 'Calculate price with optional offer code' })
   @ApiQuery({ name: 'offerCode', required: false })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering (admin only)',
+  })
   calculatePrice(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
@@ -81,15 +127,29 @@ export class PlansController {
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.plansService.calculatePriceWithOffer(id, req.user.gymId, branchId, offerCode);
+    return this.plansService.calculatePriceWithOffer(
+      id,
+      req.user.gymId,
+      branchId,
+      offerCode,
+    );
   }
 
   @Post()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Create a new plan' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for the plan (admin only)' })
-  create(@Request() req: any, @Body() dto: CreatePlanDto, @Query('branchId') queryBranchId?: string) {
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for the plan (admin only)',
+  })
+  create(
+    @Request() req: any,
+    @Body() dto: CreatePlanDto,
+    @Query('branchId') queryBranchId?: string,
+  ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.plansService.create(dto, req.user.gymId, branchId);
   }
@@ -98,7 +158,11 @@ export class PlansController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update a plan' })
-  update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePlanDto) {
+  update(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePlanDto,
+  ) {
     return this.plansService.update(id, req.user.gymId, dto);
   }
 

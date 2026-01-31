@@ -16,20 +16,36 @@ export const ROLES = {
 export type UserRole = (typeof ROLES)[keyof typeof ROLES];
 
 export const ALL_ROLES = Object.values(ROLES);
-export const STAFF_ROLES = [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as const;
+export const STAFF_ROLES = [
+  ROLES.ADMIN,
+  ROLES.BRANCH_ADMIN,
+  ROLES.MANAGER,
+  ROLES.TRAINER,
+] as const;
 export const ADMIN_ROLES = [ROLES.ADMIN, ROLES.BRANCH_ADMIN] as const; // Admin-level roles in public.users
-export const TENANT_ROLES = [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT] as const;
+export const TENANT_ROLES = [
+  ROLES.MANAGER,
+  ROLES.TRAINER,
+  ROLES.CLIENT,
+] as const;
 
 // User Status
+// Client statuses: onboarding, confirm, active, expired, inactive, rejected, archive
+// Staff statuses: active, inactive, suspended
 export const USER_STATUS = {
+  ONBOARDING: 'onboarding',
+  CONFIRM: 'confirm',
   ACTIVE: 'active',
+  EXPIRED: 'expired',
   INACTIVE: 'inactive',
-  PENDING: 'pending',
-  SUSPENDED: 'suspended',
   REJECTED: 'rejected',
+  ARCHIVE: 'archive',
+  SUSPENDED: 'suspended',
 } as const;
 
 export type UserStatus = (typeof USER_STATUS)[keyof typeof USER_STATUS];
+
+export const USER_STATUSES_ARRAY = Object.values(USER_STATUS);
 
 // Gym Status
 export const GYM_STATUS = {
@@ -49,7 +65,8 @@ export const MEMBERSHIP_STATUS = {
   CANCELLED: 'cancelled',
 } as const;
 
-export type MembershipStatus = (typeof MEMBERSHIP_STATUS)[keyof typeof MEMBERSHIP_STATUS];
+export type MembershipStatus =
+  (typeof MEMBERSHIP_STATUS)[keyof typeof MEMBERSHIP_STATUS];
 
 // Plan Status
 export const PLAN_STATUS = {
@@ -65,7 +82,8 @@ export const ATTENDANCE_STATUS = {
   CHECKED_OUT: 'checked_out',
 } as const;
 
-export type AttendanceStatus = (typeof ATTENDANCE_STATUS)[keyof typeof ATTENDANCE_STATUS];
+export type AttendanceStatus =
+  (typeof ATTENDANCE_STATUS)[keyof typeof ATTENDANCE_STATUS];
 
 // Password Configuration
 export const PASSWORD_CONFIG = {

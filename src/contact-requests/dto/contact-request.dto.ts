@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsEmail, IsNotEmpty, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEmail,
+  IsNotEmpty,
+  IsIn,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateContactRequestDto {
@@ -29,7 +35,10 @@ export class CreateContactRequestDto {
 }
 
 export class UpdateContactRequestDto {
-  @ApiPropertyOptional({ description: 'Status of the request', enum: ['new', 'read', 'replied', 'closed'] })
+  @ApiPropertyOptional({
+    description: 'Status of the request',
+    enum: ['new', 'read', 'replied', 'closed'],
+  })
   @IsOptional()
   @IsString()
   @IsIn(['new', 'read', 'replied', 'closed'])

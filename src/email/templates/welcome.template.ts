@@ -7,7 +7,11 @@ export interface WelcomeTemplateOptions {
 }
 
 export function welcomeTemplate(options: WelcomeTemplateOptions): string {
-  const { userName, gymName, loginUrl = 'https://app.strakly.com/login' } = options;
+  const {
+    userName,
+    gymName,
+    loginUrl = 'https://app.strakly.com/login',
+  } = options;
 
   const content = `
     <h1 style="font-size: 22px; font-weight: 600; color: #0f172a; margin: 0 0 8px 0; text-align: center;">
@@ -62,7 +66,11 @@ export function welcomeTemplate(options: WelcomeTemplateOptions): string {
 }
 
 export function welcomePlainText(options: WelcomeTemplateOptions): string {
-  const { userName, gymName, loginUrl = 'https://app.strakly.com/login' } = options;
+  const {
+    userName,
+    gymName,
+    loginUrl = 'https://app.strakly.com/login',
+  } = options;
 
   return `
 Welcome to ${gymName}

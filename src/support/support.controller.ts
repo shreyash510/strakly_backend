@@ -13,7 +13,12 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SupportService } from './support.service';
 import {
   CreateTicketDto,
@@ -36,29 +41,83 @@ export class SupportController {
   @ApiOperation({ summary: 'Create a new support ticket' })
   create(@Request() req: any, @Body() createTicketDto: CreateTicketDto) {
     // Determine user type: staff roles are 'staff', others are 'client'
-    const userType = ['admin', 'manager', 'trainer'].includes(req.user.role) ? 'staff' : 'client';
+    const userType = ['admin', 'manager', 'trainer'].includes(req.user.role)
+      ? 'staff'
+      : 'client';
     return this.supportService.create(
       req.user.userId,
       req.user.gymId,
       req.user.name,
       req.user.email,
       userType,
-      createTicketDto
+      createTicketDto,
     );
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all support tickets with optional filters and pagination' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by subject, description, or ticket number' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status' })
-  @ApiQuery({ name: 'category', required: false, type: String, description: 'Filter by category' })
-  @ApiQuery({ name: 'priority', required: false, type: String, description: 'Filter by priority' })
-  @ApiQuery({ name: 'userId', required: false, type: String, description: 'Filter by user ID' })
-  @ApiQuery({ name: 'assignedToId', required: false, type: String, description: 'Filter by assigned user ID' })
-  @ApiQuery({ name: 'gymId', required: false, type: String, description: 'Filter by gym ID (superadmin only)' })
-  @ApiQuery({ name: 'noPagination', required: false, type: Boolean, description: 'Disable pagination' })
+  @ApiOperation({
+    summary: 'Get all support tickets with optional filters and pagination',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by subject, description, or ticket number',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by status',
+  })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    type: String,
+    description: 'Filter by category',
+  })
+  @ApiQuery({
+    name: 'priority',
+    required: false,
+    type: String,
+    description: 'Filter by priority',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: String,
+    description: 'Filter by user ID',
+  })
+  @ApiQuery({
+    name: 'assignedToId',
+    required: false,
+    type: String,
+    description: 'Filter by assigned user ID',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: String,
+    description: 'Filter by gym ID (superadmin only)',
+  })
+  @ApiQuery({
+    name: 'noPagination',
+    required: false,
+    type: Boolean,
+    description: 'Disable pagination',
+  })
   async findAll(
     @Request() req: any,
     @Query('page') page?: string,
@@ -88,7 +147,7 @@ export class SupportController {
       },
       req.user.role,
       req.user.userId,
-      req.user.gymId
+      req.user.gymId,
     );
 
     if (res && result.pagination) {
@@ -111,7 +170,12 @@ export class SupportController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single support ticket' })
   findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.supportService.findOne(id, req.user.userId, req.user.role, req.user.gymId);
+    return this.supportService.findOne(
+      id,
+      req.user.userId,
+      req.user.role,
+      req.user.gymId,
+    );
   }
 
   @Patch(':id')
@@ -152,6 +216,11 @@ export class SupportController {
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a support ticket (admin only)' })
   remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.supportService.remove(id, req.user.userId, req.user.role, req.user.gymId);
+    return this.supportService.remove(
+      id,
+      req.user.userId,
+      req.user.role,
+      req.user.gymId,
+    );
   }
 }

@@ -85,7 +85,9 @@ export class SaasSubscriptionsService {
     });
 
     if (existing) {
-      throw new ConflictException(`Plan with code '${dto.code}' already exists`);
+      throw new ConflictException(
+        `Plan with code '${dto.code}' already exists`,
+      );
     }
 
     return this.prisma.saasPlan.create({
@@ -121,7 +123,9 @@ export class SaasSubscriptionsService {
         ...(dto.maxStaff !== undefined && { maxStaff: dto.maxStaff }),
         ...(dto.maxBranches !== undefined && { maxBranches: dto.maxBranches }),
         ...(dto.features && { features: dto.features }),
-        ...(dto.displayOrder !== undefined && { displayOrder: dto.displayOrder }),
+        ...(dto.displayOrder !== undefined && {
+          displayOrder: dto.displayOrder,
+        }),
         ...(dto.isFeatured !== undefined && { isFeatured: dto.isFeatured }),
         ...(dto.badge !== undefined && { badge: dto.badge }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
@@ -211,7 +215,7 @@ export class SaasSubscriptionsService {
     ]);
 
     // Get admin owners for each gym from user_gym_xref (public.users)
-    const gymIds = subscriptions.map(s => s.gym.id);
+    const gymIds = subscriptions.map((s) => s.gym.id);
     const adminAssignments = await this.prisma.userGymXref.findMany({
       where: {
         gymId: { in: gymIds },
@@ -244,7 +248,7 @@ export class SaasSubscriptionsService {
     }
 
     // Format subscriptions with owner info
-    const formattedSubscriptions = subscriptions.map(sub => ({
+    const formattedSubscriptions = subscriptions.map((sub) => ({
       ...sub,
       gym: {
         ...sub.gym,
@@ -304,9 +308,10 @@ export class SaasSubscriptionsService {
     }
 
     // Check if gym already has a subscription
-    const existingSubscription = await this.prisma.saasGymSubscription.findUnique({
-      where: { gymId: dto.gymId },
-    });
+    const existingSubscription =
+      await this.prisma.saasGymSubscription.findUnique({
+        where: { gymId: dto.gymId },
+      });
 
     if (existingSubscription) {
       throw new ConflictException(
@@ -345,7 +350,8 @@ export class SaasSubscriptionsService {
     }
 
     const amount = dto.amount ?? plan.price.toNumber();
-    const status = dto.status || (plan.price.toNumber() === 0 ? 'active' : 'trial');
+    const status =
+      dto.status || (plan.price.toNumber() === 0 ? 'active' : 'trial');
     const paymentStatus =
       dto.paymentStatus || (plan.price.toNumber() === 0 ? 'paid' : 'pending');
 
@@ -395,7 +401,8 @@ export class SaasSubscriptionsService {
     if (dto.status) updateData.status = dto.status;
     if (dto.amount !== undefined) updateData.amount = dto.amount;
     if (dto.paymentStatus) updateData.paymentStatus = dto.paymentStatus;
-    if (dto.paymentMethod !== undefined) updateData.paymentMethod = dto.paymentMethod;
+    if (dto.paymentMethod !== undefined)
+      updateData.paymentMethod = dto.paymentMethod;
     if (dto.paymentRef !== undefined) updateData.paymentRef = dto.paymentRef;
     if (dto.autoRenew !== undefined) updateData.autoRenew = dto.autoRenew;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
@@ -489,7 +496,8 @@ export class SaasSubscriptionsService {
       totalGyms,
       activeSubscriptions,
       trialSubscriptions,
-      expiredSubscriptions: totalGyms - activeSubscriptions - trialSubscriptions,
+      expiredSubscriptions:
+        totalGyms - activeSubscriptions - trialSubscriptions,
       monthlyRevenue: monthlyRevenue._sum.amount?.toNumber() || 0,
       planDistribution: distribution,
     };
