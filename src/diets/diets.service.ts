@@ -231,7 +231,7 @@ export class DietsService {
             dto.description || null,
             dto.category,
             dto.content,
-            dto.status || 'draft',
+            dto.status || 'active',
             userId,
           ],
         );

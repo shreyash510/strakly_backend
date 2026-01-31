@@ -39,11 +39,16 @@ export class CreateDietDto {
 
   @ApiPropertyOptional({
     enum: ['draft', 'active', 'archived'],
-    default: 'draft',
+    default: 'active',
   })
   @IsEnum(['draft', 'active', 'archived'])
   @IsOptional()
   status?: 'draft' | 'active' | 'archived';
+
+  @ApiPropertyOptional({ description: 'Branch ID for the diet' })
+  @IsInt()
+  @IsOptional()
+  branchId?: number;
 }
 
 export class UpdateDietDto {

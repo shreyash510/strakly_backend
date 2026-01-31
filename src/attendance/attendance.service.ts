@@ -24,13 +24,8 @@ export interface AttendanceReportData {
   };
   dailyTrend: Array<{ date: string; count: number }>;
   weeklyPattern: Array<{ day: string; count: number }>;
-  hourlyDistribution: Array<{ hour: number; count: number }>;
+  genderDistribution: { male: number; female: number; other: number };
   topMembers: Array<{ userId: number; name: string; visits: number }>;
-  branchComparison?: Array<{
-    branchId: number;
-    branchName: string;
-    count: number;
-  }>;
 }
 
 export interface AttendanceRecord {
@@ -752,26 +747,32 @@ export class AttendanceService {
     const reportData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // 1. Summary stats
+        // Use UNION ALL to combine attendance (current check-ins) and attendance_history (completed)
+        // This ensures we capture all attendance data regardless of checkout status
+
+        // 1. Summary stats - combine both tables
         const summaryResult = await client.query(
           `
         SELECT
           COUNT(*) as total_checkins,
           COUNT(DISTINCT user_id) as unique_members,
           COALESCE(AVG(duration), 0) as avg_duration
-        FROM attendance_history
-        WHERE date >= $1 AND date <= $2${branchFilter}
+        FROM (
+          SELECT user_id, NULL as duration FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT user_id, duration FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
       `,
           [start, end],
         );
 
         // Calculate days in range
-        const startDate = new Date(start);
-        const endDate = new Date(end);
+        const startDateObj = new Date(start);
+        const endDateObj = new Date(end);
         const daysInRange = Math.max(
           1,
           Math.ceil(
-            (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+            (endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24),
           ) + 1,
         );
 
@@ -793,12 +794,15 @@ export class AttendanceService {
           summary.totalCheckIns / daysInRange,
         );
 
-        // 2. Daily trend
+        // 2. Daily trend - combine both tables
         const dailyTrendResult = await client.query(
           `
         SELECT date, COUNT(*) as count
-        FROM attendance_history
-        WHERE date >= $1 AND date <= $2${branchFilter}
+        FROM (
+          SELECT date FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT date FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
         GROUP BY date
         ORDER BY date ASC
       `,
@@ -810,14 +814,17 @@ export class AttendanceService {
           count: parseInt(row.count, 10),
         }));
 
-        // 3. Weekly pattern (day of week distribution)
+        // 3. Weekly pattern (day of week distribution) - combine both tables
         const weeklyPatternResult = await client.query(
           `
         SELECT
           EXTRACT(DOW FROM check_in_time) as day_num,
           COUNT(*) as count
-        FROM attendance_history
-        WHERE date >= $1 AND date <= $2${branchFilter}
+        FROM (
+          SELECT check_in_time FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT check_in_time FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
         GROUP BY EXTRACT(DOW FROM check_in_time)
         ORDER BY day_num
       `,
@@ -835,43 +842,59 @@ export class AttendanceService {
           };
         });
 
-        // 4. Hourly distribution
-        const hourlyResult = await client.query(
+        // 4. Gender distribution - combine both tables and join with users
+        const genderResult = await client.query(
           `
         SELECT
-          EXTRACT(HOUR FROM check_in_time) as hour,
+          COALESCE(LOWER(u.gender), 'other') as gender,
           COUNT(*) as count
-        FROM attendance_history
-        WHERE date >= $1 AND date <= $2${branchFilter}
-        GROUP BY EXTRACT(HOUR FROM check_in_time)
-        ORDER BY hour
+        FROM (
+          SELECT user_id FROM attendance WHERE date >= $1 AND date <= $2${branchFilter}
+          UNION ALL
+          SELECT user_id FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}
+        ) combined
+        JOIN users u ON u.id = combined.user_id
+        GROUP BY COALESCE(LOWER(u.gender), 'other')
       `,
           [start, end],
         );
 
-        const hourlyDistribution = Array.from({ length: 24 }, (_, i) => {
-          const found = hourlyResult.rows.find(
-            (r: any) => parseInt(r.hour) === i,
-          );
-          return {
-            hour: i,
-            count: found ? parseInt(found.count, 10) : 0,
-          };
+        const genderDistribution = { male: 0, female: 0, other: 0 };
+        genderResult.rows.forEach((row: any) => {
+          const gender = row.gender?.toLowerCase();
+          const count = parseInt(row.count, 10);
+          if (gender === 'male') {
+            genderDistribution.male = count;
+          } else if (gender === 'female') {
+            genderDistribution.female = count;
+          } else {
+            genderDistribution.other += count;
+          }
         });
 
-        // 5. Top members (use ah.branch_id to avoid ambiguity with users.branch_id)
+        // 5. Top members - combine both tables
         const topMembersBranchFilter =
-          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
+          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
         const topMembersResult = await client.query(
           `
         SELECT
-          ah.user_id,
-          u.name,
-          COUNT(*) as visits
-        FROM attendance_history ah
-        JOIN users u ON u.id = ah.user_id
-        WHERE ah.date >= $1 AND ah.date <= $2${topMembersBranchFilter}
-        GROUP BY ah.user_id, u.name
+          user_id,
+          name,
+          SUM(visits) as visits
+        FROM (
+          SELECT a.user_id, u.name, COUNT(*) as visits
+          FROM attendance a
+          JOIN users u ON u.id = a.user_id
+          WHERE a.date >= $1 AND a.date <= $2${topMembersBranchFilter}
+          GROUP BY a.user_id, u.name
+          UNION ALL
+          SELECT ah.user_id, u.name, COUNT(*) as visits
+          FROM attendance_history ah
+          JOIN users u ON u.id = ah.user_id
+          WHERE ah.date >= $1 AND ah.date <= $2${topMembersBranchFilter.replace('a.branch_id', 'ah.branch_id')}
+          GROUP BY ah.user_id, u.name
+        ) combined
+        GROUP BY user_id, name
         ORDER BY visits DESC
         LIMIT 10
       `,
@@ -884,42 +907,12 @@ export class AttendanceService {
           visits: parseInt(row.visits, 10),
         }));
 
-        // 6. Branch comparison (only if no specific branch filter)
-        let branchComparison:
-          | Array<{ branchId: number; branchName: string; count: number }>
-          | undefined;
-        if (branchId === null) {
-          const branchResult = await client.query(
-            `
-          SELECT
-            ah.branch_id,
-            b.name as branch_name,
-            COUNT(*) as count
-          FROM attendance_history ah
-          LEFT JOIN branches b ON b.id = ah.branch_id
-          WHERE ah.date >= $1 AND ah.date <= $2
-          GROUP BY ah.branch_id, b.name
-          ORDER BY count DESC
-        `,
-            [start, end],
-          );
-
-          branchComparison = branchResult.rows
-            .filter((row: any) => row.branch_id !== null)
-            .map((row: any) => ({
-              branchId: row.branch_id,
-              branchName: row.branch_name || `Branch ${row.branch_id}`,
-              count: parseInt(row.count, 10),
-            }));
-        }
-
         return {
           summary,
           dailyTrend,
           weeklyPattern,
-          hourlyDistribution,
+          genderDistribution,
           topMembers,
-          branchComparison,
         };
       },
     );

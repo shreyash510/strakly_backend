@@ -148,7 +148,8 @@ export class DietsController {
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a new diet plan' })
   create(@Request() req: any, @Body() dto: CreateDietDto) {
-    const branchId = req.user.branchId ?? null;
+    // Use branchId from request body if provided, otherwise fallback to user's branchId
+    const branchId = dto.branchId ?? req.user.branchId ?? null;
     return this.dietsService.create(
       dto,
       req.user.gymId,
