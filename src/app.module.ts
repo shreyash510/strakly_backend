@@ -30,7 +30,6 @@ import { ReportsModule } from './reports/reports.module';
 import { DietsModule } from './diets/diets.module';
 import { FacilitiesModule } from './facilities/facilities.module';
 import { AmenitiesModule } from './amenities/amenities.module';
-import { WorkoutsModule } from './workouts/workouts.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
@@ -71,7 +70,6 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     DietsModule,
     FacilitiesModule,
     AmenitiesModule,
-    WorkoutsModule,
     NotificationsModule,
     PaymentsModule,
     ActivityLogsModule,
