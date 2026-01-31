@@ -1017,12 +1017,12 @@ export class AuthService {
       orderBy: { name: 'asc' },
     });
 
-    // Search staff (manager/trainer) in tenant.users
+    // Search staff (branch_admin/manager/trainer) in tenant.users
     const tenantStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT * FROM users
          WHERE id != $1
-         AND role IN ('manager', 'trainer')
+         AND role IN ('branch_admin', 'manager', 'trainer')
          AND (name ILIKE $2 OR email ILIKE $2)
          ORDER BY name ASC`,
         [currentUserId, searchPattern]

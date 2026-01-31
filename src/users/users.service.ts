@@ -49,6 +49,40 @@ export class UsersService {
     return this.lookupsService.getLookupCode(statusId);
   }
 
+  /**
+   * Role hierarchy for user management
+   * Higher level can manage lower levels
+   * admin > branch_admin > manager > trainer > client
+   */
+  private readonly ROLE_HIERARCHY: Record<string, string[]> = {
+    superadmin: ['admin', 'branch_admin', 'manager', 'trainer', 'client'],
+    admin: ['branch_admin', 'manager', 'trainer', 'client'],
+    branch_admin: ['manager', 'trainer', 'client'],
+    manager: ['trainer', 'client'],
+    trainer: ['client'],
+    client: [],
+  };
+
+  /**
+   * Check if caller role can manage target role
+   */
+  private canManageRole(callerRole: string, targetRole: string): boolean {
+    const allowedRoles = this.ROLE_HIERARCHY[callerRole] || [];
+    return allowedRoles.includes(targetRole);
+  }
+
+  /**
+   * Validate role hierarchy - throws if caller cannot manage target role
+   */
+  private validateRoleHierarchy(callerRole: string, targetRole: string, action: string = 'create'): void {
+    if (!this.canManageRole(callerRole, targetRole)) {
+      throw new BadRequestException(
+        `${callerRole} cannot ${action} users with role '${targetRole}'. ` +
+        `Allowed roles: ${this.ROLE_HIERARCHY[callerRole]?.join(', ') || 'none'}`
+      );
+    }
+  }
+
   private formatAdminUser(user: any, gymAssignments?: any[]) {
     const primaryAssignment = gymAssignments?.find((a) => a.isPrimary) || gymAssignments?.[0];
     return {
@@ -110,6 +144,7 @@ export class UsersService {
       userType: role === 'client' ? 'client' : 'staff',
       gymId: gym?.id,
       branchId: user.branch_id || user.branchId || null,
+      branchName: user.branch_name || user.branchName || null,
       branchIds: branchIds.length > 0 ? branchIds : (user.branch_id ? [user.branch_id] : []),
       gym: gym ? {
         id: gym.id,
@@ -544,7 +579,8 @@ export class UsersService {
 
       const [usersResult, countResult] = await Promise.all([
         client.query(
-          `SELECT u.* FROM users u
+          `SELECT u.*, b.name as branch_name FROM users u
+           LEFT JOIN branches b ON b.id = u.branch_id
            WHERE ${whereClause}
            ORDER BY u.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -876,23 +912,23 @@ export class UsersService {
     }
 
     const { users, total } = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ["role = 'client'"]; // Filter only clients
+      const conditions: string[] = ["u.role = 'client'"]; // Filter only clients
       const values: any[] = [];
       let paramIndex = 1;
 
       // Branch filtering: null = all branches, number = specific branch
       if (branchId !== null && branchId !== undefined) {
-        conditions.push(`branch_id = $${paramIndex++}`);
+        conditions.push(`u.branch_id = $${paramIndex++}`);
         values.push(branchId);
       }
 
       if (filters.status && filters.status !== 'all') {
-        conditions.push(`status = $${paramIndex++}`);
+        conditions.push(`u.status = $${paramIndex++}`);
         values.push(filters.status);
       }
 
       if (filters.search) {
-        conditions.push(`(name ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
+        conditions.push(`(u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex} OR u.phone ILIKE $${paramIndex})`);
         values.push(`%${filters.search}%`);
         paramIndex++;
       }
@@ -901,14 +937,15 @@ export class UsersService {
 
       const [usersResult, countResult] = await Promise.all([
         client.query(
-          `SELECT * FROM users
+          `SELECT u.*, b.name as branch_name FROM users u
+           LEFT JOIN branches b ON b.id = u.branch_id
            WHERE ${whereClause}
-           ORDER BY created_at DESC
+           ORDER BY u.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
           [...values, take, skip]
         ),
         client.query(
-          `SELECT COUNT(*) as count FROM users WHERE ${whereClause}`,
+          `SELECT COUNT(*) as count FROM users u WHERE ${whereClause}`,
           values
         ),
       ]);
@@ -1077,9 +1114,15 @@ export class UsersService {
 
   /**
    * Create user - determines type based on role
+   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
    */
-  async create(createUserDto: CreateUserDto, gymId: number): Promise<any> {
+  async create(createUserDto: CreateUserDto, gymId: number, callerRole?: string): Promise<any> {
     const role = createUserDto.role || 'client';
+
+    // Validate role hierarchy if callerRole is provided
+    if (callerRole) {
+      this.validateRoleHierarchy(callerRole, role, 'create');
+    }
 
     if (role === 'admin') {
       return this.createAdmin(createUserDto as CreateStaffDto, gymId);
@@ -1290,15 +1333,28 @@ export class UsersService {
 
   /**
    * Update user - determines location based on where user exists
+   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
    */
-  async update(id: number, gymId: number, updateUserDto: UpdateUserDto, userType?: 'admin' | 'staff' | 'client'): Promise<any> {
+  async update(id: number, gymId: number, updateUserDto: UpdateUserDto, userType?: 'admin' | 'staff' | 'client', callerRole?: string): Promise<any> {
+    // Helper to validate and update
+    const validateAndUpdate = async (targetRole: string, updateFn: () => Promise<any>) => {
+      if (callerRole) {
+        this.validateRoleHierarchy(callerRole, targetRole, 'update');
+      }
+      return updateFn();
+    };
+
     if (userType === 'admin') {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'update');
       return this.updateAdmin(id, gymId, updateUserDto);
     }
     if (userType === 'staff') {
-      return this.updateStaff(id, gymId, updateUserDto);
+      // Need to get role to validate hierarchy
+      const staff = await this.findOneStaff(id, gymId);
+      return validateAndUpdate(staff.role, () => this.updateStaff(id, gymId, updateUserDto));
     }
     if (userType === 'client') {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'client', 'update');
       return this.updateClient(id, gymId, updateUserDto);
     }
 
@@ -1308,6 +1364,7 @@ export class UsersService {
     });
 
     if (adminUser) {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'update');
       return this.updateAdmin(id, gymId, updateUserDto);
     }
 
@@ -1318,6 +1375,9 @@ export class UsersService {
     });
 
     if (tenantUser) {
+      if (callerRole) {
+        this.validateRoleHierarchy(callerRole, tenantUser.role, 'update');
+      }
       if (tenantUser.role === 'client') {
         return this.updateClient(id, gymId, updateUserDto);
       } else {
@@ -1330,15 +1390,21 @@ export class UsersService {
 
   /**
    * Delete user - determines location based on where user exists
+   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
    */
-  async remove(id: number, gymId: number, userType?: 'admin' | 'staff' | 'client'): Promise<{ success: boolean }> {
+  async remove(id: number, gymId: number, userType?: 'admin' | 'staff' | 'client', callerRole?: string): Promise<{ success: boolean }> {
     if (userType === 'admin') {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'delete');
       return this.removeAdmin(id);
     }
     if (userType === 'staff') {
+      // Need to get role to validate hierarchy
+      const staff = await this.findOneStaff(id, gymId);
+      if (callerRole) this.validateRoleHierarchy(callerRole, staff.role, 'delete');
       return this.removeStaff(id, gymId);
     }
     if (userType === 'client') {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'client', 'delete');
       return this.removeClient(id, gymId);
     }
 
@@ -1348,6 +1414,7 @@ export class UsersService {
     });
 
     if (adminUser) {
+      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'delete');
       return this.removeAdmin(id);
     }
 
@@ -1358,6 +1425,9 @@ export class UsersService {
     });
 
     if (tenantUser) {
+      if (callerRole) {
+        this.validateRoleHierarchy(callerRole, tenantUser.role, 'delete');
+      }
       if (tenantUser.role === 'client') {
         return this.removeClient(id, gymId);
       } else {

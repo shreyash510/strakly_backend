@@ -115,7 +115,7 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.create(createUserDto, gymId);
+    return this.usersService.create(createUserDto, gymId, user.role);
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -391,12 +391,12 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.update(id, gymId, updateUserDto);
+    return this.usersService.update(id, gymId, updateUserDto, undefined, user.role);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Delete user by ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number, description: 'Gym ID (required for superadmin)' })
   removeById(
@@ -405,6 +405,6 @@ export class UsersController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = resolveGymId(user.gymId, queryGymId, user.role === 'superadmin');
-    return this.usersService.remove(id, gymId);
+    return this.usersService.remove(id, gymId, undefined, user.role);
   }
 }

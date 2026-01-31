@@ -96,7 +96,7 @@ export class BranchService {
           [branchId]
         ),
         client.query(
-          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('trainer', 'manager') AND status = 'active'`,
+          `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
           [branchId]
         ),
         client.query(

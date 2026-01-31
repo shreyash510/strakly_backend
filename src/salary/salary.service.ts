@@ -63,7 +63,7 @@ export class SalaryService {
     const staff = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `SELECT id, name, role FROM users
-         WHERE id = $1 AND role IN ('trainer', 'manager')`,
+         WHERE id = $1 AND role IN ('branch_admin', 'manager', 'trainer')`,
         [createSalaryDto.staffId]
       );
       return result.rows[0];
@@ -374,7 +374,7 @@ export class SalaryService {
         ),
         client.query(
           `SELECT COUNT(*) as count FROM users u
-           WHERE u.status = 'active' AND u.role IN ('trainer', 'manager')${branchFilter}`
+           WHERE u.status = 'active' AND u.role IN ('branch_admin', 'manager', 'trainer')${branchFilter}`
         ),
       ]);
 
@@ -397,7 +397,7 @@ export class SalaryService {
       let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.role, u.branch_id, b.name as branch_name
          FROM users u
          LEFT JOIN branches b ON b.id = u.branch_id
-         WHERE u.status = 'active' AND u.role IN ('trainer', 'manager')`;
+         WHERE u.status = 'active' AND u.role IN ('branch_admin', 'manager', 'trainer')`;
       const values: any[] = [];
 
       // Branch filtering for non-admin users
@@ -410,6 +410,12 @@ export class SalaryService {
 
       const result = await client.query(query, values);
 
+      const roleLabels: Record<string, string> = {
+        branch_admin: 'Branch Admin',
+        manager: 'Manager',
+        trainer: 'Trainer',
+      };
+
       return result.rows.map((u: any) => ({
         id: u.id,
         name: u.name,
@@ -418,7 +424,7 @@ export class SalaryService {
         phone: u.phone,
         branchId: u.branch_id,
         branchName: u.branch_name,
-        role: { code: u.role, name: u.role === 'trainer' ? 'Trainer' : 'Manager' },
+        role: { code: u.role, name: roleLabels[u.role] || u.role },
       }));
     });
   }
@@ -486,7 +492,7 @@ export class SalaryService {
             // Check if staff is still active
             const staffActive = await this.tenantService.executeInTenant(gym.id, async (client) => {
               const result = await client.query(
-                `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('trainer', 'manager')`,
+                `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('branch_admin', 'manager', 'trainer')`,
                 [salary.staff_id]
               );
               return result.rows.length > 0;
