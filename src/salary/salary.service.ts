@@ -147,7 +147,8 @@ export class SalaryService {
 
     const { salaries, total, userMap } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
-        let whereClause = `1=1`;
+        // Start with soft delete filter
+        let whereClause = `(s.is_deleted = FALSE OR s.is_deleted IS NULL)`;
         const values: any[] = [];
         let paramIndex = 1;
 
@@ -246,7 +247,7 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
          FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
-         WHERE s.staff_id = $1 AND s.year = $2
+         WHERE s.staff_id = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
          ORDER BY s.year DESC, s.month DESC`,
           [staffId, currentYear],
         );
@@ -290,7 +291,7 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
          FROM staff_salaries s
          JOIN users u ON u.id = s.staff_id
-         WHERE s.id = $1`,
+         WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -428,7 +429,7 @@ export class SalaryService {
     return this.findOne(salaryId, gymId);
   }
 
-  async remove(salaryId: number, gymId: number) {
+  async remove(salaryId: number, gymId: number, deletedById?: number) {
     const salary = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -448,10 +449,12 @@ export class SalaryService {
       throw new ForbiddenException('Cannot delete a paid salary record');
     }
 
+    // Soft delete instead of hard delete
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(`DELETE FROM staff_salaries WHERE id = $1`, [
-        salaryId,
-      ]);
+      await client.query(
+        `UPDATE staff_salaries SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
+        [salaryId, deletedById || null],
+      );
     });
 
     return { success: true, message: 'Salary record deleted successfully' };

@@ -430,7 +430,7 @@ export class UsersService {
   /**
    * Soft delete an admin
    */
-  async removeAdmin(id: number): Promise<{ success: boolean }> {
+  async removeAdmin(id: number, deletedById?: number): Promise<{ success: boolean }> {
     const user = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
@@ -450,10 +450,14 @@ export class UsersService {
       );
     }
 
-    // Soft delete
+    // Soft delete with deleted_by tracking
     await this.prisma.user.update({
       where: { id },
-      data: { isDeleted: true, deletedAt: new Date() },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: deletedById || null,
+      },
     });
 
     // Deactivate all gym assignments

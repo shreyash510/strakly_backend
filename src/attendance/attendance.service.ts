@@ -377,7 +377,7 @@ export class AttendanceService {
         let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
          FROM attendance a
          JOIN users u ON u.id = a.user_id
-         WHERE a.date = $1`;
+         WHERE a.date = $1 AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const values: any[] = [today];
 
         // Branch filtering for non-admin users
@@ -408,13 +408,14 @@ export class AttendanceService {
         // Build branch filter
         const branchFilter =
           branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
         const [activeResult, historyResult] = await Promise.all([
           client.query(
             `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance a
            JOIN users u ON u.id = a.user_id
-           WHERE a.date = $1${branchFilter}
+           WHERE a.date = $1${branchFilter}${softDeleteFilter.replace('is_deleted', 'a.is_deleted')}
            ORDER BY a.check_in_time DESC`,
             [date],
           ),
@@ -422,7 +423,7 @@ export class AttendanceService {
             `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
-           WHERE ah.date = $1${branchFilter}
+           WHERE ah.date = $1${branchFilter}${softDeleteFilter.replace('is_deleted', 'ah.is_deleted')}
            ORDER BY ah.check_in_time DESC`,
             [date],
           ),
@@ -693,25 +694,36 @@ export class AttendanceService {
   async deleteAttendance(
     attendanceId: number,
     gymId: number,
+    deletedById?: number,
   ): Promise<boolean> {
     try {
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(`DELETE FROM attendance WHERE id = $1`, [
-          attendanceId,
-        ]);
-      });
-      return true;
+      // Try soft delete from attendance table first
+      const result = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const res = await client.query(
+            `UPDATE attendance SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1 RETURNING id`,
+            [attendanceId, deletedById || null],
+          );
+          return res.rowCount > 0;
+        },
+      );
+      if (result) return true;
+
+      // If not found in attendance, try attendance_history
+      const historyResult = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const res = await client.query(
+            `UPDATE attendance_history SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1 RETURNING id`,
+            [attendanceId, deletedById || null],
+          );
+          return res.rowCount > 0;
+        },
+      );
+      return historyResult;
     } catch {
-      try {
-        await this.tenantService.executeInTenant(gymId, async (client) => {
-          await client.query(`DELETE FROM attendance_history WHERE id = $1`, [
-            attendanceId,
-          ]);
-        });
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
   }
 

@@ -337,13 +337,14 @@ export class AnnouncementsService {
   async delete(
     id: number,
     gymId: number,
+    deletedById?: number,
   ): Promise<{ id: number; deleted: boolean }> {
     await this.findOne(id, gymId);
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE announcements SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE, updated_at = NOW() WHERE id = $1`,
-        [id],
+        `UPDATE announcements SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, is_active = FALSE, updated_at = NOW() WHERE id = $1`,
+        [id, deletedById || null],
       );
     });
 

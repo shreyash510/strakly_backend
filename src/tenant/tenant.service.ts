@@ -544,13 +544,22 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
-   * Add soft delete columns to tenant tables (users, plans, memberships, offers)
+   * Add soft delete columns to tenant tables (users, plans, memberships, offers, attendance, staff_salaries, announcements)
    */
   private async addSoftDeleteColumns(
     client: any,
     schemaName: string,
   ): Promise<void> {
-    const tablesToMigrate = ['users', 'plans', 'memberships', 'offers'];
+    const tablesToMigrate = [
+      'users',
+      'plans',
+      'memberships',
+      'offers',
+      'attendance',
+      'attendance_history',
+      'staff_salaries',
+      'announcements',
+    ];
 
     for (const table of tablesToMigrate) {
       try {
