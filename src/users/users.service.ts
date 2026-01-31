@@ -147,6 +147,17 @@ export class UsersService {
   private formatTenantUser(user: any, gym?: any, branchAssignments?: any[]) {
     const role = user.role || 'client';
     const branchIds = branchAssignments?.map((a) => a.branch_id) || [];
+    const branchNames = branchAssignments?.map((a) => a.branch_name).filter(Boolean) || [];
+
+    // Fall back to user's branch_name if no assignments
+    const fallbackBranchName = user.branch_name || user.branchName || null;
+    const finalBranchNames = branchNames.length > 0
+      ? branchNames
+      : (fallbackBranchName ? [fallbackBranchName] : []);
+    const finalBranchIds = branchIds.length > 0
+      ? branchIds
+      : (user.branch_id ? [user.branch_id] : []);
+
     return {
       id: user.id,
       name: user.name,
@@ -172,14 +183,8 @@ export class UsersService {
         user.emergency_contact_phone || user.emergencyContactPhone,
       userType: role === 'client' ? 'client' : 'staff',
       gymId: gym?.id,
-      branchId: user.branch_id || user.branchId || null,
-      branchName: user.branch_name || user.branchName || null,
-      branchIds:
-        branchIds.length > 0
-          ? branchIds
-          : user.branch_id
-            ? [user.branch_id]
-            : [],
+      branchIds: finalBranchIds,
+      branchNames: finalBranchNames,
       gym: gym
         ? {
             id: gym.id,
@@ -590,9 +595,13 @@ export class UsersService {
               [user.id, branchId, isPrimary],
             );
           }
-          // Fetch the created assignments
+          // Fetch the created assignments with branch names
           const assignmentsResult = await client.query(
-            `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
             [user.id],
           );
           branchAssignments = assignmentsResult.rows;
@@ -637,7 +646,7 @@ export class UsersService {
       throw new BadRequestException('gymId is required for fetching staff');
     }
 
-    const { users, total } = await this.tenantService.executeInTenant(
+    const { users, total, branchAssignmentsMap } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const conditions: string[] = [
@@ -688,7 +697,7 @@ export class UsersService {
         const [usersResult, countResult] = await Promise.all([
           client.query(
             `SELECT u.*, b.name as branch_name FROM users u
-           LEFT JOIN branches b ON b.id = u.branch_id
+           LEFT JOIN public.branches b ON b.id = u.branch_id
            WHERE ${whereClause}
            ORDER BY u.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -700,9 +709,33 @@ export class UsersService {
           ),
         ]);
 
+        // Fetch branch assignments for all users in the result
+        const userIds = usersResult.rows.map((u: any) => u.id);
+        let branchAssignmentsMap: Record<number, any[]> = {};
+
+        if (userIds.length > 0) {
+          const assignmentsResult = await client.query(
+            `SELECT ubx.user_id, ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = ANY($1) AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
+            [userIds],
+          );
+
+          // Group assignments by user_id
+          for (const row of assignmentsResult.rows) {
+            if (!branchAssignmentsMap[row.user_id]) {
+              branchAssignmentsMap[row.user_id] = [];
+            }
+            branchAssignmentsMap[row.user_id].push(row);
+          }
+        }
+
         return {
           users: usersResult.rows,
           total: parseInt(countResult.rows[0].count, 10),
+          branchAssignmentsMap,
         };
       },
     );
@@ -710,7 +743,10 @@ export class UsersService {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     return {
-      data: users.map((user: any) => this.formatTenantUser(user, gym)),
+      data: users.map((user: any) => {
+        const assignments = branchAssignmentsMap[user.id] || [];
+        return this.formatTenantUser(user, gym, assignments);
+      }),
       pagination: createPaginationMeta(total, page, limit, noPagination),
     };
   }
@@ -727,14 +763,18 @@ export class UsersService {
         );
         const staff = result.rows[0];
 
-        // Fetch branch assignments for all staff roles
+        // Fetch branch assignments for all staff roles with branch names
         let assignments: any[] = [];
         if (
           staff &&
           ['branch_admin', 'manager', 'trainer'].includes(staff.role)
         ) {
           const assignmentsResult = await client.query(
-            `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
             [id],
           );
           assignments = assignmentsResult.rows;
@@ -881,16 +921,24 @@ export class UsersService {
             );
           }
 
-          // Fetch updated assignments
+          // Fetch updated assignments with branch names
           const assignmentsResult = await client.query(
-            `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
             [id],
           );
           assignments = assignmentsResult.rows;
         } else if (staffRolesWithBranches.includes(user.role)) {
-          // Fetch existing assignments
+          // Fetch existing assignments with branch names
           const assignmentsResult = await client.query(
-            `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
             [id],
           );
           assignments = assignmentsResult.rows;
