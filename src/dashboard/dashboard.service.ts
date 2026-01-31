@@ -416,13 +416,13 @@ export class DashboardService {
   }
 
   // Client Dashboard Methods
-  async getClientDashboard(userId: number, gymId: number): Promise<ClientDashboardDto> {
+  async getClientDashboard(userId: number, gymId: number, branchId: number | null = null): Promise<ClientDashboardDto> {
     const [user, subscription, attendanceStats, recentAttendance, activeOffers] = await Promise.all([
       this.getClientUser(userId, gymId),
       this.getClientSubscription(userId, gymId),
       this.getClientAttendanceStats(userId, gymId),
       this.getClientRecentAttendance(userId, gymId),
-      this.getClientActiveOffers(gymId),
+      this.getClientActiveOffers(gymId, branchId),
     ]);
 
     // Get gym info from public schema
@@ -695,17 +695,25 @@ export class DashboardService {
     }));
   }
 
-  private async getClientActiveOffers(gymId: number, limit = 3): Promise<ActiveOfferDto[]> {
+  private async getClientActiveOffers(gymId: number, branchId: number | null = null, limit = 3): Promise<ActiveOfferDto[]> {
     const now = new Date();
 
     const offers = await this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id, name, description, discount_type, discount_value, code, valid_to
+      const values: any[] = [now];
+      let query = `SELECT id, name, description, discount_type, discount_value, code, valid_to
          FROM offers
-         WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1
-         ORDER BY valid_to ASC LIMIT $2`,
-        [now, limit]
-      );
+         WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1`;
+
+      // Filter by branch: show offers for specific branch OR global offers (branch_id IS NULL)
+      if (branchId !== null) {
+        query += ` AND (branch_id = $${values.length + 1} OR branch_id IS NULL)`;
+        values.push(branchId);
+      }
+
+      query += ` ORDER BY valid_to ASC LIMIT $${values.length + 1}`;
+      values.push(limit);
+
+      const result = await client.query(query, values);
       return result.rows;
     });
 

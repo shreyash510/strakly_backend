@@ -75,9 +75,11 @@ export class DashboardController {
     description: 'Client dashboard data retrieved successfully',
     type: ClientDashboardDto,
   })
-  async getClientDashboard(@Req() req: any): Promise<ClientDashboardDto> {
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering (admin only)' })
+  async getClientDashboard(@Req() req: any, @Query('branchId') queryBranchId?: string): Promise<ClientDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
-    return this.dashboardService.getClientDashboard(Number(userId), Number(gymId));
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.dashboardService.getClientDashboard(Number(userId), Number(gymId), branchId);
   }
 }
