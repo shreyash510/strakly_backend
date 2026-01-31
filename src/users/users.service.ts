@@ -500,9 +500,9 @@ export class UsersService {
 
       const user = result.rows[0];
 
-      // For branch_admin with multiple branches, create user_branch_xref entries
+      // For staff with multiple branches, create user_branch_xref entries
       let branchAssignments: any[] = [];
-      if (role === 'branch_admin' && branchIds.length > 0) {
+      if (['branch_admin', 'manager', 'trainer'].includes(role) && branchIds.length > 0) {
         for (let i = 0; i < branchIds.length; i++) {
           const branchId = branchIds[i];
           const isPrimary = i === 0; // First branch is primary
@@ -546,14 +546,14 @@ export class UsersService {
       let paramIndex = 1;
 
       // Branch filtering: null = all branches, number = specific branch
-      // For branch_admin, also check user_branch_xref table
+      // For all staff roles, also check user_branch_xref table (staff can have multiple branches)
       if (branchId !== null && branchId !== undefined) {
         conditions.push(`(
           u.branch_id = $${paramIndex} OR
-          (u.role = 'branch_admin' AND EXISTS (
+          EXISTS (
             SELECT 1 FROM user_branch_xref ubx
             WHERE ubx.user_id = u.id AND ubx.branch_id = $${paramIndex} AND ubx.is_active = TRUE
-          ))
+          )
         )`);
         values.push(branchId);
         paramIndex++;
@@ -617,9 +617,9 @@ export class UsersService {
       );
       const staff = result.rows[0];
 
-      // Fetch branch assignments for branch_admin
+      // Fetch branch assignments for all staff roles
       let assignments: any[] = [];
-      if (staff && staff.role === 'branch_admin') {
+      if (staff && ['branch_admin', 'manager', 'trainer'].includes(staff.role)) {
         const assignmentsResult = await client.query(
           `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
           [id]
@@ -727,9 +727,10 @@ export class UsersService {
       );
       const user = result.rows[0];
 
-      // Handle branch assignments update for branch_admin
+      // Handle branch assignments update for all staff roles
+      const staffRolesWithBranches = ['branch_admin', 'manager', 'trainer'];
       let assignments: any[] = [];
-      if (updateDto.branchIds && updateDto.branchIds.length > 0 && user.role === 'branch_admin') {
+      if (updateDto.branchIds && updateDto.branchIds.length > 0 && staffRolesWithBranches.includes(user.role)) {
         // Deactivate all existing assignments
         await client.query(
           `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
@@ -760,7 +761,7 @@ export class UsersService {
           [id]
         );
         assignments = assignmentsResult.rows;
-      } else if (user.role === 'branch_admin') {
+      } else if (staffRolesWithBranches.includes(user.role)) {
         // Fetch existing assignments
         const assignmentsResult = await client.query(
           `SELECT branch_id, is_primary FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
