@@ -50,4 +50,9 @@ export class MemberRegistrationDto {
   @IsString()
   @IsOptional()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Avatar image as base64 encoded string' })
+  @IsString()
+  @IsOptional()
+  avatar?: string;
 }

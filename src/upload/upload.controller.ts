@@ -10,12 +10,16 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
+import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly usersService: UsersService,
+  ) {}
 
   /**
    * Upload avatar image
@@ -51,13 +55,28 @@ export class UploadController {
     }
 
     // Use provided userId or current user's ID
-    const targetUserId = userId || req.user?.id || req.user?.sub;
+    const targetUserId = userId || req.user?.userId || req.user?.id || req.user?.sub;
+    const gymId = req.user?.gymId;
 
     if (!targetUserId) {
       throw new BadRequestException('User ID is required');
     }
 
     const result = await this.uploadService.uploadAvatar(file, targetUserId, oldUrl);
+
+    // Update user's avatar in database
+    if (gymId) {
+      try {
+        await this.usersService.update(
+          parseInt(String(targetUserId)),
+          gymId,
+          { avatar: result.url },
+        );
+      } catch (error) {
+        console.error('Failed to update user avatar in database:', error);
+        // Don't throw - the upload succeeded, just log the DB update failure
+      }
+    }
 
     return {
       success: true,
