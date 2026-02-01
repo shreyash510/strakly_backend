@@ -1876,7 +1876,33 @@ export class UsersService {
       return { success: true };
     }
 
-    // Try to determine user type - check admin first (public.users)
+    // Try to determine user type - check tenant schema FIRST when gymId is provided
+    // This avoids ID collision with public.users (same pattern as findOne)
+    if (gymId) {
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT id FROM users WHERE id = $1`,
+            [userId],
+          );
+          return result.rows[0];
+        },
+      );
+
+      if (tenantUser) {
+        // User found in tenant schema - update there
+        await this.tenantService.executeInTenant(gymId, async (client) => {
+          await client.query(
+            `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+            [passwordHash, userId],
+          );
+        });
+        return { success: true };
+      }
+    }
+
+    // Not found in tenant or no gymId - check admin (public.users)
     const adminUser = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
     });
@@ -1887,13 +1913,7 @@ export class UsersService {
         data: { passwordHash },
       });
     } else {
-      // Must be in tenant schema
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(
-          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-          [passwordHash, userId],
-        );
-      });
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     return { success: true };

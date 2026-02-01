@@ -46,7 +46,7 @@ export class CreateSaasPlanDto {
   @ApiPropertyOptional({ example: 500, description: '-1 for unlimited' })
   @IsNumber()
   @IsOptional()
-  maxMembers?: number;
+  maxClients?: number;
 
   @ApiPropertyOptional({ example: 5, description: '-1 for unlimited' })
   @IsNumber()
@@ -104,7 +104,7 @@ export class UpdateSaasPlanDto {
   @ApiPropertyOptional({ example: 500 })
   @IsNumber()
   @IsOptional()
-  maxMembers?: number;
+  maxClients?: number;
 
   @ApiPropertyOptional({ example: 5 })
   @IsNumber()
