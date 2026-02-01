@@ -34,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     PaymentsModule,
     ActivityLogsModule,
     AnnouncementsModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],
