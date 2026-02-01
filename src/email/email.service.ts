@@ -21,6 +21,8 @@ import {
   emailVerificationPlainText,
   contactRequestTemplate,
   contactRequestPlainText,
+  ticketResolvedTemplate,
+  ticketResolvedPlainText,
 } from './templates';
 
 export interface EmailResponse {
@@ -485,6 +487,37 @@ export class EmailService {
     return this.sendEmail({
       to: 'support@strakly.com',
       subject: emailSubject,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Send support ticket resolved email to user
+   */
+  async sendTicketResolvedEmail(
+    to: string,
+    userName: string,
+    ticketNumber: string,
+    subject: string,
+    resolution?: string,
+  ): Promise<EmailResponse> {
+    const html = ticketResolvedTemplate({
+      userName,
+      ticketNumber,
+      subject,
+      resolution,
+    });
+    const text = ticketResolvedPlainText({
+      userName,
+      ticketNumber,
+      subject,
+      resolution,
+    });
+
+    return this.sendEmail({
+      to,
+      subject: `Your Support Ticket #${ticketNumber} is Resolved - Strakly`,
       html,
       text,
     });

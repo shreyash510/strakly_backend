@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -11,6 +11,7 @@ import {
   NotificationType,
   NotificationPriority,
 } from './notification-types';
+import { NotificationsGateway } from './notifications.gateway';
 
 // Superadmin notification types
 export enum SystemNotificationType {
@@ -28,6 +29,8 @@ export class NotificationsService {
   constructor(
     private readonly tenantService: TenantService,
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private readonly gateway: NotificationsGateway,
   ) {}
 
   /**
@@ -37,30 +40,42 @@ export class NotificationsService {
     dto: CreateNotificationDto,
     gymId: number,
   ): Promise<Notification> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `
+    const notification = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `
         INSERT INTO notifications
         (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
       `,
-        [
-          dto.branchId || null,
-          dto.userId,
-          dto.type,
-          dto.title,
-          dto.message,
-          dto.data ? JSON.stringify(dto.data) : null,
-          dto.actionUrl || null,
-          dto.priority || NotificationPriority.NORMAL,
-          dto.expiresAt || null,
-          dto.createdBy || null,
-        ],
-      );
+          [
+            dto.branchId || null,
+            dto.userId,
+            dto.type,
+            dto.title,
+            dto.message,
+            dto.data ? JSON.stringify(dto.data) : null,
+            dto.actionUrl || null,
+            dto.priority || NotificationPriority.NORMAL,
+            dto.expiresAt || null,
+            dto.createdBy || null,
+          ],
+        );
 
-      return this.mapToNotification(result.rows[0]);
-    });
+        return this.mapToNotification(result.rows[0]);
+      },
+    );
+
+    // Emit real-time notification via WebSocket
+    try {
+      this.gateway.emitToUser(gymId, dto.userId, notification);
+    } catch (error) {
+      this.logger.warn(`Failed to emit real-time notification: ${error.message}`);
+    }
+
+    return notification;
   }
 
   /**
@@ -74,40 +89,57 @@ export class NotificationsService {
       return 0;
     }
 
-    return this.tenantService.executeInTenant(gymId, async (client) => {
-      const values: any[] = [];
-      const placeholders: string[] = [];
-      let paramIndex = 1;
+    const notifications = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        let paramIndex = 1;
 
-      for (const userId of dto.userIds) {
-        placeholders.push(
-          `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
-        );
-        values.push(
-          dto.branchId || null,
-          userId,
-          dto.type,
-          dto.title,
-          dto.message,
-          dto.data ? JSON.stringify(dto.data) : null,
-          dto.actionUrl || null,
-          dto.priority || NotificationPriority.NORMAL,
-          dto.expiresAt || null,
-          dto.createdBy || null,
-        );
-      }
+        for (const userId of dto.userIds) {
+          placeholders.push(
+            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
+          );
+          values.push(
+            dto.branchId || null,
+            userId,
+            dto.type,
+            dto.title,
+            dto.message,
+            dto.data ? JSON.stringify(dto.data) : null,
+            dto.actionUrl || null,
+            dto.priority || NotificationPriority.NORMAL,
+            dto.expiresAt || null,
+            dto.createdBy || null,
+          );
+        }
 
-      const result = await client.query(
-        `
+        const result = await client.query(
+          `
         INSERT INTO notifications
         (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
         VALUES ${placeholders.join(', ')}
+        RETURNING *
       `,
-        values,
-      );
+          values,
+        );
 
-      return result.rowCount || dto.userIds.length;
-    });
+        return result.rows.map((row: any) => this.mapToNotification(row));
+      },
+    );
+
+    // Emit real-time notifications via WebSocket
+    try {
+      notifications.forEach((notification: Notification) => {
+        this.gateway.emitToUser(gymId, notification.userId, notification);
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to emit bulk real-time notifications: ${error.message}`,
+      );
+    }
+
+    return notifications.length;
   }
 
   /**
@@ -496,7 +528,7 @@ export class NotificationsService {
     priority?: string;
   }): Promise<any> {
     try {
-      return await this.prisma.systemNotification.create({
+      const notification = await this.prisma.systemNotification.create({
         data: {
           userId: data.userId,
           type: data.type,
@@ -507,6 +539,29 @@ export class NotificationsService {
           priority: data.priority || 'normal',
         },
       });
+
+      // Emit real-time notification to superadmin
+      try {
+        this.gateway.emitToSuperadmin(data.userId, {
+          id: notification.id,
+          userId: notification.userId,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data,
+          isRead: notification.isRead,
+          readAt: notification.readAt,
+          actionUrl: notification.actionUrl,
+          priority: notification.priority,
+          createdAt: notification.createdAt,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to emit real-time system notification: ${error.message}`,
+        );
+      }
+
+      return notification;
     } catch (error) {
       this.logger.error(
         `Failed to create system notification: ${error.message}`,
@@ -545,6 +600,24 @@ export class NotificationsService {
       const result = await this.prisma.systemNotification.createMany({
         data: notifications,
       });
+
+      // Emit real-time notifications to all superadmins
+      try {
+        this.gateway.emitToAllSuperadmins({
+          type: data.type,
+          title: data.title,
+          message: data.message,
+          data: data.data,
+          actionUrl: data.actionUrl,
+          priority: data.priority || 'normal',
+          isRead: false,
+          createdAt: new Date(),
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to emit real-time notifications to superadmins: ${error.message}`,
+        );
+      }
 
       return result.count;
     } catch (error) {
@@ -723,6 +796,42 @@ export class NotificationsService {
       actionUrl: `/superadmin/contact-requests/${requestData.requestId}`,
       priority: 'normal',
     });
+  }
+
+  /**
+   * Notify user when their support ticket is resolved
+   */
+  async notifySupportTicketResolved(
+    userId: number,
+    gymId: number,
+    ticketData: {
+      ticketId: number;
+      ticketNumber: string;
+      subject: string;
+    },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId: null,
+          type: NotificationType.SUPPORT_TICKET_RESOLVED,
+          title: 'Support Ticket Resolved',
+          message: `Your support ticket #${ticketData.ticketNumber} has been resolved.`,
+          data: {
+            entityType: 'support_ticket',
+            entityId: ticketData.ticketId,
+          },
+          actionUrl: '/support',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to create support ticket resolved notification: ${error.message}`,
+      );
+    }
   }
 
   /**

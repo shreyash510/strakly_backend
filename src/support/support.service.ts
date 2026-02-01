@@ -2,10 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmailService } from '../email/email.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -30,10 +32,13 @@ export interface SupportFilters extends PaginationParams {
 
 @Injectable()
 export class SupportService {
+  private readonly logger = new Logger(SupportService.name);
+
   constructor(
     private prisma: PrismaService,
     private tenantService: TenantService,
     private notificationsService: NotificationsService,
+    private emailService: EmailService,
   ) {}
 
   private generateTicketNumber(): string {
@@ -341,6 +346,37 @@ export class SupportService {
       where: { id: ticketId },
       data: updateData,
     });
+
+    // Send notification and email when ticket is resolved
+    if (updateTicketDto.status === 'resolved' && ticket.status !== 'resolved') {
+      // Send in-app notification (non-blocking)
+      this.notificationsService
+        .notifySupportTicketResolved(ticket.userId, ticket.gymId, {
+          ticketId: ticket.id,
+          ticketNumber: ticket.ticketNumber,
+          subject: ticket.subject,
+        })
+        .catch((error) => {
+          this.logger.error(
+            `Failed to send ticket resolved notification: ${error.message}`,
+          );
+        });
+
+      // Send email notification (non-blocking)
+      this.emailService
+        .sendTicketResolvedEmail(
+          ticket.userEmail,
+          ticket.userName,
+          ticket.ticketNumber,
+          ticket.subject,
+          updateTicketDto.resolution,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to send ticket resolved email: ${error.message}`,
+          );
+        });
+    }
 
     return this.findOne(updatedTicket.id, userId, userRole, userGymId);
   }

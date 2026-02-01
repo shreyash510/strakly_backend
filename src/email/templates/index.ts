@@ -6,3 +6,4 @@ export * from './membership-expiry.template';
 export * from './payment-receipt.template';
 export * from './email-verification.template';
 export * from './contact-request.template';
+export * from './ticket-resolved.template';
