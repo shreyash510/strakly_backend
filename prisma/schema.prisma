@@ -80,6 +80,7 @@ model User {
   status        String    @default("active") // onboarding, confirm, active, expired, inactive, rejected, archive
   statusId      Int?      @map("status_id") // Reference to lookups.id for status
   emailVerified Boolean   @default(false) @map("email_verified")
+  googleId      String?   @unique @map("google_id") // Google OAuth ID
   lastLoginAt   DateTime? @map("last_login_at")
   isDeleted     Boolean   @default(false) @map("is_deleted") // Soft delete
   deletedAt     DateTime? @map("deleted_at")
@@ -93,6 +94,7 @@ model User {
   @@index([email])
   @@index([status])
   @@index([isDeleted])
+  @@index([googleId])
   @@map("users")
 }
 

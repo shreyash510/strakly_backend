@@ -16,6 +16,7 @@ import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
+import { GoogleCallbackDto, GoogleRegisterWithGymDto } from './dto/google-auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
@@ -209,5 +210,29 @@ export class AuthController {
     @Param('gymId', ParseIntPipe) gymId: number,
   ) {
     return this.authService.impersonateGym(userId, gymId);
+  }
+
+  // ============================================
+  // GOOGLE OAUTH ENDPOINTS
+  // ============================================
+
+  @Post('google/callback')
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Exchanges Google auth code for user info. For LOGIN intent, returns auth token if user exists. For SIGNUP intent, returns user info for gym setup.',
+  })
+  googleCallback(@Body() dto: GoogleCallbackDto) {
+    return this.authService.googleCallback(dto);
+  }
+
+  @Post('google/register-with-gym')
+  @ApiOperation({
+    summary: 'Register Google user with gym',
+    description:
+      'Creates a new user with Google OAuth and creates their gym. Used after Google SIGNUP returns requiresGymSetup: true.',
+  })
+  googleRegisterWithGym(@Body() dto: GoogleRegisterWithGymDto) {
+    return this.authService.googleRegisterWithGym(dto);
   }
 }

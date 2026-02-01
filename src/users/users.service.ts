@@ -1195,23 +1195,40 @@ export class UsersService {
    * Get a single client (role='client' in tenant schema)
    */
   async findOneClient(id: number, gymId: number): Promise<any> {
-    const clientData = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
+    const { clientData, branchAssignments } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
-          `SELECT * FROM users WHERE id = $1 AND role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT u.*, b.name as branch_name
+           FROM users u
+           LEFT JOIN branches b ON u.branch_id = b.id
+           WHERE u.id = $1 AND u.role = 'client' AND (u.is_deleted = FALSE OR u.is_deleted IS NULL)`,
           [id],
         );
-        return result.rows[0];
-      },
-    );
+        const userData = result.rows[0];
+
+        // Fetch branch assignments for clients with branch names
+        let assignments: any[] = [];
+        if (userData) {
+          const assignmentsResult = await client.query(
+            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+             FROM user_branch_xref ubx
+             LEFT JOIN public.branches b ON b.id = ubx.branch_id
+             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+             ORDER BY ubx.is_primary DESC`,
+            [id],
+          );
+          assignments = assignmentsResult.rows;
+        }
+
+        return { clientData: userData, branchAssignments: assignments };
+      });
 
     if (!clientData) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(clientData, gym);
+    return this.formatTenantUser(clientData, gym, branchAssignments);
   }
 
   /**
