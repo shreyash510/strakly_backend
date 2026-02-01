@@ -57,6 +57,7 @@ export class UploadController {
     // Use provided userId or current user's ID
     const targetUserId = userId || req.user?.userId || req.user?.id || req.user?.sub;
     const gymId = req.user?.gymId;
+    const userRole = req.user?.role;
 
     if (!targetUserId) {
       throw new BadRequestException('User ID is required');
@@ -66,15 +67,25 @@ export class UploadController {
 
     // Update user's avatar in database
     if (gymId) {
+      // Determine user type based on role
+      let userType: 'admin' | 'staff' | 'client' | undefined;
+      if (userRole === 'client') {
+        userType = 'client';
+      } else if (['manager', 'trainer', 'branch_admin'].includes(userRole)) {
+        userType = 'staff';
+      } else if (userRole === 'admin') {
+        userType = 'admin';
+      }
+
       try {
         await this.usersService.update(
           parseInt(String(targetUserId)),
           gymId,
           { avatar: result.url },
+          userType,
         );
-      } catch (error) {
-        console.error('Failed to update user avatar in database:', error);
-        // Don't throw - the upload succeeded, just log the DB update failure
+      } catch (error: any) {
+        throw new BadRequestException(`Avatar uploaded but failed to update profile: ${error.message}`);
       }
     }
 
