@@ -11,6 +11,7 @@ export const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export const TICKET_STATUSES = [
   'open',
   'in_progress',
+  'waiting_for_response',
   'resolved',
   'closed',
 ] as const;

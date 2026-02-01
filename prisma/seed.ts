@@ -16,6 +16,9 @@ const lookupTypes = [
   { code: 'USER_STATUS', name: 'User Status', description: 'Account status of users' },
   { code: 'GENDER', name: 'Gender', description: 'Gender options for user profile' },
   { code: 'DAY_OF_WEEK', name: 'Day of Week', description: 'Days of the week' },
+  { code: 'TICKET_STATUS', name: 'Ticket Status', description: 'Support ticket status options' },
+  { code: 'TICKET_CATEGORY', name: 'Ticket Category', description: 'Support ticket category options' },
+  { code: 'TICKET_PRIORITY', name: 'Ticket Priority', description: 'Support ticket priority options' },
 ];
 
 // Lookup values for each type
@@ -51,6 +54,26 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
     { code: 'thursday', name: 'Thursday', value: '4', displayOrder: 4 },
     { code: 'friday', name: 'Friday', value: '5', displayOrder: 5 },
     { code: 'saturday', name: 'Saturday', value: '6', displayOrder: 6 },
+  ],
+  TICKET_STATUS: [
+    { code: 'open', name: 'Open', value: 'open', displayOrder: 1 },
+    { code: 'in_progress', name: 'In Progress', value: 'in_progress', displayOrder: 2 },
+    { code: 'waiting_for_response', name: 'Waiting for Response', value: 'waiting_for_response', displayOrder: 3 },
+    { code: 'resolved', name: 'Resolved', value: 'resolved', displayOrder: 4 },
+    { code: 'closed', name: 'Closed', value: 'closed', displayOrder: 5 },
+  ],
+  TICKET_CATEGORY: [
+    { code: 'general', name: 'General', value: 'general', displayOrder: 1 },
+    { code: 'technical', name: 'Technical', value: 'technical', displayOrder: 2 },
+    { code: 'billing', name: 'Billing', value: 'billing', displayOrder: 3 },
+    { code: 'feedback', name: 'Feedback', value: 'feedback', displayOrder: 4 },
+    { code: 'complaint', name: 'Complaint', value: 'complaint', displayOrder: 5 },
+  ],
+  TICKET_PRIORITY: [
+    { code: 'low', name: 'Low', value: 'low', displayOrder: 1 },
+    { code: 'medium', name: 'Medium', value: 'medium', displayOrder: 2 },
+    { code: 'high', name: 'High', value: 'high', displayOrder: 3 },
+    { code: 'urgent', name: 'Urgent', value: 'urgent', displayOrder: 4 },
   ],
 };
 

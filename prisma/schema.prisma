@@ -307,7 +307,7 @@ model SaasPlan {
   billingPeriod   String    @default("monthly") @map("billing_period")
 
   // Limits
-  maxMembers      Int       @default(-1) @map("max_members")
+  maxClients      Int       @default(-1) @map("max_clients")
   maxStaff        Int       @default(-1) @map("max_staff")
   maxBranches     Int       @default(1) @map("max_branches")
 
