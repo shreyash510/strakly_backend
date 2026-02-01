@@ -1753,7 +1753,33 @@ export class UsersService {
       return this.updateClient(id, gymId, updateUserDto);
     }
 
-    // Try to determine user type - check admin first (public.users)
+    // Check tenant schema FIRST when gymId is provided (clients/staff live here)
+    // This prevents ID collision issues where same ID exists in both public.users and tenant schema
+    if (gymId) {
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT role FROM users WHERE id = $1`,
+            [id],
+          );
+          return result.rows[0];
+        },
+      );
+
+      if (tenantUser) {
+        if (callerRole) {
+          this.validateRoleHierarchy(callerRole, tenantUser.role, 'update');
+        }
+        if (tenantUser.role === 'client') {
+          return this.updateClient(id, gymId, updateUserDto);
+        } else {
+          return this.updateStaff(id, gymId, updateUserDto);
+        }
+      }
+    }
+
+    // Check admin (public.users) only if not found in tenant schema
     const adminUser = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
@@ -1761,29 +1787,6 @@ export class UsersService {
     if (adminUser) {
       if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'update');
       return this.updateAdmin(id, gymId, updateUserDto);
-    }
-
-    // Check tenant schema
-    const tenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT role FROM users WHERE id = $1`,
-          [id],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (tenantUser) {
-      if (callerRole) {
-        this.validateRoleHierarchy(callerRole, tenantUser.role, 'update');
-      }
-      if (tenantUser.role === 'client') {
-        return this.updateClient(id, gymId, updateUserDto);
-      } else {
-        return this.updateStaff(id, gymId, updateUserDto);
-      }
     }
 
     throw new NotFoundException(`User with ID ${id} not found`);
@@ -1816,7 +1819,33 @@ export class UsersService {
       return this.removeClient(id, gymId);
     }
 
-    // Try to determine user type - check admin first (public.users)
+    // Check tenant schema FIRST when gymId is provided (clients/staff live here)
+    // This prevents ID collision issues where same ID exists in both public.users and tenant schema
+    if (gymId) {
+      const tenantUser = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT role FROM users WHERE id = $1`,
+            [id],
+          );
+          return result.rows[0];
+        },
+      );
+
+      if (tenantUser) {
+        if (callerRole) {
+          this.validateRoleHierarchy(callerRole, tenantUser.role, 'delete');
+        }
+        if (tenantUser.role === 'client') {
+          return this.removeClient(id, gymId);
+        } else {
+          return this.removeStaff(id, gymId);
+        }
+      }
+    }
+
+    // Check admin (public.users) only if not found in tenant schema
     const adminUser = await this.prisma.user.findUnique({
       where: { id, isDeleted: false },
     });
@@ -1824,29 +1853,6 @@ export class UsersService {
     if (adminUser) {
       if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'delete');
       return this.removeAdmin(id);
-    }
-
-    // Check tenant schema
-    const tenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT role FROM users WHERE id = $1`,
-          [id],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (tenantUser) {
-      if (callerRole) {
-        this.validateRoleHierarchy(callerRole, tenantUser.role, 'delete');
-      }
-      if (tenantUser.role === 'client') {
-        return this.removeClient(id, gymId);
-      } else {
-        return this.removeStaff(id, gymId);
-      }
     }
 
     throw new NotFoundException(`User with ID ${id} not found`);
