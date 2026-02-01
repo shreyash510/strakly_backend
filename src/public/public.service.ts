@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { UploadService } from '../upload/upload.service';
 import { MemberRegistrationDto } from './dto/member-registration.dto';
 import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
 
@@ -14,6 +15,7 @@ export class PublicService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly uploadService: UploadService,
   ) {}
 
   async registerMember(dto: MemberRegistrationDto) {
@@ -115,6 +117,44 @@ export class PublicService {
         return result.rows[0];
       },
     );
+
+    /* Handle avatar upload if provided */
+    if (dto.avatar) {
+      try {
+        // Convert base64 to buffer
+        const base64Data = dto.avatar.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Determine mime type from base64 header
+        const mimeMatch = dto.avatar.match(/^data:(image\/\w+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+        // Create a mock file object for uploadService
+        const mockFile = {
+          buffer,
+          mimetype: mimeType,
+          originalname: 'avatar.jpg',
+          size: buffer.length,
+        } as Express.Multer.File;
+
+        // Upload avatar
+        const uploadResult = await this.uploadService.uploadAvatar(
+          mockFile,
+          user.id,
+        );
+
+        // Update user with avatar URL
+        await this.tenantService.executeInTenant(dto.gymId, async (client) => {
+          await client.query(`UPDATE users SET avatar = $1 WHERE id = $2`, [
+            uploadResult.url,
+            user.id,
+          ]);
+        });
+      } catch (error) {
+        // Avatar upload failed, but user was created - don't fail the registration
+        console.error('Failed to upload avatar during registration:', error);
+      }
+    }
 
     return {
       success: true,
