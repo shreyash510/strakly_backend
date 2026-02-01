@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
@@ -14,8 +15,16 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
+import {
+  GoogleCallbackDto,
+  GoogleAuthIntent,
+  GoogleRegisterWithGymDto,
+  GoogleSignupPendingResponse,
+} from './dto/google-auth.dto';
 import { hashPassword, comparePassword } from '../common/utils';
 import { PASSWORD_CONFIG, OTP_CONFIG } from '../common/constants';
+import { OAuth2Client } from 'google-auth-library';
+import * as crypto from 'crypto';
 
 export interface GymSubscriptionInfo {
   planCode: string;
@@ -76,6 +85,7 @@ export class AuthService {
   private readonly OTP_EXPIRY_MINUTES = OTP_CONFIG.EXPIRY_MINUTES;
   private readonly VERIFICATION_EXPIRY_MINUTES = 30;
   private readonly MAX_OTP_ATTEMPTS = 5;
+  private readonly googleOAuth2Client: OAuth2Client;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,7 +94,13 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly branchService: BranchService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    // Initialize Google OAuth2 client
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    this.googleOAuth2Client = new OAuth2Client(clientId, clientSecret);
+  }
 
   /**
    * Generate a 6-digit OTP
@@ -1968,6 +1984,424 @@ export class AuthService {
           : undefined,
       },
       expiresIn: 7200, // 2 hours in seconds
+    };
+  }
+
+  // ============================================
+  // GOOGLE OAUTH METHODS
+  // ============================================
+
+  /**
+   * Get redirect URI based on environment
+   */
+  private getGoogleRedirectUri(): string {
+    const environment = this.configService.get<string>('ENVIRONMENT') || 'dev';
+    return environment === 'prod'
+      ? 'https://www.strakly.com/auth/google/callback'
+      : 'http://localhost:5173/auth/google/callback';
+  }
+
+  /**
+   * Exchange Google auth code for tokens and get user info
+   */
+  private async getGoogleUserInfo(code: string): Promise<{
+    googleId: string;
+    name: string;
+    email: string;
+    picture?: string;
+  }> {
+    try {
+      const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+      const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+      const redirectUri = this.getGoogleRedirectUri();
+
+      // Create a new OAuth2Client with proper redirect URI for token exchange
+      const oAuth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
+
+      // Exchange code for tokens
+      const tokenResponse = await oAuth2Client.getToken(code);
+      const tokens = tokenResponse.tokens;
+
+      if (!tokens.access_token) {
+        throw new BadRequestException('Failed to get access token from Google');
+      }
+
+      // Get user info from Google
+      const response = await fetch(
+        `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokens.access_token}`,
+      );
+
+      if (!response.ok) {
+        throw new BadRequestException('Failed to get user info from Google');
+      }
+
+      const userInfo = await response.json();
+
+      return {
+        googleId: userInfo.id,
+        name: userInfo.name,
+        email: userInfo.email,
+        picture: userInfo.picture,
+      };
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to authenticate with Google');
+    }
+  }
+
+  /**
+   * Handle Google OAuth callback
+   * For LOGIN: Find user and return auth token
+   * For SIGNUP: Check if user exists and return user info for gym setup
+   */
+  async googleCallback(
+    dto: GoogleCallbackDto,
+  ): Promise<AuthResponse | GoogleSignupPendingResponse> {
+    // Get user info from Google
+    const googleUser = await this.getGoogleUserInfo(dto.code);
+
+    if (dto.intent === GoogleAuthIntent.LOGIN) {
+      return this.googleLogin(googleUser);
+    } else {
+      return this.googleSignup(googleUser);
+    }
+  }
+
+  /**
+   * Google Login - Find existing user and generate token
+   */
+  private async googleLogin(googleUser: {
+    googleId: string;
+    name: string;
+    email: string;
+    picture?: string;
+  }): Promise<AuthResponse> {
+    // Try to find user by googleId first
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: googleUser.googleId },
+          { email: googleUser.email },
+        ],
+        isDeleted: false,
+      },
+      include: {
+        gymAssignments: {
+          where: { isActive: true },
+          include: { gym: true },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('No account found with this email');
+    }
+
+    // Check user status
+    if (user.status === 'suspended') {
+      throw new UnauthorizedException('Your account has been suspended');
+    }
+
+    if (user.status === 'inactive') {
+      throw new UnauthorizedException('Your account is inactive');
+    }
+
+    // Update googleId if user was found by email but doesn't have googleId
+    if (!user.googleId) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { googleId: googleUser.googleId },
+        include: {
+          gymAssignments: {
+            where: { isActive: true },
+            include: { gym: true },
+          },
+        },
+      });
+    }
+
+    // Update avatar if user doesn't have one and Google provides one
+    if (!user.avatar && googleUser.picture) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { avatar: googleUser.picture },
+      });
+    }
+
+    // Update last login time
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    // Build gym assignments list
+    const gymAssignments: GymAssignment[] = user.gymAssignments.map(
+      (assignment) => ({
+        gymId: assignment.gymId,
+        branchId: assignment.branchId,
+        role: assignment.role,
+        isPrimary: assignment.isPrimary,
+        gym: {
+          id: assignment.gym.id,
+          name: assignment.gym.name,
+          logo: assignment.gym.logo || undefined,
+          city: assignment.gym.city || undefined,
+          state: assignment.gym.state || undefined,
+          tenantSchemaName: assignment.gym.tenantSchemaName!,
+        },
+      }),
+    );
+
+    if (gymAssignments.length === 0) {
+      throw new UnauthorizedException('You are not assigned to any gym');
+    }
+
+    // Find primary gym or use first gym
+    const primaryAssignment =
+      gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
+    const hasMultipleGyms = gymAssignments.length > 1;
+
+    const userResponse = this.toUserResponse(
+      { ...user, role: primaryAssignment.role },
+      primaryAssignment.gym,
+      gymAssignments,
+    );
+
+    const accessToken = this.generateToken(userResponse, primaryAssignment, true);
+
+    return {
+      user: userResponse,
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
+      requiresGymSelection: hasMultipleGyms,
+    };
+  }
+
+  /**
+   * Google Signup - Check if user can signup and return user info for gym setup
+   */
+  private async googleSignup(googleUser: {
+    googleId: string;
+    name: string;
+    email: string;
+    picture?: string;
+  }): Promise<GoogleSignupPendingResponse> {
+    // Check if user with this email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: googleUser.email },
+    });
+
+    if (existingUser) {
+      if (existingUser.googleId) {
+        throw new ConflictException('Account already exists, please login');
+      } else {
+        throw new ConflictException(
+          'Email already registered, please login with password',
+        );
+      }
+    }
+
+    // Check if googleId is already used (shouldn't happen but just in case)
+    const existingGoogleUser = await this.prisma.user.findFirst({
+      where: { googleId: googleUser.googleId },
+    });
+
+    if (existingGoogleUser) {
+      throw new ConflictException('Account already exists, please login');
+    }
+
+    // Return user info for gym setup (don't create account yet)
+    return {
+      requiresGymSetup: true,
+      googleUser: {
+        googleId: googleUser.googleId,
+        name: googleUser.name,
+        email: googleUser.email,
+        picture: googleUser.picture,
+      },
+    };
+  }
+
+  /**
+   * Register Google user with gym
+   * Creates user with googleId and creates gym
+   */
+  async googleRegisterWithGym(
+    dto: GoogleRegisterWithGymDto,
+  ): Promise<AuthResponse> {
+    // Double check email doesn't exist
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.user.email },
+    });
+
+    if (existingUser) {
+      if (existingUser.googleId) {
+        throw new ConflictException('Account already exists, please login');
+      } else {
+        throw new ConflictException(
+          'Email already registered, please login with password',
+        );
+      }
+    }
+
+    // Generate a random password hash (Google users don't need password)
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const passwordHash = await hashPassword(randomPassword);
+
+    let gym: any;
+    let createdUser: any;
+
+    try {
+      // Create gym and get gym ID first
+      gym = await this.prisma.gym.create({
+        data: {
+          name: dto.gym.name,
+          tenantSchemaName: 'pending', // Will update after getting ID
+          phone: dto.gym.phone,
+          email: dto.gym.email,
+          address: dto.gym.address,
+          city: dto.gym.city,
+          state: dto.gym.state,
+          zipCode: dto.gym.zipCode,
+          country: dto.gym.country || 'India',
+          isActive: true,
+        },
+      });
+      console.log('Gym created:', gym.id);
+
+      // Update tenant schema name with the gym ID
+      const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
+      await this.prisma.gym.update({
+        where: { id: gym.id },
+        data: { tenantSchemaName },
+      });
+      console.log('Tenant schema name updated:', tenantSchemaName);
+
+      // Create the tenant schema with all tables (for clients)
+      await this.tenantService.createTenantSchema(gym.id);
+      console.log('Tenant schema created');
+
+      // Create default branch for the gym
+      await this.branchService.createDefaultBranch(gym.id, gym);
+      console.log('Default branch created');
+
+      // Create admin user in PUBLIC.users with googleId
+      createdUser = await this.prisma.user.create({
+        data: {
+          email: dto.user.email,
+          passwordHash,
+          name: dto.user.name,
+          avatar: dto.user.picture,
+          googleId: dto.user.googleId,
+          status: 'active',
+          emailVerified: true, // Google email is already verified
+        },
+      });
+      console.log('User created:', createdUser.id);
+    } catch (error: any) {
+      console.error('Google registration error:', error.message || error);
+      // Clean up gym if it was created but user creation failed
+      if (gym?.id && !createdUser) {
+        try {
+          await this.prisma.gym.delete({ where: { id: gym.id } });
+          console.log('Cleaned up orphaned gym:', gym.id);
+        } catch (cleanupError) {
+          console.error('Failed to clean up gym:', cleanupError);
+        }
+      }
+      throw error;
+    }
+
+    // Create user-gym assignment with admin role
+    await this.prisma.userGymXref.create({
+      data: {
+        userId: createdUser.id,
+        gymId: gym.id,
+        role: 'admin',
+        isPrimary: true,
+        isActive: true,
+      },
+    });
+
+    // Create free trial subscription
+    const freePlan = await this.prisma.saasPlan.findFirst({
+      where: { code: 'free' },
+    });
+
+    if (freePlan) {
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
+      const endDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+
+      await this.prisma.saasGymSubscription.create({
+        data: {
+          gymId: gym.id,
+          planId: freePlan.id,
+          startDate: now,
+          endDate: endDate,
+          status: 'trial',
+          trialEndsAt: trialEnd,
+          amount: 0,
+          currency: 'INR',
+          paymentStatus: 'paid',
+          autoRenew: true,
+          isActive: true,
+        },
+      });
+    }
+
+    const updatedGym = await this.prisma.gym.findUnique({
+      where: { id: gym.id },
+    });
+
+    // Notify superadmins about new gym registration (non-blocking)
+    this.notificationsService
+      .notifyNewGymRegistration({
+        gymId: gym.id,
+        gymName: dto.gym.name,
+        ownerName: dto.user.name,
+      })
+      .catch((error) => {
+        console.error('Failed to send new gym notification:', error);
+      });
+
+    const gymAssignment: GymAssignment = {
+      gymId: gym.id,
+      branchId: null, // Admin has access to all branches
+      role: 'admin',
+      isPrimary: true,
+      gym: {
+        id: updatedGym!.id,
+        name: updatedGym!.name,
+        logo: updatedGym!.logo || undefined,
+        city: updatedGym!.city || undefined,
+        state: updatedGym!.state || undefined,
+        tenantSchemaName: updatedGym!.tenantSchemaName!,
+      },
+    };
+
+    const user = this.toUserResponse(
+      { ...createdUser, role: 'admin', emailVerified: true },
+      updatedGym,
+      [gymAssignment],
+    );
+    const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
+
+    return {
+      user,
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800, // 7 days in seconds
+        tokenType: 'Bearer',
+      },
     };
   }
 }
