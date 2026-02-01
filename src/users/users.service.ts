@@ -72,11 +72,11 @@ export class UsersService {
    */
   private readonly ROLE_HIERARCHY: Record<string, string[]> = {
     superadmin: ['admin', 'branch_admin', 'manager', 'trainer', 'client'],
-    admin: ['branch_admin', 'manager', 'trainer', 'client'],
-    branch_admin: ['manager', 'trainer', 'client'],
-    manager: ['trainer', 'client'],
-    trainer: ['client'],
-    client: [],
+    admin: ['admin', 'branch_admin', 'manager', 'trainer', 'client'],
+    branch_admin: ['branch_admin', 'manager', 'trainer', 'client'],
+    manager: ['manager', 'trainer', 'client'],
+    trainer: ['trainer', 'client'],
+    client: ['client'],
   };
 
   /**
