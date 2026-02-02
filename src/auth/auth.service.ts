@@ -1997,7 +1997,7 @@ export class AuthService {
   private getGoogleRedirectUri(): string {
     const environment = this.configService.get<string>('ENVIRONMENT') || 'dev';
     return environment === 'prod'
-      ? 'https://www.strakly.com/auth/google/callback'
+      ? 'https://app.strakly.com/auth/google/callback'
       : 'http://localhost:5173/auth/google/callback';
   }
 
