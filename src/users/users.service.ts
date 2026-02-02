@@ -433,6 +433,44 @@ export class UsersService {
   }
 
   /**
+   * Update superadmin profile (no gym context required)
+   * Used for profile updates like name for superadmin users
+   * Note: SystemUser model only supports name updates currently
+   */
+  async updateSuperadminProfile(
+    id: number,
+    updateData: { avatar?: string; name?: string; phone?: string; bio?: string },
+  ): Promise<any> {
+    // Superadmins are stored in system_users table
+    const user = await this.prisma.systemUser.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Superadmin with ID ${id} not found`);
+    }
+
+    if (user.role !== 'superadmin') {
+      throw new BadRequestException('This method is only for superadmin users');
+    }
+
+    // Update user data (SystemUser only has name field available for update)
+    const updatedUser = await this.prisma.systemUser.update({
+      where: { id },
+      data: {
+        ...(updateData.name !== undefined && { name: updateData.name }),
+      },
+    });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      role: updatedUser.role,
+    };
+  }
+
+  /**
    * Soft delete an admin
    */
   async removeAdmin(id: number, deletedById?: number): Promise<{ success: boolean }> {
@@ -499,6 +537,35 @@ export class UsersService {
       throw new BadRequestException(
         'Invalid role. Staff role must be manager, trainer, or branch_admin.',
       );
+    }
+
+    // Check subscription limit for maxStaff
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+      include: { plan: true },
+    });
+
+    if (subscription?.plan) {
+      const maxStaff = subscription.plan.maxStaff;
+      // -1 means unlimited
+      if (maxStaff !== -1) {
+        // Count current staff in the gym (managers, trainers, branch_admins)
+        const currentStaffCount = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer', 'branch_admin')`,
+            );
+            return result.rows[0]?.count || 0;
+          },
+        );
+
+        if (currentStaffCount >= maxStaff) {
+          throw new BadRequestException(
+            `You have reached the maximum limit of ${maxStaff} staff members for your subscription plan. Please upgrade your plan to add more staff.`,
+          );
+        }
+      }
     }
 
     // Check if email already exists in public.users
@@ -1016,6 +1083,35 @@ export class UsersService {
   ): Promise<any> {
     if (!dto.password) {
       throw new BadRequestException('Password is required');
+    }
+
+    // Check subscription limit for maxClients
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+      include: { plan: true },
+    });
+
+    if (subscription?.plan) {
+      const maxClients = subscription.plan.maxClients;
+      // -1 means unlimited
+      if (maxClients !== -1) {
+        // Count current clients in the gym
+        const currentClientCount = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*)::int as count FROM users WHERE role = 'client'`,
+            );
+            return result.rows[0]?.count || 0;
+          },
+        );
+
+        if (currentClientCount >= maxClients) {
+          throw new BadRequestException(
+            `You have reached the maximum limit of ${maxClients} clients for your subscription plan. Please upgrade your plan to add more clients.`,
+          );
+        }
+      }
     }
 
     // Check if email already exists in this tenant

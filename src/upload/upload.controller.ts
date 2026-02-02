@@ -68,6 +68,7 @@ export class UploadController {
     // Update user's avatar in database
     // Determine user type based on role (normalize to lowercase for comparison)
     const normalizedRole = userRole?.toLowerCase();
+    const isSuperadmin = normalizedRole === 'superadmin';
     const isAdmin = normalizedRole === 'admin';
     const isTenantUser = ['manager', 'trainer', 'branch_admin', 'client'].includes(normalizedRole);
 
@@ -82,13 +83,20 @@ export class UploadController {
     }
 
     // If no recognized role and no gymId, we can't update the profile
-    if (!isAdmin && !isTenantUser && !gymId) {
+    // Exception: superadmins don't need gym context
+    if (!isSuperadmin && !isAdmin && !isTenantUser && !gymId) {
       throw new BadRequestException('Unable to update profile: missing gym context');
     }
 
-    // Update profile if we have gymId
-    if (gymId) {
-      try {
+    // Update profile
+    try {
+      if (isSuperadmin) {
+        // For superadmin, update directly in public.users table without gym context
+        await this.usersService.updateSuperadminProfile(
+          parseInt(String(targetUserId)),
+          { avatar: result.url },
+        );
+      } else if (gymId) {
         // For admin users, explicitly pass 'admin' to use public.users table
         // For tenant users (staff/client), let auto-detection handle it by not passing userType
         // This ensures the tenant schema is queried correctly
@@ -98,9 +106,9 @@ export class UploadController {
           { avatar: result.url },
           isAdmin ? 'admin' : undefined, // Let auto-detection work for tenant users
         );
-      } catch (error: any) {
-        throw new BadRequestException(`Avatar uploaded but failed to update profile: ${error.message}`);
       }
+    } catch (error: any) {
+      throw new BadRequestException(`Avatar uploaded but failed to update profile: ${error.message}`);
     }
 
     return {
