@@ -44,7 +44,7 @@ import { UploadModule } from './upload/upload.module';
     ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
-      exclude: ['/api/{*path}', '/docs/{*path}'],
+      exclude: ['/api*', '/docs*'],
     }),
     DatabaseModule,
     TenantModule,
