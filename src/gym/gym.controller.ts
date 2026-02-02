@@ -152,4 +152,14 @@ export class GymController {
   toggleStatus(@Param('id', ParseIntPipe) id: number) {
     return this.gymService.toggleStatus(id);
   }
+
+  @Post(':id/provision')
+  @ApiOperation({
+    summary: 'Provision gym tenant schema and default branch',
+    description:
+      'Step 2 of 2-step tenant provisioning. Creates tenant schema and default branch for a gym.',
+  })
+  provision(@Param('id', ParseIntPipe) id: number) {
+    return this.gymService.provision(id);
+  }
 }

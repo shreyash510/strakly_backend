@@ -180,7 +180,9 @@ export class AuthService {
   }
 
   /**
-   * Register a new admin with their gym (creates tenant schema)
+   * Register a new admin with their gym (2-step: creates gym record without tenant schema)
+   * Step 1: Creates gym + user + assignment + subscription (no tenant schema)
+   * Step 2: Call POST /gyms/:id/provision to create tenant schema and default branch
    */
   async registerAdminWithGym(
     dto: RegisterAdminWithGymDto,
@@ -188,73 +190,10 @@ export class AuthService {
     // Check if user already exists in public.users
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.user.email },
-      include: {
-        gymAssignments: true,
-      },
     });
 
-    // Block if user exists AND has verified email (completed signup properly)
     if (existingUser) {
-      console.log(
-        'Found existing user:',
-        existingUser.id,
-        'emailVerified:',
-        existingUser.emailVerified,
-        'gymAssignments:',
-        existingUser.gymAssignments?.length,
-      );
-
-      if (existingUser.emailVerified) {
-        throw new ConflictException('User with this email already exists');
-      }
-
-      // User exists but email not verified - they didn't complete signup properly
-      // Clean up everything and let them start fresh
-      console.log('Cleaning up incomplete user:', existingUser.id);
-
-      // Delete gym assignments first
-      if (
-        existingUser.gymAssignments &&
-        existingUser.gymAssignments.length > 0
-      ) {
-        for (const assignment of existingUser.gymAssignments) {
-          // Delete the gym and its tenant schema
-          try {
-            const gym = await this.prisma.gym.findUnique({
-              where: { id: assignment.gymId },
-            });
-            if (gym?.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
-              await this.tenantService.dropTenantSchema(assignment.gymId);
-            }
-            // Delete subscriptions
-            await this.prisma.saasGymSubscription.deleteMany({
-              where: { gymId: assignment.gymId },
-            });
-            // Delete the gym
-            await this.prisma.gym.delete({ where: { id: assignment.gymId } });
-            console.log('Cleaned up orphaned gym:', assignment.gymId);
-          } catch (cleanupError) {
-            console.error(
-              'Failed to cleanup gym:',
-              assignment.gymId,
-              cleanupError,
-            );
-          }
-        }
-      }
-
-      // Delete the user (this will cascade delete gym assignments due to onDelete: Cascade)
-      try {
-        await this.prisma.user.delete({
-          where: { id: existingUser.id },
-        });
-        console.log('Deleted incomplete user:', existingUser.id);
-      } catch (deleteError) {
-        console.error('Failed to delete incomplete user:', deleteError);
-        throw new ConflictException(
-          'User with this email already exists. Please try again later.',
-        );
-      }
+      throw new ConflictException('User with this email already exists');
     }
 
     // Clean up any old email verification records for this email
@@ -269,11 +208,11 @@ export class AuthService {
     let createdUser: any;
 
     try {
-      // Create gym and get gym ID first
+      // Create gym with null tenantSchemaName (pending provision)
       gym = await this.prisma.gym.create({
         data: {
           name: dto.gym.name,
-          tenantSchemaName: 'pending', // Will update after getting ID
+          tenantSchemaName: null, // Will be set when provisioned
           phone: dto.gym.phone,
           email: dto.gym.email,
           address: dto.gym.address,
@@ -284,23 +223,7 @@ export class AuthService {
           isActive: true,
         },
       });
-      console.log('Gym created:', gym.id);
-
-      // Update tenant schema name with the gym ID
-      const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
-      await this.prisma.gym.update({
-        where: { id: gym.id },
-        data: { tenantSchemaName },
-      });
-      console.log('Tenant schema name updated:', tenantSchemaName);
-
-      // Create the tenant schema with all tables (for clients)
-      await this.tenantService.createTenantSchema(gym.id);
-      console.log('Tenant schema created');
-
-      // Create default branch for the gym
-      await this.branchService.createDefaultBranch(gym.id, gym);
-      console.log('Default branch created');
+      console.log('Gym created (pending provision):', gym.id);
 
       // Create admin user in PUBLIC.users (not tenant schema)
       createdUser = await this.prisma.user.create({
@@ -319,7 +242,7 @@ export class AuthService {
       if (gym?.id && !createdUser) {
         try {
           await this.prisma.gym.delete({ where: { id: gym.id } });
-          console.log('Cleaned up orphaned gym:', gym.id);
+          console.log('Cleaned up gym:', gym.id);
         } catch (cleanupError) {
           console.error('Failed to clean up gym:', cleanupError);
         }
@@ -364,10 +287,6 @@ export class AuthService {
         },
       });
     }
-
-    const updatedGym = await this.prisma.gym.findUnique({
-      where: { id: gym.id },
-    });
 
     // Generate and send email verification OTP
     const verificationOtp = this.generateOtp();
@@ -415,18 +334,18 @@ export class AuthService {
       role: 'admin',
       isPrimary: true,
       gym: {
-        id: updatedGym!.id,
-        name: updatedGym!.name,
-        logo: updatedGym!.logo || undefined,
-        city: updatedGym!.city || undefined,
-        state: updatedGym!.state || undefined,
-        tenantSchemaName: updatedGym!.tenantSchemaName!,
+        id: gym.id,
+        name: gym.name,
+        logo: gym.logo || undefined,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
+        tenantSchemaName: null as any, // Not provisioned yet
       },
     };
 
     const user = this.toUserResponse(
       { ...createdUser, role: 'admin', emailVerified: false },
-      updatedGym,
+      gym,
       [gymAssignment],
     );
     const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
@@ -2230,8 +2149,9 @@ export class AuthService {
   }
 
   /**
-   * Register Google user with gym
-   * Creates user with googleId and creates gym
+   * Register Google user with gym (2-step: creates gym record without tenant schema)
+   * Step 1: Creates gym + user + assignment + subscription (no tenant schema)
+   * Step 2: Call POST /gyms/:id/provision to create tenant schema and default branch
    */
   async googleRegisterWithGym(
     dto: GoogleRegisterWithGymDto,
@@ -2259,11 +2179,11 @@ export class AuthService {
     let createdUser: any;
 
     try {
-      // Create gym and get gym ID first
+      // Create gym with null tenantSchemaName (pending provision)
       gym = await this.prisma.gym.create({
         data: {
           name: dto.gym.name,
-          tenantSchemaName: 'pending', // Will update after getting ID
+          tenantSchemaName: null, // Will be set when provisioned
           phone: dto.gym.phone,
           email: dto.gym.email,
           address: dto.gym.address,
@@ -2274,23 +2194,7 @@ export class AuthService {
           isActive: true,
         },
       });
-      console.log('Gym created:', gym.id);
-
-      // Update tenant schema name with the gym ID
-      const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
-      await this.prisma.gym.update({
-        where: { id: gym.id },
-        data: { tenantSchemaName },
-      });
-      console.log('Tenant schema name updated:', tenantSchemaName);
-
-      // Create the tenant schema with all tables (for clients)
-      await this.tenantService.createTenantSchema(gym.id);
-      console.log('Tenant schema created');
-
-      // Create default branch for the gym
-      await this.branchService.createDefaultBranch(gym.id, gym);
-      console.log('Default branch created');
+      console.log('Gym created (pending provision):', gym.id);
 
       // Create admin user in PUBLIC.users with googleId
       createdUser = await this.prisma.user.create({
@@ -2311,7 +2215,7 @@ export class AuthService {
       if (gym?.id && !createdUser) {
         try {
           await this.prisma.gym.delete({ where: { id: gym.id } });
-          console.log('Cleaned up orphaned gym:', gym.id);
+          console.log('Cleaned up gym:', gym.id);
         } catch (cleanupError) {
           console.error('Failed to clean up gym:', cleanupError);
         }
@@ -2357,10 +2261,6 @@ export class AuthService {
       });
     }
 
-    const updatedGym = await this.prisma.gym.findUnique({
-      where: { id: gym.id },
-    });
-
     // Notify superadmins about new gym registration (non-blocking)
     this.notificationsService
       .notifyNewGymRegistration({
@@ -2378,18 +2278,18 @@ export class AuthService {
       role: 'admin',
       isPrimary: true,
       gym: {
-        id: updatedGym!.id,
-        name: updatedGym!.name,
-        logo: updatedGym!.logo || undefined,
-        city: updatedGym!.city || undefined,
-        state: updatedGym!.state || undefined,
-        tenantSchemaName: updatedGym!.tenantSchemaName!,
+        id: gym.id,
+        name: gym.name,
+        logo: gym.logo || undefined,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
+        tenantSchemaName: null as any, // Not provisioned yet
       },
     };
 
     const user = this.toUserResponse(
       { ...createdUser, role: 'admin', emailVerified: true },
-      updatedGym,
+      gym,
       [gymAssignment],
     );
     const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true

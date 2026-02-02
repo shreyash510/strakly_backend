@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
+import { APP_PIPE } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { MigrationModule } from './database/migration.module';
 import { TenantModule } from './tenant/tenant.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
@@ -47,6 +50,7 @@ import { UploadModule } from './upload/upload.module';
       exclude: ['/api/{*path}', '/docs/{*path}'],
     }),
     DatabaseModule,
+    MigrationModule,
     TenantModule,
     CommonModule,
     AuthModule,
@@ -78,6 +82,13 @@ import { UploadModule } from './upload/upload.module';
     UploadModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Add ZodValidationPipe for Zod-based DTOs (works alongside class-validator)
+    {
+      provide: APP_PIPE,
+      useClass: ZodValidationPipe,
+    },
+  ],
 })
 export class AppModule {}

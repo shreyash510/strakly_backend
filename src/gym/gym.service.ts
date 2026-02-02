@@ -172,6 +172,11 @@ export class GymService {
     };
   }
 
+  /**
+   * Create a new gym (2-step: creates gym record without tenant schema)
+   * Step 1: Creates gym + user + assignment + subscription (no tenant schema)
+   * Step 2: Call POST /gyms/:id/provision to create tenant schema and default branch
+   */
   async create(dto: CreateGymDto) {
     // Check if admin email already exists in public.users
     const existingUser = await this.prisma.user.findUnique({
@@ -194,11 +199,11 @@ export class GymService {
     // Hash password
     const passwordHash = await hashPassword(dto.admin.password);
 
-    // Create gym first with a temporary schema name
+    // Create gym with null tenantSchemaName (pending provision)
     const gym = await this.prisma.gym.create({
       data: {
         name: dto.name,
-        tenantSchemaName: 'pending', // Will update after getting ID
+        tenantSchemaName: null, // Will be set when provisioned
         description: dto.description,
         logo: dto.logo,
         phone: dto.phone,
@@ -216,22 +221,7 @@ export class GymService {
         isActive: dto.isActive ?? true,
       },
     });
-
-    // Update tenant schema name with the gym ID
-    const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
-    await this.prisma.gym.update({
-      where: { id: gym.id },
-      data: { tenantSchemaName },
-    });
-
-    // Create the tenant schema with all tables (for clients)
-    await this.tenantService.createTenantSchema(gym.id);
-
-    // Create default branch for this gym
-    const defaultBranch = await this.branchService.createDefaultBranch(
-      gym.id,
-      gym,
-    );
+    console.log('Gym created (pending provision):', gym.id);
 
     // Create admin user in PUBLIC.users
     const createdUser = await this.prisma.user.create({
@@ -243,6 +233,7 @@ export class GymService {
         status: 'active',
       },
     });
+    console.log('User created:', createdUser.id);
 
     // Create user-gym assignment with admin role (null branchId = all branches)
     await this.prisma.userGymXref.create({
@@ -523,6 +514,65 @@ export class GymService {
       where: { id: assignment.id },
       data: { role: newRole },
     });
+  }
+
+  /**
+   * Provision a gym's tenant schema and default branch
+   * Step 2 of 2-step tenant provisioning
+   */
+  async provision(gymId: number): Promise<{
+    success: boolean;
+    message: string;
+    tenantSchemaName: string;
+    branchId: number;
+  }> {
+    // Get gym and validate
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+    });
+
+    if (!gym) {
+      throw new NotFoundException(`Gym with ID ${gymId} not found`);
+    }
+
+    if (!gym.isActive) {
+      throw new BadRequestException('Cannot provision inactive gym');
+    }
+
+    // Check if already provisioned
+    if (gym.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
+      throw new BadRequestException(
+        `Gym is already provisioned with schema: ${gym.tenantSchemaName}`,
+      );
+    }
+
+    // Generate tenant schema name
+    const tenantSchemaName = this.tenantService.getTenantSchemaName(gymId);
+
+    // Create the tenant schema with all tables
+    await this.tenantService.createTenantSchema(gymId);
+    console.log('Tenant schema created:', tenantSchemaName);
+
+    // Update gym with tenant schema name
+    await this.prisma.gym.update({
+      where: { id: gymId },
+      data: { tenantSchemaName },
+    });
+    console.log('Gym updated with tenant schema name');
+
+    // Create default branch for the gym
+    const defaultBranch = await this.branchService.createDefaultBranch(
+      gymId,
+      gym,
+    );
+    console.log('Default branch created:', defaultBranch.id);
+
+    return {
+      success: true,
+      message: `Gym provisioned successfully with schema ${tenantSchemaName}`,
+      tenantSchemaName,
+      branchId: defaultBranch.id,
+    };
   }
 
   /**
