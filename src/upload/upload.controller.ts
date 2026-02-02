@@ -66,23 +66,37 @@ export class UploadController {
     const result = await this.uploadService.uploadAvatar(file, targetUserId, oldUrl);
 
     // Update user's avatar in database
-    if (gymId) {
-      // Determine user type based on role
-      let userType: 'admin' | 'staff' | 'client' | undefined;
-      if (userRole === 'client') {
-        userType = 'client';
-      } else if (['manager', 'trainer', 'branch_admin'].includes(userRole)) {
-        userType = 'staff';
-      } else if (userRole === 'admin') {
-        userType = 'admin';
-      }
+    // Determine user type based on role (normalize to lowercase for comparison)
+    const normalizedRole = userRole?.toLowerCase();
+    const isAdmin = normalizedRole === 'admin';
+    const isTenantUser = ['manager', 'trainer', 'branch_admin', 'client'].includes(normalizedRole);
 
+    // For tenant users (staff/client), gymId is required
+    if (isTenantUser && !gymId) {
+      throw new BadRequestException('Gym ID is required for staff and client users');
+    }
+
+    // For admin users, gymId is also required
+    if (isAdmin && !gymId) {
+      throw new BadRequestException('Gym ID is required to update profile');
+    }
+
+    // If no recognized role and no gymId, we can't update the profile
+    if (!isAdmin && !isTenantUser && !gymId) {
+      throw new BadRequestException('Unable to update profile: missing gym context');
+    }
+
+    // Update profile if we have gymId
+    if (gymId) {
       try {
+        // For admin users, explicitly pass 'admin' to use public.users table
+        // For tenant users (staff/client), let auto-detection handle it by not passing userType
+        // This ensures the tenant schema is queried correctly
         await this.usersService.update(
           parseInt(String(targetUserId)),
           gymId,
           { avatar: result.url },
-          userType,
+          isAdmin ? 'admin' : undefined, // Let auto-detection work for tenant users
         );
       } catch (error: any) {
         throw new BadRequestException(`Avatar uploaded but failed to update profile: ${error.message}`);
