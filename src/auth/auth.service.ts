@@ -409,6 +409,9 @@ export class AuthService {
         console.error('Failed to send new gym notification:', error);
       });
 
+    // Get the subscription we just created
+    const subscription = await this.getGymSubscription(gym.id);
+
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
       branchId: null, // Admin has access to all branches
@@ -428,6 +431,7 @@ export class AuthService {
       { ...createdUser, role: 'admin', emailVerified: false },
       updatedGym,
       [gymAssignment],
+      subscription,
     );
     const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
 
@@ -572,10 +576,14 @@ export class AuthService {
         gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
       const hasMultipleGyms = gymAssignments.length > 1;
 
+      // Get subscription for current gym
+      const subscription = await this.getGymSubscription(primaryAssignment.gymId);
+
       const user = this.toUserResponse(
         { ...adminUser, role: primaryAssignment.role },
         primaryAssignment.gym,
         gymAssignments,
+        subscription,
       );
 
       const accessToken = this.generateToken(user, primaryAssignment, true); // isAdmin = true
@@ -683,9 +691,14 @@ export class AuthService {
             branchIds = branchAssignments.map((a: any) => a.branch_id);
           }
 
+          // Get subscription for the gym
+          const subscription = await this.getGymSubscription(gym.id);
+
           const user = this.toUserResponse(
             { ...tenantUser, role: userRole, branchIds },
             gym,
+            undefined,
+            subscription,
           );
           const accessToken = this.generateToken(user, {
             gymId: gym.id,
