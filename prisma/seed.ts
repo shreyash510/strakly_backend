@@ -117,6 +117,10 @@ const permissions = [
   { code: 'gym.view', name: 'View Gym', module: 'gym', description: 'View gym details' },
   { code: 'gym.manage', name: 'Manage Gym', module: 'gym', description: 'Manage gym settings' },
 
+  // Gym Profile module (admin - own gym)
+  { code: 'view_gym_profile', name: 'View Gym Profile', module: 'gym_profile', description: 'View own gym profile' },
+  { code: 'manage_gym_profile', name: 'Manage Gym Profile', module: 'gym_profile', description: 'Manage own gym profile' },
+
   // Contact Requests module (superadmin)
   { code: 'contact_requests.view', name: 'View Contact Requests', module: 'contact_requests', description: 'View contact form submissions' },
   { code: 'contact_requests.manage', name: 'Manage Contact Requests', module: 'contact_requests', description: 'Manage contact form submissions' },
@@ -195,6 +199,9 @@ const rolePermissions: Record<string, string[]> = {
   admin: [
     // Dashboard
     'dashboard.view',
+    // Gym Profile (own gym)
+    'view_gym_profile',
+    'manage_gym_profile',
     // Member Management
     'members.view',
     'members.manage',
@@ -233,6 +240,8 @@ const rolePermissions: Record<string, string[]> = {
   branch_admin: [
     // Dashboard
     'dashboard.view',
+    // Gym Profile (view only)
+    'view_gym_profile',
     // Member Management (branch-specific)
     'members.view',
     'members.manage',
