@@ -1289,9 +1289,10 @@ export class UsersService {
 
   /**
    * Get a single client (role='client' in tenant schema)
+   * Includes membership details (active membership + history)
    */
   async findOneClient(id: number, gymId: number): Promise<any> {
-    const { clientData, branchAssignments } =
+    const { clientData, branchAssignments, activeMembership, membershipHistory } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
           `SELECT u.*, b.name as branch_name
@@ -1316,7 +1317,47 @@ export class UsersService {
           assignments = assignmentsResult.rows;
         }
 
-        return { clientData: userData, branchAssignments: assignments };
+        // Fetch active membership
+        let activeMembershipData = null;
+        if (userData) {
+          const now = new Date();
+          const activeMembershipResult = await client.query(
+            `SELECT m.*, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                    o.name as offer_name, o.code as offer_code
+             FROM memberships m
+             LEFT JOIN plans p ON p.id = m.plan_id
+             LEFT JOIN offers o ON o.id = m.offer_id
+             WHERE m.user_id = $1 AND m.status = 'active'
+               AND m.start_date <= $2 AND m.end_date >= $2
+               AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+             ORDER BY m.created_at DESC LIMIT 1`,
+            [id, now],
+          );
+          activeMembershipData = activeMembershipResult.rows[0] || null;
+        }
+
+        // Fetch membership history (last 10 memberships)
+        let membershipHistoryData: any[] = [];
+        if (userData) {
+          const historyResult = await client.query(
+            `SELECT m.*, p.name as plan_name, p.code as plan_code, p.price as plan_price,
+                    o.name as offer_name, o.code as offer_code
+             FROM memberships m
+             LEFT JOIN plans p ON p.id = m.plan_id
+             LEFT JOIN offers o ON o.id = m.offer_id
+             WHERE m.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+             ORDER BY m.created_at DESC LIMIT 10`,
+            [id],
+          );
+          membershipHistoryData = historyResult.rows;
+        }
+
+        return {
+          clientData: userData,
+          branchAssignments: assignments,
+          activeMembership: activeMembershipData,
+          membershipHistory: membershipHistoryData,
+        };
       });
 
     if (!clientData) {
@@ -1324,7 +1365,67 @@ export class UsersService {
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(clientData, gym, branchAssignments);
+    const formattedUser = this.formatTenantUser(clientData, gym, branchAssignments);
+
+    // Format and add membership data
+    const formatMembership = (m: any) => {
+      if (!m) return null;
+      const now = new Date();
+      const startDate = new Date(m.start_date);
+      const endDate = new Date(m.end_date);
+      const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+      // Calculate progress percentage
+      let progress = 0;
+      if (now >= endDate) {
+        progress = 100;
+      } else if (now <= startDate) {
+        progress = 0;
+      } else {
+        const total = endDate.getTime() - startDate.getTime();
+        const elapsed = now.getTime() - startDate.getTime();
+        progress = Math.round((elapsed / total) * 100);
+      }
+
+      return {
+        id: m.id,
+        branchId: m.branch_id,
+        planId: m.plan_id,
+        offerId: m.offer_id,
+        startDate: m.start_date,
+        endDate: m.end_date,
+        status: m.status,
+        originalAmount: m.original_amount,
+        discountAmount: m.discount_amount,
+        finalAmount: m.final_amount,
+        currency: m.currency,
+        paymentStatus: m.payment_status,
+        paymentMethod: m.payment_method,
+        paidAt: m.paid_at,
+        daysRemaining,
+        progress,
+        isEndingSoon: daysRemaining > 0 && daysRemaining <= 14,
+        plan: m.plan_name ? {
+          id: m.plan_id,
+          name: m.plan_name,
+          code: m.plan_code,
+          price: m.plan_price,
+        } : null,
+        offer: m.offer_name ? {
+          id: m.offer_id,
+          name: m.offer_name,
+          code: m.offer_code,
+        } : null,
+        createdAt: m.created_at,
+        updatedAt: m.updated_at,
+      };
+    };
+
+    return {
+      ...formattedUser,
+      activeMembership: formatMembership(activeMembership),
+      membershipHistory: membershipHistory.map(formatMembership),
+    };
   }
 
   /**
@@ -1744,39 +1845,24 @@ export class UsersService {
 
     // If gymId is provided, check tenant schema FIRST (avoids ID collision with public.users)
     if (gymId) {
-      const { tenantUser, branchAssignments } = await this.tenantService.executeInTenant(
+      const tenantUser = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT u.*, b.name as branch_name
-             FROM users u
-             LEFT JOIN branches b ON u.branch_id = b.id
-             WHERE u.id = $1`,
+            `SELECT id, role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [id],
           );
-          const userData = result.rows[0];
-
-          // Fetch branch assignments with branch names
-          let assignments: any[] = [];
-          if (userData) {
-            const assignmentsResult = await client.query(
-              `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-               FROM user_branch_xref ubx
-               LEFT JOIN public.branches b ON b.id = ubx.branch_id
-               WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-               ORDER BY ubx.is_primary DESC`,
-              [id],
-            );
-            assignments = assignmentsResult.rows;
-          }
-
-          return { tenantUser: userData, branchAssignments: assignments };
+          return result.rows[0];
         },
       );
 
       if (tenantUser) {
-        const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-        return this.formatTenantUser(tenantUser, gym, branchAssignments);
+        // If the user is a client, use findOneClient to include membership data
+        if (tenantUser.role === 'client') {
+          return this.findOneClient(id, gymId);
+        }
+        // For staff, use findOneStaff
+        return this.findOneStaff(id, gymId);
       }
 
       // Not found in tenant, try admin (public.users)
