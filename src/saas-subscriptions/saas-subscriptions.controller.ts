@@ -25,6 +25,8 @@ import {
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
   CancelSubscriptionDto,
+  CreatePaymentHistoryDto,
+  UpdatePaymentHistoryDto,
 } from './dto/saas-subscriptions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -43,10 +45,17 @@ export class SaasSubscriptionsController {
 
   @Get('plans')
   @Roles('superadmin')
-  @ApiOperation({ summary: 'Get all SaaS plans' })
+  @ApiOperation({ summary: 'Get all SaaS plans (superadmin)' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAllPlans(@Query('includeInactive') includeInactive?: string) {
     return this.service.findAllPlans(includeInactive === 'true');
+  }
+
+  @Get('plans/active')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get active SaaS plans (for viewing/renewal)' })
+  findActivePlans() {
+    return this.service.findAllPlans(false);
   }
 
   @Get('plans/:id')
@@ -168,5 +177,128 @@ export class SaasSubscriptionsController {
     @Body() dto: CancelSubscriptionDto,
   ) {
     return this.service.cancelSubscription(id, dto);
+  }
+
+  // ============================================
+  // Payment History Endpoints
+  // ============================================
+
+  @Get('me/payment-history')
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Get payment history for current gym' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  getMyPaymentHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    return this.service.getPaymentHistoryByGymId(gymId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      status,
+      startDate,
+      endDate,
+    });
+  }
+
+  @Get('payments')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get all payment history (superadmin)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'gymId', required: false, type: Number })
+  @ApiQuery({ name: 'subscriptionId', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'gateway', required: false, type: String })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  getAllPaymentHistory(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('gymId') gymId?: string,
+    @Query('subscriptionId') subscriptionId?: string,
+    @Query('status') status?: string,
+    @Query('gateway') gateway?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.service.getPaymentHistory({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      gymId: gymId ? parseInt(gymId, 10) : undefined,
+      subscriptionId: subscriptionId ? parseInt(subscriptionId, 10) : undefined,
+      status,
+      gateway,
+      startDate,
+      endDate,
+    });
+  }
+
+  @Get('payments/stats')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get payment statistics' })
+  @ApiQuery({ name: 'gymId', required: false, type: Number })
+  getPaymentStats(@Query('gymId') gymId?: string) {
+    return this.service.getPaymentStats(gymId ? parseInt(gymId, 10) : undefined);
+  }
+
+  @Get('payments/:id')
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Get payment by ID' })
+  getPaymentById(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getPaymentById(id);
+  }
+
+  @Get(':id/payment-history')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get payment history for a subscription' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  getSubscriptionPaymentHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.getPaymentHistoryBySubscriptionId(id, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      status,
+    });
+  }
+
+  @Post(':id/payments')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Record a payment for a subscription' })
+  createPayment(
+    @Param('id', ParseIntPipe) subscriptionId: number,
+    @Body() dto: CreatePaymentHistoryDto,
+  ) {
+    return this.service.createPaymentHistory({
+      ...dto,
+      subscriptionId,
+    });
+  }
+
+  @Patch('payments/:id')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Update a payment record' })
+  updatePayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentHistoryDto,
+  ) {
+    return this.service.updatePaymentHistory(id, dto);
   }
 }
