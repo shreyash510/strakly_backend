@@ -1744,20 +1744,39 @@ export class UsersService {
 
     // If gymId is provided, check tenant schema FIRST (avoids ID collision with public.users)
     if (gymId) {
-      const tenantUser = await this.tenantService.executeInTenant(
+      const { tenantUser, branchAssignments } = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT * FROM users WHERE id = $1`,
+            `SELECT u.*, b.name as branch_name
+             FROM users u
+             LEFT JOIN branches b ON u.branch_id = b.id
+             WHERE u.id = $1`,
             [id],
           );
-          return result.rows[0];
+          const userData = result.rows[0];
+
+          // Fetch branch assignments with branch names
+          let assignments: any[] = [];
+          if (userData) {
+            const assignmentsResult = await client.query(
+              `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+               FROM user_branch_xref ubx
+               LEFT JOIN public.branches b ON b.id = ubx.branch_id
+               WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+               ORDER BY ubx.is_primary DESC`,
+              [id],
+            );
+            assignments = assignmentsResult.rows;
+          }
+
+          return { tenantUser: userData, branchAssignments: assignments };
         },
       );
 
       if (tenantUser) {
         const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-        return this.formatTenantUser(tenantUser, gym);
+        return this.formatTenantUser(tenantUser, gym, branchAssignments);
       }
 
       // Not found in tenant, try admin (public.users)
@@ -1787,19 +1806,37 @@ export class UsersService {
 
       for (const gym of gyms) {
         try {
-          const tenantUser = await this.tenantService.executeInTenant(
+          const { tenantUser, branchAssignments } = await this.tenantService.executeInTenant(
             gym.id,
             async (client) => {
               const result = await client.query(
-                `SELECT * FROM users WHERE id = $1`,
+                `SELECT u.*, b.name as branch_name
+                 FROM users u
+                 LEFT JOIN branches b ON u.branch_id = b.id
+                 WHERE u.id = $1`,
                 [id],
               );
-              return result.rows[0];
+              const userData = result.rows[0];
+
+              let assignments: any[] = [];
+              if (userData) {
+                const assignmentsResult = await client.query(
+                  `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+                   FROM user_branch_xref ubx
+                   LEFT JOIN public.branches b ON b.id = ubx.branch_id
+                   WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+                   ORDER BY ubx.is_primary DESC`,
+                  [id],
+                );
+                assignments = assignmentsResult.rows;
+              }
+
+              return { tenantUser: userData, branchAssignments: assignments };
             },
           );
 
           if (tenantUser) {
-            return this.formatTenantUser(tenantUser, gym);
+            return this.formatTenantUser(tenantUser, gym, branchAssignments);
           }
         } catch (e) {
           // Tenant schema might not exist, continue to next gym
@@ -2104,18 +2141,34 @@ export class UsersService {
 
     const statusId = await this.getStatusId('active');
 
-    const updatedUser = await this.tenantService.executeInTenant(
+    const role = dto?.role || 'client';
+
+    const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         await client.query(
-          `UPDATE users SET status = 'active', status_id = $2, updated_at = NOW() WHERE id = $1`,
-          [userId, statusId],
+          `UPDATE users SET status = 'active', status_id = $2, role = $3, updated_at = NOW() WHERE id = $1`,
+          [userId, statusId, role],
         );
 
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
-          userId,
-        ]);
-        return result.rows[0];
+        const result = await client.query(
+          `SELECT u.*, b.name as branch_name
+           FROM users u
+           LEFT JOIN branches b ON u.branch_id = b.id
+           WHERE u.id = $1`,
+          [userId],
+        );
+
+        const assignmentsResult = await client.query(
+          `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+           FROM user_branch_xref ubx
+           LEFT JOIN public.branches b ON b.id = ubx.branch_id
+           WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+           ORDER BY ubx.is_primary DESC`,
+          [userId],
+        );
+
+        return { updatedUser: result.rows[0], branchAssignments: assignmentsResult.rows };
       },
     );
 
@@ -2130,7 +2183,7 @@ export class UsersService {
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedUser, gym);
+    return this.formatTenantUser(updatedUser, gym, branchAssignments);
   }
 
   /**
@@ -2162,29 +2215,42 @@ export class UsersService {
 
     const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
     const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + plan.duration_days);
 
-    const baseAmount = parseFloat(plan.price) || 0;
-    const taxAmount = baseAmount * 0.18; // 18% GST
-    const finalAmount = baseAmount + taxAmount;
+    // Calculate end date based on duration_type
+    const durationValue = parseInt(plan.duration_value) || 30;
+    const durationType = plan.duration_type || 'days';
+
+    if (durationType === 'days') {
+      endDate.setDate(endDate.getDate() + durationValue);
+    } else if (durationType === 'months') {
+      endDate.setMonth(endDate.getMonth() + durationValue);
+    } else if (durationType === 'years') {
+      endDate.setFullYear(endDate.getFullYear() + durationValue);
+    } else {
+      // Default to days
+      endDate.setDate(endDate.getDate() + durationValue);
+    }
+
+    const originalAmount = parseFloat(plan.price) || 0;
+    const discountAmount = 0;
+    const finalAmount = originalAmount - discountAmount;
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `INSERT INTO memberships (
           user_id, plan_id, branch_id, start_date, end_date,
-          base_amount, tax_amount, discount_amount, final_amount,
+          original_amount, discount_amount, final_amount,
           status, payment_status, payment_method, notes,
           created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
         [
           userId,
           dto.planId,
           branchId,
           startDate,
           endDate,
-          baseAmount,
-          taxAmount,
-          0, // discount_amount
+          originalAmount,
+          discountAmount,
           finalAmount,
           'active',
           'pending',
@@ -2221,7 +2287,7 @@ export class UsersService {
 
     const statusId = await this.getStatusId('rejected');
 
-    const updatedUser = await this.tenantService.executeInTenant(
+    const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         await client.query(
@@ -2229,15 +2295,29 @@ export class UsersService {
           [userId, statusId],
         );
 
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
-          userId,
-        ]);
-        return result.rows[0];
+        const result = await client.query(
+          `SELECT u.*, b.name as branch_name
+           FROM users u
+           LEFT JOIN branches b ON u.branch_id = b.id
+           WHERE u.id = $1`,
+          [userId],
+        );
+
+        const assignmentsResult = await client.query(
+          `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
+           FROM user_branch_xref ubx
+           LEFT JOIN public.branches b ON b.id = ubx.branch_id
+           WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
+           ORDER BY ubx.is_primary DESC`,
+          [userId],
+        );
+
+        return { updatedUser: result.rows[0], branchAssignments: assignmentsResult.rows };
       },
     );
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedUser, gym);
+    return this.formatTenantUser(updatedUser, gym, branchAssignments);
   }
 
   // ============================================

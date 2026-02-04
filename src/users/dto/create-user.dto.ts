@@ -6,6 +6,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsArray,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
@@ -390,6 +391,15 @@ export class AdminResetPasswordDto {
 }
 
 export class ApproveRequestDto {
+  @ApiPropertyOptional({
+    description: 'Role to assign to the user (defaults to client)',
+    enum: ['client', 'trainer', 'manager'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['client', 'trainer', 'manager'])
+  role?: string;
+
   @ApiPropertyOptional({
     description:
       'Plan ID for membership (optional - skip to approve without membership)',
