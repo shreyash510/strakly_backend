@@ -174,6 +174,7 @@ model Gym {
   subscription      SaasGymSubscription?
   supportTickets    SupportTicket[]
   branches          Branch[]
+  paymentHistory    SaasPaymentHistory[]
 
   @@map("gyms")
 }
@@ -327,6 +328,7 @@ model SaasPlan {
 
   // Relations
   gymSubscriptions SaasGymSubscription[]
+  paymentHistory   SaasPaymentHistory[]
 
   @@index([isActive, displayOrder])
   @@map("saas_plans")
@@ -375,6 +377,57 @@ model SaasGymSubscription {
   @@index([paymentStatus])
   @@index([endDate, status])
   @@map("saas_gym_subscriptions")
+
+  // Relations
+  paymentHistory  SaasPaymentHistory[]
+}
+
+model SaasPaymentHistory {
+  id                  Int       @id @default(autoincrement())
+  subscriptionId      Int       @map("subscription_id")
+  gymId               Int       @map("gym_id")
+  planId              Int       @map("plan_id")
+
+  // Payment details
+  amount              Decimal   @db.Decimal(10, 2)
+  currency            String    @default("INR")
+  status              String    @default("pending") // pending, processing, completed, failed, refunded
+  paymentMethod       String?   @map("payment_method") // UPI, Card, NetBanking, Wallet, etc.
+
+  // References
+  paymentRef          String?   @map("payment_ref") // Internal reference number
+  gateway             String?   // Razorpay, PayU, Stripe, Manual, etc.
+  gatewayRef          String?   @map("gateway_ref") // Gateway transaction ID
+  gatewayResponse     Json?     @map("gateway_response") // Full gateway response for debugging
+
+  // Billing period this payment covers
+  billingPeriodStart  DateTime  @map("billing_period_start")
+  billingPeriodEnd    DateTime  @map("billing_period_end")
+
+  // Invoice
+  invoiceNumber       String?   @map("invoice_number")
+
+  // Failure handling
+  failureReason       String?   @map("failure_reason")
+  retryCount          Int       @default(0) @map("retry_count")
+
+  // Timestamps
+  processedAt         DateTime? @map("processed_at")
+  notes               String?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  subscription        SaasGymSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  gym                 Gym                 @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan                SaasPlan            @relation(fields: [planId], references: [id])
+
+  @@index([subscriptionId, createdAt(sort: Desc)])
+  @@index([gymId, status])
+  @@index([status, createdAt])
+  @@index([gatewayRef])
+  @@index([invoiceNumber])
+  @@map("saas_payment_history")
 }
 
 // ============================================

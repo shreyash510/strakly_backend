@@ -12,6 +12,9 @@ import {
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
   CancelSubscriptionDto,
+  CreatePaymentHistoryDto,
+  UpdatePaymentHistoryDto,
+  PaymentHistoryFiltersDto,
 } from './dto/saas-subscriptions.dto';
 import {
   PaginationParams,
@@ -501,5 +504,302 @@ export class SaasSubscriptionsService {
       monthlyRevenue: monthlyRevenue._sum.amount?.toNumber() || 0,
       planDistribution: distribution,
     };
+  }
+
+  // ============================================
+  // Payment History
+  // ============================================
+
+  async getPaymentHistory(filters: PaymentHistoryFiltersDto = {}) {
+    const { page = 1, limit = 10 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (filters.subscriptionId) {
+      where.subscriptionId = filters.subscriptionId;
+    }
+
+    if (filters.gymId) {
+      where.gymId = filters.gymId;
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      where.status = filters.status;
+    }
+
+    if (filters.gateway) {
+      where.gateway = filters.gateway;
+    }
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        where.createdAt.lte = new Date(filters.endDate);
+      }
+    }
+
+    const [payments, total] = await Promise.all([
+      this.prisma.saasPaymentHistory.findMany({
+        where,
+        include: {
+          subscription: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          gym: {
+            select: {
+              id: true,
+              name: true,
+              logo: true,
+            },
+          },
+          plan: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.saasPaymentHistory.count({ where }),
+    ]);
+
+    return {
+      data: payments,
+      pagination: createPaginationMeta(total, page, limit),
+    };
+  }
+
+  async getPaymentHistoryBySubscriptionId(subscriptionId: number, filters: PaymentHistoryFiltersDto = {}) {
+    return this.getPaymentHistory({ ...filters, subscriptionId });
+  }
+
+  async getPaymentHistoryByGymId(gymId: number, filters: PaymentHistoryFiltersDto = {}) {
+    return this.getPaymentHistory({ ...filters, gymId });
+  }
+
+  async getPaymentById(id: number) {
+    const payment = await this.prisma.saasPaymentHistory.findUnique({
+      where: { id },
+      include: {
+        subscription: true,
+        gym: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            email: true,
+          },
+        },
+        plan: true,
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID ${id} not found`);
+    }
+
+    return payment;
+  }
+
+  async createPaymentHistory(dto: CreatePaymentHistoryDto) {
+    // Get subscription to validate and get gymId, planId
+    const subscription = await this.findSubscriptionById(dto.subscriptionId);
+
+    // Generate invoice number if not provided
+    const invoiceNumber = dto.invoiceNumber || await this.generateInvoiceNumber();
+
+    // Generate payment reference if not provided
+    const paymentRef = dto.paymentRef || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+    const payment = await this.prisma.saasPaymentHistory.create({
+      data: {
+        subscriptionId: dto.subscriptionId,
+        gymId: subscription.gymId,
+        planId: subscription.planId,
+        amount: dto.amount,
+        currency: dto.currency || 'INR',
+        status: dto.status || 'pending',
+        paymentMethod: dto.paymentMethod,
+        paymentRef,
+        gateway: dto.gateway,
+        gatewayRef: dto.gatewayRef,
+        billingPeriodStart: dto.billingPeriodStart
+          ? new Date(dto.billingPeriodStart)
+          : subscription.startDate,
+        billingPeriodEnd: dto.billingPeriodEnd
+          ? new Date(dto.billingPeriodEnd)
+          : subscription.endDate,
+        invoiceNumber,
+        failureReason: dto.failureReason,
+        notes: dto.notes,
+        processedAt: dto.status === 'completed' ? new Date() : null,
+      },
+      include: {
+        subscription: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        gym: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // If payment is completed, update subscription
+    if (dto.status === 'completed') {
+      await this.prisma.saasGymSubscription.update({
+        where: { id: dto.subscriptionId },
+        data: {
+          paymentStatus: 'paid',
+          lastPaymentAt: new Date(),
+          paymentRef,
+          paymentMethod: dto.paymentMethod,
+        },
+      });
+    }
+
+    return payment;
+  }
+
+  async updatePaymentHistory(id: number, dto: UpdatePaymentHistoryDto) {
+    const payment = await this.getPaymentById(id);
+
+    const updateData: any = {};
+
+    if (dto.status) {
+      updateData.status = dto.status;
+      if (dto.status === 'completed') {
+        updateData.processedAt = new Date();
+      }
+    }
+
+    if (dto.gatewayRef !== undefined) updateData.gatewayRef = dto.gatewayRef;
+    if (dto.failureReason !== undefined) updateData.failureReason = dto.failureReason;
+    if (dto.retryCount !== undefined) updateData.retryCount = dto.retryCount;
+    if (dto.notes !== undefined) updateData.notes = dto.notes;
+
+    const updatedPayment = await this.prisma.saasPaymentHistory.update({
+      where: { id },
+      data: updateData,
+      include: {
+        subscription: true,
+        gym: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // If payment status changed to completed, update subscription
+    if (dto.status === 'completed' && payment.status !== 'completed') {
+      await this.prisma.saasGymSubscription.update({
+        where: { id: payment.subscriptionId },
+        data: {
+          paymentStatus: 'paid',
+          lastPaymentAt: new Date(),
+          paymentRef: payment.paymentRef,
+          paymentMethod: payment.paymentMethod,
+        },
+      });
+    }
+
+    return updatedPayment;
+  }
+
+  async getPaymentStats(gymId?: number) {
+    const where: any = gymId ? { gymId } : {};
+
+    const [totalPayments, completedPayments, failedPayments, totalRevenue] =
+      await Promise.all([
+        this.prisma.saasPaymentHistory.count({ where }),
+        this.prisma.saasPaymentHistory.count({
+          where: { ...where, status: 'completed' },
+        }),
+        this.prisma.saasPaymentHistory.count({
+          where: { ...where, status: 'failed' },
+        }),
+        this.prisma.saasPaymentHistory.aggregate({
+          where: { ...where, status: 'completed' },
+          _sum: { amount: true },
+        }),
+      ]);
+
+    // Get monthly revenue for the last 6 months
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const monthlyPayments = await this.prisma.saasPaymentHistory.groupBy({
+      by: ['createdAt'],
+      where: {
+        ...where,
+        status: 'completed',
+        createdAt: { gte: sixMonthsAgo },
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+    });
+
+    return {
+      totalPayments,
+      completedPayments,
+      failedPayments,
+      pendingPayments: totalPayments - completedPayments - failedPayments,
+      totalRevenue: totalRevenue._sum.amount?.toNumber() || 0,
+      successRate:
+        totalPayments > 0
+          ? Math.round((completedPayments / totalPayments) * 100)
+          : 0,
+    };
+  }
+
+  private async generateInvoiceNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+
+    // Get the count of invoices this month
+    const startOfMonth = new Date(year, new Date().getMonth(), 1);
+    const endOfMonth = new Date(year, new Date().getMonth() + 1, 0);
+
+    const count = await this.prisma.saasPaymentHistory.count({
+      where: {
+        createdAt: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+      },
+    });
+
+    const sequence = String(count + 1).padStart(4, '0');
+    return `INV-${year}${month}-${sequence}`;
   }
 }
