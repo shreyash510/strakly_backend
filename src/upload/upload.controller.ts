@@ -90,21 +90,23 @@ export class UploadController {
 
     // Update profile
     try {
-      if (isSuperadmin) {
-        // For superadmin, update directly in public.users table without gym context
+      if (isSuperadmin && !userId) {
+        // For superadmin updating their own profile, update directly in public.users table
         await this.usersService.updateSuperadminProfile(
           parseInt(String(targetUserId)),
           { avatar: result.url },
         );
       } else if (gymId) {
-        // For admin users, explicitly pass 'admin' to use public.users table
-        // For tenant users (staff/client), let auto-detection handle it by not passing userType
-        // This ensures the tenant schema is queried correctly
+        // When uploading for another user (userId provided), let auto-detection find the user
+        // Only pass 'admin' when the user is updating their OWN profile AND they are an admin
+        const isUpdatingSelf = !userId || userId === String(req.user?.userId);
+        const userTypeHint = (isUpdatingSelf && isAdmin) ? 'admin' : undefined;
+
         await this.usersService.update(
           parseInt(String(targetUserId)),
           gymId,
           { avatar: result.url },
-          isAdmin ? 'admin' : undefined, // Let auto-detection work for tenant users
+          userTypeHint, // Let auto-detection work when uploading for others
         );
       }
     } catch (error: any) {
