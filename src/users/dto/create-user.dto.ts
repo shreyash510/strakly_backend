@@ -7,7 +7,11 @@ import {
   IsNotEmpty,
   IsArray,
   IsIn,
+  ValidateNested,
+  ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
 import type { UserRole, UserStatus, Gender } from '../../constants';
@@ -451,4 +455,22 @@ export class BulkDeleteUserDto {
   @IsInt({ each: true })
   @IsNotEmpty()
   userIds: number[];
+}
+
+export class BulkCreateUserDto {
+  @ApiProperty({
+    description: 'Array of users to create (max 50)',
+    type: [CreateUserDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CreateUserDto)
+  users: CreateUserDto[];
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
