@@ -30,6 +30,7 @@ import {
   ApproveRequestDto,
   BulkUpdateUserDto,
   BulkDeleteUserDto,
+  BulkCreateUserDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -535,6 +536,33 @@ export class UsersController {
   }
 
   // ============ BULK OPERATIONS ============
+
+  @Post('bulk/create')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Bulk create users (max 50)' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async bulkCreate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkCreateUserDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    return this.usersService.bulkCreate(dto.users, gymId, user.role, {
+      id: user.userId,
+      name: user.name || user.email,
+      role: user.role,
+    });
+  }
 
   @Patch('bulk/update')
   @UseGuards(RolesGuard)

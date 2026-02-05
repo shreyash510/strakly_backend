@@ -2727,6 +2727,54 @@ export class UsersService {
   // ============================================
 
   /**
+   * Bulk create users
+   * Creates each user independently - one failure doesn't stop the batch
+   */
+  async bulkCreate(
+    users: CreateUserDto[],
+    gymId: number,
+    callerRole: string,
+    actorInfo: { id: number; name: string; role: string },
+  ): Promise<{
+    success: number;
+    failed: number;
+    errors: string[];
+    created: Array<{ name: string; email: string; id: number }>;
+  }> {
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as string[],
+      created: [] as Array<{ name: string; email: string; id: number }>,
+    };
+
+    for (let i = 0; i < users.length; i++) {
+      const userDto = users[i];
+      try {
+        const createdUser = await this.create(
+          userDto,
+          gymId,
+          callerRole,
+          actorInfo,
+        );
+        results.success++;
+        results.created.push({
+          name: createdUser.name,
+          email: createdUser.email,
+          id: createdUser.id,
+        });
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push(
+          `User ${i + 1} (${userDto.name || userDto.email}): ${error.message}`,
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Bulk update users - move to branch or update status
    * Skips users that cannot be updated (e.g., admins, users from other gyms)
    */
