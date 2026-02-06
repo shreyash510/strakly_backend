@@ -1214,6 +1214,52 @@ export class UsersService {
   }
 
   /**
+   * Get user counts grouped by status for a specific role
+   */
+  async getStatusCounts(
+    role: string,
+    gymId: number | undefined,
+    branchId: number | null,
+  ): Promise<Record<string, number>> {
+    if (!gymId) {
+      throw new BadRequestException('gymId is required for fetching status counts');
+    }
+
+    const counts = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const conditions: string[] = [
+          `u.role = $1`,
+          '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
+        ];
+        const values: any[] = [role];
+        let paramIndex = 2;
+
+        if (branchId !== null && branchId !== undefined) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(branchId);
+        }
+
+        const whereClause = conditions.join(' AND ');
+        const result = await client.query(
+          `SELECT u.status, COUNT(*)::int as count FROM users u
+           WHERE ${whereClause}
+           GROUP BY u.status`,
+          values,
+        );
+
+        const statusCounts: Record<string, number> = {};
+        for (const row of result.rows) {
+          statusCounts[row.status] = row.count;
+        }
+        return statusCounts;
+      },
+    );
+
+    return counts;
+  }
+
+  /**
    * Get all clients for a gym (role='client' in tenant schema)
    */
   async findAllClients(filters: UserFilters): Promise<PaginatedResponse<any>> {
@@ -2850,11 +2896,11 @@ export class UsersService {
 
         if (updateData.status) {
           const statusId = await this.getStatusId(updateData.status);
-          if (statusId) {
+          if (statusId !== null) {
             await this.tenantService.executeInTenant(gymId, async (client) => {
               await client.query(
-                `UPDATE users SET status_id = $1, updated_at = NOW() WHERE id = $2`,
-                [statusId, userId],
+                `UPDATE users SET status = $1, status_id = $2, updated_at = NOW() WHERE id = $3`,
+                [updateData.status, statusId, userId],
               );
             });
           }
