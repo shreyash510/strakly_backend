@@ -564,6 +564,47 @@ export class UsersController {
     });
   }
 
+  @Get('status-counts')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get user counts grouped by status' })
+  @ApiQuery({
+    name: 'role',
+    required: true,
+    type: String,
+    description: 'Filter by role (e.g., client, trainer)',
+  })
+  @ApiQuery({
+    name: 'branchId',
+    required: false,
+    type: Number,
+    description: 'Branch ID for filtering',
+  })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async getStatusCounts(
+    @Request() req: any,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('role') role: string,
+    @Query('branchId') queryBranchId?: string,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const isSuperAdmin = user.role === 'superadmin';
+    const gymId = isSuperAdmin
+      ? queryGymId
+        ? parseInt(queryGymId)
+        : undefined
+      : resolveGymId(user.gymId, queryGymId, false);
+    const branchId = isSuperAdmin
+      ? null
+      : this.resolveBranchId(req, queryBranchId);
+    return this.usersService.getStatusCounts(role, gymId, branchId);
+  }
+
   @Patch('bulk/update')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
