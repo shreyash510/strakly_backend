@@ -229,6 +229,16 @@ export class NotificationsGateway
   }
 
   /**
+   * Emit user:changed event to all connected users in a gym
+   */
+  emitUserChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('user:changed', payload);
+    this.logger.debug(
+      `user:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
    * Get connection stats
    */
   getConnectionStats() {

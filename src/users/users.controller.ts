@@ -23,6 +23,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -48,7 +49,10 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   /**
    * Resolve branchId for filtering:
@@ -179,7 +183,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  create(
+  async create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() createUserDto: CreateUserDto,
     @Query('gymId') queryGymId?: string,
@@ -189,11 +193,13 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.create(createUserDto, gymId, user.role, {
+    const result = await this.usersService.create(createUserDto, gymId, user.role, {
       id: user.userId,
       name: user.name || user.email,
       role: user.role,
     });
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'created' });
+    return result;
   }
 
   // ============ CURRENT USER ENDPOINTS ============
@@ -319,7 +325,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  updateStatusByHeader(
+  async updateStatusByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Body() body: { status: string },
@@ -331,7 +337,9 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.updateStatus(parseInt(userId), gymId, body.status);
+    const result = await this.usersService.updateStatus(parseInt(userId), gymId, body.status);
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'status_changed' });
+    return result;
   }
 
   @Post('user/reset-password')
@@ -625,12 +633,14 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.bulkUpdate(
+    const result = await this.usersService.bulkUpdate(
       dto.userIds,
       { branchIds: dto.branchIds, status: dto.status },
       gymId,
       user.role,
     );
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_updated' });
+    return result;
   }
 
   @Delete('bulk/delete')
