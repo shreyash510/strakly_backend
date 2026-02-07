@@ -264,7 +264,8 @@ export class GymService {
     if (freePlan) {
       const now = new Date();
       const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
-      const endDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+      const endDate = new Date(now);
+      endDate.setMonth(endDate.getMonth() + (freePlan.durationMonths || 3));
 
       await this.prisma.saasGymSubscription.create({
         data: {

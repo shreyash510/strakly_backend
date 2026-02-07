@@ -1,9 +1,11 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import {
@@ -31,6 +33,8 @@ export interface SubscriptionFilters extends PaginationParams {
 
 @Injectable()
 export class SaasSubscriptionsService {
+  private readonly logger = new Logger(SaasSubscriptionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
@@ -101,6 +105,7 @@ export class SaasSubscriptionsService {
         price: dto.price,
         currency: dto.currency || 'INR',
         billingPeriod: dto.billingPeriod || 'monthly',
+        durationMonths: dto.durationMonths ?? 1,
         maxClients: dto.maxClients ?? -1,
         maxStaff: dto.maxStaff ?? -1,
         maxBranches: dto.maxBranches ?? 1,
@@ -122,6 +127,7 @@ export class SaasSubscriptionsService {
         ...(dto.name && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.price !== undefined && { price: dto.price }),
+        ...(dto.durationMonths !== undefined && { durationMonths: dto.durationMonths }),
         ...(dto.maxClients !== undefined && { maxClients: dto.maxClients }),
         ...(dto.maxStaff !== undefined && { maxStaff: dto.maxStaff }),
         ...(dto.maxBranches !== undefined && { maxBranches: dto.maxBranches }),
@@ -338,18 +344,10 @@ export class SaasSubscriptionsService {
     if (dto.endDate) {
       endDate = new Date(dto.endDate);
     } else {
-      // Default to 1 month for paid, or trial period
+      // Use plan's durationMonths to calculate end date
       endDate = new Date(startDate);
-      if (plan.price.toNumber() === 0) {
-        // Free plan - set far future date
-        endDate.setFullYear(2099);
-      } else if (dto.status === 'trial') {
-        // Trial - 14 days
-        endDate.setDate(endDate.getDate() + 14);
-      } else {
-        // Paid - 1 month
-        endDate.setMonth(endDate.getMonth() + 1);
-      }
+      const months = plan.durationMonths || 3;
+      endDate.setMonth(endDate.getMonth() + months);
     }
 
     const amount = dto.amount ?? plan.price.toNumber();
@@ -400,6 +398,7 @@ export class SaasSubscriptionsService {
       updateData.planId = dto.planId;
     }
 
+    if (dto.startDate) updateData.startDate = new Date(dto.startDate);
     if (dto.endDate) updateData.endDate = new Date(dto.endDate);
     if (dto.status) updateData.status = dto.status;
     if (dto.amount !== undefined) updateData.amount = dto.amount;
@@ -801,5 +800,36 @@ export class SaasSubscriptionsService {
 
     const sequence = String(count + 1).padStart(4, '0');
     return `INV-${year}${month}-${sequence}`;
+  }
+
+  // ============================================
+  // Cron: Auto-expire subscriptions
+  // ============================================
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleExpiredSubscriptions() {
+    this.logger.log('Running subscription expiry check...');
+
+    try {
+      const now = new Date();
+
+      const result = await this.prisma.saasGymSubscription.updateMany({
+        where: {
+          endDate: { lt: now },
+          status: { in: ['active', 'trial'] },
+        },
+        data: {
+          status: 'expired',
+        },
+      });
+
+      if (result.count > 0) {
+        this.logger.log(`Expired ${result.count} subscription(s)`);
+      } else {
+        this.logger.log('No subscriptions to expire');
+      }
+    } catch (error) {
+      this.logger.error('Failed to expire subscriptions', error);
+    }
   }
 }

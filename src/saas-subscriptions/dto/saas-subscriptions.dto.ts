@@ -43,6 +43,11 @@ export class CreateSaasPlanDto {
   @IsOptional()
   billingPeriod?: string;
 
+  @ApiPropertyOptional({ example: 3, description: 'Duration in months (e.g., 3, 6, 12, 24)' })
+  @IsNumber()
+  @IsOptional()
+  durationMonths?: number;
+
   @ApiPropertyOptional({ example: 500, description: '-1 for unlimited' })
   @IsNumber()
   @IsOptional()
@@ -100,6 +105,11 @@ export class UpdateSaasPlanDto {
   @Min(0)
   @IsOptional()
   price?: number;
+
+  @ApiPropertyOptional({ example: 3, description: 'Duration in months (e.g., 3, 6, 12, 24)' })
+  @IsNumber()
+  @IsOptional()
+  durationMonths?: number;
 
   @ApiPropertyOptional({ example: 500 })
   @IsNumber()
@@ -216,6 +226,11 @@ export class UpdateGymSubscriptionDto {
   @IsNumber()
   @IsOptional()
   planId?: number;
+
+  @ApiPropertyOptional({ example: '2024-01-01' })
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
 
   @ApiPropertyOptional({ example: '2024-12-31' })
   @IsDateString()
