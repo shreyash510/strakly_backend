@@ -152,11 +152,26 @@ export class AdminDashboardStatsDto {
   @ApiProperty({ description: 'Open support tickets' })
   openTickets: number;
 
-  @ApiProperty({ description: 'Memberships expiring this week' })
-  expiringThisWeek: number;
+  @ApiProperty({ description: 'Expired memberships count' })
+  expiredMemberships: number;
 
   @ApiProperty({ description: 'Pending onboarding requests' })
   pendingOnboardingCount: number;
+
+  @ApiProperty({ description: 'Male client count' })
+  maleClients: number;
+
+  @ApiProperty({ description: 'Female client count' })
+  femaleClients: number;
+
+  @ApiProperty({ description: 'New clients this month' })
+  newClientsThisMonth: number;
+
+  @ApiProperty({ description: 'New enquiries this month' })
+  newEnquiriesThisMonth: number;
+
+  @ApiProperty({ description: 'Monthly revenue for last 5 months', type: [Object] })
+  monthlyRevenueHistory: { month: string; revenue: number }[];
 }
 
 export class RecentClientDto {
