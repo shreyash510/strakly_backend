@@ -724,7 +724,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  updateById(
+  async updateById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
@@ -756,7 +756,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  removeById(
+  async removeById(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
