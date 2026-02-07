@@ -266,7 +266,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  updateByHeader(
+  async updateByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Body() updateUserDto: UpdateUserDto,
@@ -278,7 +278,9 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.update(parseInt(userId), gymId, updateUserDto);
+    const result = await this.usersService.update(parseInt(userId), gymId, updateUserDto);
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete('user')
@@ -296,7 +298,7 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  removeByHeader(
+  async removeByHeader(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('x-user-id') userId: string,
     @Query('gymId') queryGymId?: string,
@@ -307,7 +309,9 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.remove(parseInt(userId), gymId);
+    const result = await this.usersService.remove(parseInt(userId), gymId);
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'deleted' });
+    return result;
   }
 
   @Patch('user/status')
@@ -565,11 +569,23 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.bulkCreate(dto.users, gymId, user.role, {
+
+    // Propagate top-level branchId to each user that doesn't already have one
+    if (dto.branchId) {
+      for (const u of dto.users) {
+        if (!u.branchId) {
+          u.branchId = dto.branchId;
+        }
+      }
+    }
+
+    const result = await this.usersService.bulkCreate(dto.users, gymId, user.role, {
       id: user.userId,
       name: user.name || user.email,
       role: user.role,
     });
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_created' });
+    return result;
   }
 
   @Get('status-counts')
@@ -663,12 +679,14 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.bulkDelete(
+    const result = await this.usersService.bulkDelete(
       dto.userIds,
       gymId,
       user.role,
       user.userId,
     );
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_deleted' });
+    return result;
   }
 
   // ============ ID-BASED ENDPOINTS (must be last due to :id wildcard) ============
@@ -717,13 +735,15 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.update(
+    const result = await this.usersService.update(
       id,
       gymId,
       updateUserDto,
       undefined,
       user.role,
     );
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
@@ -746,6 +766,8 @@ export class UsersController {
       queryGymId,
       user.role === 'superadmin',
     );
-    return this.usersService.remove(id, gymId, undefined, user.role);
+    const result = await this.usersService.remove(id, gymId, undefined, user.role);
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'deleted' });
+    return result;
   }
 }
