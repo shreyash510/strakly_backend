@@ -447,7 +447,7 @@ export class UsersController {
   @ApiOperation({
     summary: 'Approve a pending registration request with optional membership',
   })
-  approveRequest(
+  async approveRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ApproveRequestDto,
@@ -455,21 +455,25 @@ export class UsersController {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    return this.usersService.approveRequest(id, user.gymId, dto);
+    const result = await this.usersService.approveRequest(id, user.gymId, dto);
+    this.notificationsGateway.emitUserChanged(user.gymId, { action: 'status_changed' });
+    return result;
   }
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
   @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Reject a pending registration request' })
-  rejectRequest(
+  async rejectRequest(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
   ) {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    return this.usersService.rejectRequest(id, user.gymId);
+    const result = await this.usersService.rejectRequest(id, user.gymId);
+    this.notificationsGateway.emitUserChanged(user.gymId, { action: 'status_changed' });
+    return result;
   }
 
   // ============ TRAINER-CLIENT ASSIGNMENT ENDPOINTS ============
