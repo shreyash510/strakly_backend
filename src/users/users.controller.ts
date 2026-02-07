@@ -24,6 +24,7 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -52,6 +53,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly notificationsGateway: NotificationsGateway,
+    private readonly rabbitMqService: RabbitMqService,
   ) {}
 
   /**
@@ -199,6 +201,7 @@ export class UsersController {
       role: user.role,
     });
     this.notificationsGateway.emitUserChanged(gymId, { action: 'created' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -280,6 +283,7 @@ export class UsersController {
     );
     const result = await this.usersService.update(parseInt(userId), gymId, updateUserDto);
     this.notificationsGateway.emitUserChanged(gymId, { action: 'updated' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -311,6 +315,7 @@ export class UsersController {
     );
     const result = await this.usersService.remove(parseInt(userId), gymId);
     this.notificationsGateway.emitUserChanged(gymId, { action: 'deleted' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -343,6 +348,7 @@ export class UsersController {
     );
     const result = await this.usersService.updateStatus(parseInt(userId), gymId, body.status);
     this.notificationsGateway.emitUserChanged(gymId, { action: 'status_changed' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -457,6 +463,7 @@ export class UsersController {
     }
     const result = await this.usersService.approveRequest(id, user.gymId, dto);
     this.notificationsGateway.emitUserChanged(user.gymId, { action: 'status_changed' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId: user.gymId });
     return result;
   }
 
@@ -473,6 +480,7 @@ export class UsersController {
     }
     const result = await this.usersService.rejectRequest(id, user.gymId);
     this.notificationsGateway.emitUserChanged(user.gymId, { action: 'status_changed' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId: user.gymId });
     return result;
   }
 
@@ -589,6 +597,7 @@ export class UsersController {
       role: user.role,
     });
     this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_created' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -660,6 +669,7 @@ export class UsersController {
       user.role,
     );
     this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_updated' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -690,6 +700,7 @@ export class UsersController {
       user.userId,
     );
     this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_deleted' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -747,6 +758,7 @@ export class UsersController {
       user.role,
     );
     this.notificationsGateway.emitUserChanged(gymId, { action: 'updated' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 
@@ -772,6 +784,7 @@ export class UsersController {
     );
     const result = await this.usersService.remove(id, gymId, undefined, user.role);
     this.notificationsGateway.emitUserChanged(gymId, { action: 'deleted' });
+    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
     return result;
   }
 }

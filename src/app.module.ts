@@ -35,6 +35,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { UploadModule } from './upload/upload.module';
+import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { UploadModule } from './upload/upload.module';
     }),
     DatabaseModule,
     TenantModule,
+    RabbitMqModule,
     CommonModule,
     AuthModule,
     UsersModule,

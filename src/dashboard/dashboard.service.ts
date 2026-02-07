@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { DashboardCacheService } from './dashboard-cache.service';
 import {
   SuperadminDashboardDto,
   DashboardStatsDto,
@@ -20,9 +21,12 @@ import {
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly dashboardCacheService: DashboardCacheService,
   ) {}
 
   async getSuperadminDashboard(): Promise<SuperadminDashboardDto> {
@@ -222,6 +226,23 @@ export class DashboardService {
   // Admin Dashboard Methods
   async getAdminDashboard(
     userId: number,
+    gymId: number,
+    branchId: number | null = null,
+  ): Promise<AdminDashboardDto> {
+    // Check cache first
+    const cached = this.dashboardCacheService.get(gymId, branchId);
+    if (cached) {
+      return cached;
+    }
+
+    // Cache miss — compute and store
+    const result = await this.computeAdminDashboard(gymId, branchId);
+    this.dashboardCacheService.set(gymId, branchId, result);
+    return result;
+  }
+
+  /** Raw computation without cache — used by consumer and scheduler */
+  async computeAdminDashboard(
     gymId: number,
     branchId: number | null = null,
   ): Promise<AdminDashboardDto> {
