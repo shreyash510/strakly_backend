@@ -390,8 +390,12 @@ export class DashboardService {
           lastMonthRevenueResult,
           thisMonthRevenueResult,
           presentTodayResult,
-          expiringThisWeekResult,
+          expiredMembershipsResult,
           pendingOnboardingResult,
+          maleClientsResult,
+          femaleClientsResult,
+          newClientsThisMonthResult,
+          newEnquiriesThisMonthResult,
         ] = await Promise.all([
           client.query(
             `SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`,
@@ -424,11 +428,24 @@ export class DashboardService {
             [today],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1 AND end_date <= $2${membershipBranchFilter}`,
-            [now, endOfWeek],
+            `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired'${membershipBranchFilter}`,
           ),
           client.query(
             `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND gender = 'male'${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND gender = 'female'${userBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND created_at >= $1${userBranchFilter}`,
+            [startOfMonth],
+          ),
+          client.query(
+            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1${userBranchFilter}`,
+            [startOfMonth],
           ),
         ]);
 
@@ -445,14 +462,57 @@ export class DashboardService {
           lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
           monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
           presentToday: parseInt(presentTodayResult.rows[0].count, 10),
-          expiringThisWeek: parseInt(expiringThisWeekResult.rows[0].count, 10),
+          expiredMemberships: parseInt(expiredMembershipsResult.rows[0].count, 10),
           pendingOnboardingCount: parseInt(
             pendingOnboardingResult.rows[0].count,
             10,
           ),
+          maleClients: parseInt(maleClientsResult.rows[0].count, 10),
+          femaleClients: parseInt(femaleClientsResult.rows[0].count, 10),
+          newClientsThisMonth: parseInt(newClientsThisMonthResult.rows[0].count, 10),
+          newEnquiriesThisMonth: parseInt(newEnquiriesThisMonthResult.rows[0].count, 10),
         };
       },
     );
+
+    // Get last 5 months revenue history
+    const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+    const revenueHistory = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const branchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const result = await client.query(
+          `SELECT
+            TO_CHAR(DATE_TRUNC('month', paid_at), 'Mon') as month,
+            EXTRACT(MONTH FROM DATE_TRUNC('month', paid_at)) as month_num,
+            EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
+            COALESCE(SUM(final_amount), 0) as revenue
+          FROM memberships
+          WHERE payment_status = 'paid' AND paid_at >= $1${branchFilter}
+          GROUP BY DATE_TRUNC('month', paid_at)
+          ORDER BY DATE_TRUNC('month', paid_at) ASC`,
+          [fiveMonthsAgo],
+        );
+        return result.rows;
+      },
+    );
+
+    // Build full 5-month array (fill missing months with 0)
+    const monthlyRevenueHistory: { month: string; revenue: number }[] = [];
+    for (let i = 4; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+      const found = revenueHistory.find(
+        (r: any) =>
+          parseInt(r.month_num) === d.getMonth() + 1 &&
+          parseInt(r.year_num) === d.getFullYear(),
+      );
+      monthlyRevenueHistory.push({
+        month: monthLabel,
+        revenue: found ? parseFloat(found.revenue) : 0,
+      });
+    }
 
     // Get open tickets count from public schema
     const openTickets = await this.prisma.supportTicket.count({
@@ -485,8 +545,13 @@ export class DashboardService {
       monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
       presentToday: stats.presentToday,
       openTickets,
-      expiringThisWeek: stats.expiringThisWeek,
+      expiredMemberships: stats.expiredMemberships,
       pendingOnboardingCount: stats.pendingOnboardingCount,
+      maleClients: stats.maleClients,
+      femaleClients: stats.femaleClients,
+      newClientsThisMonth: stats.newClientsThisMonth,
+      newEnquiriesThisMonth: stats.newEnquiriesThisMonth,
+      monthlyRevenueHistory,
     };
   }
 
