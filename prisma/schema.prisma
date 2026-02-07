@@ -308,6 +308,7 @@ model SaasPlan {
   price           Decimal   @db.Decimal(10, 2)
   currency        String    @default("INR")
   billingPeriod   String    @default("monthly") @map("billing_period")
+  durationMonths  Int       @default(1) @map("duration_months")
 
   // Limits
   maxClients      Int       @default(-1) @map("max_clients")
