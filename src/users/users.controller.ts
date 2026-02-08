@@ -129,6 +129,12 @@ export class UsersController {
     description:
       'Branch ID for filtering (admin only, pass "all" for all branches)',
   })
+  @ApiQuery({ name: 'name', required: false, type: String, description: 'Filter by name (partial match)' })
+  @ApiQuery({ name: 'phone', required: false, type: String, description: 'Filter by phone (partial match)' })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city (partial match)' })
+  @ApiQuery({ name: 'gender', required: false, type: String, description: 'Filter by gender (male/female/other)' })
+  @ApiQuery({ name: 'joinDateFrom', required: false, type: String, description: 'Filter join date from (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'joinDateTo', required: false, type: String, description: 'Filter join date to (YYYY-MM-DD)' })
   async findAll(
     @Request() req: any,
     @CurrentUser() user: AuthenticatedUser,
@@ -140,6 +146,12 @@ export class UsersController {
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
+    @Query('name') filterName?: string,
+    @Query('phone') filterPhone?: string,
+    @Query('city') filterCity?: string,
+    @Query('gender') filterGender?: string,
+    @Query('joinDateFrom') joinDateFrom?: string,
+    @Query('joinDateTo') joinDateTo?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const isSuperAdmin = user.role === 'superadmin';
@@ -166,6 +178,12 @@ export class UsersController {
       branchId,
       isSuperAdmin,
       noPagination: noPagination === 'true',
+      name: filterName,
+      phone: filterPhone,
+      city: filterCity,
+      gender: filterGender,
+      joinDateFrom,
+      joinDateTo,
     });
 
     if (res && result.pagination) {
