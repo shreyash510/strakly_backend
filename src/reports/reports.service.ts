@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import {
   ReportFilterDto,
   IncomeExpenseReportDto,
@@ -17,12 +18,20 @@ import {
   ClientAttendanceReportDto,
   TrainerClientsSummaryDto,
 } from './dto/client-reports.dto';
+import {
+  PdfReportFilterDto,
+  FullReportData,
+  DashboardSummary,
+  TrainerStaffReportItem,
+  GymInfo,
+} from './dto/pdf-report.dto';
 
 @Injectable()
 export class ReportsService {
   constructor(
     private prisma: PrismaService,
     private tenantService: TenantService,
+    private attendanceService: AttendanceService,
   ) {}
 
   async getIncomeExpenseReport(
@@ -1108,6 +1117,217 @@ export class ReportsService {
     }
 
     return { longestStreak, currentStreak };
+  }
+
+  // ============================================
+  // PDF REPORT DATA GATHERING
+  // ============================================
+
+  async getFullReportData(
+    gymId: number,
+    filters: PdfReportFilterDto,
+    branchId: number | null = null,
+  ): Promise<FullReportData> {
+    const currentDate = new Date();
+    const year = filters.year || currentDate.getFullYear();
+    const month = filters.month;
+
+    const reportFilters: ReportFilterDto = { year, month };
+
+    // Calculate date range for attendance (default: last 30 days)
+    const endDate = filters.endDate || currentDate.toISOString().split('T')[0];
+    const startDate =
+      filters.startDate ||
+      new Date(currentDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+
+    const [
+      incomeExpense,
+      membershipSales,
+      paymentDues,
+      attendanceReport,
+      dashboardSummary,
+      trainerStaffReport,
+      gymInfo,
+      branchName,
+    ] = await Promise.all([
+      this.getIncomeExpenseReport(gymId, reportFilters, branchId),
+      this.getMembershipSalesReport(gymId, reportFilters, branchId),
+      this.getPaymentDuesReport(gymId, branchId),
+      this.attendanceService.getReports(gymId, branchId, startDate, endDate),
+      this.getDashboardSummary(gymId, branchId, year, month),
+      this.getTrainerStaffReport(gymId, year, branchId),
+      this.getGymInfo(gymId),
+      this.getBranchName(gymId, branchId),
+    ]);
+
+    return {
+      gymInfo,
+      branchName,
+      period: { year, month },
+      dashboardSummary,
+      incomeExpense,
+      membershipSales,
+      paymentDues,
+      attendanceReport,
+      trainerStaffReport,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  private async getDashboardSummary(
+    gymId: number,
+    branchId: number | null,
+    year: number,
+    month?: number,
+  ): Promise<DashboardSummary> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const branchFilter = branchId !== null;
+      const branchParam = branchFilter ? [branchId] : [];
+
+      // Active members
+      const activeMembersResult = await client.query(
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${branchFilter ? ' AND branch_id = $1' : ''}`,
+        branchParam,
+      );
+
+      // New members this month
+      const firstOfMonth = new Date(year, (month || new Date().getMonth() + 1) - 1, 1)
+        .toISOString()
+        .split('T')[0];
+      const newMembersValues: any[] = [firstOfMonth];
+      if (branchFilter) newMembersValues.push(branchId);
+      const newMembersResult = await client.query(
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND created_at >= $1${branchFilter ? ' AND branch_id = $2' : ''}`,
+        newMembersValues,
+      );
+
+      // Expired memberships
+      const expiredResult = await client.query(
+        `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired'${branchFilter ? ' AND branch_id = $1' : ''}`,
+        branchParam,
+      );
+
+      // Monthly revenue
+      let revenueWhere = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
+      const revenueValues: any[] = [year];
+      let paramIdx = 2;
+      if (month) {
+        revenueWhere += ` AND EXTRACT(MONTH FROM paid_at) = $${paramIdx++}`;
+        revenueValues.push(month);
+      }
+      if (branchFilter) {
+        revenueWhere += ` AND branch_id = $${paramIdx++}`;
+        revenueValues.push(branchId);
+      }
+      const revenueResult = await client.query(
+        `SELECT COALESCE(SUM(final_amount), 0) as total FROM memberships WHERE ${revenueWhere}`,
+        revenueValues,
+      );
+
+      // Pending dues
+      const pendingResult = await client.query(
+        `SELECT COALESCE(SUM(final_amount), 0) as total FROM memberships WHERE payment_status = 'pending'${branchFilter ? ' AND branch_id = $1' : ''}`,
+        branchParam,
+      );
+
+      // Attendance today
+      const today = new Date().toISOString().split('T')[0];
+      const attendanceValues: any[] = [today];
+      if (branchFilter) attendanceValues.push(branchId);
+      const attendanceResult = await client.query(
+        `SELECT COUNT(*) as count FROM attendance WHERE date = $1${branchFilter ? ' AND branch_id = $2' : ''}`,
+        attendanceValues,
+      );
+
+      return {
+        activeMembers: parseInt(activeMembersResult.rows[0].count, 10),
+        newMembersThisMonth: parseInt(newMembersResult.rows[0].count, 10),
+        expiredMemberships: parseInt(expiredResult.rows[0].count, 10),
+        monthlyRevenue: parseFloat(revenueResult.rows[0].total),
+        pendingDues: parseFloat(pendingResult.rows[0].total),
+        attendanceToday: parseInt(attendanceResult.rows[0].count, 10),
+      };
+    });
+  }
+
+  private async getTrainerStaffReport(
+    gymId: number,
+    year: number,
+    branchId: number | null,
+  ): Promise<TrainerStaffReportItem[]> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      let whereClause = `u.role IN ('trainer', 'manager')`;
+      const values: any[] = [year];
+      let paramIndex = 2;
+
+      if (branchId !== null) {
+        whereClause += ` AND u.branch_id = $${paramIndex++}`;
+        values.push(branchId);
+      }
+
+      const result = await client.query(
+        `SELECT
+          u.id, u.name, u.email, u.role,
+          (SELECT COUNT(*) FROM trainer_client_xref tc WHERE tc.trainer_id = u.id AND tc.is_active = true) as client_count,
+          (SELECT COALESCE(SUM(s.net_amount), 0) FROM staff_salaries s WHERE s.staff_id = u.id AND s.payment_status = 'paid' AND s.year = $1) as total_salary_paid
+        FROM users u
+        WHERE ${whereClause}
+        ORDER BY u.role, u.name`,
+        values,
+      );
+
+      return result.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        role: r.role === 'trainer' ? 'Trainer' : 'Manager',
+        clientCount: parseInt(r.client_count, 10),
+        totalSalaryPaid: parseFloat(r.total_salary_paid),
+      }));
+    });
+  }
+
+  private async getGymInfo(gymId: number): Promise<GymInfo> {
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: {
+        id: true,
+        name: true,
+        logo: true,
+        phone: true,
+        email: true,
+        address: true,
+        city: true,
+        state: true,
+      },
+    });
+
+    return {
+      id: gym?.id || gymId,
+      name: gym?.name || 'Gym',
+      logo: gym?.logo || null,
+      phone: gym?.phone || null,
+      email: gym?.email || null,
+      address: gym?.address || null,
+      city: gym?.city || null,
+      state: gym?.state || null,
+    };
+  }
+
+  private async getBranchName(
+    gymId: number,
+    branchId: number | null,
+  ): Promise<string | null> {
+    if (branchId === null) return null;
+
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, gymId },
+      select: { name: true },
+    });
+
+    return branch?.name || null;
   }
 
   private getMonthName(month: number): string {

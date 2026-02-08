@@ -21,10 +21,11 @@ export class MemberRegistrationDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ description: 'Password (minimum 6 characters)' })
+  @ApiPropertyOptional({ description: 'Password (minimum 6 characters, optional)' })
   @IsString()
   @MinLength(6)
-  password: string;
+  @IsOptional()
+  password?: string;
 
   @ApiProperty({ description: 'Phone number' })
   @IsString()
