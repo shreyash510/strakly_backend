@@ -7,8 +7,15 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { UploadService } from '../upload/upload.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { MemberRegistrationDto } from './dto/member-registration.dto';
 import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
+import {
+  NotificationType,
+  NotificationPriority,
+} from '../notifications/notification-types';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class PublicService {
@@ -16,6 +23,8 @@ export class PublicService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly uploadService: UploadService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async registerMember(dto: MemberRegistrationDto) {
@@ -106,7 +115,7 @@ export class PublicService {
           [
             dto.name,
             dto.email.toLowerCase(),
-            await hashPassword(dto.password),
+            await hashPassword(dto.password || randomBytes(16).toString('hex')),
             dto.phone,
             dto.gender,
             dto.joinDate || null,
@@ -154,6 +163,89 @@ export class PublicService {
         // Avatar upload failed, but user was created - don't fail the registration
         console.error('Failed to upload avatar during registration:', error);
       }
+    }
+
+    /* Notify admin and branch_admin users about new registration */
+    try {
+      const notificationPayload = {
+        type: NotificationType.NEW_MEMBER_REGISTRATION,
+        title: 'New Member Registration',
+        message: `${dto.name} has registered and is awaiting approval.`,
+        priority: NotificationPriority.NORMAL,
+        branchId: dto.branchId || null,
+        actionUrl: `/clients/${user.id}`,
+        data: {
+          entityId: user.id,
+          entityType: 'user',
+          userId: user.id,
+          metadata: { name: dto.name, email: dto.email },
+        },
+      };
+
+      /* 1. Notify branch_admin users (they live in tenant schema) */
+      const branchAdminIds = await this.tenantService.executeInTenant(
+        dto.gymId,
+        async (client) => {
+          let query = `SELECT id FROM users WHERE role = 'branch_admin' AND status = 'active'`;
+          const params: any[] = [];
+
+          if (dto.branchId) {
+            params.push(dto.branchId);
+            query += ` AND (branch_id = $1 OR id IN (SELECT user_id FROM user_branch_xref WHERE branch_id = $1 AND is_active = true))`;
+          }
+
+          const result = await client.query(query, params);
+          return result.rows.map((r: any) => r.id as number);
+        },
+      );
+
+      if (branchAdminIds.length > 0) {
+        await this.notificationsService.createBulk(
+          { userIds: branchAdminIds, ...notificationPayload },
+          dto.gymId,
+        );
+      }
+
+      /* 2. Notify admin (gym owner) users (they live in public.users, not tenant schema) */
+      const gymAdmins = await this.prisma.userGymXref.findMany({
+        where: { gymId: dto.gymId, role: 'admin', isActive: true },
+        select: { userId: true },
+      });
+
+      if (gymAdmins.length > 0) {
+        const adminIds = gymAdmins.map((a) => a.userId);
+
+        /* Persist notifications in tenant schema (skip FK errors gracefully) */
+        for (const adminId of adminIds) {
+          try {
+            await this.notificationsService.create(
+              { userId: adminId, ...notificationPayload },
+              dto.gymId,
+            );
+          } catch {
+            /* FK constraint may fail since admin userId is from public.users.
+               Send real-time WebSocket notification instead. */
+            this.notificationsGateway.emitToUser(dto.gymId, adminId, {
+              id: 0,
+              userId: adminId,
+              branchId: dto.branchId || null,
+              type: NotificationType.NEW_MEMBER_REGISTRATION,
+              title: notificationPayload.title,
+              message: notificationPayload.message,
+              data: notificationPayload.data,
+              isRead: false,
+              readAt: null,
+              actionUrl: notificationPayload.actionUrl,
+              priority: NotificationPriority.NORMAL,
+              expiresAt: null,
+              createdAt: new Date(),
+              createdBy: null,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send registration notifications:', error);
     }
 
     return {
