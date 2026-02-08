@@ -37,6 +37,13 @@ export interface UserFilters extends PaginationParams {
   branchId?: number | null; // null = all branches, number = specific branch
   isSuperAdmin?: boolean;
   userType?: 'staff' | 'client' | 'all'; // New: filter by user type
+  // Column-specific filters
+  name?: string;
+  phone?: string;
+  city?: string;
+  gender?: string;
+  joinDateFrom?: string;
+  joinDateTo?: string;
 }
 
 @Injectable()
@@ -1299,6 +1306,37 @@ export class UsersService {
           );
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        // Column-specific filters
+        if (filters.name) {
+          conditions.push(`u.name ILIKE $${paramIndex++}`);
+          values.push(`%${filters.name}%`);
+        }
+
+        if (filters.phone) {
+          conditions.push(`u.phone ILIKE $${paramIndex++}`);
+          values.push(`%${filters.phone}%`);
+        }
+
+        if (filters.city) {
+          conditions.push(`u.city ILIKE $${paramIndex++}`);
+          values.push(`%${filters.city}%`);
+        }
+
+        if (filters.gender) {
+          conditions.push(`u.gender = $${paramIndex++}`);
+          values.push(filters.gender);
+        }
+
+        if (filters.joinDateFrom) {
+          conditions.push(`u.join_date >= $${paramIndex++}`);
+          values.push(filters.joinDateFrom);
+        }
+
+        if (filters.joinDateTo) {
+          conditions.push(`u.join_date <= $${paramIndex++}`);
+          values.push(filters.joinDateTo + ' 23:59:59');
         }
 
         const whereClause = conditions.join(' AND ');
