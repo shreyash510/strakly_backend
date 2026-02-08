@@ -7,6 +7,9 @@ export enum NotificationType {
   SYSTEM_NOTIFICATION = 'system_notification',
   SUPPORT_TICKET_RESOLVED = 'support_ticket_resolved',
   NEW_MEMBER_REGISTRATION = 'new_member_registration',
+  NEW_STAFF_ADDED = 'new_staff_added',
+  NEW_ENROLLMENT = 'new_enrollment',
+  NEW_BRANCH_CREATED = 'new_branch_created',
 }
 
 export enum NotificationPriority {

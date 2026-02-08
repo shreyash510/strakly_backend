@@ -182,11 +182,11 @@ export class PublicService {
         },
       };
 
-      /* 1. Notify branch_admin users (they live in tenant schema) */
+      /* 1. Notify branch_admin and manager users (they live in tenant schema) */
       const branchAdminIds = await this.tenantService.executeInTenant(
         dto.gymId,
         async (client) => {
-          let query = `SELECT id FROM users WHERE role = 'branch_admin' AND status = 'active'`;
+          let query = `SELECT id FROM users WHERE role IN ('branch_admin', 'manager') AND status = 'active'`;
           const params: any[] = [];
 
           if (dto.branchId) {

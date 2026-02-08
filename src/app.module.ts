@@ -35,6 +35,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { UploadModule } from './upload/upload.module';
+import { MigrationModule } from './migration/migration.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
@@ -78,6 +79,7 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
     ActivityLogsModule,
     AnnouncementsModule,
     UploadModule,
+    MigrationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

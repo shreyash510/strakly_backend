@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import {
+  NotificationType,
+  NotificationPriority,
+} from '../notifications/notification-types';
 import {
   CreateBranchDto,
   UpdateBranchDto,
@@ -31,6 +37,8 @@ export class BranchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -177,6 +185,74 @@ export class BranchService {
         isDefault: false, // New branches are never default
       },
     });
+
+    // Notify admin and branch_admin about new branch
+    try {
+      const notifPayload = {
+        type: NotificationType.NEW_BRANCH_CREATED,
+        title: 'New Branch Created',
+        message: `Branch "${dto.name}" has been created.`,
+        priority: NotificationPriority.NORMAL,
+        branchId: null as number | null,
+        data: {
+          entityId: branch.id,
+          entityType: 'branch',
+          metadata: { name: dto.name, code: dto.code.toUpperCase() },
+        },
+      };
+
+      /* Notify branch_admin users in tenant schema */
+      const branchAdminIds = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          const result = await client.query(
+            `SELECT id FROM users WHERE role = 'branch_admin' AND status = 'active'`,
+          );
+          return result.rows.map((r: any) => r.id as number);
+        },
+      );
+
+      if (branchAdminIds.length > 0) {
+        await this.notificationsService.createBulk(
+          { userIds: branchAdminIds, ...notifPayload },
+          gymId,
+        );
+      }
+
+      /* Notify admin (gym owner) from public schema */
+      const gymAdmins = await this.prisma.userGymXref.findMany({
+        where: { gymId, role: 'admin', isActive: true },
+        select: { userId: true },
+      });
+
+      for (const admin of gymAdmins) {
+        try {
+          await this.notificationsService.create(
+            { userId: admin.userId, ...notifPayload },
+            gymId,
+          );
+        } catch {
+          this.notificationsGateway.emitToUser(gymId, admin.userId, {
+            id: 0,
+            userId: admin.userId,
+            branchId: null,
+            type: NotificationType.NEW_BRANCH_CREATED,
+            title: notifPayload.title,
+            message: notifPayload.message,
+            data: notifPayload.data,
+            isRead: false,
+            readAt: null,
+            actionUrl: null,
+            priority: NotificationPriority.NORMAL,
+            expiresAt: null,
+            createdAt: new Date(),
+            createdBy: null,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send branch creation notifications:', error);
+    }
 
     return branch;
   }
