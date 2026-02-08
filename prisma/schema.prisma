@@ -311,7 +311,7 @@ model SaasPlan {
   durationMonths  Int       @default(1) @map("duration_months")
 
   // Limits
-  maxClients      Int       @default(-1) @map("max_clients")
+  maxClients      Int       @default(-1) @map("max_members")
   maxStaff        Int       @default(-1) @map("max_staff")
   maxBranches     Int       @default(1) @map("max_branches")
 
