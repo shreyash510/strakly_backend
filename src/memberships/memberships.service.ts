@@ -7,6 +7,11 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import {
+  NotificationType,
+  NotificationPriority,
+} from '../notifications/notification-types';
 import { PaymentsService } from '../payments/payments.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
@@ -23,6 +28,7 @@ export class MembershipsService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
     private readonly paymentsService: PaymentsService,
     private readonly activityLogsService: ActivityLogsService,
   ) {}
@@ -516,6 +522,93 @@ export class MembershipsService {
         userName,
         plan.name,
       );
+    }
+
+    // Notify admin, branch_admin and manager about new enrollment
+    try {
+      const notifPayload = {
+        type: NotificationType.NEW_ENROLLMENT,
+        title: 'New Membership Enrollment',
+        message: `${userName} has been enrolled in ${plan.name}.`,
+        priority: NotificationPriority.NORMAL,
+        branchId: membershipBranchId || null,
+        actionUrl: `/clients/${dto.userId}?tab=subscription`,
+        data: {
+          entityId: membership.id,
+          entityType: 'membership',
+          userId: dto.userId,
+          membershipId: membership.id,
+          metadata: { userName, planName: plan.name },
+        },
+      };
+
+      /* Notify branch_admin and manager in tenant schema */
+      const staffIds = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          let query = `SELECT id FROM users WHERE role IN ('branch_admin', 'manager') AND status = 'active'`;
+          const params: any[] = [];
+
+          if (membershipBranchId) {
+            params.push(membershipBranchId);
+            query += ` AND (branch_id = $1 OR id IN (SELECT user_id FROM user_branch_xref WHERE branch_id = $1 AND is_active = true))`;
+          }
+
+          const result = await client.query(query, params);
+          return result.rows.map((r: any) => r.id as number);
+        },
+      );
+
+      // Exclude the actor from receiving the notification
+      const filteredStaffIds = actorInfo
+        ? staffIds.filter((id) => id !== actorInfo.id)
+        : staffIds;
+
+      if (filteredStaffIds.length > 0) {
+        await this.notificationsService.createBulk(
+          { userIds: filteredStaffIds, ...notifPayload },
+          gymId,
+        );
+      }
+
+      /* Notify admin (gym owner) from public schema */
+      const gymAdmins = await this.prisma.userGymXref.findMany({
+        where: { gymId, role: 'admin', isActive: true },
+        select: { userId: true },
+      });
+
+      // Exclude actor if they are admin
+      const filteredAdmins = actorInfo
+        ? gymAdmins.filter((a) => a.userId !== actorInfo.id)
+        : gymAdmins;
+
+      for (const admin of filteredAdmins) {
+        try {
+          await this.notificationsService.create(
+            { userId: admin.userId, ...notifPayload },
+            gymId,
+          );
+        } catch {
+          this.notificationsGateway.emitToUser(gymId, admin.userId, {
+            id: 0,
+            userId: admin.userId,
+            branchId: membershipBranchId || null,
+            type: NotificationType.NEW_ENROLLMENT,
+            title: notifPayload.title,
+            message: notifPayload.message,
+            data: notifPayload.data,
+            isRead: false,
+            readAt: null,
+            actionUrl: notifPayload.actionUrl,
+            priority: NotificationPriority.NORMAL,
+            expiresAt: null,
+            createdAt: new Date(),
+            createdBy: null,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send enrollment notifications:', error);
     }
 
     return this.findOne(membership.id, gymId);

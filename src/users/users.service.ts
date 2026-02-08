@@ -7,6 +7,11 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import {
+  NotificationType,
+  NotificationPriority,
+} from '../notifications/notification-types';
 import { LookupsService } from '../lookups/lookups.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import {
@@ -52,6 +57,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
     private readonly lookupsService: LookupsService,
     private readonly activityLogsService: ActivityLogsService,
   ) {}
@@ -107,6 +113,99 @@ export class UsersService {
         `${callerRole} cannot ${action} users with role '${targetRole}'. ` +
           `Allowed roles: ${this.ROLE_HIERARCHY[callerRole]?.join(', ') || 'none'}`,
       );
+    }
+  }
+
+  /**
+   * Notify admin and branch_admin users about an event
+   */
+  private async notifyAdminsAndBranchAdmins(
+    gymId: number,
+    branchId: number | null,
+    payload: {
+      type: NotificationType;
+      title: string;
+      message: string;
+      actionUrl?: string;
+      data?: Record<string, any>;
+    },
+  ): Promise<void> {
+    try {
+      /* 1. Notify branch_admin and manager users in tenant schema */
+      const staffIds = await this.tenantService.executeInTenant(
+        gymId,
+        async (client) => {
+          let query = `SELECT id FROM users WHERE role IN ('branch_admin', 'manager') AND status = 'active'`;
+          const params: any[] = [];
+
+          if (branchId) {
+            params.push(branchId);
+            query += ` AND (branch_id = $1 OR id IN (SELECT user_id FROM user_branch_xref WHERE branch_id = $1 AND is_active = true))`;
+          }
+
+          const result = await client.query(query, params);
+          return result.rows.map((r: any) => r.id as number);
+        },
+      );
+
+      if (staffIds.length > 0) {
+        await this.notificationsService.createBulk(
+          {
+            userIds: staffIds,
+            type: payload.type,
+            title: payload.title,
+            message: payload.message,
+            priority: NotificationPriority.NORMAL,
+            branchId: branchId || null,
+            actionUrl: payload.actionUrl,
+            data: payload.data,
+          },
+          gymId,
+        );
+      }
+
+      /* 2. Notify admin (gym owner) users from public.users */
+      const gymAdmins = await this.prisma.userGymXref.findMany({
+        where: { gymId, role: 'admin', isActive: true },
+        select: { userId: true },
+      });
+
+      for (const admin of gymAdmins) {
+        try {
+          await this.notificationsService.create(
+            {
+              userId: admin.userId,
+              type: payload.type,
+              title: payload.title,
+              message: payload.message,
+              priority: NotificationPriority.NORMAL,
+              branchId: branchId || null,
+              actionUrl: payload.actionUrl,
+              data: payload.data,
+            },
+            gymId,
+          );
+        } catch {
+          this.notificationsGateway.emitToUser(gymId, admin.userId, {
+            id: 0,
+            userId: admin.userId,
+            branchId: branchId || null,
+            type: payload.type,
+            title: payload.title,
+            message: payload.message,
+            data: payload.data || null,
+            isRead: false,
+            readAt: null,
+            actionUrl: payload.actionUrl || null,
+            priority: NotificationPriority.NORMAL,
+            expiresAt: null,
+            createdAt: new Date(),
+            createdBy: null,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send admin notifications:', error);
     }
   }
 
@@ -293,6 +392,19 @@ export class UsersService {
         isActive: true,
       },
       include: { gym: true },
+    });
+
+    // Notify existing admins and branch_admins about new admin
+    await this.notifyAdminsAndBranchAdmins(gymId, null, {
+      type: NotificationType.NEW_STAFF_ADDED,
+      title: 'New Admin Added',
+      message: `${dto.name} has been added as admin.`,
+      data: {
+        entityId: createdUser.id,
+        entityType: 'user',
+        userId: createdUser.id,
+        metadata: { name: dto.name, email: dto.email, role: 'admin' },
+      },
     });
 
     return this.formatAdminUser(createdUser, [assignment]);
@@ -699,6 +811,20 @@ export class UsersService {
         dto.name,
       );
     }
+
+    // Notify admin and branch_admin about new staff
+    await this.notifyAdminsAndBranchAdmins(gymId, primaryBranchId, {
+      type: NotificationType.NEW_STAFF_ADDED,
+      title: 'New Staff Added',
+      message: `${dto.name} has been added as ${role}.`,
+      actionUrl: `/users/${createdStaff.user.id}`,
+      data: {
+        entityId: createdStaff.user.id,
+        entityType: 'user',
+        userId: createdStaff.user.id,
+        metadata: { name: dto.name, email: dto.email, role },
+      },
+    });
 
     return this.formatTenantUser(
       createdStaff.user,
