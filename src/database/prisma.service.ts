@@ -28,8 +28,6 @@ export class PrismaService
       );
     }
 
-    this.logger.log(`Connecting to ${env} database...`);
-
     const pool = new Pool({ connectionString: databaseUrl });
     const adapter = new PrismaPg(pool);
     super({
@@ -37,6 +35,7 @@ export class PrismaService
       log: env === 'dev' ? ['warn', 'error'] : ['error'],
     });
     this.pool = pool;
+    this.logger.log(`Connecting to ${env} database...`);
   }
 
   async onModuleInit() {

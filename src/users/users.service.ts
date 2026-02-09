@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notification-types';
 import { LookupsService } from '../lookups/lookups.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
@@ -53,6 +54,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly notificationHelper: NotificationHelperService,
+    private readonly notificationsService: NotificationsService,
     private readonly lookupsService: LookupsService,
     private readonly activityLogsService: ActivityLogsService,
   ) {}
