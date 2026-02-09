@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -7,12 +8,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationsGateway } from '../notifications/notifications.gateway';
-import {
-  NotificationType,
-  NotificationPriority,
-} from '../notifications/notification-types';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 import {
   CreateBranchDto,
   UpdateBranchDto,
@@ -34,11 +31,12 @@ export interface BranchFilters extends PaginationParams {
 
 @Injectable()
 export class BranchService {
+  private readonly logger = new Logger(BranchService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
-    private readonly notificationsService: NotificationsService,
-    private readonly notificationsGateway: NotificationsGateway,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   /**
@@ -187,72 +185,16 @@ export class BranchService {
     });
 
     // Notify admin and branch_admin about new branch
-    try {
-      const notifPayload = {
-        type: NotificationType.NEW_BRANCH_CREATED,
-        title: 'New Branch Created',
-        message: `Branch "${dto.name}" has been created.`,
-        priority: NotificationPriority.NORMAL,
-        branchId: null as number | null,
-        data: {
-          entityId: branch.id,
-          entityType: 'branch',
-          metadata: { name: dto.name, code: dto.code.toUpperCase() },
-        },
-      };
-
-      /* Notify branch_admin users in tenant schema */
-      const branchAdminIds = await this.tenantService.executeInTenant(
-        gymId,
-        async (client) => {
-          const result = await client.query(
-            `SELECT id FROM users WHERE role = 'branch_admin' AND status = 'active'`,
-          );
-          return result.rows.map((r: any) => r.id as number);
-        },
-      );
-
-      if (branchAdminIds.length > 0) {
-        await this.notificationsService.createBulk(
-          { userIds: branchAdminIds, ...notifPayload },
-          gymId,
-        );
-      }
-
-      /* Notify admin (gym owner) from public schema */
-      const gymAdmins = await this.prisma.userGymXref.findMany({
-        where: { gymId, role: 'admin', isActive: true },
-        select: { userId: true },
-      });
-
-      for (const admin of gymAdmins) {
-        try {
-          await this.notificationsService.create(
-            { userId: admin.userId, ...notifPayload },
-            gymId,
-          );
-        } catch {
-          this.notificationsGateway.emitToUser(gymId, admin.userId, {
-            id: 0,
-            userId: admin.userId,
-            branchId: null,
-            type: NotificationType.NEW_BRANCH_CREATED,
-            title: notifPayload.title,
-            message: notifPayload.message,
-            data: notifPayload.data,
-            isRead: false,
-            readAt: null,
-            actionUrl: null,
-            priority: NotificationPriority.NORMAL,
-            expiresAt: null,
-            createdAt: new Date(),
-            createdBy: null,
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to send branch creation notifications:', error);
-    }
+    await this.notificationHelper.notifyStaff(gymId, null, {
+      type: NotificationType.NEW_BRANCH_CREATED,
+      title: 'New Branch Created',
+      message: `Branch "${dto.name}" has been created.`,
+      data: {
+        entityId: branch.id,
+        entityType: 'branch',
+        metadata: { name: dto.name, code: dto.code.toUpperCase() },
+      },
+    });
 
     return branch;
   }
@@ -682,12 +624,12 @@ export class BranchService {
         });
 
         migrated++;
-        console.log(
+        this.logger.log(
           `Migrated gym ${gym.id} (${gym.name}) with branch ${branch.id}`,
         );
       } catch (error: any) {
         errors.push(`Gym ${gym.id} (${gym.name}): ${error.message}`);
-        console.error(`Failed to migrate gym ${gym.id}:`, error.message);
+        this.logger.error(`Failed to migrate gym ${gym.id}: ${error.message}`);
       }
     }
 

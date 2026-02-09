@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -61,6 +62,8 @@ export interface SearchUserResult {
 
 @Injectable()
 export class AttendanceService {
+  private readonly logger = new Logger(AttendanceService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
@@ -248,7 +251,7 @@ export class AttendanceService {
         user.id,
         user.name,
       )
-      .catch((err) => console.error('Failed to log attendance activity:', err));
+      .catch((err) => this.logger.error('Failed to log attendance activity', err));
 
     return {
       id: attendance.id,

@@ -1,21 +1,22 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
 @Injectable()
 export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
   private s3Client: S3Client;
   private bucket: string;
   private publicUrl: string;
 
   constructor() {
-    console.log('=== S3 Configuration ===');
-    console.log('Endpoint:', process.env.STORAGE_ENDPOINT);
-    console.log('Region:', process.env.STORAGE_REGION);
-    console.log('Bucket:', process.env.STORAGE_BUCKET);
-    console.log('Public URL:', process.env.STORAGE_PUBLIC_URL);
-    console.log('Access Key (first 8 chars):', process.env.STORAGE_ACCESS_KEY?.substring(0, 8));
-    console.log('========================');
+    this.logger.log('=== S3 Configuration ===');
+    this.logger.log('Endpoint:', process.env.STORAGE_ENDPOINT);
+    this.logger.log('Region:', process.env.STORAGE_REGION);
+    this.logger.log('Bucket:', process.env.STORAGE_BUCKET);
+    this.logger.log('Public URL:', process.env.STORAGE_PUBLIC_URL);
+    this.logger.log('Access Key (first 8 chars):', process.env.STORAGE_ACCESS_KEY?.substring(0, 8));
+    this.logger.log('========================');
 
     this.s3Client = new S3Client({
       endpoint: process.env.STORAGE_ENDPOINT,
@@ -143,7 +144,7 @@ export class UploadService {
 
     // Upload to S3 (Supabase Storage)
     try {
-      console.log('Attempting S3 upload:', { bucket: this.bucket, key: filename, contentType: compressed.contentType });
+      this.logger.log('Attempting S3 upload:', { bucket: this.bucket, key: filename, contentType: compressed.contentType });
       const result = await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
@@ -152,22 +153,22 @@ export class UploadService {
           ContentType: compressed.contentType,
         }),
       );
-      console.log('S3 Upload Success:', result);
+      this.logger.log('S3 Upload Success:', result);
     } catch (error: any) {
-      console.error('=== S3 Upload Error ===');
-      console.error('Error Name:', error.name);
-      console.error('Error Message:', error.message);
-      console.error('Error Code:', error.Code || error.$metadata?.httpStatusCode);
-      console.error('Bucket:', this.bucket);
-      console.error('Key:', filename);
-      console.error('Full Error:', JSON.stringify(error, null, 2));
-      console.error('=======================');
+      this.logger.error('=== S3 Upload Error ===');
+      this.logger.error('Error Name:', error.name);
+      this.logger.error('Error Message:', error.message);
+      this.logger.error('Error Code:', error.Code || error.$metadata?.httpStatusCode);
+      this.logger.error('Bucket:', this.bucket);
+      this.logger.error('Key:', filename);
+      this.logger.error('Full Error:', JSON.stringify(error, null, 2));
+      this.logger.error('=======================');
       throw new BadRequestException(`Failed to upload image: ${error.message || 'Unknown error'}`);
     }
 
     // Return public URL
     const url = `${this.publicUrl}/${filename}`;
-    console.log('Uploaded avatar:', { url, size: compressed.buffer.length });
+    this.logger.log('Uploaded avatar:', { url, size: compressed.buffer.length });
 
     return {
       url,
@@ -192,7 +193,7 @@ export class UploadService {
         }),
       );
     } catch (error) {
-      console.error('Failed to delete avatar:', error);
+      this.logger.error('Failed to delete avatar:', error);
       // Don't throw - deletion failure shouldn't break the flow
     }
   }
@@ -236,7 +237,7 @@ export class UploadService {
         }),
       );
     } catch (error) {
-      console.error('S3 Upload Error:', error);
+      this.logger.error('S3 Upload Error:', error);
       throw new BadRequestException('Failed to upload image. Please check storage configuration.');
     }
 
@@ -266,7 +267,7 @@ export class UploadService {
         }),
       );
     } catch (error) {
-      console.error('Failed to delete gym logo:', error);
+      this.logger.error('Failed to delete gym logo:', error);
       // Don't throw - deletion failure shouldn't break the flow
     }
   }

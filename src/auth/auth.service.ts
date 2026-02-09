@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
@@ -82,6 +83,7 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly OTP_EXPIRY_MINUTES = OTP_CONFIG.EXPIRY_MINUTES;
   private readonly VERIFICATION_EXPIRY_MINUTES = 30;
   private readonly MAX_OTP_ATTEMPTS = 5;
@@ -195,13 +197,8 @@ export class AuthService {
 
     // Block if user exists AND has verified email (completed signup properly)
     if (existingUser) {
-      console.log(
-        'Found existing user:',
-        existingUser.id,
-        'emailVerified:',
-        existingUser.emailVerified,
-        'gymAssignments:',
-        existingUser.gymAssignments?.length,
+      this.logger.log(
+        `Found existing user: ${existingUser.id} emailVerified: ${existingUser.emailVerified} gymAssignments: ${existingUser.gymAssignments?.length}`,
       );
 
       if (existingUser.emailVerified) {
@@ -210,7 +207,7 @@ export class AuthService {
 
       // User exists but email not verified - they didn't complete signup properly
       // Clean up everything and let them start fresh
-      console.log('Cleaning up incomplete user:', existingUser.id);
+      this.logger.log(`Cleaning up incomplete user: ${existingUser.id}`);
 
       // Delete gym assignments first
       if (
@@ -232,11 +229,10 @@ export class AuthService {
             });
             // Delete the gym
             await this.prisma.gym.delete({ where: { id: assignment.gymId } });
-            console.log('Cleaned up orphaned gym:', assignment.gymId);
+            this.logger.log(`Cleaned up orphaned gym: ${assignment.gymId}`);
           } catch (cleanupError) {
-            console.error(
-              'Failed to cleanup gym:',
-              assignment.gymId,
+            this.logger.error(
+              `Failed to cleanup gym: ${assignment.gymId}`,
               cleanupError,
             );
           }
@@ -248,9 +244,9 @@ export class AuthService {
         await this.prisma.user.delete({
           where: { id: existingUser.id },
         });
-        console.log('Deleted incomplete user:', existingUser.id);
+        this.logger.log(`Deleted incomplete user: ${existingUser.id}`);
       } catch (deleteError) {
-        console.error('Failed to delete incomplete user:', deleteError);
+        this.logger.error('Failed to delete incomplete user:', deleteError);
         throw new ConflictException(
           'User with this email already exists. Please try again later.',
         );
@@ -284,7 +280,7 @@ export class AuthService {
           isActive: true,
         },
       });
-      console.log('Gym created:', gym.id);
+      this.logger.log(`Gym created: ${gym.id}`);
 
       // Update tenant schema name with the gym ID
       const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
@@ -292,15 +288,15 @@ export class AuthService {
         where: { id: gym.id },
         data: { tenantSchemaName },
       });
-      console.log('Tenant schema name updated:', tenantSchemaName);
+      this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
 
       // Create the tenant schema with all tables (for clients)
       await this.tenantService.createTenantSchema(gym.id);
-      console.log('Tenant schema created');
+      this.logger.log('Tenant schema created');
 
       // Create default branch for the gym
       await this.branchService.createDefaultBranch(gym.id, gym);
-      console.log('Default branch created');
+      this.logger.log('Default branch created');
 
       // Create admin user in PUBLIC.users (not tenant schema)
       createdUser = await this.prisma.user.create({
@@ -312,16 +308,16 @@ export class AuthService {
           status: 'active',
         },
       });
-      console.log('User created:', createdUser.id);
+      this.logger.log(`User created: ${createdUser.id}`);
     } catch (error: any) {
-      console.error('Registration error:', error.message || error);
+      this.logger.error('Registration error:', error.message || error);
       // Clean up gym if it was created but user creation failed
       if (gym?.id && !createdUser) {
         try {
           await this.prisma.gym.delete({ where: { id: gym.id } });
-          console.log('Cleaned up orphaned gym:', gym.id);
+          this.logger.log(`Cleaned up orphaned gym: ${gym.id}`);
         } catch (cleanupError) {
-          console.error('Failed to clean up gym:', cleanupError);
+          this.logger.error('Failed to clean up gym:', cleanupError);
         }
       }
       throw error;
@@ -396,7 +392,7 @@ export class AuthService {
         this.VERIFICATION_EXPIRY_MINUTES,
       )
       .catch((error) => {
-        console.error('Failed to send verification email:', error);
+        this.logger.error('Failed to send verification email:', error);
       });
 
     // Notify superadmins about new gym registration (non-blocking)
@@ -407,7 +403,7 @@ export class AuthService {
         ownerName: dto.user.name,
       })
       .catch((error) => {
-        console.error('Failed to send new gym notification:', error);
+        this.logger.error('Failed to send new gym notification:', error);
       });
 
     // Get the subscription we just created
@@ -1746,13 +1742,13 @@ export class AuthService {
       );
 
       if (!emailResult.success) {
-        console.error('Email sending failed:', emailResult.error);
+        this.logger.error('Email sending failed:', emailResult.error);
         throw new BadRequestException(
           'Failed to send verification email. Please try again.',
         );
       }
     } catch (error) {
-      console.error('Email sending error:', error);
+      this.logger.error('Email sending error:', error);
       throw new BadRequestException(
         'Failed to send verification email. Please try again.',
       );
@@ -2058,7 +2054,7 @@ export class AuthService {
         picture: userInfo.picture,
       };
     } catch (error) {
-      console.error('Google OAuth error:', error);
+      this.logger.error('Google OAuth error:', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -2288,7 +2284,7 @@ export class AuthService {
           isActive: true,
         },
       });
-      console.log('Gym created:', gym.id);
+      this.logger.log(`Gym created: ${gym.id}`);
 
       // Update tenant schema name with the gym ID
       const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
@@ -2296,15 +2292,15 @@ export class AuthService {
         where: { id: gym.id },
         data: { tenantSchemaName },
       });
-      console.log('Tenant schema name updated:', tenantSchemaName);
+      this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
 
       // Create the tenant schema with all tables (for clients)
       await this.tenantService.createTenantSchema(gym.id);
-      console.log('Tenant schema created');
+      this.logger.log('Tenant schema created');
 
       // Create default branch for the gym
       await this.branchService.createDefaultBranch(gym.id, gym);
-      console.log('Default branch created');
+      this.logger.log('Default branch created');
 
       // Create admin user in PUBLIC.users with googleId
       createdUser = await this.prisma.user.create({
@@ -2318,16 +2314,16 @@ export class AuthService {
           emailVerified: true, // Google email is already verified
         },
       });
-      console.log('User created:', createdUser.id);
+      this.logger.log(`User created: ${createdUser.id}`);
     } catch (error: any) {
-      console.error('Google registration error:', error.message || error);
+      this.logger.error('Google registration error:', error.message || error);
       // Clean up gym if it was created but user creation failed
       if (gym?.id && !createdUser) {
         try {
           await this.prisma.gym.delete({ where: { id: gym.id } });
-          console.log('Cleaned up orphaned gym:', gym.id);
+          this.logger.log(`Cleaned up orphaned gym: ${gym.id}`);
         } catch (cleanupError) {
-          console.error('Failed to clean up gym:', cleanupError);
+          this.logger.error('Failed to clean up gym:', cleanupError);
         }
       }
       throw error;
@@ -2384,7 +2380,7 @@ export class AuthService {
         ownerName: dto.user.name,
       })
       .catch((error) => {
-        console.error('Failed to send new gym notification:', error);
+        this.logger.error('Failed to send new gym notification:', error);
       });
 
     const gymAssignment: GymAssignment = {
