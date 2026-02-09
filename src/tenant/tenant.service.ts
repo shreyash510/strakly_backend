@@ -1,8 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
 
 @Injectable()
 export class TenantService implements OnModuleInit {
+  private readonly logger = new Logger(TenantService.name);
   private pool: Pool;
 
   constructor() {
@@ -16,7 +17,7 @@ export class TenantService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    console.log('TenantService initialized');
+    this.logger.log('TenantService initialized');
     // Run migrations to ensure all tenant schemas have required columns
     await this.migrateAllTenantSchemas();
   }
@@ -33,7 +34,7 @@ export class TenantService implements OnModuleInit {
         WHERE schema_name LIKE 'tenant_%'
       `);
 
-      console.log(
+      this.logger.log(
         `Found ${schemasResult.rows.length} tenant schemas to migrate`,
       );
 
@@ -42,14 +43,14 @@ export class TenantService implements OnModuleInit {
         try {
           await this.migrateTenantSchema(client, schemaName);
         } catch (error) {
-          console.error(
+          this.logger.error(
             `Failed to migrate schema ${schemaName}:`,
             error.message,
           );
         }
       }
 
-      console.log('Tenant schema migrations completed');
+      this.logger.log('Tenant schema migrations completed');
     } finally {
       client.release();
     }
@@ -62,7 +63,7 @@ export class TenantService implements OnModuleInit {
     client: any,
     schemaName: string,
   ): Promise<void> {
-    console.log(`Migrating schema: ${schemaName}`);
+    this.logger.log(`Migrating schema: ${schemaName}`);
 
     // Always try to add the role column (IF NOT EXISTS handles the case where it already exists)
     try {
@@ -70,9 +71,9 @@ export class TenantService implements OnModuleInit {
         ALTER TABLE "${schemaName}".users
         ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'client'
       `);
-      console.log(`Ensured 'role' column exists in ${schemaName}.users`);
+      this.logger.log(`Ensured 'role' column exists in ${schemaName}.users`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error adding role column to ${schemaName}:`,
         error.message,
       );
@@ -132,7 +133,7 @@ export class TenantService implements OnModuleInit {
         await this.seedDefaultPlans(client, schemaName);
       }
     } catch (error) {
-      console.error(`Error seeding plans for ${schemaName}:`, error.message);
+      this.logger.error(`Error seeding plans for ${schemaName}:`, error.message);
     }
   }
 
@@ -164,11 +165,11 @@ export class TenantService implements OnModuleInit {
           ALTER TABLE "${schemaName}"."${table}"
           ADD COLUMN IF NOT EXISTS branch_id INTEGER
         `);
-        console.log(
+        this.logger.log(
           `Ensured 'branch_id' column exists in ${schemaName}.${table}`,
         );
       } catch (error) {
-        console.error(
+        this.logger.error(
           `Error adding branch_id to ${schemaName}.${table}:`,
           error.message,
         );
@@ -195,10 +196,10 @@ export class TenantService implements OnModuleInit {
       try {
         await client.query(query);
       } catch (error) {
-        console.error(`Error creating index for ${schemaName}:`, error.message);
+        this.logger.error(`Error creating index for ${schemaName}:`, error.message);
       }
     }
-    console.log(`Created branch_id indexes for ${schemaName}`);
+    this.logger.log(`Created branch_id indexes for ${schemaName}`);
   }
 
   /**
@@ -234,9 +235,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_facilities_active" ON "${schemaName}"."facilities"(is_active)`,
       );
-      console.log(`Ensured 'facilities' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'facilities' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating facilities table for ${schemaName}:`,
         error.message,
       );
@@ -268,9 +269,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_amenities_active" ON "${schemaName}"."amenities"(is_active)`,
       );
-      console.log(`Ensured 'amenities' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'amenities' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating amenities table for ${schemaName}:`,
         error.message,
       );
@@ -301,11 +302,11 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_facilities_facility" ON "${schemaName}"."membership_facilities"(facility_id)`,
       );
-      console.log(
+      this.logger.log(
         `Ensured 'membership_facilities' table exists in ${schemaName}`,
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating membership_facilities table for ${schemaName}:`,
         error.message,
       );
@@ -328,11 +329,11 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_amenities_amenity" ON "${schemaName}"."membership_amenities"(amenity_id)`,
       );
-      console.log(
+      this.logger.log(
         `Ensured 'membership_amenities' table exists in ${schemaName}`,
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating membership_amenities table for ${schemaName}:`,
         error.message,
       );
@@ -382,9 +383,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_plans_created_by" ON "${schemaName}"."workout_plans"(created_by)`,
       );
-      console.log(`Ensured 'workout_plans' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'workout_plans' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating workout_plans table for ${schemaName}:`,
         error.message,
       );
@@ -419,11 +420,11 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_status" ON "${schemaName}"."workout_assignments"(status)`,
       );
-      console.log(
+      this.logger.log(
         `Ensured 'workout_assignments' table exists in ${schemaName}`,
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating workout_assignments table for ${schemaName}:`,
         error.message,
       );
@@ -471,9 +472,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`,
       );
-      console.log(`Ensured 'notifications' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'notifications' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating notifications table for ${schemaName}:`,
         error.message,
       );
@@ -510,9 +511,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`,
       );
-      console.log(`Ensured 'user_branch_xref' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'user_branch_xref' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating user_branch_xref table for ${schemaName}:`,
         error.message,
       );
@@ -534,9 +535,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`,
       );
-      console.log(`Ensured 'status_id' column exists in ${schemaName}.users`);
+      this.logger.log(`Ensured 'status_id' column exists in ${schemaName}.users`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error adding status_id column to ${schemaName}:`,
         error.message,
       );
@@ -587,11 +588,11 @@ export class TenantService implements OnModuleInit {
           ON "${schemaName}"."${table}"(is_deleted) WHERE is_deleted = FALSE
         `);
 
-        console.log(
+        this.logger.log(
           `Ensured soft delete columns exist in ${schemaName}.${table}`,
         );
       } catch (error) {
-        console.error(
+        this.logger.error(
           `Error adding soft delete columns to ${schemaName}.${table}:`,
           error.message,
         );
@@ -646,9 +647,9 @@ export class TenantService implements OnModuleInit {
         ON "${schemaName}"."attendance_history"(attendance_date)
       `);
 
-      console.log(`Migrated date columns for ${schemaName}`);
+      this.logger.log(`Migrated date columns for ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error migrating date columns in ${schemaName}:`,
         error.message,
       );
@@ -693,9 +694,9 @@ export class TenantService implements OnModuleInit {
         END $$;
       `);
 
-      console.log(`Added status CHECK constraints for ${schemaName}`);
+      this.logger.log(`Added status CHECK constraints for ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error adding status constraints in ${schemaName}:`,
         error.message,
       );
@@ -737,13 +738,13 @@ export class TenantService implements OnModuleInit {
       try {
         await client.query(indexQuery);
       } catch (error) {
-        console.error(
+        this.logger.error(
           `Error creating performance index in ${schemaName}:`,
           error.message,
         );
       }
     }
-    console.log(`Created performance indexes for ${schemaName}`);
+    this.logger.log(`Created performance indexes for ${schemaName}`);
   }
 
   /**
@@ -823,9 +824,9 @@ export class TenantService implements OnModuleInit {
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_created" ON "${schemaName}"."payments"(created_at DESC)`,
       );
 
-      console.log(`Ensured 'payments' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'payments' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating payments table for ${schemaName}:`,
         error.message,
       );
@@ -865,9 +866,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_history_created" ON "${schemaName}"."user_history"(created_at DESC)`,
       );
-      console.log(`Ensured 'user_history' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'user_history' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating user_history table for ${schemaName}:`,
         error.message,
       );
@@ -897,9 +898,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_plan_history_created" ON "${schemaName}"."plan_history"(created_at DESC)`,
       );
-      console.log(`Ensured 'plan_history' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'plan_history' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating plan_history table for ${schemaName}:`,
         error.message,
       );
@@ -931,9 +932,9 @@ export class TenantService implements OnModuleInit {
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_salary_history_created" ON "${schemaName}"."salary_history"(created_at DESC)`,
       );
-      console.log(`Ensured 'salary_history' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'salary_history' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating salary_history table for ${schemaName}:`,
         error.message,
       );
@@ -1001,9 +1002,9 @@ export class TenantService implements OnModuleInit {
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_branch_created" ON "${schemaName}"."activity_logs"(branch_id, created_at DESC)`,
       );
 
-      console.log(`Ensured 'activity_logs' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'activity_logs' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating activity_logs table for ${schemaName}:`,
         error.message,
       );
@@ -1065,9 +1066,9 @@ export class TenantService implements OnModuleInit {
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_type" ON "${schemaName}"."announcements"(type)`,
       );
 
-      console.log(`Ensured 'announcements' table exists in ${schemaName}`);
+      this.logger.log(`Ensured 'announcements' table exists in ${schemaName}`);
     } catch (error) {
-      console.error(
+      this.logger.error(
         `Error creating announcements table for ${schemaName}:`,
         error.message,
       );
@@ -1101,10 +1102,10 @@ export class TenantService implements OnModuleInit {
       await this.seedDefaultPlans(client, schemaName);
 
       await client.query('COMMIT');
-      console.log(`Created tenant schema: ${schemaName}`);
+      this.logger.log(`Created tenant schema: ${schemaName}`);
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error(`Failed to create tenant schema ${schemaName}:`, error);
+      this.logger.error(`Failed to create tenant schema ${schemaName}:`, error);
       throw error;
     } finally {
       client.release();
@@ -1871,7 +1872,7 @@ export class TenantService implements OnModuleInit {
       }
     }
 
-    console.log(`Seeded default plans for ${schemaName}`);
+    this.logger.log(`Seeded default plans for ${schemaName}`);
   }
 
   /**
@@ -1883,7 +1884,7 @@ export class TenantService implements OnModuleInit {
 
     try {
       await client.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      console.log(`Dropped tenant schema: ${schemaName}`);
+      this.logger.log(`Dropped tenant schema: ${schemaName}`);
     } finally {
       client.release();
     }

@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
@@ -12,6 +13,8 @@ import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 
 @Injectable()
 export class LookupsService {
+  private readonly logger = new Logger(LookupsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ============ LOOKUP TYPES ============
@@ -223,7 +226,7 @@ export class LookupsService {
         results.push(created);
       } catch (error) {
         // Skip duplicates
-        console.log(`Skipping duplicate lookup: ${dto.code}`);
+        this.logger.log(`Skipping duplicate lookup: ${dto.code}`);
       }
     }
 

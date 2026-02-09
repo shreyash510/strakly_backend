@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
+import { NotificationHelperService } from './notification-helper.service';
 import { NotificationsScheduler } from './notifications.scheduler';
 import { NotificationsGateway } from './notifications.gateway';
 
@@ -22,9 +23,10 @@ import { NotificationsGateway } from './notifications.gateway';
   controllers: [NotificationsController],
   providers: [
     NotificationsService,
+    NotificationHelperService,
     NotificationsScheduler,
     NotificationsGateway,
   ],
-  exports: [NotificationsService, NotificationsGateway],
+  exports: [NotificationsService, NotificationHelperService, NotificationsGateway],
 })
 export class NotificationsModule {}

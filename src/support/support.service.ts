@@ -92,7 +92,7 @@ export class SupportService {
         priority: ticket.priority,
       })
       .catch((error) => {
-        console.error('Failed to send support ticket notification:', error);
+        this.logger.error('Failed to send support ticket notification', error);
       });
 
     return this.findOne(ticket.id, userId, undefined, gymId);
