@@ -45,14 +45,14 @@ export class BranchService {
   async findAll(
     gymId: number,
     filters: BranchFilters = {},
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
 
     // Verify gym exists
     await this.verifyGymExists(gymId);
 
-    const where: any = { gymId };
+    const where: Record<string, any> = { gymId };
 
     // Handle active filter
     if (!filters.includeInactive) {
@@ -330,7 +330,7 @@ export class BranchService {
   /**
    * Create default branch for a gym (used when gym is created)
    */
-  async createDefaultBranch(gymId: number, gym: any) {
+  async createDefaultBranch(gymId: number, gym: Record<string, any>) {
     return this.prisma.branch.create({
       data: {
         gymId,
@@ -508,7 +508,7 @@ export class BranchService {
   /**
    * Get member's current branch
    */
-  async getMemberBranch(gymId: number, memberId: number): Promise<any | null> {
+  async getMemberBranch(gymId: number, memberId: number): Promise<Record<string, any> | null> {
     const member = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -627,9 +627,10 @@ export class BranchService {
         this.logger.log(
           `Migrated gym ${gym.id} (${gym.name}) with branch ${branch.id}`,
         );
-      } catch (error: any) {
-        errors.push(`Gym ${gym.id} (${gym.name}): ${error.message}`);
-        this.logger.error(`Failed to migrate gym ${gym.id}: ${error.message}`);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        errors.push(`Gym ${gym.id} (${gym.name}): ${msg}`);
+        this.logger.error(`Failed to migrate gym ${gym.id}: ${msg}`);
       }
     }
 

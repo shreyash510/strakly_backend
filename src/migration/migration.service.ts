@@ -3,6 +3,7 @@ import { TenantService } from '../tenant/tenant.service';
 import * as ExcelJS from 'exceljs';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { SqlValue } from '../common/types';
 import type {
   DataType,
   FieldDef,
@@ -132,8 +133,10 @@ export class MigrationService {
     const ext = file.originalname.toLowerCase();
 
     if (ext.endsWith('.csv')) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await workbook.csv.read(this.bufferToStream(file.buffer) as any);
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await workbook.xlsx.load(file.buffer as any);
     }
 
@@ -427,8 +430,9 @@ export class MigrationService {
             ],
           );
           imported++;
-        } catch (err: any) {
-          errors.push({ row: rowNum, field: 'general', message: err.message });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ row: rowNum, field: 'general', message: msg });
         }
       }
     });
@@ -486,8 +490,9 @@ export class MigrationService {
             ],
           );
           imported++;
-        } catch (err: any) {
-          errors.push({ row: rowNum, field: 'general', message: err.message });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ row: rowNum, field: 'general', message: msg });
         }
       }
     });
@@ -525,7 +530,7 @@ export class MigrationService {
 
           /* resolve plan by name */
           let planQuery = 'SELECT id, price FROM plans WHERE LOWER(name) = LOWER($1)';
-          const planParams: any[] = [data.planName];
+          const planParams: SqlValue[] = [data.planName];
           if (branchId) {
             planQuery += ' AND branch_id = $2';
             planParams.push(branchId);
@@ -566,8 +571,9 @@ export class MigrationService {
             ],
           );
           imported++;
-        } catch (err: any) {
-          errors.push({ row: rowNum, field: 'general', message: err.message });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ row: rowNum, field: 'general', message: msg });
         }
       }
     });
@@ -617,8 +623,9 @@ export class MigrationService {
             ],
           );
           imported++;
-        } catch (err: any) {
-          errors.push({ row: rowNum, field: 'general', message: err.message });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ row: rowNum, field: 'general', message: msg });
         }
       }
     });
@@ -658,7 +665,7 @@ export class MigrationService {
     return mapped;
   }
 
-  private async generateAttendanceCode(client: any): Promise<string> {
+  private async generateAttendanceCode(client: Record<string, any>): Promise<string> {
     let code: string;
     let exists = true;
     do {

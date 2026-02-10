@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationType, NotificationPriority } from './notification-types';
+import { SqlValue } from '../common/types';
 
 export interface NotifyStaffPayload {
   type: NotificationType;
@@ -48,7 +49,7 @@ export class NotificationHelperService {
         gymId,
         async (client) => {
           let query = `SELECT id FROM users WHERE role IN ('branch_admin', 'manager') AND status = 'active'`;
-          const params: any[] = [];
+          const params: SqlValue[] = [];
 
           if (branchId) {
             params.push(branchId);
@@ -56,7 +57,7 @@ export class NotificationHelperService {
           }
 
           const result = await client.query(query, params);
-          return result.rows.map((r: any) => r.id as number);
+          return result.rows.map((r: Record<string, any>) => r.id as number);
         },
       );
 

@@ -18,6 +18,7 @@ import {
   RenewMembershipDto,
   RecordPaymentDto,
 } from './dto/membership.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class MembershipsService {
@@ -51,7 +52,7 @@ export class MembershipsService {
       async (client) => {
         // Start with soft delete filter
         let whereClause = '(m.is_deleted = FALSE OR m.is_deleted IS NULL)';
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering: null = admin (all branches), number = specific branch
@@ -108,12 +109,12 @@ export class MembershipsService {
     );
 
     return {
-      data: memberships.map((m: any) => this.formatMembership(m)),
+      data: memberships.map((m: Record<string, any>) => this.formatMembership(m)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  private formatMembership(m: any) {
+  private formatMembership(m: Record<string, any>) {
     return {
       id: m.id,
       branchId: m.branch_id,
@@ -174,7 +175,7 @@ export class MembershipsService {
          LEFT JOIN plans p ON p.id = m.plan_id
          LEFT JOIN offers o ON o.id = m.offer_id
          WHERE m.id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -208,7 +209,7 @@ export class MembershipsService {
          LEFT JOIN plans p ON p.id = m.plan_id
          LEFT JOIN offers o ON o.id = m.offer_id
          WHERE m.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -223,7 +224,7 @@ export class MembershipsService {
       },
     );
 
-    return memberships.map((m: any) => this.formatMembership(m));
+    return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
   async getHistory(
@@ -241,7 +242,7 @@ export class MembershipsService {
       async (client) => {
         let whereClause =
           'm.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)';
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
         let paramIndex = 2;
 
         // Branch filtering
@@ -278,7 +279,7 @@ export class MembershipsService {
     );
 
     return {
-      data: memberships.map((m: any) => this.formatMembership(m)),
+      data: memberships.map((m: Record<string, any>) => this.formatMembership(m)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -382,7 +383,7 @@ export class MembershipsService {
     }
 
     // Get offer if provided
-    let offer: any = null;
+    let offer: Record<string, any> | null = null;
     let discountAmount = 0;
     if (dto.offerCode) {
       offer = await this.tenantService.executeInTenant(
@@ -600,7 +601,7 @@ export class MembershipsService {
   async getMembershipFacilitiesAndAmenities(
     membershipId: number,
     gymId: number,
-  ): Promise<{ facilities: any[]; amenities: any[] }> {
+  ): Promise<{ facilities: Record<string, any>[]; amenities: Record<string, any>[] }> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const [facilitiesResult, amenitiesResult] = await Promise.all([
         client.query(
@@ -622,14 +623,14 @@ export class MembershipsService {
       ]);
 
       return {
-        facilities: facilitiesResult.rows.map((f: any) => ({
+        facilities: facilitiesResult.rows.map((f: Record<string, any>) => ({
           id: f.id,
           name: f.name,
           code: f.code,
           description: f.description,
           icon: f.icon,
         })),
-        amenities: amenitiesResult.rows.map((a: any) => ({
+        amenities: amenitiesResult.rows.map((a: Record<string, any>) => ({
           id: a.id,
           name: a.name,
           code: a.code,
@@ -648,7 +649,7 @@ export class MembershipsService {
     gymId: number,
     facilityIds: number[],
     amenityIds: number[],
-  ): Promise<{ facilities: any[]; amenities: any[] }> {
+  ): Promise<{ facilities: Record<string, any>[]; amenities: Record<string, any>[] }> {
     // Verify membership exists
     await this.findOne(membershipId, gymId);
 
@@ -670,7 +671,7 @@ export class MembershipsService {
     await this.findOne(id, gymId); // Verify exists
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.status) {
@@ -826,7 +827,7 @@ export class MembershipsService {
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE m.status = 'active' AND m.end_date >= $1 AND m.end_date <= $2
            AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
-        const values: any[] = [now, futureDate];
+        const values: SqlValue[] = [now, futureDate];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -841,7 +842,7 @@ export class MembershipsService {
       },
     );
 
-    return memberships.map((m: any) => this.formatMembership(m));
+    return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
   async getStats(gymId: number, branchId: number | null = null) {
@@ -914,7 +915,7 @@ export class MembershipsService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
-      const values: any[] = [];
+      const values: SqlValue[] = [];
 
       // Branch filtering: show branch-specific plans + global plans (branch_id IS NULL)
       if (branchId !== null) {
@@ -925,7 +926,7 @@ export class MembershipsService {
       query += ` ORDER BY display_order ASC`;
 
       const result = await client.query(query, values);
-      return result.rows.map((p: any) => ({
+      return result.rows.map((p: Record<string, any>) => ({
         id: p.id,
         code: p.code,
         name: p.name,
@@ -941,7 +942,7 @@ export class MembershipsService {
       let query = `SELECT plan_id, COUNT(*) as count
          FROM memberships
          WHERE status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-      const values: any[] = [];
+      const values: SqlValue[] = [];
 
       // Branch filtering for non-admin users
       if (branchId !== null) {
@@ -952,7 +953,7 @@ export class MembershipsService {
       query += ` GROUP BY plan_id ORDER BY count DESC`;
 
       const result = await client.query(query, values);
-      return result.rows.map((row: any) => ({
+      return result.rows.map((row: Record<string, any>) => ({
         planId: row.plan_id,
         count: parseInt(row.count, 10),
       }));
@@ -973,7 +974,7 @@ export class MembershipsService {
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering for non-admin users
@@ -990,7 +991,7 @@ export class MembershipsService {
       },
     );
 
-    return memberships.map((m: any) => this.formatMembership(m));
+    return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
   async renew(

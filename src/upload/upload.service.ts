@@ -154,16 +154,18 @@ export class UploadService {
         }),
       );
       this.logger.log('S3 Upload Success:', result);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Record<string, any>;
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error('=== S3 Upload Error ===');
-      this.logger.error('Error Name:', error.name);
-      this.logger.error('Error Message:', error.message);
-      this.logger.error('Error Code:', error.Code || error.$metadata?.httpStatusCode);
+      this.logger.error('Error Name:', err.name);
+      this.logger.error('Error Message:', msg);
+      this.logger.error('Error Code:', err.Code || err.$metadata?.httpStatusCode);
       this.logger.error('Bucket:', this.bucket);
       this.logger.error('Key:', filename);
       this.logger.error('Full Error:', JSON.stringify(error, null, 2));
       this.logger.error('=======================');
-      throw new BadRequestException(`Failed to upload image: ${error.message || 'Unknown error'}`);
+      throw new BadRequestException(`Failed to upload image: ${msg || 'Unknown error'}`);
     }
 
     // Return public URL

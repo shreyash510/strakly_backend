@@ -107,7 +107,7 @@ export class PermissionsService {
     });
 
     // Group by role
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, Record<string, any>[]> = {};
     for (const rp of rolePermissions) {
       if (!grouped[rp.role]) {
         grouped[rp.role] = [];
@@ -127,7 +127,7 @@ export class PermissionsService {
     });
 
     // Create new role permissions
-    const results: any[] = [];
+    const results: Record<string, any>[] = [];
     for (const code of permissionCodes) {
       const permission = await this.prisma.permission.findUnique({
         where: { code },

@@ -35,6 +35,7 @@ import {
   BulkCreateUserDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
@@ -62,7 +63,7 @@ export class UsersController {
    * - If user is admin with access to all branches, use query param if provided
    * - Otherwise return null (all branches)
    */
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -136,7 +137,7 @@ export class UsersController {
   @ApiQuery({ name: 'joinDateFrom', required: false, type: String, description: 'Filter join date from (YYYY-MM-DD)' })
   @ApiQuery({ name: 'joinDateTo', required: false, type: String, description: 'Filter join date to (YYYY-MM-DD)' })
   async findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @CurrentUser() user: AuthenticatedUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -642,7 +643,7 @@ export class UsersController {
     description: 'Gym ID (required for superadmin)',
   })
   async getStatusCounts(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @CurrentUser() user: AuthenticatedUser,
     @Query('role') role: string,
     @Query('branchId') queryBranchId?: string,

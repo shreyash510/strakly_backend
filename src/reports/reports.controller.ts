@@ -19,6 +19,7 @@ import { PdfTemplateService } from './pdf-template.service';
 import { ReportFilterDto } from './dto/reports.dto';
 import { PdfReportFilterDto } from './dto/pdf-report.dto';
 import { ClientReportFilterDto } from './dto/client-reports.dto';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -30,7 +31,7 @@ export class ReportsController {
     private readonly pdfTemplateService: PdfTemplateService,
   ) {}
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -77,11 +78,11 @@ export class ReportsController {
   })
   async downloadPdfReport(
     @Query() filters: PdfReportFilterDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Res() res: Response,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
+    const gymId = req.user.gymId!;
     const branchId = this.resolveBranchId(req, queryBranchId);
 
     const fullData = await this.reportsService.getFullReportData(
@@ -117,10 +118,10 @@ export class ReportsController {
   })
   async getIncomeExpenseReport(
     @Query() filters: ReportFilterDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
+    const gymId = req.user.gymId!;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getIncomeExpenseReport(gymId, filters, branchId);
   }
@@ -135,10 +136,10 @@ export class ReportsController {
   })
   async getMembershipSalesReport(
     @Query() filters: ReportFilterDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
+    const gymId = req.user.gymId!;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getMembershipSalesReport(
       gymId,
@@ -156,10 +157,10 @@ export class ReportsController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getPaymentDuesReport(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
+    const gymId = req.user.gymId!;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getPaymentDuesReport(gymId, branchId);
   }
@@ -178,11 +179,11 @@ export class ReportsController {
     description: 'Branch ID for filtering',
   })
   async getTrainerClientsSummary(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
-    const trainerId = req.user.id;
+    const gymId = req.user.gymId!;
+    const trainerId = req.user.userId;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getTrainerClientsSummary(
       trainerId,
@@ -216,11 +217,11 @@ export class ReportsController {
   async getClientProgressReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
-    const trainerId = req.user.id;
+    const gymId = req.user.gymId!;
+    const trainerId = req.user.userId;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getClientProgressReport(
       trainerId,
@@ -256,11 +257,11 @@ export class ReportsController {
   async getClientAttendanceReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ) {
-    const gymId = req.user.gymId;
-    const trainerId = req.user.id;
+    const gymId = req.user.gymId!;
+    const trainerId = req.user.userId;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getClientAttendanceReport(
       trainerId,

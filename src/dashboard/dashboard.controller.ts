@@ -10,6 +10,7 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthenticatedRequest } from '../common/types';
 import {
   SuperadminDashboardDto,
   AdminDashboardDto,
@@ -24,7 +25,7 @@ import {
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -87,7 +88,7 @@ export class DashboardController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getAdminDashboard(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ): Promise<AdminDashboardDto> {
     const userId = req.user?.userId;
@@ -115,7 +116,7 @@ export class DashboardController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getClientDashboard(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('branchId') queryBranchId?: string,
   ): Promise<ClientDashboardDto> {
     const userId = req.user?.userId;
@@ -155,7 +156,7 @@ export class DashboardController {
     description: 'Branch ID for filtering',
   })
   async getNewClients(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('branchId') queryBranchId?: string,
@@ -201,7 +202,7 @@ export class DashboardController {
     description: 'Branch ID for filtering',
   })
   async getNewInquiries(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('branchId') queryBranchId?: string,

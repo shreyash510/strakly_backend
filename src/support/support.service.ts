@@ -103,13 +103,13 @@ export class SupportService {
     userRole: string,
     userId?: number,
     userGymId?: number,
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
     const isSuperadmin = userRole === 'superadmin';
     const isAdmin = ['superadmin', 'admin'].includes(userRole);
 
-    const where: any = { isActive: true };
+    const where: Record<string, any> = { isActive: true };
 
     // Multi-tenancy: Filter by gym
     if (isSuperadmin) {
@@ -320,7 +320,7 @@ export class SupportService {
         throw new ForbiddenException('You can only update your own tickets');
       }
       const allowedFields = ['subject', 'description', 'category'];
-      const updateData: any = {};
+      const updateData: Record<string, any> = {};
       for (const field of allowedFields) {
         if (updateTicketDto[field] !== undefined) {
           updateData[field] = updateTicketDto[field];
@@ -332,7 +332,7 @@ export class SupportService {
       });
     }
 
-    const updateData: any = { ...updateTicketDto };
+    const updateData: Record<string, any> = { ...updateTicketDto };
 
     if (updateTicketDto.status === 'resolved' && !ticket.resolvedAt) {
       updateData.resolvedAt = new Date();
@@ -356,9 +356,10 @@ export class SupportService {
           ticketNumber: ticket.ticketNumber,
           subject: ticket.subject,
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
+          const msg = error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to send ticket resolved notification: ${error.message}`,
+            `Failed to send ticket resolved notification: ${msg}`,
           );
         });
 
@@ -371,9 +372,10 @@ export class SupportService {
           ticket.subject,
           updateTicketDto.resolution,
         )
-        .catch((error) => {
+        .catch((error: unknown) => {
+          const msg = error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to send ticket resolved email: ${error.message}`,
+            `Failed to send ticket resolved email: ${msg}`,
           );
         });
     }
@@ -472,7 +474,7 @@ export class SupportService {
   }
 
   async getStats(gymId?: number) {
-    const where: any = { isActive: true };
+    const where: Record<string, any> = { isActive: true };
 
     if (gymId) {
       where.gymId = gymId;

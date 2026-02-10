@@ -31,6 +31,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('saas-subscriptions')
 @Controller('saas-subscriptions')
@@ -130,7 +131,7 @@ export class SaasSubscriptionsController {
   @Get('me')
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym subscription' })
-  getMySubscription(@Request() req: any) {
+  getMySubscription(@Request() req: AuthenticatedRequest) {
     const gymId = req.user.gymId;
     if (!gymId) {
       throw new BadRequestException('No gym associated with this account');
@@ -192,7 +193,7 @@ export class SaasSubscriptionsController {
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   getMyPaymentHistory(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,

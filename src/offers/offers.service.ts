@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class OffersService {
@@ -15,7 +16,7 @@ export class OffersService {
     private readonly tenantService: TenantService,
   ) {}
 
-  private formatOffer(o: any) {
+  private formatOffer(o: Record<string, any>) {
     return {
       id: o.id,
       branchId: o.branch_id,
@@ -44,7 +45,7 @@ export class OffersService {
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (!includeInactive) {
@@ -64,14 +65,14 @@ export class OffersService {
         `SELECT * FROM offers ${whereClause} ORDER BY created_at DESC`,
         values,
       );
-      return result.rows.map((o: any) => this.formatOffer(o));
+      return result.rows.map((o: Record<string, any>) => this.formatOffer(o));
     });
   }
 
   async findActive(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-      const values: any[] = [];
+      const values: SqlValue[] = [];
 
       // Branch filtering for non-admin users
       if (branchId !== null) {
@@ -82,7 +83,7 @@ export class OffersService {
       query += ` ORDER BY valid_to ASC`;
 
       const result = await client.query(query, values);
-      return result.rows.map((o: any) => this.formatOffer(o));
+      return result.rows.map((o: Record<string, any>) => this.formatOffer(o));
     });
   }
 
@@ -91,7 +92,7 @@ export class OffersService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM offers WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -120,7 +121,7 @@ export class OffersService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [code];
+        const values: SqlValue[] = [code];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -149,7 +150,7 @@ export class OffersService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [code];
+        const values: SqlValue[] = [code];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -243,7 +244,7 @@ export class OffersService {
     await this.findOne(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.name) {

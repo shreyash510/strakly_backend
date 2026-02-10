@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
+import { SqlValue } from '../common/types';
 import { AttendanceService } from '../attendance/attendance.service';
 import {
   ReportFilterDto,
@@ -48,7 +49,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `payment_status = 'paid'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -84,7 +85,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `s.payment_status = 'paid'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering via staff's branch_id
@@ -123,7 +124,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const values: any[] = [year];
+        const values: SqlValue[] = [year];
         let paramIndex = 2;
 
         // Branch filtering
@@ -143,7 +144,7 @@ export class ReportsService {
           ORDER BY month_num`,
           values,
         );
-        return result.rows.map((r: any) => ({
+        return result.rows.map((r: Record<string, any>) => ({
           month: r.month,
           amount: parseFloat(r.amount),
         }));
@@ -155,7 +156,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `s.payment_status = 'paid' AND s.year = $1`;
-        const values: any[] = [year];
+        const values: SqlValue[] = [year];
         let paramIndex = 2;
 
         // Branch filtering via staff's branch_id
@@ -190,7 +191,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const values: any[] = [year];
+        const values: SqlValue[] = [year];
         let paramIndex = 2;
 
         // Branch filtering
@@ -210,7 +211,7 @@ export class ReportsService {
           ORDER BY amount DESC`,
           values,
         );
-        return result.rows.map((r: any) => ({
+        return result.rows.map((r: Record<string, any>) => ({
           method: r.method,
           amount: parseFloat(r.amount),
           count: parseInt(r.count, 10),
@@ -234,7 +235,7 @@ export class ReportsService {
       netProfit: totalIncome - totalExpense,
       breakdown: {
         incomeByMonth,
-        expenseByMonth: expenseByMonth.map((r: any) => ({
+        expenseByMonth: expenseByMonth.map((r: Record<string, any>) => ({
           month: r.month,
           amount: parseFloat(r.amount),
         })),
@@ -257,7 +258,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `m.payment_status = 'paid'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -296,7 +297,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `m.payment_status = 'paid'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -328,11 +329,11 @@ export class ReportsService {
         );
 
         const totalRevenue = result.rows.reduce(
-          (sum: number, r: any) => sum + parseFloat(r.revenue),
+          (sum: number, r: Record<string, any>) => sum + parseFloat(r.revenue),
           0,
         );
 
-        return result.rows.map((r: any) => ({
+        return result.rows.map((r: Record<string, any>) => ({
           planId: r.plan_id,
           planName: r.plan_name,
           planCode: r.plan_code,
@@ -351,7 +352,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const values: any[] = [year];
+        const values: SqlValue[] = [year];
         let paramIndex = 2;
 
         // Branch filtering
@@ -372,7 +373,7 @@ export class ReportsService {
           ORDER BY month_num`,
           values,
         );
-        return result.rows.map((r: any) => ({
+        return result.rows.map((r: Record<string, any>) => ({
           month: r.month,
           count: parseInt(r.count, 10),
           revenue: parseFloat(r.revenue),
@@ -421,7 +422,7 @@ export class ReportsService {
           JOIN users u ON u.id = m.user_id
           JOIN plans p ON p.id = m.plan_id
           WHERE m.payment_status = 'pending'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         // Branch filtering
         if (branchId !== null) {
@@ -434,7 +435,7 @@ export class ReportsService {
         const result = await client.query(query, values);
 
         const today = new Date();
-        return result.rows.map((r: any) => {
+        return result.rows.map((r: Record<string, any>) => {
           const dueDate = new Date(r.due_date || r.created_at);
           const diffTime = today.getTime() - dueDate.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -457,7 +458,7 @@ export class ReportsService {
       gymId,
       async (client) => {
         let whereClause = `s.payment_status = 'pending'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering via staff's branch_id
@@ -482,7 +483,7 @@ export class ReportsService {
           values,
         );
 
-        return result.rows.map((r: any) => ({
+        return result.rows.map((r: Record<string, any>) => ({
           id: r.id,
           staffName: r.staff_name,
           staffEmail: r.staff_email,
@@ -494,15 +495,15 @@ export class ReportsService {
     );
 
     const membershipDuesTotal = membershipDues.reduce(
-      (sum: number, d: any) => sum + d.amount,
+      (sum: number, d: Record<string, any>) => sum + d.amount,
       0,
     );
     const salaryDuesTotal = salaryDuesResult.reduce(
-      (sum: number, d: any) => sum + d.amount,
+      (sum: number, d: Record<string, any>) => sum + d.amount,
       0,
     );
     const overdueCount = membershipDues.filter(
-      (d: any) => d.daysOverdue > 0,
+      (d: Record<string, any>) => d.daysOverdue > 0,
     ).length;
 
     return {
@@ -583,7 +584,7 @@ export class ReportsService {
       async (client) => {
         let whereClause =
           'user_id = $1 AND measured_at >= $2 AND measured_at <= $3';
-        const values: any[] = [clientId, startDate, endDate];
+        const values: SqlValue[] = [clientId, startDate, endDate];
         let paramIndex = 4;
 
         if (branchId !== null && branchId !== undefined) {
@@ -685,7 +686,7 @@ export class ReportsService {
         currentBMI,
         measurements,
       },
-      history: metricsData.history.map((h: any) => ({
+      history: metricsData.history.map((h: Record<string, any>) => ({
         id: h.id,
         measuredAt: new Date(h.measured_at).toISOString(),
         weight: h.weight ? Number(h.weight) : null,
@@ -729,7 +730,7 @@ export class ReportsService {
       async (client) => {
         let whereClause =
           'user_id = $1 AND check_in_time >= $2 AND check_in_time <= $3';
-        const values: any[] = [clientId, startDate, endDate];
+        const values: SqlValue[] = [clientId, startDate, endDate];
         let paramIndex = 4;
 
         if (branchId !== null && branchId !== undefined) {
@@ -797,7 +798,7 @@ export class ReportsService {
 
     // Calculate streaks
     const { longestStreak, currentStreak } = this.calculateStreaks(
-      attendanceData.records.map((r: any) => new Date(r.check_in_time)),
+      attendanceData.records.map((r: Record<string, any>) => new Date(r.check_in_time)),
     );
 
     // Calculate avg visits per week
@@ -819,7 +820,7 @@ export class ReportsService {
     ).getDate();
     const daysPassed = now.getDate();
     const visitsThisMonth = attendanceData.records.filter(
-      (r: any) => new Date(r.check_in_time) >= currentMonthStart,
+      (r: Record<string, any>) => new Date(r.check_in_time) >= currentMonthStart,
     ).length;
     const missedDaysThisMonth = Math.max(0, daysPassed - visitsThisMonth);
 
@@ -835,7 +836,7 @@ export class ReportsService {
     ];
     const weeklyPattern = dayNames.map((day, index) => {
       const found = attendanceData.weeklyPattern.find(
-        (p: any) => parseInt(p.day_num, 10) === index,
+        (p: Record<string, any>) => parseInt(p.day_num, 10) === index,
       );
       return {
         day,
@@ -860,11 +861,11 @@ export class ReportsService {
         missedDaysThisMonth,
       },
       weeklyPattern,
-      monthlyTrend: attendanceData.monthlyTrend.map((m: any) => ({
+      monthlyTrend: attendanceData.monthlyTrend.map((m: Record<string, any>) => ({
         month: m.month,
         visits: parseInt(m.visits, 10),
       })),
-      recentVisits: attendanceData.records.slice(0, 20).map((r: any) => ({
+      recentVisits: attendanceData.records.slice(0, 20).map((r: Record<string, any>) => ({
         id: r.id,
         checkInTime: new Date(r.check_in_time).toISOString(),
         checkOutTime: r.check_out_time
@@ -910,7 +911,7 @@ export class ReportsService {
           };
         }
 
-        const clientIds = clients.map((c: any) => c.client_id);
+        const clientIds = clients.map((c: Record<string, any>) => c.client_id);
 
         // Get clients active this week
         const weekAgo = new Date();
@@ -921,7 +922,7 @@ export class ReportsService {
         FROM attendance
         WHERE user_id = ANY($1) AND check_in_time >= $2
       `;
-        const activeValues: any[] = [clientIds, weekAgo];
+        const activeValues: SqlValue[] = [clientIds, weekAgo];
 
         if (branchId !== null && branchId !== undefined) {
           activeQuery += ` AND branch_id = $3`;
@@ -943,7 +944,7 @@ export class ReportsService {
         FROM attendance
         WHERE user_id = ANY($1) AND check_in_time >= $2
       `;
-        const avgValues: any[] = [clientIds, monthAgo];
+        const avgValues: SqlValue[] = [clientIds, monthAgo];
 
         if (branchId !== null && branchId !== undefined) {
           avgQuery += ` AND branch_id = $3`;
@@ -986,7 +987,7 @@ export class ReportsService {
         JOIN users c ON c.id = a.user_id
         WHERE a.user_id = ANY($1) AND a.check_in_time >= $2
       `;
-        const topAttValues: any[] = [clientIds, monthAgo];
+        const topAttValues: SqlValue[] = [clientIds, monthAgo];
 
         if (branchId !== null && branchId !== undefined) {
           topAttendanceQuery += ` AND a.branch_id = $3`;
@@ -1196,7 +1197,7 @@ export class ReportsService {
       const firstOfMonth = new Date(year, (month || new Date().getMonth() + 1) - 1, 1)
         .toISOString()
         .split('T')[0];
-      const newMembersValues: any[] = [firstOfMonth];
+      const newMembersValues: SqlValue[] = [firstOfMonth];
       if (branchFilter) newMembersValues.push(branchId);
       const newMembersResult = await client.query(
         `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND created_at >= $1${branchFilter ? ' AND branch_id = $2' : ''}`,
@@ -1211,7 +1212,7 @@ export class ReportsService {
 
       // Monthly revenue
       let revenueWhere = `payment_status = 'paid' AND EXTRACT(YEAR FROM paid_at) = $1`;
-      const revenueValues: any[] = [year];
+      const revenueValues: SqlValue[] = [year];
       let paramIdx = 2;
       if (month) {
         revenueWhere += ` AND EXTRACT(MONTH FROM paid_at) = $${paramIdx++}`;
@@ -1234,7 +1235,7 @@ export class ReportsService {
 
       // Attendance today
       const today = new Date().toISOString().split('T')[0];
-      const attendanceValues: any[] = [today];
+      const attendanceValues: SqlValue[] = [today];
       if (branchFilter) attendanceValues.push(branchId);
       const attendanceResult = await client.query(
         `SELECT COUNT(*) as count FROM attendance WHERE date = $1${branchFilter ? ' AND branch_id = $2' : ''}`,
@@ -1259,7 +1260,7 @@ export class ReportsService {
   ): Promise<TrainerStaffReportItem[]> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let whereClause = `u.role IN ('trainer', 'manager')`;
-      const values: any[] = [year];
+      const values: SqlValue[] = [year];
       let paramIndex = 2;
 
       if (branchId !== null) {
@@ -1278,7 +1279,7 @@ export class ReportsService {
         values,
       );
 
-      return result.rows.map((r: any) => ({
+      return result.rows.map((r: Record<string, any>) => ({
         id: r.id,
         name: r.name,
         email: r.email,

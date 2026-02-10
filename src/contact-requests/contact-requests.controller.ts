@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('contact-requests')
 @Controller('contact-requests')
@@ -108,9 +109,9 @@ export class ContactRequestsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContactRequestDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
-    return this.contactRequestsService.update(id, dto, req.user?.id);
+    return this.contactRequestsService.update(id, dto, req.user?.userId);
   }
 
   @Post(':id/mark-read')

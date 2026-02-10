@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('gyms')
 @Controller('gyms')
@@ -43,7 +44,7 @@ export class GymController {
     type: Number,
     description: 'Filter by specific branch',
   })
-  async getProfile(@Request() req: any, @Query('branchId') branchId?: string) {
+  async getProfile(@Request() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
     const gymId = req.user?.gymId;
     if (!gymId) {
       throw new Error('No gym associated with this user');
@@ -93,7 +94,7 @@ export class GymController {
     description: 'Disable pagination',
   })
   async findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -103,7 +104,7 @@ export class GymController {
     @Res({ passthrough: true }) res?: Response,
   ) {
     /* Superadmin can see all gyms, others only see their own gym */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId ?? undefined;
 
     const result = await this.gymService.findAll({
       page: page ? parseInt(page) : undefined,

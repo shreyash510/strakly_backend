@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { UpdateBodyMetricsDto, RecordMetricsDto } from './dto/body-metrics.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class BodyMetricsService {
@@ -16,7 +17,7 @@ export class BodyMetricsService {
     return Math.round((weight / (heightInMeters * heightInMeters)) * 100) / 100;
   }
 
-  private formatMetrics(m: any) {
+  private formatMetrics(m: Record<string, any>) {
     return {
       id: m.id,
       userId: m.user_id,
@@ -50,7 +51,7 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
 
         // Branch filtering
         if (branchId !== null && branchId !== undefined) {
@@ -79,7 +80,7 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
 
         // Branch filtering
         if (branchId !== null && branchId !== undefined) {
@@ -137,7 +138,7 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         let query = `SELECT id FROM body_metrics WHERE user_id = $1`;
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
 
         // Branch filtering
         if (branchId !== null && branchId !== undefined) {
@@ -155,7 +156,7 @@ export class BodyMetricsService {
       async (client) => {
         if (existing) {
           const updates: string[] = [];
-          const values: any[] = [];
+          const values: SqlValue[] = [];
           let paramIndex = 1;
 
           if (dto.height !== undefined) {
@@ -344,7 +345,7 @@ export class BodyMetricsService {
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let whereClause = 'user_id = $1';
-      const values: any[] = [userId];
+      const values: SqlValue[] = [userId];
       let paramIndex = 2;
 
       // Branch filtering
@@ -376,7 +377,7 @@ export class BodyMetricsService {
         dataValues,
       );
 
-      const data = result.rows.map((h: any) => ({
+      const data = result.rows.map((h: Record<string, any>) => ({
         id: h.id,
         userId: h.user_id,
         branchId: h.branch_id,
@@ -428,7 +429,7 @@ export class BodyMetricsService {
     const { firstRecord, latestRecord, totalRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         let whereClause = 'user_id = $1';
-        const values: any[] = [userId];
+        const values: SqlValue[] = [userId];
 
         // Branch filtering
         if (branchId !== null && branchId !== undefined) {
@@ -462,7 +463,7 @@ export class BodyMetricsService {
       return { current, progress: null, firstRecord: null, totalRecords: 0 };
     }
 
-    const progress: any = {};
+    const progress: Record<string, any> = {};
 
     if (firstRecord.weight && current.weight) {
       progress.weight = {

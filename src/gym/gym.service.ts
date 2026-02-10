@@ -33,11 +33,11 @@ export class GymService {
     private readonly branchService: BranchService,
   ) {}
 
-  async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<any>> {
+  async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
 
-    const where: any = {};
+    const where: Record<string, any> = {};
 
     /* Filter by gymId if provided (non-superadmin users only see their own gym) */
     if (filters.gymId) {
@@ -555,7 +555,7 @@ export class GymService {
     }
 
     // Get branches with stats
-    let branches: any[];
+    let branches: Record<string, any>[];
     if (branchId) {
       // Get single branch with stats
       const branch = await this.branchService.findOne(gymId, branchId);

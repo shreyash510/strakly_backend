@@ -6,12 +6,13 @@ import {
 import { TenantService } from '../tenant/tenant.service';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class AmenitiesService {
   constructor(private readonly tenantService: TenantService) {}
 
-  private formatAmenity(a: any) {
+  private formatAmenity(a: Record<string, any>) {
     return {
       id: a.id,
       branchId: a.branch_id,
@@ -39,7 +40,7 @@ export class AmenitiesService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (!includeInactive) {
@@ -59,7 +60,7 @@ export class AmenitiesService {
         `SELECT * FROM amenities ${whereClause} ORDER BY display_order ASC, name ASC`,
         values,
       );
-      return result.rows.map((a: any) => this.formatAmenity(a));
+      return result.rows.map((a: Record<string, any>) => this.formatAmenity(a));
     });
   }
 
@@ -71,7 +72,7 @@ export class AmenitiesService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM amenities WHERE id = $1`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         if (branchId !== null) {
           query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
@@ -103,7 +104,7 @@ export class AmenitiesService {
       gymId,
       async (client) => {
         let query = `SELECT id FROM amenities WHERE code = $1`;
-        const values: any[] = [dto.code];
+        const values: SqlValue[] = [dto.code];
 
         if (branchId !== null) {
           query += ` AND branch_id = $2`;
@@ -174,7 +175,7 @@ export class AmenitiesService {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.name !== undefined) {

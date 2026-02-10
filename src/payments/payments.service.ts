@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   PaymentType,
 } from './dto/payment.dto';
+import { SqlValue } from '../common/types';
 
 export interface PaymentRecord {
   id: number;
@@ -51,7 +52,7 @@ export class PaymentsService {
     private readonly tenantService: TenantService,
   ) {}
 
-  private formatPayment(p: any): PaymentRecord {
+  private formatPayment(p: Record<string, any>): PaymentRecord {
     return {
       id: p.id,
       branchId: p.branch_id,
@@ -100,7 +101,7 @@ export class PaymentsService {
       gymId,
       async (client) => {
         const conditions: string[] = [];
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -166,7 +167,7 @@ export class PaymentsService {
     );
 
     return {
-      data: payments.map((p: any) => this.formatPayment(p)),
+      data: payments.map((p: Record<string, any>) => this.formatPayment(p)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -183,7 +184,7 @@ export class PaymentsService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM payments WHERE id = $1`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         if (branchId !== null) {
           query += ` AND branch_id = $2`;
@@ -221,7 +222,7 @@ export class PaymentsService {
       },
     );
 
-    return payments.map((p: any) => this.formatPayment(p));
+    return payments.map((p: Record<string, any>) => this.formatPayment(p));
   }
 
   /**
@@ -290,7 +291,7 @@ export class PaymentsService {
     await this.findOne(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.status) {
@@ -404,17 +405,17 @@ export class PaymentsService {
           totalCount: parseInt(totalResult.rows[0].total_count, 10),
           totalAmount: parseFloat(totalResult.rows[0].total_amount),
           completedAmount: parseFloat(totalResult.rows[0].completed_amount),
-          byType: byTypeResult.rows.map((r: any) => ({
+          byType: byTypeResult.rows.map((r: Record<string, any>) => ({
             type: r.payment_type,
             count: parseInt(r.count, 10),
             amount: parseFloat(r.amount),
           })),
-          byMethod: byMethodResult.rows.map((r: any) => ({
+          byMethod: byMethodResult.rows.map((r: Record<string, any>) => ({
             method: r.payment_method,
             count: parseInt(r.count, 10),
             amount: parseFloat(r.amount),
           })),
-          byStatus: byStatusResult.rows.map((r: any) => ({
+          byStatus: byStatusResult.rows.map((r: Record<string, any>) => ({
             status: r.status,
             count: parseInt(r.count, 10),
           })),

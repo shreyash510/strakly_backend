@@ -23,6 +23,7 @@ import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('facilities')
 @Controller('facilities')
@@ -31,7 +32,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class FacilitiesController {
   constructor(private readonly facilitiesService: FacilitiesService) {}
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -53,13 +54,13 @@ export class FacilitiesController {
     description: 'Branch ID for filtering (admin only)',
   })
   findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.facilitiesService.findAll(
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
       includeInactive === 'true',
     );
@@ -74,12 +75,12 @@ export class FacilitiesController {
     description: 'Branch ID for filtering (admin only)',
   })
   findOne(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.facilitiesService.findOne(id, req.user.gymId, branchId);
+    return this.facilitiesService.findOne(id, req.user.gymId!, branchId);
   }
 
   @Post()
@@ -93,12 +94,12 @@ export class FacilitiesController {
     description: 'Branch ID for the facility (admin only)',
   })
   create(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() dto: CreateFacilityDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.facilitiesService.create(dto, req.user.gymId, branchId);
+    return this.facilitiesService.create(dto, req.user.gymId!, branchId);
   }
 
   @Patch(':id')
@@ -106,18 +107,18 @@ export class FacilitiesController {
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update a facility' })
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateFacilityDto,
   ) {
-    return this.facilitiesService.update(id, req.user.gymId, dto);
+    return this.facilitiesService.update(id, req.user.gymId!, dto);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Delete a facility (soft delete)' })
-  delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.facilitiesService.delete(id, req.user.gymId);
+  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.facilitiesService.delete(id, req.user.gymId!);
   }
 }

@@ -81,7 +81,7 @@ export class EmailService {
   async sendEmail(dto: SendEmailDto): Promise<EmailResponse> {
     try {
       // Build native ZeptoMail API payload
-      const emailPayload: any = {
+      const emailPayload: Record<string, any> = {
         from: {
           address: dto.from || this.defaultFromEmail,
           name: dto.fromName || this.defaultFromName,
@@ -152,16 +152,17 @@ export class EmailService {
         success: true,
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const axiosErr = error as Record<string, any>;
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error?.message ||
-        error.message;
+        axiosErr.response?.data?.message ||
+        axiosErr.response?.data?.error?.message ||
+        (error instanceof Error ? error.message : String(error));
       this.logger.error(`Failed to send email to ${dto.to}: ${errorMessage}`);
       this.logger.error(
-        `Full API Response: ${JSON.stringify(error.response?.data)}`,
+        `Full API Response: ${JSON.stringify(axiosErr.response?.data)}`,
       );
-      this.logger.error(`Status Code: ${error.response?.status}`);
+      this.logger.error(`Status Code: ${axiosErr.response?.status}`);
       return {
         success: false,
         error: errorMessage,
@@ -176,7 +177,7 @@ export class EmailService {
   async sendBulkEmail(dto: SendBulkEmailDto): Promise<EmailResponse> {
     try {
       // Build native ZeptoMail API payload
-      const emailPayload: any = {
+      const emailPayload: Record<string, any> = {
         from: {
           address: dto.from || this.defaultFromEmail,
           name: dto.fromName || this.defaultFromName,
@@ -223,11 +224,12 @@ export class EmailService {
         success: true,
         messageId: data.request_id || data.data?.[0]?.request_id,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const axiosErr = error as Record<string, any>;
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error?.message ||
-        error.message;
+        axiosErr.response?.data?.message ||
+        axiosErr.response?.data?.error?.message ||
+        (error instanceof Error ? error.message : String(error));
       this.logger.error(`Failed to send bulk email: ${errorMessage}`);
       return {
         success: false,

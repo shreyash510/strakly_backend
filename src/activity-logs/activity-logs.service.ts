@@ -4,6 +4,7 @@ import {
   CreateActivityLogDto,
   ActivityLogFiltersDto,
 } from './dto/activity-log.dto';
+import { SqlValue } from '../common/types';
 
 export interface ActivityLogRecord {
   id: number;
@@ -30,7 +31,7 @@ export interface ActivityLogRecord {
 export class ActivityLogsService {
   constructor(private readonly tenantService: TenantService) {}
 
-  private formatActivityLog(log: any): ActivityLogRecord {
+  private formatActivityLog(log: Record<string, any>): ActivityLogRecord {
     return {
       id: log.id,
       branchId: log.branch_id,
@@ -69,7 +70,7 @@ export class ActivityLogsService {
       gymId,
       async (client) => {
         const conditions: string[] = [];
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -140,7 +141,7 @@ export class ActivityLogsService {
     );
 
     return {
-      data: logs.map((log: any) => this.formatActivityLog(log)),
+      data: logs.map((log: Record<string, any>) => this.formatActivityLog(log)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -158,7 +159,7 @@ export class ActivityLogsService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2`;
-        const values: any[] = [targetType, targetId];
+        const values: SqlValue[] = [targetType, targetId];
 
         if (branchId !== null) {
           query += ` AND branch_id = $3`;
@@ -172,7 +173,7 @@ export class ActivityLogsService {
       },
     );
 
-    return logs.map((log: any) => this.formatActivityLog(log));
+    return logs.map((log: Record<string, any>) => this.formatActivityLog(log));
   }
 
   /**
@@ -195,7 +196,7 @@ export class ActivityLogsService {
       },
     );
 
-    return logs.map((log: any) => this.formatActivityLog(log));
+    return logs.map((log: Record<string, any>) => this.formatActivityLog(log));
   }
 
   /**

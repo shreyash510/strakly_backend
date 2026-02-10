@@ -26,6 +26,7 @@ import {
   CheckOutDto,
   AttendanceReportQueryDto,
 } from './dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
@@ -37,7 +38,7 @@ import { Roles, GymId, UserId } from '../auth/decorators';
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
-  private resolveGymId(req: any, queryGymId?: string): number {
+  private resolveGymId(req: AuthenticatedRequest, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
       if (!queryGymId) {
         throw new BadRequestException(
@@ -52,7 +53,7 @@ export class AttendanceController {
     return req.user.gymId;
   }
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -79,7 +80,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async searchUserByCode(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('code') code: string,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
@@ -114,7 +115,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async markAttendance(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() body: MarkAttendanceDto,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
@@ -159,7 +160,7 @@ export class AttendanceController {
     description: 'Gym ID (required for superadmin)',
   })
   async checkOut(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) attendanceId: number,
     @Body() body?: CheckOutDto,
     @Query('gymId') queryGymId?: string,
@@ -211,7 +212,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getTodayAttendance(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -237,7 +238,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getAttendanceByDate(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('date') date: string,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
@@ -275,7 +276,7 @@ export class AttendanceController {
     description: 'Records per page',
   })
   async getUserAttendance(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
@@ -306,7 +307,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getAttendanceStats(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -332,7 +333,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getCurrentlyPresentCount(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -372,7 +373,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering',
   })
   async getReports(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query() query: AttendanceReportQueryDto,
   ) {
     const gymId = this.resolveGymId(req, query.gymId?.toString());
@@ -406,7 +407,7 @@ export class AttendanceController {
     description: 'Branch ID for filtering (admin only)',
   })
   async getAllAttendance(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('startDate') startDate?: string,
@@ -437,7 +438,7 @@ export class AttendanceController {
     description: 'Gym ID (required for superadmin)',
   })
   async deleteAttendance(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) attendanceId: number,
     @Query('gymId') queryGymId?: string,
   ) {

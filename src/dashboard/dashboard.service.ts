@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { DashboardCacheService } from './dashboard-cache.service';
+import { SqlValue } from '../common/types';
 import {
   SuperadminDashboardDto,
   DashboardStatsDto,
@@ -17,6 +18,8 @@ import {
   ClientAttendanceStatsDto,
   ClientRecentAttendanceDto,
   ActiveOfferDto,
+  ClientFacilityDto,
+  ClientAmenityDto,
 } from './dto/dashboard.dto';
 
 @Injectable()
@@ -275,7 +278,7 @@ export class DashboardService {
       async (client) => {
         let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         if (branchId !== null) {
           countQuery += ` AND branch_id = $1`;
@@ -301,7 +304,7 @@ export class DashboardService {
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: result.data.map((c: any) => ({
+      data: result.data.map((c: Record<string, any>) => ({
         id: c.id,
         name: c.name,
         email: c.email,
@@ -334,7 +337,7 @@ export class DashboardService {
       async (client) => {
         let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         if (branchId !== null) {
           countQuery += ` AND branch_id = $1`;
@@ -360,7 +363,7 @@ export class DashboardService {
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: result.data.map((c: any) => ({
+      data: result.data.map((c: Record<string, any>) => ({
         id: c.id,
         name: c.name,
         email: c.email,
@@ -525,7 +528,7 @@ export class DashboardService {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthLabel = d.toLocaleString('en-US', { month: 'short' });
       const found = revenueHistory.find(
-        (r: any) =>
+        (r: Record<string, any>) =>
           parseInt(r.month_num) === d.getMonth() + 1 &&
           parseInt(r.year_num) === d.getFullYear(),
       );
@@ -585,7 +588,7 @@ export class DashboardService {
       gymId,
       async (client) => {
         let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         if (branchId !== null) {
           query += ` AND branch_id = $1`;
@@ -600,7 +603,7 @@ export class DashboardService {
       },
     );
 
-    return clients.map((c: any) => ({
+    return clients.map((c: Record<string, any>) => ({
       id: c.id,
       name: c.name,
       email: c.email,
@@ -621,7 +624,7 @@ export class DashboardService {
         let query = `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         if (branchId !== null) {
           query += ` WHERE a.branch_id = $1`;
@@ -636,7 +639,7 @@ export class DashboardService {
       },
     );
 
-    return attendance.map((record: any) => ({
+    return attendance.map((record: Record<string, any>) => ({
       id: record.id,
       userName: record.user_name,
       date: record.date,
@@ -714,8 +717,8 @@ export class DashboardService {
     });
 
     // Get membership facilities and amenities if subscription exists
-    let facilities: any[] = [];
-    let amenities: any[] = [];
+    let facilities: ClientFacilityDto[] = [];
+    let amenities: ClientAmenityDto[] = [];
     if (subscription) {
       const membershipExtras = await this.getClientMembershipFacilities(
         subscription.id,
@@ -751,7 +754,7 @@ export class DashboardService {
   private async getClientMembershipFacilities(
     membershipId: number,
     gymId: number,
-  ): Promise<{ facilities: any[]; amenities: any[] }> {
+  ): Promise<{ facilities: ClientFacilityDto[]; amenities: ClientAmenityDto[] }> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const [facilitiesResult, amenitiesResult] = await Promise.all([
         client.query(
@@ -773,14 +776,14 @@ export class DashboardService {
       ]);
 
       return {
-        facilities: facilitiesResult.rows.map((f: any) => ({
+        facilities: facilitiesResult.rows.map((f: Record<string, any>) => ({
           id: f.id,
           name: f.name,
           code: f.code,
           description: f.description,
           icon: f.icon,
         })),
-        amenities: amenitiesResult.rows.map((a: any) => ({
+        amenities: amenitiesResult.rows.map((a: Record<string, any>) => ({
           id: a.id,
           name: a.name,
           code: a.code,
@@ -947,7 +950,7 @@ export class DashboardService {
 
     // Count consecutive days
     const uniqueDates = [
-      ...new Set(attendanceRecords.map((r: any) => r.date)),
+      ...new Set(attendanceRecords.map((r: Record<string, any>) => r.date)),
     ] as string[];
     let expectedDate = new Date(uniqueDates[0]);
 
@@ -989,7 +992,7 @@ export class DashboardService {
       },
     );
 
-    return attendance.map((record: any) => ({
+    return attendance.map((record: Record<string, any>) => ({
       id: record.id,
       date: record.date,
       checkIn: new Date(record.check_in_time).toLocaleTimeString('en-US', {
@@ -1018,7 +1021,7 @@ export class DashboardService {
     const offers = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const values: any[] = [now];
+        const values: (SqlValue | Date)[] = [now];
         let query = `SELECT id, name, description, discount_type, discount_value, code, valid_to
          FROM offers
          WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1`;
@@ -1037,7 +1040,7 @@ export class DashboardService {
       },
     );
 
-    return offers.map((offer: any) => ({
+    return offers.map((offer: Record<string, any>) => ({
       id: offer.id,
       title: offer.name,
       description: offer.description || undefined,

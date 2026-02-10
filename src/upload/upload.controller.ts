@@ -12,6 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/types';
 
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
@@ -48,14 +49,14 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
     @Body('userId') userId: string,
     @Body('oldUrl') oldUrl: string,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
     // Use provided userId or current user's ID
-    const targetUserId = userId || req.user?.userId || req.user?.id || req.user?.sub;
+    const targetUserId = userId || req.user?.userId;
     const gymId = req.user?.gymId;
     const userRole = req.user?.role;
 
@@ -109,8 +110,9 @@ export class UploadController {
           userTypeHint, // Let auto-detection work when uploading for others
         );
       }
-    } catch (error: any) {
-      throw new BadRequestException(`Avatar uploaded but failed to update profile: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(`Avatar uploaded but failed to update profile: ${msg}`);
     }
 
     return {

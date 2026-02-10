@@ -5,6 +5,7 @@ import {
   UpdateAnnouncementDto,
   AnnouncementFiltersDto,
 } from './dto/announcement.dto';
+import { SqlValue } from '../common/types';
 
 export interface AnnouncementRecord {
   id: number;
@@ -31,7 +32,7 @@ export interface AnnouncementRecord {
 export class AnnouncementsService {
   constructor(private readonly tenantService: TenantService) {}
 
-  private formatAnnouncement(a: any): AnnouncementRecord {
+  private formatAnnouncement(a: Record<string, any>): AnnouncementRecord {
     return {
       id: a.id,
       branchId: a.branch_id,
@@ -72,7 +73,7 @@ export class AnnouncementsService {
         const conditions: string[] = [
           '(is_deleted = FALSE OR is_deleted IS NULL)',
         ];
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -127,7 +128,7 @@ export class AnnouncementsService {
     );
 
     return {
-      data: announcements.map((a: any) => this.formatAnnouncement(a)),
+      data: announcements.map((a: Record<string, any>) => this.formatAnnouncement(a)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -156,7 +157,7 @@ export class AnnouncementsService {
           AND (end_date >= NOW() OR end_date IS NULL)
           AND ${platformFilter}
       `;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
 
         // Branch filtering
         if (branchId !== null) {
@@ -171,7 +172,7 @@ export class AnnouncementsService {
       },
     );
 
-    return announcements.map((a: any) => this.formatAnnouncement(a));
+    return announcements.map((a: Record<string, any>) => this.formatAnnouncement(a));
   }
 
   /**
@@ -186,7 +187,7 @@ export class AnnouncementsService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM announcements WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         if (branchId !== null) {
           query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
@@ -260,7 +261,7 @@ export class AnnouncementsService {
     await this.findOne(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.title) {

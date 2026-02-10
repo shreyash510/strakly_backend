@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class PlansService {
@@ -31,7 +32,7 @@ export class PlansService {
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (!includeInactive) {
@@ -51,7 +52,7 @@ export class PlansService {
         `SELECT * FROM plans ${whereClause} ORDER BY display_order ASC`,
         values,
       );
-      return result.rows.map((p: any) => this.formatPlan(p));
+      return result.rows.map((p: Record<string, any>) => this.formatPlan(p));
     });
   }
 
@@ -67,7 +68,7 @@ export class PlansService {
         'is_active = true',
         'is_featured = true',
       ];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       const paramIndex = 1;
 
       if (branchId !== null) {
@@ -79,11 +80,11 @@ export class PlansService {
         `SELECT * FROM plans WHERE ${conditions.join(' AND ')} ORDER BY display_order ASC`,
         values,
       );
-      return result.rows.map((p: any) => this.formatPlan(p));
+      return result.rows.map((p: Record<string, any>) => this.formatPlan(p));
     });
   }
 
-  private formatPlan(p: any) {
+  private formatPlan(p: Record<string, any>) {
     return {
       id: p.id,
       branchId: p.branch_id,
@@ -108,7 +109,7 @@ export class PlansService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM plans WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -137,7 +138,7 @@ export class PlansService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM plans WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        const values: any[] = [code];
+        const values: SqlValue[] = [code];
 
         if (branchId !== null) {
           query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
@@ -214,7 +215,7 @@ export class PlansService {
     await this.findOne(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.name) {
@@ -318,14 +319,14 @@ export class PlansService {
     const plan = await this.findOne(planId, gymId, branchId);
 
     let discount = 0;
-    let validOffer: any = null;
+    let validOffer: Record<string, any> | null = null;
 
     if (offerCode) {
       const offer = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
           let query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`;
-          const values: any[] = [offerCode];
+          const values: SqlValue[] = [offerCode];
 
           // Branch filtering for offers
           if (branchId !== null) {

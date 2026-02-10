@@ -37,7 +37,7 @@ export async function generateUniqueAttendanceCode(
           `SELECT attendance_code FROM users WHERE attendance_code = ANY($1)`,
           [candidates],
         );
-        return result.rows.map((r: any) => r.attendance_code);
+        return result.rows.map((r: Record<string, any>) => r.attendance_code);
       },
     );
 
