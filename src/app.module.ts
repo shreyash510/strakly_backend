@@ -37,6 +37,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { UploadModule } from './upload/upload.module';
 import { MigrationModule } from './migration/migration.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
     AnnouncementsModule,
     UploadModule,
     MigrationModule,
+    ConversationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
