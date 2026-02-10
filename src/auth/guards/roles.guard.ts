@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import type { UserRole } from '../../constants';
+import { ROLES } from '../../common/constants';
+import type { UserRole } from '../../common/constants';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -30,7 +31,7 @@ export class RolesGuard implements CanActivate {
     }
 
     // The role is already set by JWT strategy
-    const userRole = user.role || 'client';
+    const userRole = user.role || ROLES.CLIENT;
 
     // Check if user has required role
     const hasRole = requiredRoles.includes(userRole as UserRole);

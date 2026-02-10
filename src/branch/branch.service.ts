@@ -24,6 +24,7 @@ import {
   getPaginationParams,
   createPaginationMeta,
 } from '../common/pagination.util';
+import { ROLES } from '../common/constants';
 
 export interface BranchFilters extends PaginationParams {
   includeInactive?: boolean;
@@ -613,13 +614,13 @@ export class BranchService {
 
         // Update staff assignments (UserGymXref) - admin gets null (all branches)
         await this.prisma.userGymXref.updateMany({
-          where: { gymId: gym.id, role: 'admin' },
+          where: { gymId: gym.id, role: ROLES.ADMIN },
           data: { branchId: null }, // Admin has all branches access
         });
 
         // Non-admin staff get assigned to default branch
         await this.prisma.userGymXref.updateMany({
-          where: { gymId: gym.id, role: { not: 'admin' }, branchId: null },
+          where: { gymId: gym.id, role: { not: ROLES.ADMIN }, branchId: null },
           data: { branchId: branch.id },
         });
 

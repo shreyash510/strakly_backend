@@ -13,8 +13,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { USER_ROLES, USER_STATUSES, GENDERS } from '../../constants';
-import type { UserRole, UserStatus, Gender } from '../../constants';
+import { ALL_ROLES, USER_STATUSES_ARRAY, GENDERS } from '../../common/constants';
+import type { UserRole, UserStatus, Gender } from '../../common/constants';
 
 export type { UserRole, UserStatus, Gender };
 
@@ -50,14 +50,14 @@ export class CreateUserDto {
   @IsString()
   bio?: string;
 
-  @ApiPropertyOptional({ description: 'User role', enum: USER_ROLES })
+  @ApiPropertyOptional({ description: 'User role', enum: ALL_ROLES })
   @IsOptional()
-  @IsEnum(USER_ROLES)
+  @IsEnum(ALL_ROLES)
   role?: UserRole;
 
-  @ApiPropertyOptional({ description: 'User status', enum: USER_STATUSES })
+  @ApiPropertyOptional({ description: 'User status', enum: USER_STATUSES_ARRAY })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsEnum(USER_STATUSES_ARRAY)
   status?: UserStatus;
 
   @ApiPropertyOptional({ description: 'Date of birth' })
@@ -159,9 +159,9 @@ export class CreateStaffDto {
   @IsString()
   bio?: string;
 
-  @ApiPropertyOptional({ description: 'Staff status', enum: USER_STATUSES })
+  @ApiPropertyOptional({ description: 'Staff status', enum: USER_STATUSES_ARRAY })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsEnum(USER_STATUSES_ARRAY)
   status?: UserStatus;
 
   @ApiPropertyOptional({ description: 'Date of birth' })
@@ -240,9 +240,9 @@ export class CreateClientDto {
   @IsString()
   bio?: string;
 
-  @ApiPropertyOptional({ description: 'Client status', enum: USER_STATUSES })
+  @ApiPropertyOptional({ description: 'Client status', enum: USER_STATUSES_ARRAY })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsEnum(USER_STATUSES_ARRAY)
   status?: UserStatus;
 
   @ApiPropertyOptional({ description: 'Date of birth' })
@@ -322,14 +322,14 @@ export class UpdateUserDto {
   @IsString()
   bio?: string;
 
-  @ApiPropertyOptional({ description: 'User role', enum: USER_ROLES })
+  @ApiPropertyOptional({ description: 'User role', enum: ALL_ROLES })
   @IsOptional()
-  @IsEnum(USER_ROLES)
+  @IsEnum(ALL_ROLES)
   role?: UserRole;
 
-  @ApiPropertyOptional({ description: 'User status', enum: USER_STATUSES })
+  @ApiPropertyOptional({ description: 'User status', enum: USER_STATUSES_ARRAY })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsEnum(USER_STATUSES_ARRAY)
   status?: UserStatus;
 
   @ApiPropertyOptional({ description: 'Date of birth' })
@@ -443,9 +443,9 @@ export class BulkUpdateUserDto {
   @IsInt({ each: true })
   branchIds?: number[];
 
-  @ApiPropertyOptional({ description: 'Status to set', enum: USER_STATUSES })
+  @ApiPropertyOptional({ description: 'Status to set', enum: USER_STATUSES_ARRAY })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsEnum(USER_STATUSES_ARRAY)
   status?: UserStatus;
 }
 

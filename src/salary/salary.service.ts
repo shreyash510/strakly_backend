@@ -21,6 +21,7 @@ import {
   createPaginationMeta,
 } from '../common/pagination.util';
 import { SqlValue } from '../common/types';
+import { ROLES } from '../common/constants';
 
 export interface SalaryFilters extends PaginationParams {
   staffId?: number;
@@ -534,9 +535,9 @@ export class SalaryService {
       const result = await client.query(query, values);
 
       const roleLabels: Record<string, string> = {
-        branch_admin: 'Branch Admin',
-        manager: 'Manager',
-        trainer: 'Trainer',
+        [ROLES.BRANCH_ADMIN]: 'Branch Admin',
+        [ROLES.MANAGER]: 'Manager',
+        [ROLES.TRAINER]: 'Trainer',
       };
 
       return result.rows.map((u: Record<string, any>) => ({

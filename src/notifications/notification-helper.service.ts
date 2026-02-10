@@ -2,9 +2,9 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from './notifications.service';
-import { NotificationsGateway } from './notifications.gateway';
 import { NotificationType, NotificationPriority } from './notification-types';
 import { SqlValue } from '../common/types';
+import { ROLES } from '../common/constants';
 
 export interface NotifyStaffPayload {
   type: NotificationType;
@@ -28,14 +28,12 @@ export class NotificationHelperService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
-    @Inject(forwardRef(() => NotificationsGateway))
-    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
    * Notify branch_admin/manager users in tenant schema AND admin (gym owner) users.
-   * Handles the FK constraint issue where admin users from public.users can't be
-   * persisted in tenant notifications — falls back to WebSocket-only for admins.
+   * Admin users from public.users now have persistent notifications since the FK
+   * constraint on notifications.user_id was removed.
    */
   async notifyStaff(
     gymId: number,
@@ -65,10 +63,24 @@ export class NotificationHelperService {
         ? staffIds.filter((id) => id !== options.excludeUserId)
         : staffIds;
 
-      if (filteredStaffIds.length > 0) {
+      /* 2. Collect admin (gym owner) user IDs from public.users */
+      const gymAdmins = await this.prisma.userGymXref.findMany({
+        where: { gymId, role: ROLES.ADMIN, isActive: true },
+        select: { userId: true },
+      });
+
+      const filteredAdminIds = (options?.excludeUserId
+        ? gymAdmins.filter((a) => a.userId !== options.excludeUserId)
+        : gymAdmins
+      ).map((a) => a.userId);
+
+      /* 3. Bulk-create notifications for all recipients (staff + admins) */
+      const allUserIds = [...filteredStaffIds, ...filteredAdminIds];
+
+      if (allUserIds.length > 0) {
         await this.notificationsService.createBulk(
           {
-            userIds: filteredStaffIds,
+            userIds: allUserIds,
             type: payload.type,
             title: payload.title,
             message: payload.message,
@@ -79,53 +91,6 @@ export class NotificationHelperService {
           },
           gymId,
         );
-      }
-
-      /* 2. Notify admin (gym owner) users from public.users */
-      const gymAdmins = await this.prisma.userGymXref.findMany({
-        where: { gymId, role: 'admin', isActive: true },
-        select: { userId: true },
-      });
-
-      const filteredAdmins = options?.excludeUserId
-        ? gymAdmins.filter((a) => a.userId !== options.excludeUserId)
-        : gymAdmins;
-
-      for (const admin of filteredAdmins) {
-        try {
-          await this.notificationsService.create(
-            {
-              userId: admin.userId,
-              type: payload.type,
-              title: payload.title,
-              message: payload.message,
-              priority: NotificationPriority.NORMAL,
-              branchId: branchId || null,
-              actionUrl: payload.actionUrl,
-              data: payload.data,
-            },
-            gymId,
-          );
-        } catch {
-          /* FK constraint fails since admin userId is from public.users.
-             Send real-time WebSocket notification instead. */
-          this.notificationsGateway.emitToUser(gymId, admin.userId, {
-            id: 0,
-            userId: admin.userId,
-            branchId: branchId || null,
-            type: payload.type,
-            title: payload.title,
-            message: payload.message,
-            data: payload.data || null,
-            isRead: false,
-            readAt: null,
-            actionUrl: payload.actionUrl || null,
-            priority: NotificationPriority.NORMAL,
-            expiresAt: null,
-            createdAt: new Date(),
-            createdBy: null,
-          });
-        }
       }
     } catch (error) {
       this.logger.error('Failed to send staff notifications', error);

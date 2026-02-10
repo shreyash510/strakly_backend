@@ -30,6 +30,7 @@ import {
 } from '../common/pagination.util';
 import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
 import { SqlValue } from '../common/types';
+import { ROLES, USER_STATUS } from '../common/constants';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
@@ -82,12 +83,12 @@ export class UsersService {
    * admin > branch_admin > manager > trainer > client
    */
   private readonly ROLE_HIERARCHY: Record<string, string[]> = {
-    superadmin: ['admin', 'branch_admin', 'manager', 'trainer', 'client'],
-    admin: ['admin', 'branch_admin', 'manager', 'trainer', 'client'],
-    branch_admin: ['branch_admin', 'manager', 'trainer', 'client'],
-    manager: ['manager', 'trainer', 'client'],
-    trainer: ['trainer', 'client'],
-    client: ['client'],
+    [ROLES.SUPERADMIN]: [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.BRANCH_ADMIN]: [ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.MANAGER]: [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.TRAINER]: [ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.CLIENT]: [ROLES.CLIENT],
   };
 
   /**
@@ -124,7 +125,7 @@ export class UsersService {
       phone: user.phone,
       avatar: user.avatar,
       bio: user.bio,
-      role: primaryAssignment?.role || 'admin',
+      role: primaryAssignment?.role || ROLES.ADMIN,
       status: user.status,
       dateOfBirth: user.dateOfBirth,
       gender: user.gender,
@@ -156,7 +157,7 @@ export class UsersService {
   }
 
   private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null, branchAssignments?: Record<string, any>[]) {
-    const role = user.role || 'client';
+    const role = user.role || ROLES.CLIENT;
     const branchIds = branchAssignments?.map((a) => a.branch_id) || [];
     const branchNames = branchAssignments?.map((a) => a.branch_name).filter(Boolean) || [];
 
@@ -185,14 +186,14 @@ export class UsersService {
       state: user.state,
       zipCode: user.zip_code || user.zipCode,
       attendanceCode:
-        role === 'client'
+        role === ROLES.CLIENT
           ? user.attendance_code || user.attendanceCode
           : undefined,
       emergencyContactName:
         user.emergency_contact_name || user.emergencyContactName,
       emergencyContactPhone:
         user.emergency_contact_phone || user.emergencyContactPhone,
-      userType: role === 'client' ? 'client' : 'staff',
+      userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
       branchIds: finalBranchIds,
       branchNames: finalBranchNames,
@@ -219,7 +220,7 @@ export class UsersService {
    * Note: This is typically done via registerAdminWithGym in auth service
    */
   async createAdmin(dto: CreateStaffDto, gymId: number): Promise<any> {
-    if (dto.role !== 'admin') {
+    if (dto.role !== ROLES.ADMIN) {
       throw new BadRequestException(
         'This method is only for creating admins. Use createStaff for manager/trainer.',
       );
@@ -264,7 +265,7 @@ export class UsersService {
     }
 
     const passwordHash = await hashPassword(dto.password);
-    const status = dto.status || 'active';
+    const status = dto.status || USER_STATUS.ACTIVE;
     const statusId = await this.getStatusId(status);
 
     // Create admin in public.users
@@ -292,7 +293,7 @@ export class UsersService {
       data: {
         userId: createdUser.id,
         gymId,
-        role: 'admin',
+        role: ROLES.ADMIN,
         isPrimary: false, // Only the first admin is primary
         isActive: true,
       },
@@ -308,7 +309,7 @@ export class UsersService {
         entityId: createdUser.id,
         entityType: 'user',
         userId: createdUser.id,
-        metadata: { name: dto.name, email: dto.email, role: 'admin' },
+        metadata: { name: dto.name, email: dto.email, role: ROLES.ADMIN },
       },
     });
 
@@ -328,7 +329,7 @@ export class UsersService {
       gymAssignments: {
         some: {
           ...(gymId && { gymId }),
-          role: 'admin',
+          role: ROLES.ADMIN,
           isActive: true,
         },
       },
@@ -474,7 +475,7 @@ export class UsersService {
       throw new NotFoundException(`Superadmin with ID ${id} not found`);
     }
 
-    if (user.role !== 'superadmin') {
+    if (user.role !== ROLES.SUPERADMIN) {
       throw new BadRequestException('This method is only for superadmin users');
     }
 
@@ -508,7 +509,7 @@ export class UsersService {
 
     // Check if user is primary admin of any gym
     const primaryAdminAssignments = await this.prisma.userGymXref.findMany({
-      where: { userId: id, role: 'admin', isPrimary: true, isActive: true },
+      where: { userId: id, role: ROLES.ADMIN, isPrimary: true, isActive: true },
     });
 
     if (primaryAdminAssignments.length > 0) {
@@ -552,12 +553,12 @@ export class UsersService {
       throw new BadRequestException('Password is required');
     }
 
-    const role = dto.role || 'trainer';
-    if (role === 'admin') {
+    const role = dto.role || ROLES.TRAINER;
+    if (role === ROLES.ADMIN) {
       return this.createAdmin(dto, gymId);
     }
 
-    if (!['manager', 'trainer', 'branch_admin'].includes(role)) {
+    if (!([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(role)) {
       throw new BadRequestException(
         'Invalid role. Staff role must be manager, trainer, or branch_admin.',
       );
@@ -629,7 +630,7 @@ export class UsersService {
     }
 
     const passwordHash = await hashPassword(dto.password);
-    const status = dto.status || 'active';
+    const status = dto.status || USER_STATUS.ACTIVE;
     const statusId = await this.getStatusId(status);
 
     // Determine primary branch: use branchIds[0] if available, otherwise branchId
@@ -673,7 +674,7 @@ export class UsersService {
         // For staff with multiple branches, create user_branch_xref entries
         let branchAssignments: Record<string, any>[] = [];
         if (
-          ['branch_admin', 'manager', 'trainer'].includes(role) &&
+          ([ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role) &&
           branchIds.length > 0
         ) {
           for (let i = 0; i < branchIds.length; i++) {
@@ -778,7 +779,7 @@ export class UsersService {
         if (
           filters.role &&
           filters.role !== 'all' &&
-          ['manager', 'trainer', 'branch_admin'].includes(filters.role)
+          ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(filters.role)
         ) {
           conditions.push(`u.role = $${paramIndex++}`);
           values.push(filters.role);
@@ -872,7 +873,7 @@ export class UsersService {
         let assignments: Record<string, any>[] = [];
         if (
           staff &&
-          ['branch_admin', 'manager', 'trainer'].includes(staff.role)
+          ([ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(staff.role)
         ) {
           const assignmentsResult = await client.query(
             `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
@@ -937,7 +938,7 @@ export class UsersService {
     }
     if (
       updateDto.role &&
-      ['manager', 'trainer', 'branch_admin'].includes(updateDto.role)
+      ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(updateDto.role)
     ) {
       updates.push(`role = $${paramIndex++}`);
       values.push(updateDto.role);
@@ -995,7 +996,7 @@ export class UsersService {
         const user = result.rows[0];
 
         // Handle branch assignments update for all roles that can have branch assignments
-        const rolesWithBranches = ['branch_admin', 'manager', 'trainer', 'client'];
+        const rolesWithBranches = [ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT];
         let assignments: Record<string, any>[] = [];
         if (
           updateDto.branchIds &&
@@ -1091,7 +1092,7 @@ export class UsersService {
     // Soft delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
       // Deactivate user_branch_xref entries for branch_admin
-      if (staffData.role === 'branch_admin') {
+      if (staffData.role === ROLES.BRANCH_ADMIN) {
         await client.query(
           `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
           [id],
@@ -1187,7 +1188,7 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    const status = dto.status || 'active';
+    const status = dto.status || USER_STATUS.ACTIVE;
     const [passwordHash, attendanceCode, statusId] = await Promise.all([
       hashPassword(dto.password),
       generateUniqueAttendanceCode(gymId, this.tenantService),
@@ -1213,7 +1214,7 @@ export class UsersService {
             dto.phone || null,
             dto.avatar || null,
             dto.bio || null,
-            'client', // role is always 'client' for clients
+            ROLES.CLIENT, // role is always 'client' for clients
             status,
             statusId,
             dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
@@ -1756,16 +1757,16 @@ export class UsersService {
     callerRole?: string,
     actorInfo?: { id: number; name: string; role: string },
   ): Promise<any> {
-    const role = createUserDto.role || 'client';
+    const role = createUserDto.role || ROLES.CLIENT;
 
     // Validate role hierarchy if callerRole is provided
     if (callerRole) {
       this.validateRoleHierarchy(callerRole, role, 'create');
     }
 
-    if (role === 'admin') {
+    if (role === ROLES.ADMIN) {
       return this.createAdmin(createUserDto as CreateStaffDto, gymId);
-    } else if (role === 'client') {
+    } else if (role === ROLES.CLIENT) {
       return this.createClient(
         createUserDto as CreateClientDto,
         gymId,
@@ -1787,7 +1788,7 @@ export class UsersService {
     const isSuperAdmin = filters.isSuperAdmin || false;
 
     // If role is 'admin', only get admins from public.users
-    if (role === 'admin') {
+    if (role === ROLES.ADMIN) {
       return this.findAllAdmins(filters);
     }
 
@@ -1795,9 +1796,9 @@ export class UsersService {
     if (!isSuperAdmin && !filters.gymId) {
       // If role requires tenant access, throw error
       if (
-        role === 'client' ||
-        role === 'manager' ||
-        role === 'trainer' ||
+        role === ROLES.CLIENT ||
+        role === ROLES.MANAGER ||
+        role === ROLES.TRAINER ||
         userType !== 'all'
       ) {
         throw new BadRequestException('gymId is required for fetching users');
@@ -1810,12 +1811,12 @@ export class UsersService {
     }
 
     // If role is 'client', only get clients from tenant.users
-    if (role === 'client') {
+    if (role === ROLES.CLIENT) {
       return this.findAllClients(filters);
     }
 
     // If role is manager/trainer/branch_admin, only get staff from tenant.users
-    if (role && ['manager', 'trainer', 'branch_admin'].includes(role)) {
+    if (role && ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(role)) {
       return this.findAllStaff(filters);
     }
 
@@ -1974,7 +1975,7 @@ export class UsersService {
 
       if (tenantUser) {
         // If the user is a client, use findOneClient to include membership data
-        if (tenantUser.role === 'client') {
+        if (tenantUser.role === ROLES.CLIENT) {
           return this.findOneClient(id, gymId);
         }
         // For staff, use findOneStaff
@@ -2072,7 +2073,7 @@ export class UsersService {
     };
 
     if (userType === 'admin') {
-      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'update');
+      if (callerRole) this.validateRoleHierarchy(callerRole, ROLES.ADMIN, 'update');
       return this.updateAdmin(id, gymId, updateUserDto);
     }
     if (userType === 'staff') {
@@ -2084,7 +2085,7 @@ export class UsersService {
     }
     if (userType === 'client') {
       if (callerRole)
-        this.validateRoleHierarchy(callerRole, 'client', 'update');
+        this.validateRoleHierarchy(callerRole, ROLES.CLIENT, 'update');
       return this.updateClient(id, gymId, updateUserDto);
     }
 
@@ -2106,7 +2107,7 @@ export class UsersService {
         if (callerRole) {
           this.validateRoleHierarchy(callerRole, tenantUser.role, 'update');
         }
-        if (tenantUser.role === 'client') {
+        if (tenantUser.role === ROLES.CLIENT) {
           return this.updateClient(id, gymId, updateUserDto);
         } else {
           return this.updateStaff(id, gymId, updateUserDto);
@@ -2120,7 +2121,7 @@ export class UsersService {
     });
 
     if (adminUser) {
-      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'update');
+      if (callerRole) this.validateRoleHierarchy(callerRole, ROLES.ADMIN, 'update');
       return this.updateAdmin(id, gymId, updateUserDto);
     }
 
@@ -2138,7 +2139,7 @@ export class UsersService {
     callerRole?: string,
   ): Promise<{ success: boolean }> {
     if (userType === 'admin') {
-      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'delete');
+      if (callerRole) this.validateRoleHierarchy(callerRole, ROLES.ADMIN, 'delete');
       return this.removeAdmin(id);
     }
     if (userType === 'staff') {
@@ -2150,7 +2151,7 @@ export class UsersService {
     }
     if (userType === 'client') {
       if (callerRole)
-        this.validateRoleHierarchy(callerRole, 'client', 'delete');
+        this.validateRoleHierarchy(callerRole, ROLES.CLIENT, 'delete');
       return this.removeClient(id, gymId);
     }
 
@@ -2172,7 +2173,7 @@ export class UsersService {
         if (callerRole) {
           this.validateRoleHierarchy(callerRole, tenantUser.role, 'delete');
         }
-        if (tenantUser.role === 'client') {
+        if (tenantUser.role === ROLES.CLIENT) {
           return this.removeClient(id, gymId);
         } else {
           return this.removeStaff(id, gymId);
@@ -2186,7 +2187,7 @@ export class UsersService {
     });
 
     if (adminUser) {
-      if (callerRole) this.validateRoleHierarchy(callerRole, 'admin', 'delete');
+      if (callerRole) this.validateRoleHierarchy(callerRole, ROLES.ADMIN, 'delete');
       return this.removeAdmin(id);
     }
 
@@ -2303,10 +2304,10 @@ export class UsersService {
     role: string,
     gymId: number,
   ): Promise<PaginatedResponse<any>> {
-    if (role === 'admin') {
+    if (role === ROLES.ADMIN) {
       return this.findAllAdmins({ role, gymId, noPagination: true });
     }
-    if (role === 'client') {
+    if (role === ROLES.CLIENT) {
       return this.findAllClients({ role, gymId, noPagination: true });
     }
     // manager or trainer
@@ -2335,15 +2336,15 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (userData.status !== 'onboarding' && userData.status !== 'confirm') {
+    if (userData.status !== USER_STATUS.ONBOARDING && userData.status !== USER_STATUS.CONFIRM) {
       throw new BadRequestException(
         'Only onboarding or confirm requests can be approved',
       );
     }
 
-    const statusId = await this.getStatusId('active');
+    const statusId = await this.getStatusId(USER_STATUS.ACTIVE);
 
-    const role = dto?.role || 'client';
+    const role = dto?.role || ROLES.CLIENT;
 
     const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
       gymId,
@@ -2481,13 +2482,13 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    if (userData.status !== 'onboarding' && userData.status !== 'confirm') {
+    if (userData.status !== USER_STATUS.ONBOARDING && userData.status !== USER_STATUS.CONFIRM) {
       throw new BadRequestException(
         'Only onboarding or confirm requests can be rejected',
       );
     }
 
-    const statusId = await this.getStatusId('rejected');
+    const statusId = await this.getStatusId(USER_STATUS.REJECTED);
 
     const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
       gymId,
@@ -3033,7 +3034,7 @@ export class UsersService {
         }
 
         // Check for active memberships (for clients)
-        if (user.role === 'client') {
+        if (user.role === ROLES.CLIENT) {
           const activeMembership = await this.tenantService.executeInTenant(
             gymId,
             async (client) => {

@@ -76,6 +76,10 @@ export const PLAN_STATUS = {
 
 export type PlanStatus = (typeof PLAN_STATUS)[keyof typeof PLAN_STATUS];
 
+// Gender
+export const GENDERS = ['male', 'female', 'other'] as const;
+export type Gender = (typeof GENDERS)[number];
+
 // Attendance Status
 export const ATTENDANCE_STATUS = {
   CHECKED_IN: 'checked_in',

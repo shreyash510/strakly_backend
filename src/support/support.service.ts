@@ -8,6 +8,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../email/email.service';
+import { ROLES } from '../common/constants';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -67,7 +68,7 @@ export class SupportService {
         userId: userId,
         userEmail: userEmail,
         userName: userName,
-        userType: userType || 'client',
+        userType: userType || ROLES.CLIENT,
         gymId: gymId,
         status: 'open',
       },
@@ -106,8 +107,8 @@ export class SupportService {
   ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
-    const isSuperadmin = userRole === 'superadmin';
-    const isAdmin = ['superadmin', 'admin'].includes(userRole);
+    const isSuperadmin = userRole === ROLES.SUPERADMIN;
+    const isAdmin = ([ROLES.SUPERADMIN, ROLES.ADMIN] as string[]).includes(userRole);
 
     const where: Record<string, any> = { isActive: true };
 
@@ -245,8 +246,8 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
-    const isSuperadmin = userRole === 'superadmin';
-    const isAdmin = userRole && ['superadmin', 'admin'].includes(userRole);
+    const isSuperadmin = userRole === ROLES.SUPERADMIN;
+    const isAdmin = userRole && ([ROLES.SUPERADMIN, ROLES.ADMIN] as string[]).includes(userRole);
 
     // Multi-tenancy access control
     if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
@@ -307,8 +308,8 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
-    const isSuperadmin = userRole === 'superadmin';
-    const isAdmin = ['superadmin', 'admin'].includes(userRole);
+    const isSuperadmin = userRole === ROLES.SUPERADMIN;
+    const isAdmin = ([ROLES.SUPERADMIN, ROLES.ADMIN] as string[]).includes(userRole);
 
     // Multi-tenancy access control
     if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
@@ -399,8 +400,8 @@ export class SupportService {
       throw new NotFoundException('Ticket not found');
     }
 
-    const isSuperadmin = userRole === 'superadmin';
-    const isAdmin = ['superadmin', 'admin'].includes(userRole);
+    const isSuperadmin = userRole === ROLES.SUPERADMIN;
+    const isAdmin = ([ROLES.SUPERADMIN, ROLES.ADMIN] as string[]).includes(userRole);
 
     // Multi-tenancy access control
     if (!isSuperadmin && isAdmin && userGymId && ticket.gymId !== userGymId) {
@@ -444,8 +445,8 @@ export class SupportService {
     userRole: string,
     userGymId?: number,
   ) {
-    const isSuperadmin = userRole === 'superadmin';
-    const isAdmin = ['superadmin', 'admin'].includes(userRole);
+    const isSuperadmin = userRole === ROLES.SUPERADMIN;
+    const isAdmin = ([ROLES.SUPERADMIN, ROLES.ADMIN] as string[]).includes(userRole);
 
     if (!isAdmin) {
       throw new ForbiddenException('Only admins can delete tickets');

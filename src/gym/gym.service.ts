@@ -17,6 +17,7 @@ import {
   createPaginationMeta,
 } from '../common/pagination.util';
 import { hashPassword } from '../common/utils';
+import { ROLES, USER_STATUS, GYM_STATUS } from '../common/constants';
 
 export interface GymFilters extends PaginationParams {
   status?: string;
@@ -46,7 +47,7 @@ export class GymService {
 
     // Handle status filter
     if (filters.status && filters.status !== 'all') {
-      where.isActive = filters.status === 'active';
+      where.isActive = filters.status === GYM_STATUS.ACTIVE;
     } else if (!filters.includeInactive) {
       where.isActive = true;
     }
@@ -72,7 +73,7 @@ export class GymService {
       take,
       include: {
         userAssignments: {
-          where: { role: 'admin', isActive: true },
+          where: { role: ROLES.ADMIN, isActive: true },
           include: {
             user: {
               select: {
@@ -126,7 +127,7 @@ export class GymService {
       where: { id },
       include: {
         userAssignments: {
-          where: { role: 'admin', isActive: true },
+          where: { role: ROLES.ADMIN, isActive: true },
           include: {
             user: {
               select: {
@@ -240,7 +241,7 @@ export class GymService {
         passwordHash,
         name: dto.admin.name,
         phone: dto.admin.phone,
-        status: 'active',
+        status: USER_STATUS.ACTIVE,
       },
     });
 
@@ -250,7 +251,7 @@ export class GymService {
         userId: createdUser.id,
         gymId: gym.id,
         branchId: null, // Admin has access to all branches
-        role: 'admin',
+        role: ROLES.ADMIN,
         isPrimary: true,
         isActive: true,
       },
@@ -482,7 +483,7 @@ export class GymService {
     }
 
     // Don't allow removing the primary admin
-    if (assignment.role === 'admin' && assignment.isPrimary) {
+    if (assignment.role === ROLES.ADMIN && assignment.isPrimary) {
       throw new BadRequestException(
         'Cannot remove the primary admin from the gym',
       );
@@ -511,9 +512,9 @@ export class GymService {
 
     // Don't allow changing the primary admin's role
     if (
-      assignment.role === 'admin' &&
+      assignment.role === ROLES.ADMIN &&
       assignment.isPrimary &&
-      newRole !== 'admin'
+      newRole !== ROLES.ADMIN
     ) {
       throw new BadRequestException(
         'Cannot change the role of the primary admin',
@@ -535,7 +536,7 @@ export class GymService {
       where: { id: gymId },
       include: {
         userAssignments: {
-          where: { role: 'admin', isActive: true },
+          where: { role: ROLES.ADMIN, isActive: true },
           include: {
             user: {
               select: {

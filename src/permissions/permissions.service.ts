@@ -10,6 +10,7 @@ import {
   UpdatePermissionDto,
   AssignRolePermissionsDto,
 } from './dto/permission.dto';
+import { ROLES } from '../common/constants';
 
 @Injectable()
 export class PermissionsService {
@@ -221,24 +222,24 @@ export class PermissionsService {
   ) {
     // Handle impersonation case - superadmin acting as admin should have all permissions
     if (isImpersonating) {
-      return this.getPermissionsByRole('superadmin');
+      return this.getPermissionsByRole(ROLES.SUPERADMIN);
     }
 
     // Handle superadmin case - they don't have gymId
-    if (gymId === null || role === 'superadmin') {
+    if (gymId === null || role === ROLES.SUPERADMIN) {
       // For superadmin, return all permissions or permissions for 'superadmin' role
-      return this.getPermissionsByRole('superadmin');
+      return this.getPermissionsByRole(ROLES.SUPERADMIN);
     }
 
     // Handle admin case - admin users are in public.users, not tenant.users
     // They have a role passed from JWT, so we can use it directly
-    if (role === 'admin') {
-      return this.getPermissionsByRole('admin');
+    if (role === ROLES.ADMIN) {
+      return this.getPermissionsByRole(ROLES.ADMIN);
     }
 
     // Handle branch_admin case - branch admins are in public.users with branch assignments
-    if (role === 'branch_admin') {
-      return this.getPermissionsByRole('branch_admin');
+    if (role === ROLES.BRANCH_ADMIN) {
+      return this.getPermissionsByRole(ROLES.BRANCH_ADMIN);
     }
 
     // For tenant users (manager, trainer, client), get role from tenant schema
@@ -258,7 +259,7 @@ export class PermissionsService {
     }
 
     // Get role from the user record
-    const roleCode = user.role || 'client';
+    const roleCode = user.role || ROLES.CLIENT;
     return this.getPermissionsByRole(roleCode);
   }
 

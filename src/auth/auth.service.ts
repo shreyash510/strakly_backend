@@ -24,7 +24,7 @@ import {
 } from './dto/google-auth.dto';
 import { hashPassword, comparePassword } from '../common/utils';
 import { SqlValue } from '../common/types';
-import { PASSWORD_CONFIG, OTP_CONFIG } from '../common/constants';
+import { PASSWORD_CONFIG, OTP_CONFIG, ROLES, USER_STATUS } from '../common/constants';
 import { OAuth2Client } from 'google-auth-library';
 import * as crypto from 'crypto';
 
@@ -121,7 +121,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: gymAssignment?.role || user.role || 'client',
+      role: gymAssignment?.role || user.role || ROLES.CLIENT,
       gymId: gymAssignment?.gymId || user.gymId || null,
       tenantSchemaName:
         gymAssignment?.gym?.tenantSchemaName ||
@@ -143,9 +143,9 @@ export class AuthService {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role || 'client',
+      role: user.role || ROLES.CLIENT,
       avatar: user.avatar,
-      status: user.status || 'active',
+      status: user.status || USER_STATUS.ACTIVE,
       phone: user.phone,
       emailVerified: user.emailVerified ?? user.email_verified ?? false,
       attendanceCode: user.attendance_code || user.attendanceCode,
@@ -306,7 +306,7 @@ export class AuthService {
           passwordHash,
           name: dto.user.name,
           phone: dto.user.phone,
-          status: 'active',
+          status: USER_STATUS.ACTIVE,
         },
       });
       this.logger.log(`User created: ${createdUser.id}`);
@@ -330,7 +330,7 @@ export class AuthService {
       data: {
         userId: createdUser.id,
         gymId: gym.id,
-        role: 'admin',
+        role: ROLES.ADMIN,
         isPrimary: true,
         isActive: true,
       },
@@ -414,7 +414,7 @@ export class AuthService {
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
       branchId: null, // Admin has access to all branches
-      role: 'admin',
+      role: ROLES.ADMIN,
       isPrimary: true,
       gym: {
         id: updatedGym!.id,
@@ -427,7 +427,7 @@ export class AuthService {
     };
 
     const user = this.toUserResponse(
-      { ...createdUser, role: 'admin', emailVerified: false },
+      { ...createdUser, role: ROLES.ADMIN, emailVerified: false },
       updatedGym,
       [gymAssignment],
       subscription,
@@ -481,7 +481,7 @@ export class AuthService {
         name: systemUser.name,
         email: systemUser.email,
         role: systemUser.role,
-        status: 'active',
+        status: USER_STATUS.ACTIVE,
       };
 
       const payload = {
@@ -525,11 +525,11 @@ export class AuthService {
         throw new UnauthorizedException('Your account has been deleted');
       }
 
-      if (adminUser.status === 'suspended') {
+      if (adminUser.status === USER_STATUS.SUSPENDED) {
         throw new UnauthorizedException('Your account has been suspended');
       }
 
-      if (adminUser.status === 'inactive') {
+      if (adminUser.status === USER_STATUS.INACTIVE) {
         throw new UnauthorizedException('Your account is inactive');
       }
 
@@ -599,140 +599,146 @@ export class AuthService {
       };
     }
 
-    // Check staff (manager, trainer) and client login in all tenant schemas
+    // Check staff (manager, trainer) and client login across all tenant schemas
+    // Phase 1: Query all gyms in parallel to find which tenant has this user
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
     });
 
-    for (const gym of gyms) {
-      try {
-        const schemaExists = await this.tenantService.tenantSchemaExists(
-          gym.id,
-        );
-        if (!schemaExists) continue;
+    const BATCH_SIZE = 5;
+    let matchedGym: Record<string, any> | null = null;
+    let matchedUser: Record<string, any> | null = null;
 
-        const tenantUser = await this.tenantService.executeInTenant(
-          gym.id,
-          async (client) => {
-            const result = await client.query(
-              `SELECT * FROM users WHERE email = $1`,
-              [loginDto.email],
-            );
-            return result.rows[0];
-          },
-        );
+    for (let i = 0; i < gyms.length; i += BATCH_SIZE) {
+      const batch = gyms.slice(i, i + BATCH_SIZE);
 
-        if (tenantUser) {
-          // Check user status
-          if (tenantUser.status === 'suspended') {
-            throw new UnauthorizedException('Your account has been suspended');
-          }
+      const results = await Promise.allSettled(
+        batch.map(async (gym) => {
+          const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!schemaExists) return null;
 
-          if (tenantUser.status === 'inactive') {
-            throw new UnauthorizedException('Your account is inactive');
-          }
-
-          if (
-            tenantUser.status === 'onboarding' ||
-            tenantUser.status === 'confirm'
-          ) {
-            throw new UnauthorizedException('Your account is pending approval');
-          }
-
-          if (tenantUser.status === 'rejected') {
-            throw new UnauthorizedException(
-              'Your registration has been rejected',
-            );
-          }
-
-          if (tenantUser.status === 'archive') {
-            throw new UnauthorizedException('Your account has been archived');
-          }
-
-          if (tenantUser.status === 'expired') {
-            throw new UnauthorizedException('Your account has expired');
-          }
-
-          // Check password
-          const isPasswordValid = await comparePassword(
-            loginDto.password,
-            tenantUser.password_hash,
+          const tenantUser = await this.tenantService.executeInTenant(
+            gym.id,
+            async (client) => {
+              const result = await client.query(
+                `SELECT * FROM users WHERE email = $1`,
+                [loginDto.email],
+              );
+              return result.rows[0];
+            },
           );
 
-          if (!isPasswordValid) {
-            throw new UnauthorizedException('Invalid credentials');
-          }
+          return tenantUser ? { gym, tenantUser } : null;
+        }),
+      );
 
-          // Update last login time
-          await this.tenantService.executeInTenant(gym.id, async (client) => {
-            await client.query(
-              `UPDATE users SET last_login_at = NOW() WHERE id = $1`,
-              [tenantUser.id],
-            );
-          });
-
-          // Get user's role from tenant schema (could be manager, trainer, branch_admin, or client)
-          const userRole = tenantUser.role || 'client';
-
-          // For branch_admin, fetch their assigned branch IDs
-          let branchIds: number[] = [];
-          if (userRole === 'branch_admin') {
-            const branchAssignments = await this.tenantService.executeInTenant(
-              gym.id,
-              async (client) => {
-                const result = await client.query(
-                  `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
-                  [tenantUser.id],
-                );
-                return result.rows;
-              },
-            );
-            branchIds = branchAssignments.map((a: Record<string, any>) => a.branch_id);
-          }
-
-          // Get subscription for the gym
-          const subscription = await this.getGymSubscription(gym.id);
-
-          const user = this.toUserResponse(
-            { ...tenantUser, role: userRole, branchIds },
-            gym,
-            undefined,
-            subscription,
-          );
-          const accessToken = this.generateToken(user, {
-            gymId: gym.id,
-            branchId: tenantUser.branch_id ?? null, // User's assigned branch
-            role: userRole,
-            isPrimary: true,
-            gym: {
-              id: gym.id,
-              name: gym.name,
-              logo: gym.logo || undefined,
-              city: gym.city || undefined,
-              state: gym.state || undefined,
-              tenantSchemaName: gym.tenantSchemaName!,
-            },
-          });
-
-          return {
-            user,
-            accessToken,
-            tokens: {
-              accessToken,
-              expiresIn: 604800,
-              tokenType: 'Bearer',
-            },
-          };
-        }
-      } catch (e) {
-        // Skip gyms with errors (schema might not exist)
-        if (e instanceof UnauthorizedException) {
-          throw e;
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          matchedGym = result.value.gym;
+          matchedUser = result.value.tenantUser;
+          break;
         }
       }
+
+      if (matchedUser) break;
     }
 
-    throw new UnauthorizedException('Invalid credentials');
+    if (!matchedUser || !matchedGym) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Phase 2: Validate the matched user (status, password, etc.)
+    const tenantUser = matchedUser;
+    const gym = matchedGym;
+
+    if (tenantUser.status === USER_STATUS.SUSPENDED) {
+      throw new UnauthorizedException('Your account has been suspended');
+    }
+    if (tenantUser.status === USER_STATUS.INACTIVE) {
+      throw new UnauthorizedException('Your account is inactive');
+    }
+    if (
+      tenantUser.status === USER_STATUS.ONBOARDING ||
+      tenantUser.status === USER_STATUS.CONFIRM
+    ) {
+      throw new UnauthorizedException('Your account is pending approval');
+    }
+    if (tenantUser.status === USER_STATUS.REJECTED) {
+      throw new UnauthorizedException('Your registration has been rejected');
+    }
+    if (tenantUser.status === USER_STATUS.ARCHIVE) {
+      throw new UnauthorizedException('Your account has been archived');
+    }
+    if (tenantUser.status === USER_STATUS.EXPIRED) {
+      throw new UnauthorizedException('Your account has expired');
+    }
+
+    const isPasswordValid = await comparePassword(
+      loginDto.password,
+      tenantUser.password_hash,
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Update last login time
+    await this.tenantService.executeInTenant(gym.id, async (client) => {
+      await client.query(
+        `UPDATE users SET last_login_at = NOW() WHERE id = $1`,
+        [tenantUser.id],
+      );
+    });
+
+    const userRole = tenantUser.role || ROLES.CLIENT;
+
+    // For branch_admin, fetch their assigned branch IDs
+    let branchIds: number[] = [];
+    if (userRole === ROLES.BRANCH_ADMIN) {
+      const branchAssignments = await this.tenantService.executeInTenant(
+        gym.id,
+        async (client) => {
+          const result = await client.query(
+            `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
+            [tenantUser.id],
+          );
+          return result.rows;
+        },
+      );
+      branchIds = branchAssignments.map((a: Record<string, any>) => a.branch_id);
+    }
+
+    const subscription = await this.getGymSubscription(gym.id);
+
+    const user = this.toUserResponse(
+      { ...tenantUser, role: userRole, branchIds },
+      gym,
+      undefined,
+      subscription,
+    );
+    const accessToken = this.generateToken(user, {
+      gymId: gym.id,
+      branchId: tenantUser.branch_id ?? null,
+      role: userRole,
+      isPrimary: true,
+      gym: {
+        id: gym.id,
+        name: gym.name,
+        logo: gym.logo || undefined,
+        city: gym.city || undefined,
+        state: gym.state || undefined,
+        tenantSchemaName: gym.tenantSchemaName!,
+      },
+    });
+
+    return {
+      user,
+      accessToken,
+      tokens: {
+        accessToken,
+        expiresIn: 604800,
+        tokenType: 'Bearer',
+      },
+    };
   }
 
   /**
@@ -839,7 +845,7 @@ export class AuthService {
       }
 
       // Get role from tenant user (could be manager, trainer, or client)
-      const userRole = tenantUser.role || 'client';
+      const userRole = tenantUser.role || ROLES.CLIENT;
 
       // Get subscription for gym
       const subscription = await this.getGymSubscription(gymId);
@@ -895,7 +901,7 @@ export class AuthService {
       : null;
 
     return this.toUserResponse(
-      { ...adminUser, role: currentAssignment?.role || 'admin' },
+      { ...adminUser, role: currentAssignment?.role || ROLES.ADMIN },
       currentAssignment?.gym,
       gymAssignments,
       subscription,
@@ -962,7 +968,7 @@ export class AuthService {
         },
       );
 
-      const userRole = tenantUser.role || 'client';
+      const userRole = tenantUser.role || ROLES.CLIENT;
       return this.toUserResponse({ ...tenantUser, role: userRole }, gym);
     }
 
@@ -1006,7 +1012,7 @@ export class AuthService {
       : gymAssignments.find((g) => g.isPrimary) || gymAssignments[0];
 
     return this.toUserResponse(
-      { ...updatedUser, role: currentAssignment?.role || 'admin' },
+      { ...updatedUser, role: currentAssignment?.role || ROLES.ADMIN },
       currentAssignment?.gym,
       gymAssignments,
     );
@@ -1103,7 +1109,7 @@ export class AuthService {
         : user.gyms?.[0];
 
     // Admin users (not tenant users) need isAdmin flag
-    const isAdmin = !isTenantUser && user.role === 'admin';
+    const isAdmin = !isTenantUser && user.role === ROLES.ADMIN;
 
     return {
       accessToken: this.generateToken(user, gymAssignment, isAdmin),
@@ -1142,7 +1148,7 @@ export class AuthService {
           { email: { contains: query, mode: 'insensitive' } },
         ],
         gymAssignments: {
-          some: { gymId, isActive: true, role: 'admin' },
+          some: { gymId, isActive: true, role: ROLES.ADMIN },
         },
       },
       include: {
@@ -1175,7 +1181,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.gymAssignments[0]?.role || 'admin',
+        role: user.gymAssignments[0]?.role || ROLES.ADMIN,
         avatar: user.avatar ?? undefined,
       })),
       ...tenantStaff.map((user: Record<string, any>) => ({
@@ -1445,38 +1451,43 @@ export class AuthService {
       };
     }
 
-    // Check all tenant schemas for staff and clients
+    // Check all tenant schemas for staff and clients (batched parallel)
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
     });
 
-    for (const gym of gyms) {
-      try {
-        const schemaExists = await this.tenantService.tenantSchemaExists(
-          gym.id,
-        );
-        if (!schemaExists) continue;
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < gyms.length; i += BATCH_SIZE) {
+      const batch = gyms.slice(i, i + BATCH_SIZE);
 
-        const tenantUser = await this.tenantService.executeInTenant(
-          gym.id,
-          async (client) => {
-            const result = await client.query(
-              `SELECT name, role FROM users WHERE email = $1`,
-              [email],
-            );
-            return result.rows[0];
-          },
-        );
+      const results = await Promise.allSettled(
+        batch.map(async (gym) => {
+          const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!schemaExists) return null;
 
-        if (tenantUser) {
+          const tenantUser = await this.tenantService.executeInTenant(
+            gym.id,
+            async (client) => {
+              const result = await client.query(
+                `SELECT name, role FROM users WHERE email = $1`,
+                [email],
+              );
+              return result.rows[0];
+            },
+          );
+
+          return tenantUser ? { tenantUser, gymId: gym.id } : null;
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
           return {
-            userName: tenantUser.name,
-            userType: tenantUser.role || 'client',
-            gymId: gym.id,
+            userName: result.value.tenantUser.name,
+            userType: result.value.tenantUser.role || ROLES.CLIENT,
+            gymId: result.value.gymId,
           };
         }
-      } catch (e) {
-        // Skip gyms with errors
       }
     }
 
@@ -1942,7 +1953,7 @@ export class AuthService {
       where: { id: superAdminId },
     });
 
-    if (!systemUser || systemUser.role !== 'superadmin') {
+    if (!systemUser || systemUser.role !== ROLES.SUPERADMIN) {
       throw new UnauthorizedException('Only superadmins can impersonate gyms');
     }
 
@@ -1967,12 +1978,12 @@ export class AuthService {
       sub: superAdminId,
       email: systemUser.email,
       name: systemUser.name,
-      role: 'admin', // Act as admin within the gym
+      role: ROLES.ADMIN, // Act as admin within the gym
       gymId: gym.id,
       tenantSchemaName: gym.tenantSchemaName,
       branchId: null, // Access to all branches
       isImpersonating: true,
-      originalRole: 'superadmin',
+      originalRole: ROLES.SUPERADMIN,
       impersonatedGymId: gym.id,
     };
 
@@ -2113,11 +2124,11 @@ export class AuthService {
     }
 
     // Check user status
-    if (user.status === 'suspended') {
+    if (user.status === USER_STATUS.SUSPENDED) {
       throw new UnauthorizedException('Your account has been suspended');
     }
 
-    if (user.status === 'inactive') {
+    if (user.status === USER_STATUS.INACTIVE) {
       throw new UnauthorizedException('Your account is inactive');
     }
 
@@ -2312,7 +2323,7 @@ export class AuthService {
           name: dto.user.name,
           avatar: dto.user.picture,
           googleId: dto.user.googleId,
-          status: 'active',
+          status: USER_STATUS.ACTIVE,
           emailVerified: true, // Google email is already verified
         },
       });
@@ -2337,7 +2348,7 @@ export class AuthService {
       data: {
         userId: createdUser.id,
         gymId: gym.id,
-        role: 'admin',
+        role: ROLES.ADMIN,
         isPrimary: true,
         isActive: true,
       },
@@ -2389,7 +2400,7 @@ export class AuthService {
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
       branchId: null, // Admin has access to all branches
-      role: 'admin',
+      role: ROLES.ADMIN,
       isPrimary: true,
       gym: {
         id: updatedGym!.id,
@@ -2402,7 +2413,7 @@ export class AuthService {
     };
 
     const user = this.toUserResponse(
-      { ...createdUser, role: 'admin', emailVerified: true },
+      { ...createdUser, role: ROLES.ADMIN, emailVerified: true },
       updatedGym,
       [gymAssignment],
     );
