@@ -22,11 +22,15 @@ import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('offers')
 @Controller('offers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.OFFERS)
 @ApiBearerAuth()
 export class OffersController {
   constructor(private readonly offersService: OffersService) {}
