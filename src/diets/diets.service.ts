@@ -10,6 +10,7 @@ import {
   AssignDietDto,
   UpdateDietAssignmentDto,
 } from './dto/diet.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class DietsService {
@@ -121,7 +122,7 @@ export class DietsService {
       gymId,
       async (client) => {
         let whereClause = '1=1';
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering
@@ -171,7 +172,7 @@ export class DietsService {
     );
 
     return {
-      data: diets.map((d: any) => this.formatDiet(d)),
+      data: diets.map((d: Record<string, any>) => this.formatDiet(d)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -186,7 +187,7 @@ export class DietsService {
       gymId,
       async (client) => {
         let query = `SELECT d.* FROM diets d WHERE d.id = $1`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         // Branch filtering
         if (branchId !== null && branchId !== undefined) {
@@ -249,7 +250,7 @@ export class DietsService {
     await this.findOne(id, gymId); // Verify exists
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.title) {
@@ -399,7 +400,7 @@ export class DietsService {
       gymId,
       async (client) => {
         let whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
-        const values: any[] = [dietId];
+        const values: SqlValue[] = [dietId];
         let paramIndex = 2;
 
         // Branch filtering
@@ -425,7 +426,7 @@ export class DietsService {
     // Get assigned by names from public schema
     const pool = this.tenantService.getPool();
     const assignedByIds = [
-      ...new Set(assignments.map((a: any) => a.assigned_by)),
+      ...new Set(assignments.map((a: Record<string, any>) => a.assigned_by)),
     ];
 
     let assignedByMap: Record<number, string> = {};
@@ -435,11 +436,11 @@ export class DietsService {
         [assignedByIds],
       );
       assignedByMap = Object.fromEntries(
-        result.rows.map((u: any) => [u.id, u.name]),
+        result.rows.map((u: Record<string, any>) => [u.id, u.name]),
       );
     }
 
-    return assignments.map((a: any) => ({
+    return assignments.map((a: Record<string, any>) => ({
       id: a.id,
       dietId: a.diet_id,
       dietTitle: a.diet_title,
@@ -482,7 +483,7 @@ export class DietsService {
     // Get assigned by names from public schema
     const pool = this.tenantService.getPool();
     const assignedByIds = [
-      ...new Set(assignments.map((a: any) => a.assigned_by)),
+      ...new Set(assignments.map((a: Record<string, any>) => a.assigned_by)),
     ];
 
     let assignedByMap: Record<number, string> = {};
@@ -492,11 +493,11 @@ export class DietsService {
         [assignedByIds],
       );
       assignedByMap = Object.fromEntries(
-        result.rows.map((u: any) => [u.id, u.name]),
+        result.rows.map((u: Record<string, any>) => [u.id, u.name]),
       );
     }
 
-    return assignments.map((a: any) => ({
+    return assignments.map((a: Record<string, any>) => ({
       id: a.id,
       dietId: a.diet_id,
       dietTitle: a.diet_title,
@@ -541,7 +542,7 @@ export class DietsService {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.status) {
@@ -654,7 +655,7 @@ export class DietsService {
     };
   }
 
-  private formatDiet(d: any) {
+  private formatDiet(d: Record<string, any>) {
     return {
       id: d.id,
       branchId: d.branch_id,
@@ -671,10 +672,10 @@ export class DietsService {
   }
 
   private formatDietAssignment(
-    assignment: any,
-    diet: any,
-    user: any,
-    assignedByUser: any,
+    assignment: Record<string, any>,
+    diet: Record<string, any>,
+    user: Record<string, any>,
+    assignedByUser: Record<string, any>,
   ) {
     return {
       id: assignment.id,

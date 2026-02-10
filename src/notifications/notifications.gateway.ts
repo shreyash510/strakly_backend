@@ -169,7 +169,7 @@ export class NotificationsGateway
   /**
    * Emit notification to a superadmin user
    */
-  emitToSuperadmin(userId: number, notification: any) {
+  emitToSuperadmin(userId: number, notification: Notification) {
     const key = `system:${userId}`;
     const sockets = this.userSockets.get(key);
 
@@ -223,7 +223,7 @@ export class NotificationsGateway
   /**
    * Emit to all superadmins
    */
-  emitToAllSuperadmins(notification: any) {
+  emitToAllSuperadmins(notification: Notification) {
     this.server.to('superadmin').emit('notification', notification);
     this.logger.debug('System notification broadcast to all superadmins');
   }

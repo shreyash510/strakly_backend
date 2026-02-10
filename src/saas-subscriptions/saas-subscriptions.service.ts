@@ -168,10 +168,10 @@ export class SaasSubscriptionsService {
 
   async findAllSubscriptions(
     filters: SubscriptionFilters = {},
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take } = getPaginationParams(filters);
 
-    const where: any = {};
+    const where: Record<string, any> = {};
 
     if (filters.status && filters.status !== 'all') {
       where.status = filters.status;
@@ -244,7 +244,7 @@ export class SaasSubscriptionsService {
     });
 
     // Create a map of gymId -> admin info
-    const ownerMap = new Map<number, any>();
+    const ownerMap = new Map<number, Record<string, any>>();
     for (const assignment of adminAssignments) {
       if (!ownerMap.has(assignment.gymId)) {
         ownerMap.set(assignment.gymId, {
@@ -386,7 +386,7 @@ export class SaasSubscriptionsService {
   async updateSubscription(id: number, dto: UpdateGymSubscriptionDto) {
     await this.findSubscriptionById(id);
 
-    const updateData: any = {};
+    const updateData: Record<string, any> = {};
 
     if (dto.planId) {
       const plan = await this.prisma.saasPlan.findUnique({
@@ -513,7 +513,7 @@ export class SaasSubscriptionsService {
     const { page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Record<string, any> = {};
 
     if (filters.subscriptionId) {
       where.subscriptionId = filters.subscriptionId;
@@ -685,7 +685,7 @@ export class SaasSubscriptionsService {
   async updatePaymentHistory(id: number, dto: UpdatePaymentHistoryDto) {
     const payment = await this.getPaymentById(id);
 
-    const updateData: any = {};
+    const updateData: Record<string, any> = {};
 
     if (dto.status) {
       updateData.status = dto.status;
@@ -736,7 +736,7 @@ export class SaasSubscriptionsService {
   }
 
   async getPaymentStats(gymId?: number) {
-    const where: any = gymId ? { gymId } : {};
+    const where: Record<string, any> = gymId ? { gymId } : {};
 
     const [totalPayments, completedPayments, failedPayments, totalRevenue] =
       await Promise.all([

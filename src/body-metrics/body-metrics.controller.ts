@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { BodyMetricsService } from './body-metrics.service';
 import { UpdateBodyMetricsDto, RecordMetricsDto } from './dto/body-metrics.dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -37,22 +38,22 @@ export class BodyMetricsController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user body metrics' })
-  getMyMetrics(@Request() req: any) {
+  getMyMetrics(@Request() req: AuthenticatedRequest) {
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.getOrCreateMetrics(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
     );
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user body metrics' })
-  updateMyMetrics(@Request() req: any, @Body() dto: UpdateBodyMetricsDto) {
+  updateMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: UpdateBodyMetricsDto) {
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.updateMetrics(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       dto,
       branchId,
     );
@@ -60,11 +61,11 @@ export class BodyMetricsController {
 
   @Post('me/record')
   @ApiOperation({ summary: 'Record body metrics and save to history' })
-  recordMyMetrics(@Request() req: any, @Body() dto: RecordMetricsDto) {
+  recordMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: RecordMetricsDto) {
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.recordMetrics(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       dto,
       branchId,
     );
@@ -87,13 +88,13 @@ export class BodyMetricsController {
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   getMyHistory(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.bodyMetricsService.getHistory(req.user.userId, req.user.gymId, {
+    return this.bodyMetricsService.getHistory(req.user.userId, req.user.gymId!, {
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       startDate: startDate ? new Date(startDate) : undefined,
@@ -103,20 +104,20 @@ export class BodyMetricsController {
 
   @Get('me/progress')
   @ApiOperation({ summary: 'Get current user progress' })
-  getMyProgress(@Request() req: any) {
-    return this.bodyMetricsService.getProgress(req.user.userId, req.user.gymId);
+  getMyProgress(@Request() req: AuthenticatedRequest) {
+    return this.bodyMetricsService.getProgress(req.user.userId, req.user.gymId!);
   }
 
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
   deleteMyHistoryRecord(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.bodyMetricsService.deleteHistoryRecord(
       id,
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
@@ -132,12 +133,12 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  getUserMetrics(@Request() req: any, @Headers('x-user-id') userId: string) {
+  getUserMetrics(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.getOrCreateMetrics(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
     );
   }
@@ -152,7 +153,7 @@ export class BodyMetricsController {
     description: 'Target user ID',
   })
   updateUserMetrics(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: UpdateBodyMetricsDto,
   ) {
@@ -160,7 +161,7 @@ export class BodyMetricsController {
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.updateMetrics(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       dto,
       branchId,
     );
@@ -176,7 +177,7 @@ export class BodyMetricsController {
     description: 'Target user ID',
   })
   recordUserMetrics(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: RecordMetricsDto,
   ) {
@@ -184,7 +185,7 @@ export class BodyMetricsController {
     const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.recordMetrics(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       dto,
       branchId,
     );
@@ -214,7 +215,7 @@ export class BodyMetricsController {
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   async getUserHistory(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -224,7 +225,7 @@ export class BodyMetricsController {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.bodyMetricsService.getHistory(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       {
         page: page ? parseInt(page) : undefined,
         limit: limit ? parseInt(limit) : undefined,
@@ -243,11 +244,11 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  getUserProgress(@Request() req: any, @Headers('x-user-id') userId: string) {
+  getUserProgress(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.bodyMetricsService.getProgress(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 }

@@ -28,6 +28,7 @@ import {
   RenewMembershipDto,
   RecordPaymentDto,
 } from './dto/membership.dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,7 +40,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -83,7 +84,7 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('clientId') clientId?: string,
     @Query('planId') planId?: string,
@@ -98,7 +99,7 @@ export class MembershipsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -126,9 +127,9 @@ export class MembershipsController {
     type: Number,
     description: 'Branch ID for filtering (admin only)',
   })
-  getStats(@Request() req: any, @Query('branchId') queryBranchId?: string) {
+  getStats(@Request() req: AuthenticatedRequest, @Query('branchId') queryBranchId?: string) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.getStats(req.user.gymId, branchId);
+    return this.membershipsService.getStats(req.user.gymId!, branchId);
   }
 
   @Get('overview')
@@ -150,7 +151,7 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   getOverview(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -159,7 +160,7 @@ export class MembershipsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -181,13 +182,13 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   getExpiringSoon(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('days') days?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.getExpiringSoon(
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
       days ? parseInt(days) : 7,
     );
@@ -212,7 +213,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getHistory(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('clientId') clientId?: string,
     @Query('branchId') queryBranchId?: string,
     @Query('page') page?: string,
@@ -224,7 +225,7 @@ export class MembershipsController {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.getHistory(
       parseInt(clientId),
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
       {
         page: page ? parseInt(page) : undefined,
@@ -237,29 +238,29 @@ export class MembershipsController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user memberships' })
-  getMyMemberships(@Request() req: any) {
+  getMyMemberships(@Request() req: AuthenticatedRequest) {
     return this.membershipsService.findByUser(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       req.user.branchId,
     );
   }
 
   @Get('me/active')
   @ApiOperation({ summary: 'Get current user active membership' })
-  getMyActiveMembership(@Request() req: any) {
+  getMyActiveMembership(@Request() req: AuthenticatedRequest) {
     return this.membershipsService.getActiveMembership(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
   @Get('me/status')
   @ApiOperation({ summary: 'Check current user membership status' })
-  checkMyStatus(@Request() req: any) {
+  checkMyStatus(@Request() req: AuthenticatedRequest) {
     return this.membershipsService.checkMembershipStatus(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
@@ -267,26 +268,26 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Get facilities for current user active membership',
   })
-  async getMyFacilities(@Request() req: any) {
+  async getMyFacilities(@Request() req: AuthenticatedRequest) {
     const activeMembership = await this.membershipsService.getActiveMembership(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
     );
     if (!activeMembership) {
       return { facilities: [], amenities: [] };
     }
     return this.membershipsService.getMembershipFacilitiesAndAmenities(
       activeMembership.id,
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
-  renewMyMembership(@Request() req: any, @Body() dto: RenewMembershipDto) {
+  renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
     return this.membershipsService.renew(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       req.user.branchId,
       dto,
     );
@@ -310,7 +311,7 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   findByUser(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -318,7 +319,7 @@ export class MembershipsController {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.findByUser(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
     );
   }
@@ -333,13 +334,13 @@ export class MembershipsController {
     description: 'Target user ID',
   })
   getActiveMembership(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.membershipsService.getActiveMembership(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
@@ -352,11 +353,11 @@ export class MembershipsController {
     required: true,
     description: 'Target user ID',
   })
-  checkStatus(@Request() req: any, @Headers('x-user-id') userId: string) {
+  checkStatus(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.membershipsService.checkMembershipStatus(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
@@ -376,7 +377,7 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   renew(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: RenewMembershipDto,
     @Query('branchId') queryBranchId?: string,
@@ -385,7 +386,7 @@ export class MembershipsController {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.renew(
       parseInt(userId),
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
       dto,
     );
@@ -404,12 +405,12 @@ export class MembershipsController {
     description: 'Branch ID for filtering (admin only)',
   })
   findOne(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.findOne(id, req.user.gymId, branchId);
+    return this.membershipsService.findOne(id, req.user.gymId!, branchId);
   }
 
   @Get(':id/facilities')
@@ -417,12 +418,12 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
   getMembershipFacilities(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.membershipsService.getMembershipFacilitiesAndAmenities(
       id,
-      req.user.gymId,
+      req.user.gymId!,
     );
   }
 
@@ -431,13 +432,13 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
   updateMembershipFacilities(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
   ) {
     return this.membershipsService.updateMembershipFacilitiesAndAmenities(
       id,
-      req.user.gymId,
+      req.user.gymId!,
       dto.facilityIds || [],
       dto.amenityIds || [],
     );
@@ -454,12 +455,12 @@ export class MembershipsController {
     description: 'Branch ID for the membership (admin only)',
   })
   create(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.create(dto, req.user.gymId, branchId, {
+    return this.membershipsService.create(dto, req.user.gymId!, branchId, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
@@ -471,11 +472,11 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a membership' })
   async update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMembershipDto,
   ) {
-    return this.membershipsService.update(id, req.user.gymId, dto);
+    return this.membershipsService.update(id, req.user.gymId!, dto);
   }
 
   @Post(':id/payment')
@@ -483,13 +484,13 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
   async recordPayment(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RecordPaymentDto,
   ) {
     return this.membershipsService.recordPayment(
       id,
-      req.user.gymId,
+      req.user.gymId!,
       dto,
       req.user.userId,
     );
@@ -500,11 +501,11 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Cancel a membership' })
   async cancel(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelMembershipDto,
   ) {
-    return this.membershipsService.cancel(id, req.user.gymId, dto);
+    return this.membershipsService.cancel(id, req.user.gymId!, dto);
   }
 
   @Delete(':id')
@@ -518,10 +519,10 @@ export class MembershipsController {
     description: 'Force delete active/pending memberships',
   })
   async delete(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
   ) {
-    return this.membershipsService.delete(id, req.user.gymId, force === 'true');
+    return this.membershipsService.delete(id, req.user.gymId!, force === 'true');
   }
 }

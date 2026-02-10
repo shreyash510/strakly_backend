@@ -19,7 +19,7 @@ export interface PaginatedResponse<T> {
   pagination: PaginationMeta;
 }
 
-export function getPaginationParams(query: any): {
+export function getPaginationParams(query: Record<string, any>): {
   page: number;
   limit: number;
   skip: number;

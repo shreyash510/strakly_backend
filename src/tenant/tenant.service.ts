@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 @Injectable()
 export class TenantService implements OnModuleInit {
@@ -60,7 +60,7 @@ export class TenantService implements OnModuleInit {
    * Apply migrations to a single tenant schema
    */
   private async migrateTenantSchema(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     this.logger.log(`Migrating schema: ${schemaName}`);
@@ -141,7 +141,7 @@ export class TenantService implements OnModuleInit {
    * Add branch_id columns to existing tenant tables (migration for multi-branch support)
    */
   private async addBranchIdColumns(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     const tablesToMigrate = [
@@ -206,7 +206,7 @@ export class TenantService implements OnModuleInit {
    * Create facilities and amenities tables if they don't exist (migration for existing tenants)
    */
   private async createFacilitiesAndAmenitiesTables(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // Create facilities table
@@ -282,7 +282,7 @@ export class TenantService implements OnModuleInit {
    * Create membership_facilities and membership_amenities junction tables (migration for existing tenants)
    */
   private async createMembershipFacilityTables(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // Create membership_facilities table
@@ -344,7 +344,7 @@ export class TenantService implements OnModuleInit {
    * Create workout_plans and workout_assignments tables (migration for existing tenants)
    */
   private async createWorkoutTables(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // Create workout_plans table
@@ -435,7 +435,7 @@ export class TenantService implements OnModuleInit {
    * Create notifications table for a tenant schema (migration for existing schemas)
    */
   private async createNotificationsTable(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -485,7 +485,7 @@ export class TenantService implements OnModuleInit {
    * Create user_branch_xref table for multi-branch assignments (for branch_admin)
    */
   private async createUserBranchXrefTable(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -524,7 +524,7 @@ export class TenantService implements OnModuleInit {
    * Add status_id column to users table for lookup-based status (migration for existing tenants)
    */
   private async addStatusIdColumn(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -548,7 +548,7 @@ export class TenantService implements OnModuleInit {
    * Add soft delete columns to tenant tables (users, plans, memberships, offers, attendance, staff_salaries, announcements)
    */
   private async addSoftDeleteColumns(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     const tablesToMigrate = [
@@ -605,7 +605,7 @@ export class TenantService implements OnModuleInit {
    * Adds new DATE column alongside existing VARCHAR for backward compatibility
    */
   private async migrateDateColumns(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -660,7 +660,7 @@ export class TenantService implements OnModuleInit {
    * Add CHECK constraints for status fields to enforce valid values
    */
   private async addStatusConstraints(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -707,7 +707,7 @@ export class TenantService implements OnModuleInit {
    * Add performance indexes for common query patterns
    */
   private async addPerformanceIndexes(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     const indexes = [
@@ -751,7 +751,7 @@ export class TenantService implements OnModuleInit {
    * Create payments table for centralized payment tracking
    */
   private async createPaymentsTable(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -837,7 +837,7 @@ export class TenantService implements OnModuleInit {
    * Create history tables for audit trail (user_history, plan_history, salary_history)
    */
   private async createHistoryTables(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // User history table
@@ -945,7 +945,7 @@ export class TenantService implements OnModuleInit {
    * Create activity logs table for user action audit trail
    */
   private async createActivityLogsTable(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -1015,7 +1015,7 @@ export class TenantService implements OnModuleInit {
    * Create announcements table for gym-wide announcements
    */
   private async createAnnouncementsTable(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     try {
@@ -1118,7 +1118,7 @@ export class TenantService implements OnModuleInit {
    * Only Admin (gym owner) is in public.users
    */
   private async createTenantTables(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // Users table (STAFF: manager, trainer + CLIENTS: members)
@@ -1565,7 +1565,7 @@ export class TenantService implements OnModuleInit {
    * Create indexes for tenant tables
    */
   private async createTenantIndexes(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     // Users indexes
@@ -1782,7 +1782,7 @@ export class TenantService implements OnModuleInit {
    * Seed default membership plans for a new tenant
    */
   private async seedDefaultPlans(
-    client: any,
+    client: PoolClient,
     schemaName: string,
   ): Promise<void> {
     const defaultPlans = [
@@ -1907,7 +1907,7 @@ export class TenantService implements OnModuleInit {
    */
   async executeInTenant<T>(
     gymId: number,
-    callback: (client: any, schemaName: string) => Promise<T>,
+    callback: (client: PoolClient, schemaName: string) => Promise<T>,
   ): Promise<T> {
     const schemaName = this.getTenantSchemaName(gymId);
     const client = await this.pool.connect();

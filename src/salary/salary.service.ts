@@ -20,6 +20,7 @@ import {
   getPaginationParams,
   createPaginationMeta,
 } from '../common/pagination.util';
+import { SqlValue } from '../common/types';
 
 export interface SalaryFilters extends PaginationParams {
   staffId?: number;
@@ -39,7 +40,7 @@ export class SalaryService {
     private paymentsService: PaymentsService,
   ) {}
 
-  private formatSalary(s: any, staff?: any, paidBy?: any) {
+  private formatSalary(s: Record<string, any>, staff?: Record<string, any> | null, paidBy?: Record<string, any> | null) {
     return {
       id: s.id,
       branchId: s.branch_id,
@@ -142,14 +143,14 @@ export class SalaryService {
   async findAll(
     filters: SalaryFilters,
     gymId: number,
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take } = getPaginationParams(filters);
 
     const { salaries, total, userMap } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Start with soft delete filter
         let whereClause = `(s.is_deleted = FALSE OR s.is_deleted IS NULL)`;
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering for non-admin users (filter by staff's branch)
@@ -199,15 +200,15 @@ export class SalaryService {
 
         // Build user map for paidBy lookups (from public.users - admins)
         const paidByIds = salariesResult.rows
-          .filter((s: any) => s.paid_by_id)
-          .map((s: any) => s.paid_by_id);
+          .filter((s: Record<string, any>) => s.paid_by_id)
+          .map((s: Record<string, any>) => s.paid_by_id);
         let paidByMap = new Map();
         if (paidByIds.length > 0) {
           const paidByUsers = await this.prisma.user.findMany({
             where: { id: { in: paidByIds } },
             select: { id: true, name: true, email: true },
           });
-          paidByMap = new Map(paidByUsers.map((u: any) => [u.id, u]));
+          paidByMap = new Map(paidByUsers.map((u: Record<string, any>) => [u.id, u]));
         }
 
         return {
@@ -217,7 +218,7 @@ export class SalaryService {
         };
       });
 
-    const data = salaries.map((s: any) =>
+    const data = salaries.map((s: Record<string, any>) =>
       this.formatSalary(
         s,
         {
@@ -257,18 +258,18 @@ export class SalaryService {
 
     // Get paidBy info for paid salaries
     const paidByIds = salaries
-      .filter((s: any) => s.paid_by_id)
-      .map((s: any) => s.paid_by_id);
+      .filter((s: Record<string, any>) => s.paid_by_id)
+      .map((s: Record<string, any>) => s.paid_by_id);
     let paidByMap = new Map();
     if (paidByIds.length > 0) {
       const paidByUsers = await this.prisma.user.findMany({
         where: { id: { in: paidByIds } },
         select: { id: true, name: true, email: true },
       });
-      paidByMap = new Map(paidByUsers.map((u: any) => [u.id, u]));
+      paidByMap = new Map(paidByUsers.map((u: Record<string, any>) => [u.id, u]));
     }
 
-    return salaries.map((s: any) =>
+    return salaries.map((s: Record<string, any>) =>
       this.formatSalary(
         s,
         {
@@ -520,7 +521,7 @@ export class SalaryService {
          FROM users u
          LEFT JOIN branches b ON b.id = u.branch_id
          WHERE u.status = 'active' AND u.role IN ('branch_admin', 'manager', 'trainer')`;
-      const values: any[] = [];
+      const values: SqlValue[] = [];
 
       // Branch filtering for non-admin users
       if (branchId !== null) {
@@ -538,7 +539,7 @@ export class SalaryService {
         trainer: 'Trainer',
       };
 
-      return result.rows.map((u: any) => ({
+      return result.rows.map((u: Record<string, any>) => ({
         id: u.id,
         name: u.name,
         email: u.email,

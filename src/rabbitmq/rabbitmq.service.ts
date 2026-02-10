@@ -64,8 +64,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       for (const { queue, handler } of this.consumers) {
         await this.setupConsumer(queue, handler);
       }
-    } catch (error: any) {
-      this.logger.error(`Failed to connect to RabbitMQ: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to connect to RabbitMQ: ${msg}`);
       this.channel = null;
       this.connection = null;
       if (!this.isShuttingDown) {
@@ -90,16 +91,18 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         await this.channel.close();
         this.channel = null;
       }
-    } catch (err: any) {
-      this.logger.error(`Error closing channel: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Error closing channel: ${msg}`);
     }
     try {
       if (this.connection) {
         await this.connection.close();
         this.connection = null;
       }
-    } catch (err: any) {
-      this.logger.error(`Error closing connection: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Error closing connection: ${msg}`);
     }
   }
 
@@ -115,8 +118,9 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
         Buffer.from(JSON.stringify(message)),
         { persistent: true },
       );
-    } catch (error: any) {
-      this.logger.error(`Failed to publish to ${queue}: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to publish to ${queue}: ${msg}`);
     }
   }
 
@@ -144,9 +148,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       try {
         const content = JSON.parse(msg.content.toString());
         await handler(content);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Error processing message from ${queue}: ${error.message}`,
+          `Error processing message from ${queue}: ${msg}`,
         );
       } finally {
         this.channel?.ack(msg);

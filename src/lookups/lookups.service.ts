@@ -214,7 +214,7 @@ export class LookupsService {
   async createBulkLookups(typeCode: string, lookups: CreateLookupDto[]) {
     const lookupType = await this.findLookupTypeByCode(typeCode);
 
-    const results: any[] = [];
+    const results: Record<string, any>[] = [];
     for (const dto of lookups) {
       try {
         const created = await this.prisma.lookup.create({

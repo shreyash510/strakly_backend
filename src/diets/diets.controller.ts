@@ -27,6 +27,7 @@ import {
   AssignDietDto,
   UpdateDietAssignmentDto,
 } from './dto/diet.dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -41,7 +42,7 @@ export class DietsController {
   /**
    * Resolve branchId from request: null = all branches, number = specific branch
    */
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     if (req.user.role === 'superadmin') {
       return queryBranchId ? parseInt(queryBranchId) : null;
     }
@@ -85,7 +86,7 @@ export class DietsController {
     description: 'Branch ID for filtering',
   })
   findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('type') type?: string,
     @Query('category') category?: string,
@@ -100,7 +101,7 @@ export class DietsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -125,7 +126,7 @@ export class DietsController {
   @ApiOperation({ summary: 'Get a diet plan by ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   findOne(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
@@ -134,7 +135,7 @@ export class DietsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -147,12 +148,12 @@ export class DietsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a new diet plan' })
-  create(@Request() req: any, @Body() dto: CreateDietDto) {
+  create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
     // Use branchId from request body if provided, otherwise fallback to user's branchId
     const branchId = dto.branchId ?? req.user.branchId ?? null;
     return this.dietsService.create(
       dto,
-      req.user.gymId,
+      req.user.gymId!,
       req.user.userId,
       branchId,
     );
@@ -163,19 +164,19 @@ export class DietsController {
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a diet plan' })
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDietDto,
   ) {
-    return this.dietsService.update(id, dto, req.user.gymId);
+    return this.dietsService.update(id, dto, req.user.gymId!);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Delete a diet plan' })
-  delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.dietsService.delete(id, req.user.gymId);
+  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.dietsService.delete(id, req.user.gymId!);
   }
 
   // ============ ASSIGNMENT ENDPOINTS ============
@@ -184,11 +185,11 @@ export class DietsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
-  assignDiet(@Request() req: any, @Body() dto: AssignDietDto) {
+  assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
     const branchId = req.user.branchId ?? null;
     return this.dietsService.assignDiet(
       dto,
-      req.user.gymId,
+      req.user.gymId!,
       req.user.userId,
       branchId,
     );
@@ -200,7 +201,7 @@ export class DietsController {
   @ApiOperation({ summary: 'Get all users assigned to a diet' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getDietAssignments(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
@@ -209,7 +210,7 @@ export class DietsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -224,7 +225,7 @@ export class DietsController {
   @ApiOperation({ summary: 'Get all diets assigned to a user' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getUserDietAssignments(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('userId', ParseIntPipe) userId: number,
     @Query('gymId') queryGymId?: string,
   ) {
@@ -233,7 +234,7 @@ export class DietsController {
         ? queryGymId
           ? parseInt(queryGymId)
           : null
-        : req.user.gymId;
+        : req.user.gymId!;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required');
@@ -247,18 +248,18 @@ export class DietsController {
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a diet assignment' })
   updateAssignment(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDietAssignmentDto,
   ) {
-    return this.dietsService.updateAssignment(id, dto, req.user.gymId);
+    return this.dietsService.updateAssignment(id, dto, req.user.gymId!);
   }
 
   @Delete('assignments/:id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Unassign (cancel) a diet assignment' })
-  unassignDiet(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.dietsService.unassignDiet(id, req.user.gymId);
+  unassignDiet(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.dietsService.unassignDiet(id, req.user.gymId!);
   }
 }

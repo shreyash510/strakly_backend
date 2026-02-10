@@ -6,12 +6,13 @@ import {
 import { TenantService } from '../tenant/tenant.service';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
+import { SqlValue } from '../common/types';
 
 @Injectable()
 export class FacilitiesService {
   constructor(private readonly tenantService: TenantService) {}
 
-  private formatFacility(f: any) {
+  private formatFacility(f: Record<string, any>) {
     return {
       id: f.id,
       branchId: f.branch_id,
@@ -39,7 +40,7 @@ export class FacilitiesService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (!includeInactive) {
@@ -59,7 +60,7 @@ export class FacilitiesService {
         `SELECT * FROM facilities ${whereClause} ORDER BY display_order ASC, name ASC`,
         values,
       );
-      return result.rows.map((f: any) => this.formatFacility(f));
+      return result.rows.map((f: Record<string, any>) => this.formatFacility(f));
     });
   }
 
@@ -71,7 +72,7 @@ export class FacilitiesService {
       gymId,
       async (client) => {
         let query = `SELECT * FROM facilities WHERE id = $1`;
-        const values: any[] = [id];
+        const values: SqlValue[] = [id];
 
         if (branchId !== null) {
           query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
@@ -103,7 +104,7 @@ export class FacilitiesService {
       gymId,
       async (client) => {
         let query = `SELECT id FROM facilities WHERE code = $1`;
-        const values: any[] = [dto.code];
+        const values: SqlValue[] = [dto.code];
 
         if (branchId !== null) {
           query += ` AND branch_id = $2`;
@@ -174,7 +175,7 @@ export class FacilitiesService {
     }
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (dto.name !== undefined) {

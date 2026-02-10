@@ -29,6 +29,7 @@ import {
   createPaginationMeta,
 } from '../common/pagination.util';
 import { hashPassword, generateUniqueAttendanceCode } from '../common/utils';
+import { SqlValue } from '../common/types';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
@@ -113,7 +114,7 @@ export class UsersService {
     }
   }
 
-  private formatAdminUser(user: any, gymAssignments?: any[]) {
+  private formatAdminUser(user: Record<string, any>, gymAssignments?: Record<string, any>[]) {
     const primaryAssignment =
       gymAssignments?.find((a) => a.isPrimary) || gymAssignments?.[0];
     return {
@@ -154,7 +155,7 @@ export class UsersService {
     };
   }
 
-  private formatTenantUser(user: any, gym?: any, branchAssignments?: any[]) {
+  private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null, branchAssignments?: Record<string, any>[]) {
     const role = user.role || 'client';
     const branchIds = branchAssignments?.map((a) => a.branch_id) || [];
     const branchNames = branchAssignments?.map((a) => a.branch_name).filter(Boolean) || [];
@@ -322,7 +323,7 @@ export class UsersService {
       getPaginationParams(filters);
     const gymId = filters.gymId;
 
-    const where: any = {
+    const where: Record<string, any> = {
       isDeleted: false,
       gymAssignments: {
         some: {
@@ -670,7 +671,7 @@ export class UsersService {
         const user = result.rows[0];
 
         // For staff with multiple branches, create user_branch_xref entries
-        let branchAssignments: any[] = [];
+        let branchAssignments: Record<string, any>[] = [];
         if (
           ['branch_admin', 'manager', 'trainer'].includes(role) &&
           branchIds.length > 0
@@ -757,7 +758,7 @@ export class UsersService {
           "u.role IN ('manager', 'trainer', 'branch_admin')",
           '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
         ];
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering: null = all branches, number = specific branch
@@ -814,8 +815,8 @@ export class UsersService {
         ]);
 
         // Fetch branch assignments for all users in the result
-        const userIds = usersResult.rows.map((u: any) => u.id);
-        let branchAssignmentsMap: Record<number, any[]> = {};
+        const userIds = usersResult.rows.map((u: Record<string, any>) => u.id);
+        let branchAssignmentsMap: Record<number, Record<string, any>[]> = {};
 
         if (userIds.length > 0) {
           const assignmentsResult = await client.query(
@@ -847,7 +848,7 @@ export class UsersService {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     return {
-      data: users.map((user: any) => {
+      data: users.map((user: Record<string, any>) => {
         const assignments = branchAssignmentsMap[user.id] || [];
         return this.formatTenantUser(user, gym, assignments);
       }),
@@ -868,7 +869,7 @@ export class UsersService {
         const staff = result.rows[0];
 
         // Fetch branch assignments for all staff roles with branch names
-        let assignments: any[] = [];
+        let assignments: Record<string, any>[] = [];
         if (
           staff &&
           ['branch_admin', 'manager', 'trainer'].includes(staff.role)
@@ -906,7 +907,7 @@ export class UsersService {
     await this.findOneStaff(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (updateDto.name) {
@@ -995,7 +996,7 @@ export class UsersService {
 
         // Handle branch assignments update for all roles that can have branch assignments
         const rolesWithBranches = ['branch_admin', 'manager', 'trainer', 'client'];
-        let assignments: any[] = [];
+        let assignments: Record<string, any>[] = [];
         if (
           updateDto.branchIds &&
           updateDto.branchIds.length > 0 &&
@@ -1269,7 +1270,7 @@ export class UsersService {
           `u.role = $1`,
           '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
         ];
-        const values: any[] = [role];
+        const values: SqlValue[] = [role];
         let paramIndex = 2;
 
         if (branchId !== null && branchId !== undefined) {
@@ -1316,7 +1317,7 @@ export class UsersService {
           "u.role = 'client'",
           '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
         ]; // Filter only clients, exclude soft-deleted
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering: null = all branches, number = specific branch
@@ -1396,7 +1397,7 @@ export class UsersService {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     return {
-      data: users.map((user: any) => this.formatTenantUser(user, gym)),
+      data: users.map((user: Record<string, any>) => this.formatTenantUser(user, gym)),
       pagination: createPaginationMeta(total, page, limit, noPagination),
     };
   }
@@ -1418,7 +1419,7 @@ export class UsersService {
         const userData = result.rows[0];
 
         // Fetch branch assignments for clients with branch names
-        let assignments: any[] = [];
+        let assignments: Record<string, any>[] = [];
         if (userData) {
           const assignmentsResult = await client.query(
             `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
@@ -1451,7 +1452,7 @@ export class UsersService {
         }
 
         // Fetch membership history (last 10 memberships)
-        let membershipHistoryData: any[] = [];
+        let membershipHistoryData: Record<string, any>[] = [];
         if (userData) {
           const historyResult = await client.query(
             `SELECT m.*, p.name as plan_name, p.code as plan_code, p.price as plan_price,
@@ -1482,7 +1483,7 @@ export class UsersService {
     const formattedUser = this.formatTenantUser(clientData, gym, branchAssignments);
 
     // Format and add membership data
-    const formatMembership = (m: any) => {
+    const formatMembership = (m: Record<string, any> | null) => {
       if (!m) return null;
       const now = new Date();
       const startDate = new Date(m.start_date);
@@ -1553,7 +1554,7 @@ export class UsersService {
     await this.findOneClient(id, gymId);
 
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: SqlValue[] = [];
     let paramIndex = 1;
 
     if (updateDto.name) {
@@ -1630,7 +1631,7 @@ export class UsersService {
           values,
         );
 
-        let assignments: any[] = [];
+        let assignments: Record<string, any>[] = [];
 
         // Handle branch assignments update if branchIds provided
         if (updateDto.branchIds && updateDto.branchIds.length > 0) {
@@ -1899,20 +1900,21 @@ export class UsersService {
         ]);
 
         // Add gymName to each user for context
-        const staffWithGym = staffResult.data.map((u: any) => ({
+        const staffWithGym = staffResult.data.map((u: Record<string, any>) => ({
           ...u,
           gymName: gym.name,
         }));
-        const clientsWithGym = clientResult.data.map((u: any) => ({
+        const clientsWithGym = clientResult.data.map((u: Record<string, any>) => ({
           ...u,
           gymName: gym.name,
         }));
 
         allUsers = [...allUsers, ...staffWithGym, ...clientsWithGym];
-      } catch (error) {
+      } catch (error: unknown) {
         // Skip gyms that don't have tenant schema yet
+        const msg = error instanceof Error ? error.message : String(error);
         console.warn(
-          `Could not fetch users for gym ${gym.id}: ${error.message}`,
+          `Could not fetch users for gym ${gym.id}: ${msg}`,
         );
       }
     }
@@ -2018,7 +2020,7 @@ export class UsersService {
               );
               const userData = result.rows[0];
 
-              let assignments: any[] = [];
+              let assignments: Record<string, any>[] = [];
               if (userData) {
                 const assignmentsResult = await client.query(
                   `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
@@ -2673,7 +2675,7 @@ export class UsersService {
       },
     );
 
-    return assignments.map((a: any) => ({
+    return assignments.map((a: Record<string, any>) => ({
       id: a.id,
       trainerId: a.trainer_id,
       trainerName: a.trainer_name,
@@ -2822,7 +2824,7 @@ export class UsersService {
       },
     );
 
-    return assignments.map((a: any) => ({
+    return assignments.map((a: Record<string, any>) => ({
       id: a.id,
       trainerId: a.trainer_id,
       trainerName: a.trainer_name,
@@ -2877,10 +2879,11 @@ export class UsersService {
           email: createdUser.email,
           id: createdUser.id,
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         results.failed++;
+        const msg = error instanceof Error ? error.message : String(error);
         results.errors.push(
-          `User ${i + 1} (${userDto.name || userDto.email}): ${error.message}`,
+          `User ${i + 1} (${userDto.name || userDto.email}): ${msg}`,
         );
       }
     }
@@ -2975,9 +2978,10 @@ export class UsersService {
         }
 
         results.success++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         results.failed++;
-        results.errors.push(`User ${userId}: ${error.message}`);
+        const msg = error instanceof Error ? error.message : String(error);
+        results.errors.push(`User ${userId}: ${msg}`);
       }
     }
 
@@ -3058,9 +3062,10 @@ export class UsersService {
         });
 
         results.success++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         results.failed++;
-        results.errors.push(`User ${userId}: ${error.message}`);
+        const msg = error instanceof Error ? error.message : String(error);
+        results.errors.push(`User ${userId}: ${msg}`);
       }
     }
 

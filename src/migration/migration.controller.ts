@@ -20,6 +20,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { MigrationService } from './migration.service';
 import { ValidateDto, ImportDto } from './dto/migration.dto';
 import type { DataType } from './dto/migration.dto';
+import type { AuthenticatedRequest } from '../common/types';
 
 const ALLOWED_TYPES = ['members', 'memberships', 'staff', 'payments'];
 
@@ -85,7 +86,7 @@ export class MigrationController {
 
   @Post('import')
   @ApiOperation({ summary: 'Apply mappings and bulk insert into tenant schema' })
-  async importData(@Body() dto: ImportDto, @Req() req: any) {
+  async importData(@Body() dto: ImportDto, @Req() req: AuthenticatedRequest) {
     const gymId = req.user.gymId;
     if (!gymId) throw new BadRequestException('Gym context required');
 

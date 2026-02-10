@@ -36,11 +36,11 @@ export class ContactRequestsService {
 
   async findAll(
     filters: ContactRequestFilters = {},
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<Record<string, any>>> {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
 
-    const where: any = {};
+    const where: Record<string, any> = {};
 
     // Filter by status
     if (filters.status && filters.status !== 'all') {
@@ -112,10 +112,11 @@ export class ContactRequestsService {
         requestNumber,
       );
       this.logger.log(`Contact request notification sent for ${requestNumber}`);
-    } catch (error) {
+    } catch (error: unknown) {
       // Log error but don't fail the request - contact was still saved
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to send contact request notification: ${error.message}`,
+        `Failed to send contact request notification: ${msg}`,
       );
     }
 
@@ -126,9 +127,10 @@ export class ContactRequestsService {
         requestNumber: contactRequest.requestNumber,
         name: dto.name,
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to send contact request notification to superadmins: ${error.message}`,
+          `Failed to send contact request notification to superadmins: ${msg}`,
         );
       });
 
@@ -138,7 +140,7 @@ export class ContactRequestsService {
   async update(id: number, dto: UpdateContactRequestDto, userId?: number) {
     await this.findOne(id);
 
-    const data: any = { ...dto };
+    const data: Record<string, any> = { ...dto };
 
     // If status is changing to 'replied', set repliedAt and repliedBy
     if (dto.status === 'replied') {

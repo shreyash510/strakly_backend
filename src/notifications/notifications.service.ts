@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
 import { PrismaService } from '../database/prisma.service';
+import { SqlValue } from '../common/types';
 import {
   CreateNotificationDto,
   CreateBulkNotificationDto,
@@ -10,6 +11,7 @@ import {
   Notification,
   NotificationType,
   NotificationPriority,
+  NotificationData,
 } from './notification-types';
 import { NotificationsGateway } from './notifications.gateway';
 
@@ -71,8 +73,9 @@ export class NotificationsService {
     // Emit real-time notification via WebSocket
     try {
       this.gateway.emitToUser(gymId, dto.userId, notification);
-    } catch (error) {
-      this.logger.warn(`Failed to emit real-time notification: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to emit real-time notification: ${msg}`);
     }
 
     return notification;
@@ -92,7 +95,7 @@ export class NotificationsService {
     const notifications = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         const placeholders: string[] = [];
         let paramIndex = 1;
 
@@ -124,7 +127,7 @@ export class NotificationsService {
           values,
         );
 
-        return result.rows.map((row: any) => this.mapToNotification(row));
+        return result.rows.map((row: Record<string, any>) => this.mapToNotification(row));
       },
     );
 
@@ -133,9 +136,10 @@ export class NotificationsService {
       notifications.forEach((notification: Notification) => {
         this.gateway.emitToUser(gymId, notification.userId, notification);
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `Failed to emit bulk real-time notifications: ${error.message}`,
+        `Failed to emit bulk real-time notifications: ${msg}`,
       );
     }
 
@@ -150,14 +154,14 @@ export class NotificationsService {
     gymId: number,
     branchId: number | null,
     query: NotificationQueryDto,
-  ): Promise<{ data: Notification[]; pagination: any }> {
+  ): Promise<{ data: Notification[]; pagination: Record<string, number> }> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const page = query.page || 1;
       const limit = Math.min(query.limit || 20, 50);
       const offset = (page - 1) * limit;
 
       const conditions: string[] = ['user_id = $1'];
-      const params: any[] = [userId];
+      const params: SqlValue[] = [userId];
       let paramIndex = 2;
 
       // Branch filter - if user has branch restriction
@@ -232,7 +236,7 @@ export class NotificationsService {
         WHERE user_id = $1 AND is_read = FALSE
         AND (expires_at IS NULL OR expires_at > NOW())
       `;
-      const params: any[] = [userId];
+      const params: SqlValue[] = [userId];
 
       if (branchId !== null) {
         query += ` AND (branch_id IS NULL OR branch_id = $2)`;
@@ -285,7 +289,7 @@ export class NotificationsService {
         SET is_read = TRUE, read_at = NOW()
         WHERE user_id = $1 AND is_read = FALSE
       `;
-      const params: any[] = [userId];
+      const params: SqlValue[] = [userId];
 
       if (branchId !== null) {
         query += ` AND (branch_id IS NULL OR branch_id = $2)`;
@@ -364,9 +368,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create membership expiry notification: ${error.message}`,
+        `Failed to create membership expiry notification: ${msg}`,
       );
     }
   }
@@ -399,9 +404,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create membership renewed notification: ${error.message}`,
+        `Failed to create membership renewed notification: ${msg}`,
       );
     }
   }
@@ -432,9 +438,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create trainer assigned notification: ${error.message}`,
+        `Failed to create trainer assigned notification: ${msg}`,
       );
     }
   }
@@ -464,9 +471,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create trainer unassigned notification: ${error.message}`,
+        `Failed to create trainer unassigned notification: ${msg}`,
       );
     }
   }
@@ -504,9 +512,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create announcement notification: ${error.message}`,
+        `Failed to create announcement notification: ${msg}`,
       );
     }
   }
@@ -526,7 +535,7 @@ export class NotificationsService {
     data?: Record<string, any>;
     actionUrl?: string;
     priority?: string;
-  }): Promise<any> {
+  }): Promise<Record<string, any>> {
     try {
       const notification = await this.prisma.systemNotification.create({
         data: {
@@ -544,27 +553,32 @@ export class NotificationsService {
       try {
         this.gateway.emitToSuperadmin(data.userId, {
           id: notification.id,
+          branchId: null,
           userId: notification.userId,
-          type: notification.type,
+          type: notification.type as NotificationType,
           title: notification.title,
           message: notification.message,
-          data: notification.data,
+          data: notification.data as NotificationData | null,
           isRead: notification.isRead,
           readAt: notification.readAt,
           actionUrl: notification.actionUrl,
-          priority: notification.priority,
+          priority: notification.priority as NotificationPriority,
+          expiresAt: null,
           createdAt: notification.createdAt,
+          createdBy: null,
         });
-      } catch (error) {
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `Failed to emit real-time system notification: ${error.message}`,
+          `Failed to emit real-time system notification: ${msg}`,
         );
       }
 
       return notification;
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create system notification: ${error.message}`,
+        `Failed to create system notification: ${msg}`,
       );
       throw error;
     }
@@ -604,24 +618,32 @@ export class NotificationsService {
       // Emit real-time notifications to all superadmins
       try {
         this.gateway.emitToAllSuperadmins({
-          type: data.type,
+          id: 0,
+          branchId: null,
+          userId: 0,
+          type: data.type as NotificationType,
           title: data.title,
           message: data.message,
-          data: data.data,
-          actionUrl: data.actionUrl,
-          priority: data.priority || 'normal',
+          data: (data.data ?? null) as NotificationData | null,
+          actionUrl: data.actionUrl ?? null,
+          priority: (data.priority || 'normal') as NotificationPriority,
           isRead: false,
+          readAt: null,
+          expiresAt: null,
           createdAt: new Date(),
+          createdBy: null,
         });
-      } catch (error) {
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `Failed to emit real-time notifications to superadmins: ${error.message}`,
+          `Failed to emit real-time notifications to superadmins: ${msg}`,
         );
       }
 
       return result.count;
-    } catch (error) {
-      this.logger.error(`Failed to notify superadmins: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to notify superadmins: ${msg}`);
       return 0;
     }
   }
@@ -632,12 +654,12 @@ export class NotificationsService {
   async findAllSystemNotifications(
     userId: number,
     query: NotificationQueryDto,
-  ): Promise<{ data: any[]; pagination: any }> {
+  ): Promise<{ data: Record<string, any>[]; pagination: Record<string, number> }> {
     const page = query.page || 1;
     const limit = Math.min(query.limit || 20, 50);
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Record<string, any> = {
       userId,
       ...(query.unreadOnly && { isRead: false }),
       ...(query.type && { type: query.type }),
@@ -693,7 +715,7 @@ export class NotificationsService {
   /**
    * Mark a system notification as read
    */
-  async markSystemNotificationAsRead(id: number, userId: number): Promise<any> {
+  async markSystemNotificationAsRead(id: number, userId: number): Promise<Record<string, any> | null> {
     const notification = await this.prisma.systemNotification.updateMany({
       where: { id, userId },
       data: { isRead: true, readAt: new Date() },
@@ -827,9 +849,10 @@ export class NotificationsService {
         },
         gymId,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to create support ticket resolved notification: ${error.message}`,
+        `Failed to create support ticket resolved notification: ${msg}`,
       );
     }
   }
@@ -837,7 +860,7 @@ export class NotificationsService {
   /**
    * Map database row to Notification interface
    */
-  private mapToNotification(row: any): Notification {
+  private mapToNotification(row: Record<string, any>): Notification {
     return {
       id: row.id,
       branchId: row.branch_id,

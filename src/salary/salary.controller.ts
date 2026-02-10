@@ -26,6 +26,7 @@ import {
   UpdateSalaryDto,
   PaySalaryDto,
 } from './dto/salary.dto';
+import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,7 +40,7 @@ import { setPaginationHeaders } from '../common/pagination.util';
 export class SalaryController {
   constructor(private readonly salaryService: SalaryService) {}
 
-  private resolveGymId(req: any, queryGymId?: string): number {
+  private resolveGymId(req: AuthenticatedRequest, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
       if (!queryGymId) {
         throw new BadRequestException(
@@ -48,10 +49,10 @@ export class SalaryController {
       }
       return parseInt(queryGymId);
     }
-    return req.user.gymId;
+    return req.user.gymId!;
   }
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -72,7 +73,7 @@ export class SalaryController {
     description: 'Gym ID (required for superadmin)',
   })
   create(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() createSalaryDto: CreateSalaryDto,
     @Query('gymId') queryGymId?: string,
   ) {
@@ -105,7 +106,7 @@ export class SalaryController {
     description: 'Branch ID for filtering (admin only)',
   })
   async findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -146,10 +147,10 @@ export class SalaryController {
   @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get current user salary records' })
   @ApiQuery({ name: 'year', required: false, type: Number })
-  async findMySalaries(@Request() req: any, @Query('year') year?: string) {
+  async findMySalaries(@Request() req: AuthenticatedRequest, @Query('year') year?: string) {
     return this.salaryService.findByStaffId(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       year ? parseInt(year) : undefined,
     );
   }
@@ -169,7 +170,7 @@ export class SalaryController {
     description: 'Branch ID for filtering (admin only)',
   })
   getStats(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -193,7 +194,7 @@ export class SalaryController {
     description: 'Branch ID for filtering (admin only)',
   })
   getStaffList(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
@@ -211,7 +212,7 @@ export class SalaryController {
     description: 'Gym ID (required for superadmin)',
   })
   findOne(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
@@ -228,7 +229,7 @@ export class SalaryController {
     description: 'Gym ID (required for superadmin)',
   })
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSalaryDto: UpdateSalaryDto,
     @Query('gymId') queryGymId?: string,
@@ -246,7 +247,7 @@ export class SalaryController {
     description: 'Gym ID (required for superadmin)',
   })
   paySalary(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() paySalaryDto: PaySalaryDto,
     @Query('gymId') queryGymId?: string,
@@ -269,7 +270,7 @@ export class SalaryController {
     description: 'Gym ID (required for superadmin)',
   })
   remove(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {

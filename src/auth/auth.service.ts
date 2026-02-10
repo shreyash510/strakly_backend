@@ -23,6 +23,7 @@ import {
   GoogleSignupPendingResponse,
 } from './dto/google-auth.dto';
 import { hashPassword, comparePassword } from '../common/utils';
+import { SqlValue } from '../common/types';
 import { PASSWORD_CONFIG, OTP_CONFIG } from '../common/constants';
 import { OAuth2Client } from 'google-auth-library';
 import * as crypto from 'crypto';
@@ -133,10 +134,10 @@ export class AuthService {
   }
 
   private toUserResponse(
-    user: any,
-    gym?: any,
+    user: Record<string, any>,
+    gym?: Record<string, any> | null,
     gyms?: GymAssignment[],
-    subscription?: any,
+    subscription?: Record<string, any> | null,
   ): UserResponse {
     return {
       id: user.id,
@@ -261,8 +262,8 @@ export class AuthService {
     // Hash password before transaction
     const passwordHash = await hashPassword(dto.user.password);
 
-    let gym: any;
-    let createdUser: any;
+    let gym: Record<string, any> | null = null;
+    let createdUser: Record<string, any> | null = null;
 
     try {
       // Create gym and get gym ID first
@@ -309,8 +310,9 @@ export class AuthService {
         },
       });
       this.logger.log(`User created: ${createdUser.id}`);
-    } catch (error: any) {
-      this.logger.error('Registration error:', error.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Registration error:', msg);
       // Clean up gym if it was created but user creation failed
       if (gym?.id && !createdUser) {
         try {
@@ -685,7 +687,7 @@ export class AuthService {
                 return result.rows;
               },
             );
-            branchIds = branchAssignments.map((a: any) => a.branch_id);
+            branchIds = branchAssignments.map((a: Record<string, any>) => a.branch_id);
           }
 
           // Get subscription for the gym
@@ -921,7 +923,7 @@ export class AuthService {
       }
 
       const updates: string[] = [];
-      const values: any[] = [];
+      const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (data.name) {
@@ -965,7 +967,7 @@ export class AuthService {
     }
 
     // Update admin in public.users
-    const updateData: any = {};
+    const updateData: Record<string, string | undefined> = {};
     if (data.name) updateData.name = data.name;
     if (data.bio !== undefined) updateData.bio = data.bio;
     if (data.avatar !== undefined) updateData.avatar = data.avatar;
@@ -1176,7 +1178,7 @@ export class AuthService {
         role: user.gymAssignments[0]?.role || 'admin',
         avatar: user.avatar ?? undefined,
       })),
-      ...tenantStaff.map((user: any) => ({
+      ...tenantStaff.map((user: Record<string, any>) => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -2265,8 +2267,8 @@ export class AuthService {
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await hashPassword(randomPassword);
 
-    let gym: any;
-    let createdUser: any;
+    let gym: Record<string, any> | null = null;
+    let createdUser: Record<string, any> | null = null;
 
     try {
       // Create gym and get gym ID first
@@ -2315,8 +2317,9 @@ export class AuthService {
         },
       });
       this.logger.log(`User created: ${createdUser.id}`);
-    } catch (error: any) {
-      this.logger.error('Google registration error:', error.message || error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Google registration error:', msg);
       // Clean up gym if it was created but user creation failed
       if (gym?.id && !createdUser) {
         try {

@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { SqlValue } from '../common/types';
 
 export interface AttendanceStats {
   totalPresent: number;
@@ -370,7 +371,7 @@ export class AttendanceService {
     };
   }
 
-  private formatAttendanceRecord(record: any, gym: any): AttendanceRecord {
+  private formatAttendanceRecord(record: Record<string, any>, gym: Record<string, any> | null): AttendanceRecord {
     return {
       id: record.id,
       branchId: record.branch_id,
@@ -406,7 +407,7 @@ export class AttendanceService {
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users mb ON mb.id = a.marked_by
          WHERE a.date = $1 AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
-        const values: any[] = [today];
+        const values: SqlValue[] = [today];
 
         // Branch filtering for non-admin users
         if (branchId !== null) {
@@ -421,7 +422,7 @@ export class AttendanceService {
       },
     );
 
-    return records.map((r: any) => this.formatAttendanceRecord(r, gym));
+    return records.map((r: Record<string, any>) => this.formatAttendanceRecord(r, gym));
   }
 
   async getAttendanceByDate(
@@ -477,7 +478,7 @@ export class AttendanceService {
       }
     }
 
-    return Array.from(uniqueMap.values()).map((r: any) =>
+    return Array.from(uniqueMap.values()).map((r: Record<string, any>) =>
       this.formatAttendanceRecord(r, gym),
     );
   }
@@ -558,7 +559,7 @@ export class AttendanceService {
     const paginatedRecords = sortedRecords.slice(offset, offset + limit);
 
     return {
-      data: paginatedRecords.map((r: any) =>
+      data: paginatedRecords.map((r: Record<string, any>) =>
         this.formatAttendanceRecord(r, gym),
       ),
       pagination: {
@@ -641,7 +642,7 @@ export class AttendanceService {
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`;
-      const values: any[] = [today];
+      const values: SqlValue[] = [today];
 
       // Branch filtering for non-admin users
       if (branchId !== null) {
@@ -673,7 +674,7 @@ export class AttendanceService {
       gymId,
       async (client) => {
         let whereClause = '1=1';
-        const values: any[] = [];
+        const values: SqlValue[] = [];
         let paramIndex = 1;
 
         // Branch filtering for non-admin users
@@ -720,7 +721,7 @@ export class AttendanceService {
     );
 
     return {
-      records: records.map((r: any) => this.formatAttendanceRecord(r, gym)),
+      records: records.map((r: Record<string, any>) => this.formatAttendanceRecord(r, gym)),
       total,
       page,
       pages: Math.ceil(total / limit),
@@ -741,7 +742,7 @@ export class AttendanceService {
             `UPDATE attendance SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1 RETURNING id`,
             [attendanceId, deletedById || null],
           );
-          return res.rowCount > 0;
+          return (res.rowCount ?? 0) > 0;
         },
       );
       if (result) return true;
@@ -754,7 +755,7 @@ export class AttendanceService {
             `UPDATE attendance_history SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1 RETURNING id`,
             [attendanceId, deletedById || null],
           );
-          return res.rowCount > 0;
+          return (res.rowCount ?? 0) > 0;
         },
       );
       return historyResult;
@@ -848,7 +849,7 @@ export class AttendanceService {
           [start, end],
         );
 
-        const dailyTrend = dailyTrendResult.rows.map((row: any) => ({
+        const dailyTrend = dailyTrendResult.rows.map((row: Record<string, any>) => ({
           date: row.date,
           count: parseInt(row.count, 10),
         }));
@@ -873,7 +874,7 @@ export class AttendanceService {
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const weeklyPattern = dayNames.map((day, index) => {
           const found = weeklyPatternResult.rows.find(
-            (r: any) => parseInt(r.day_num) === index,
+            (r: Record<string, any>) => parseInt(r.day_num) === index,
           );
           return {
             day,
@@ -899,7 +900,7 @@ export class AttendanceService {
         );
 
         const genderDistribution = { male: 0, female: 0, other: 0 };
-        genderResult.rows.forEach((row: any) => {
+        genderResult.rows.forEach((row: Record<string, any>) => {
           const gender = row.gender?.toLowerCase();
           const count = parseInt(row.count, 10);
           if (gender === 'male') {
@@ -942,7 +943,7 @@ export class AttendanceService {
           [start, end],
         );
 
-        const topMembers = topMembersResult.rows.map((row: any) => ({
+        const topMembers = topMembersResult.rows.map((row: Record<string, any>) => ({
           userId: row.user_id,
           name: row.name,
           visits: parseInt(row.visits, 10),

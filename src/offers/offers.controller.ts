@@ -22,6 +22,7 @@ import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('offers')
 @Controller('offers')
@@ -30,7 +31,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class OffersController {
   constructor(private readonly offersService: OffersService) {}
 
-  private resolveBranchId(req: any, queryBranchId?: string): number | null {
+  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
     if (req.user.branchId !== null && req.user.branchId !== undefined) {
       return req.user.branchId;
@@ -52,13 +53,13 @@ export class OffersController {
     description: 'Branch ID for filtering (admin only)',
   })
   findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findAll(
-      req.user.gymId,
+      req.user.gymId!,
       branchId,
       includeInactive === 'true',
     );
@@ -72,9 +73,9 @@ export class OffersController {
     type: Number,
     description: 'Branch ID for filtering (admin only)',
   })
-  findActive(@Request() req: any, @Query('branchId') queryBranchId?: string) {
+  findActive(@Request() req: AuthenticatedRequest, @Query('branchId') queryBranchId?: string) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findActive(req.user.gymId, branchId);
+    return this.offersService.findActive(req.user.gymId!, branchId);
   }
 
   @Get('validate/:code')
@@ -86,12 +87,12 @@ export class OffersController {
     description: 'Branch ID for filtering (admin only)',
   })
   validateCode(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('code') code: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.validateOfferCode(code, req.user.gymId, branchId);
+    return this.offersService.validateOfferCode(code, req.user.gymId!, branchId);
   }
 
   @Get(':id')
@@ -103,12 +104,12 @@ export class OffersController {
     description: 'Branch ID for filtering (admin only)',
   })
   findOne(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findOne(id, req.user.gymId, branchId);
+    return this.offersService.findOne(id, req.user.gymId!, branchId);
   }
 
   @Get('code/:code')
@@ -120,12 +121,12 @@ export class OffersController {
     description: 'Branch ID for filtering (admin only)',
   })
   findByCode(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('code') code: string,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findByCode(code, req.user.gymId, branchId);
+    return this.offersService.findByCode(code, req.user.gymId!, branchId);
   }
 
   @Post()
@@ -139,12 +140,12 @@ export class OffersController {
     description: 'Branch ID for the offer (admin only)',
   })
   create(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() dto: CreateOfferDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.create(dto, req.user.gymId, branchId);
+    return this.offersService.create(dto, req.user.gymId!, branchId);
   }
 
   @Patch(':id')
@@ -152,18 +153,18 @@ export class OffersController {
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update an offer' })
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOfferDto,
   ) {
-    return this.offersService.update(id, req.user.gymId, dto);
+    return this.offersService.update(id, req.user.gymId!, dto);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Delete an offer (soft delete)' })
-  delete(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.offersService.delete(id, req.user.gymId);
+  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    return this.offersService.delete(id, req.user.gymId!);
   }
 }

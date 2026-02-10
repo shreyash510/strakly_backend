@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('support')
 @Controller('support')
@@ -39,14 +40,14 @@ export class SupportController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new support ticket' })
-  create(@Request() req: any, @Body() createTicketDto: CreateTicketDto) {
+  create(@Request() req: AuthenticatedRequest, @Body() createTicketDto: CreateTicketDto) {
     // Determine user type: staff roles are 'staff', others are 'client'
     const userType = ['admin', 'manager', 'trainer'].includes(req.user.role)
       ? 'staff'
       : 'client';
     return this.supportService.create(
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId!,
       req.user.name,
       req.user.email,
       userType,
@@ -119,7 +120,7 @@ export class SupportController {
     description: 'Disable pagination',
   })
   async findAll(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -147,7 +148,7 @@ export class SupportController {
       },
       req.user.role,
       req.user.userId,
-      req.user.gymId,
+      req.user.gymId ?? undefined,
     );
 
     if (res && result.pagination) {
@@ -161,27 +162,27 @@ export class SupportController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Get support ticket statistics (admin only)' })
-  getStats(@Request() req: any) {
+  getStats(@Request() req: AuthenticatedRequest) {
     /* Superadmin can see all stats, others only see their gym's stats */
-    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId;
+    const gymId = req.user.role === 'superadmin' ? undefined : req.user.gymId ?? undefined;
     return this.supportService.getStats(gymId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single support ticket' })
-  findOne(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+  findOne(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     return this.supportService.findOne(
       id,
       req.user.userId,
       req.user.role,
-      req.user.gymId,
+      req.user.gymId ?? undefined,
     );
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a support ticket' })
   update(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateTicketDto: UpdateTicketDto,
   ) {
@@ -190,14 +191,14 @@ export class SupportController {
       updateTicketDto,
       req.user.userId,
       req.user.role,
-      req.user.gymId,
+      req.user.gymId ?? undefined,
     );
   }
 
   @Post(':id/messages')
   @ApiOperation({ summary: 'Add a message to a support ticket' })
   addMessage(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() addMessageDto: AddMessageDto,
   ) {
@@ -207,7 +208,7 @@ export class SupportController {
       req.user.userId,
       req.user.name,
       req.user.role,
-      req.user.gymId,
+      req.user.gymId ?? undefined,
     );
   }
 
@@ -215,12 +216,12 @@ export class SupportController {
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a support ticket (admin only)' })
-  remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+  remove(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     return this.supportService.remove(
       id,
       req.user.userId,
       req.user.role,
-      req.user.gymId,
+      req.user.gymId ?? undefined,
     );
   }
 }
