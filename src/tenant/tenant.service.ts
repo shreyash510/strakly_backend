@@ -28,24 +28,60 @@ export class TenantService implements OnModuleInit {
   async migrateAllTenantSchemas(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      // Get all tenant schemas
+      // Get all gyms from the database
+      const gymsResult = await client.query(`
+        SELECT id, tenant_schema_name FROM public.gyms
+      `);
+
+      // Get all existing tenant schemas
       const schemasResult = await client.query(`
         SELECT schema_name FROM information_schema.schemata
         WHERE schema_name LIKE 'tenant_%'
       `);
-
-      this.logger.log(
-        `Found ${schemasResult.rows.length} tenant schemas to migrate`,
+      const existingSchemas = new Set(
+        schemasResult.rows.map((r: Record<string, string>) => r.schema_name),
       );
 
-      for (const row of schemasResult.rows) {
-        const schemaName = row.schema_name;
+      this.logger.log(
+        `Found ${gymsResult.rows.length} gyms, ${existingSchemas.size} existing tenant schemas`,
+      );
+
+      // Create missing tenant schemas for gyms that don't have one
+      for (const gym of gymsResult.rows) {
+        const schemaName = `tenant_${gym.id}`;
+        if (!existingSchemas.has(schemaName)) {
+          this.logger.log(
+            `Creating missing tenant schema: ${schemaName} for gym ${gym.id}`,
+          );
+          try {
+            await client.query(
+              `CREATE SCHEMA IF NOT EXISTS "${schemaName}"`,
+            );
+            // Update the gym record with the tenant schema name
+            if (!gym.tenant_schema_name) {
+              await client.query(
+                `UPDATE public.gyms SET tenant_schema_name = $1 WHERE id = $2`,
+                [schemaName, gym.id],
+              );
+            }
+            existingSchemas.add(schemaName);
+          } catch (error) {
+            this.logger.error(
+              `Failed to create schema ${schemaName}:`,
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        }
+      }
+
+      // Migrate all tenant schemas (existing + newly created)
+      for (const schemaName of existingSchemas) {
         try {
           await this.migrateTenantSchema(client, schemaName);
         } catch (error) {
           this.logger.error(
             `Failed to migrate schema ${schemaName}:`,
-            error.message,
+            error instanceof Error ? error.message : String(error),
           );
         }
       }
@@ -64,6 +100,16 @@ export class TenantService implements OnModuleInit {
     schemaName: string,
   ): Promise<void> {
     this.logger.log(`Migrating schema: ${schemaName}`);
+
+    // Ensure all core tables exist (CREATE TABLE IF NOT EXISTS — safe for existing schemas)
+    try {
+      await this.createTenantTables(client, schemaName);
+    } catch (error) {
+      this.logger.error(
+        `Error ensuring core tables for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
 
     // Add role column if it doesn't exist (using information_schema for compatibility)
     try {
@@ -142,6 +188,16 @@ export class TenantService implements OnModuleInit {
 
     // Add CHECK constraints on payments polymorphic columns
     await this.addPaymentConstraints(client, schemaName);
+
+    // Create core table indexes (after all tables are guaranteed to exist)
+    try {
+      await this.createTenantIndexes(client, schemaName);
+    } catch (error) {
+      this.logger.error(
+        `Error creating tenant indexes for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
 
     // Seed default plans if none exist
     try {
