@@ -16,12 +16,16 @@ import {
   PaymentFiltersDto,
 } from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { BranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 
 @Controller('payments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.PAYMENT_GATEWAY)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 

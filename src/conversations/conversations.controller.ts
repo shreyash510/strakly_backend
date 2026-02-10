@@ -18,11 +18,15 @@ import {
   SaveExchangeDto,
 } from './dto/conversations.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('conversations')
 @Controller('conversations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.AI_CHAT)
 @ApiBearerAuth()
 export class ConversationsController {
   constructor(

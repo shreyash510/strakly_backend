@@ -306,7 +306,7 @@ model SaasPlan {
 
   // Pricing
   price           Decimal   @db.Decimal(10, 2)
-  currency        String    @default("INR")
+  currency        String    @default("USD")
   billingPeriod   String    @default("monthly") @map("billing_period")
   durationMonths  Int       @default(1) @map("duration_months")
 
@@ -350,7 +350,7 @@ model SaasGymSubscription {
 
   // Payment details
   amount          Decimal   @db.Decimal(10, 2)
-  currency        String    @default("INR")
+  currency        String    @default("USD")
   paymentStatus   String    @default("pending") @map("payment_status")
   paymentMethod   String?   @map("payment_method")
   paymentRef      String?   @map("payment_ref")
@@ -391,7 +391,7 @@ model SaasPaymentHistory {
 
   // Payment details
   amount              Decimal   @db.Decimal(10, 2)
-  currency            String    @default("INR")
+  currency            String    @default("USD")
   status              String    @default("pending") // pending, processing, completed, failed, refunded
   paymentMethod       String?   @map("payment_method") // UPI, Card, NetBanking, Wallet, etc.
 

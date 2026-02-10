@@ -26,10 +26,14 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 
 @ApiTags('body-metrics')
 @Controller('body-metrics')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.BODY_METRICS)
 @ApiBearerAuth()
 export class BodyMetricsController {
   constructor(private readonly bodyMetricsService: BodyMetricsService) {}

@@ -17,6 +17,9 @@ import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import { MigrationService } from './migration.service';
 import { ValidateDto, ImportDto } from './dto/migration.dto';
 import type { DataType } from './dto/migration.dto';
@@ -33,7 +36,8 @@ const ALLOWED_MIME_TYPES = [
 
 @ApiTags('migration')
 @Controller('migration')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.DATA_MIGRATION)
 @Roles('admin', 'branch_admin')
 export class MigrationController {
   constructor(private readonly migrationService: MigrationService) {}

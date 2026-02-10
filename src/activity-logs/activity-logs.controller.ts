@@ -9,11 +9,15 @@ import {
 import { ActivityLogsService } from './activity-logs.service';
 import { ActivityLogFiltersDto } from './dto/activity-log.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { BranchId } from '../common/decorators/branch-id.decorator';
 
 @Controller('activity-logs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.ACTIVITY_LOGS)
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
 
