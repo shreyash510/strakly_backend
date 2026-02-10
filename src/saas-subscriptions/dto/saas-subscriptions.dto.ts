@@ -33,7 +33,7 @@ export class CreateSaasPlanDto {
   @Min(0)
   price: number;
 
-  @ApiPropertyOptional({ example: 'INR' })
+  @ApiPropertyOptional({ example: 'USD' })
   @IsString()
   @IsOptional()
   currency?: string;
@@ -310,7 +310,7 @@ export class CreatePaymentHistoryDto {
   @Min(0)
   amount: number;
 
-  @ApiPropertyOptional({ example: 'INR' })
+  @ApiPropertyOptional({ example: 'USD' })
   @IsString()
   @IsOptional()
   currency?: string;
