@@ -27,6 +27,7 @@ export enum SystemNotificationType {
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly ensuredSchemas = new Set<number>();
 
   constructor(
     private readonly tenantService: TenantService,
@@ -36,13 +37,47 @@ export class NotificationsService {
   ) {}
 
   /**
+   * Execute a callback in tenant context, ensuring the notifications table exists first.
+   * Caches per gymId so the CREATE TABLE IF NOT EXISTS only runs once per app lifecycle.
+   */
+  private async executeWithTable<T>(
+    gymId: number,
+    callback: (client: import('pg').PoolClient, schemaName: string) => Promise<T>,
+  ): Promise<T> {
+    return this.tenantService.executeInTenant(gymId, async (client, schemaName) => {
+      if (!this.ensuredSchemas.has(gymId)) {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            branch_id INTEGER,
+            user_id INTEGER NOT NULL,
+            type VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
+            data JSONB,
+            is_read BOOLEAN DEFAULT FALSE,
+            read_at TIMESTAMP,
+            action_url VARCHAR(500),
+            priority VARCHAR(20) DEFAULT 'normal',
+            expires_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by INTEGER
+          )
+        `);
+        this.ensuredSchemas.add(gymId);
+      }
+      return callback(client, schemaName);
+    });
+  }
+
+  /**
    * Create a single notification
    */
   async create(
     dto: CreateNotificationDto,
     gymId: number,
   ): Promise<Notification> {
-    const notification = await this.tenantService.executeInTenant(
+    const notification = await this.executeWithTable(
       gymId,
       async (client) => {
         const result = await client.query(
@@ -92,7 +127,7 @@ export class NotificationsService {
       return 0;
     }
 
-    const notifications = await this.tenantService.executeInTenant(
+    const notifications = await this.executeWithTable(
       gymId,
       async (client) => {
         const values: SqlValue[] = [];
@@ -155,7 +190,7 @@ export class NotificationsService {
     branchId: number | null,
     query: NotificationQueryDto,
   ): Promise<{ data: Notification[]; pagination: Record<string, number> }> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       const page = query.page || 1;
       const limit = Math.min(query.limit || 20, 50);
       const offset = (page - 1) * limit;
@@ -230,7 +265,7 @@ export class NotificationsService {
     gymId: number,
     branchId: number | null,
   ): Promise<number> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       let query = `
         SELECT COUNT(*) FROM notifications
         WHERE user_id = $1 AND is_read = FALSE
@@ -256,7 +291,7 @@ export class NotificationsService {
     userId: number,
     gymId: number,
   ): Promise<Notification | null> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       const result = await client.query(
         `
         UPDATE notifications
@@ -283,7 +318,7 @@ export class NotificationsService {
     gymId: number,
     branchId: number | null,
   ): Promise<number> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       let query = `
         UPDATE notifications
         SET is_read = TRUE, read_at = NOW()
@@ -305,7 +340,7 @@ export class NotificationsService {
    * Delete a notification
    */
   async delete(id: number, userId: number, gymId: number): Promise<boolean> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       const result = await client.query(
         `DELETE FROM notifications WHERE id = $1 AND user_id = $2`,
         [id, userId],
@@ -322,7 +357,7 @@ export class NotificationsService {
     gymId: number,
     daysOld: number,
   ): Promise<number> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.executeWithTable(gymId, async (client) => {
       const result = await client.query(
         `
         DELETE FROM notifications
