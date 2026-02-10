@@ -349,7 +349,7 @@ const saasPlans = [
     price: 0,
     currency: 'USD',
     billingPeriod: 'monthly',
-    maxMembers: 50,
+    maxClients: 50,
     maxStaff: 1,
     maxBranches: 0,
     features: [],
@@ -364,7 +364,7 @@ const saasPlans = [
     price: 5,
     currency: 'USD',
     billingPeriod: 'monthly',
-    maxMembers: 500,
+    maxClients: 500,
     maxStaff: 5,
     maxBranches: 2,
     features: [
@@ -387,7 +387,7 @@ const saasPlans = [
     price: 10,
     currency: 'USD',
     billingPeriod: 'monthly',
-    maxMembers: -1, // unlimited
+    maxClients: -1, // unlimited
     maxStaff: -1, // unlimited
     maxBranches: -1, // unlimited
     features: [
@@ -534,19 +534,25 @@ async function seedSaasPlans() {
   console.log('Seeding SaaS plans...');
 
   for (const planData of saasPlans) {
-    const existing = await prisma.saasPlan.findUnique({
+    await prisma.saasPlan.upsert({
       where: { code: planData.code },
+      update: {
+        name: planData.name,
+        description: planData.description,
+        price: planData.price,
+        currency: planData.currency,
+        billingPeriod: planData.billingPeriod,
+        maxClients: planData.maxClients,
+        maxStaff: planData.maxStaff,
+        maxBranches: planData.maxBranches,
+        features: planData.features,
+        displayOrder: planData.displayOrder,
+        isFeatured: planData.isFeatured,
+        badge: planData.badge,
+      },
+      create: planData,
     });
-
-    if (existing) {
-      console.log(`  SaaS plan ${planData.code} already exists, skipping...`);
-      continue;
-    }
-
-    await prisma.saasPlan.create({
-      data: planData,
-    });
-    console.log(`  Created SaaS plan: ${planData.code}`);
+    console.log(`  Upserted SaaS plan: ${planData.code}`);
   }
 }
 

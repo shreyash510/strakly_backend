@@ -800,15 +800,19 @@ export class UsersService {
 
         const whereClause = conditions.join(' AND ');
 
-        const [usersResult, countResult] = await Promise.all([
-          client.query(
-            `SELECT u.*, b.name as branch_name FROM users u
+        let query = `SELECT u.*, b.name as branch_name FROM users u
            LEFT JOIN public.branches b ON b.id = u.branch_id
            WHERE ${whereClause}
-           ORDER BY u.created_at DESC
-           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
-            [...values, take, skip],
-          ),
+           ORDER BY u.created_at DESC`;
+        const queryValues = [...values];
+
+        if (!noPagination) {
+          query += ` LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
+          queryValues.push(take, skip);
+        }
+
+        const [usersResult, countResult] = await Promise.all([
+          client.query(query, queryValues),
           client.query(
             `SELECT COUNT(*) as count FROM users u WHERE ${whereClause}`,
             values,
@@ -1373,15 +1377,19 @@ export class UsersService {
 
         const whereClause = conditions.join(' AND ');
 
-        const [usersResult, countResult] = await Promise.all([
-          client.query(
-            `SELECT u.*, b.name as branch_name FROM users u
+        let query = `SELECT u.*, b.name as branch_name FROM users u
            LEFT JOIN public.branches b ON b.id = u.branch_id
            WHERE ${whereClause}
-           ORDER BY u.created_at DESC
-           LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
-            [...values, take, skip],
-          ),
+           ORDER BY u.created_at DESC`;
+        const queryValues = [...values];
+
+        if (!noPagination) {
+          query += ` LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
+          queryValues.push(take, skip);
+        }
+
+        const [usersResult, countResult] = await Promise.all([
+          client.query(query, queryValues),
           client.query(
             `SELECT COUNT(*) as count FROM users u WHERE ${whereClause}`,
             values,
