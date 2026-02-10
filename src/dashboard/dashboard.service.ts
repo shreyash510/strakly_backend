@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { DashboardCacheService } from './dashboard-cache.service';
 import { SqlValue } from '../common/types';
+import { USER_STATUS } from '../common/constants';
 import {
   SuperadminDashboardDto,
   DashboardStatsDto,
@@ -76,7 +77,7 @@ export class DashboardService {
       }),
       // Admin users from public schema
       this.prisma.user.count({ where: { isDeleted: false } }),
-      this.prisma.user.count({ where: { isDeleted: false, status: 'active' } }),
+      this.prisma.user.count({ where: { isDeleted: false, status: USER_STATUS.ACTIVE } }),
       // Contact requests
       this.prisma.contactRequest.count(),
       this.prisma.contactRequest.count({ where: { status: 'new' } }),
@@ -448,7 +449,7 @@ export class DashboardService {
             [startOfMonth],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${attendanceBranchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${attendanceBranchFilter}`,
             [today],
           ),
           client.query(
@@ -621,7 +622,7 @@ export class DashboardService {
     const attendance = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT a.id, a.date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
+        let query = `SELECT a.id, a.attendance_date as date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id`;
         const values: SqlValue[] = [];
@@ -882,11 +883,11 @@ export class DashboardService {
         const [thisMonthResult, thisWeekResult, totalResult] =
           await Promise.all([
             client.query(
-              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND attendance_date >= $2::DATE AND status = 'present'`,
               [userId, startOfMonthStr],
             ),
             client.query(
-              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND date >= $2 AND status = 'present'`,
+              `SELECT COUNT(*) as count FROM attendance WHERE user_id = $1 AND attendance_date >= $2::DATE AND status = 'present'`,
               [userId, startOfWeekStr],
             ),
             client.query(
@@ -923,7 +924,7 @@ export class DashboardService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY date DESC LIMIT 60`,
+          `SELECT attendance_date as date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY attendance_date DESC LIMIT 60`,
           [userId],
         );
         return result.rows;
@@ -985,7 +986,7 @@ export class DashboardService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id, date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY date DESC LIMIT $2`,
+          `SELECT id, attendance_date as date, check_in_time, check_out_time, status FROM attendance WHERE user_id = $1 ORDER BY attendance_date DESC LIMIT $2`,
           [userId, limit],
         );
         return result.rows;

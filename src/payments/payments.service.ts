@@ -13,6 +13,7 @@ import {
   PaymentType,
 } from './dto/payment.dto';
 import { SqlValue } from '../common/types';
+import { ROLES } from '../common/constants';
 
 export interface PaymentRecord {
   id: number;
@@ -448,7 +449,7 @@ export class PaymentsService {
         paymentType: PaymentType.MEMBERSHIP,
         referenceId: membershipId,
         referenceTable: 'memberships',
-        payerType: 'client',
+        payerType: ROLES.CLIENT,
         payerId,
         payerName,
         amount,

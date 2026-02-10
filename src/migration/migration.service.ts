@@ -4,6 +4,7 @@ import * as ExcelJS from 'exceljs';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { SqlValue } from '../common/types';
+import { ROLES, USER_STATUS, MEMBERSHIP_STATUS } from '../common/constants';
 import type {
   DataType,
   FieldDef,
@@ -423,7 +424,7 @@ export class MigrationService {
               defaultPasswordHash,
               data.phone || null,
               data.gender?.toLowerCase() || null,
-              data.status?.toLowerCase() || 'active',
+              data.status?.toLowerCase() || USER_STATUS.ACTIVE,
               data.joinDate ? this.parseDate(data.joinDate) : new Date(),
               attendanceCode,
               branchId || null,
@@ -481,9 +482,9 @@ export class MigrationService {
               data.email.toLowerCase(),
               defaultPasswordHash,
               data.phone || null,
-              data.role?.toLowerCase() || 'trainer',
+              data.role?.toLowerCase() || ROLES.TRAINER,
               data.gender?.toLowerCase() || null,
-              data.status?.toLowerCase() || 'active',
+              data.status?.toLowerCase() || USER_STATUS.ACTIVE,
               data.joinDate ? this.parseDate(data.joinDate) : new Date(),
               attendanceCode,
               branchId || null,
@@ -715,8 +716,8 @@ export class MigrationService {
 
   private deriveMembershipStatus(endDateStr: string): string {
     const endDate = this.parseDate(endDateStr);
-    if (!endDate) return 'active';
-    return endDate < new Date() ? 'expired' : 'active';
+    if (!endDate) return MEMBERSHIP_STATUS.ACTIVE;
+    return endDate < new Date() ? MEMBERSHIP_STATUS.EXPIRED : MEMBERSHIP_STATUS.ACTIVE;
   }
 
   private bufferToStream(buffer: Buffer): NodeJS.ReadableStream {

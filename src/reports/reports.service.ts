@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { SqlValue } from '../common/types';
+import { ROLES } from '../common/constants';
 import { AttendanceService } from '../attendance/attendance.service';
 import {
   ReportFilterDto,
@@ -487,7 +488,7 @@ export class ReportsService {
           id: r.id,
           staffName: r.staff_name,
           staffEmail: r.staff_email,
-          staffRole: r.staff_role === 'trainer' ? 'Trainer' : 'Manager',
+          staffRole: r.staff_role === ROLES.TRAINER ? 'Trainer' : 'Manager',
           period: `${this.getMonthName(r.month)} ${r.year}`,
           amount: parseFloat(r.amount),
         }));
@@ -1283,7 +1284,7 @@ export class ReportsService {
         id: r.id,
         name: r.name,
         email: r.email,
-        role: r.role === 'trainer' ? 'Trainer' : 'Manager',
+        role: r.role === ROLES.TRAINER ? 'Trainer' : 'Manager',
         clientCount: parseInt(r.client_count, 10),
         totalSalaryPaid: parseFloat(r.total_salary_paid),
       }));

@@ -65,17 +65,24 @@ export class TenantService implements OnModuleInit {
   ): Promise<void> {
     this.logger.log(`Migrating schema: ${schemaName}`);
 
-    // Always try to add the role column (IF NOT EXISTS handles the case where it already exists)
+    // Add role column if it doesn't exist (using information_schema for compatibility)
     try {
-      await client.query(`
-        ALTER TABLE "${schemaName}".users
-        ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'client'
-      `);
-      this.logger.log(`Ensured 'role' column exists in ${schemaName}.users`);
+      const roleExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'role'
+      `, [schemaName]);
+
+      if (roleExists.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE "${schemaName}".users
+          ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'client'
+        `);
+        this.logger.log(`Added 'role' column to ${schemaName}.users`);
+      }
     } catch (error) {
       this.logger.error(
         `Error adding role column to ${schemaName}:`,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
     }
 
@@ -93,6 +100,9 @@ export class TenantService implements OnModuleInit {
 
     // Create notifications table
     await this.createNotificationsTable(client, schemaName);
+
+    // Drop FK constraint on notifications.user_id so admin users (from public.users) can have persistent notifications
+    await this.dropNotificationsUserFk(client, schemaName);
 
     // Create user_branch_xref table for multi-branch assignments
     await this.createUserBranchXrefTable(client, schemaName);
@@ -123,6 +133,15 @@ export class TenantService implements OnModuleInit {
 
     // Create announcements table
     await this.createAnnouncementsTable(client, schemaName);
+
+    // Add missing FK indexes on reference columns
+    await this.addMissingForeignKeyIndexes(client, schemaName);
+
+    // Add safe FK constraints (within-schema only)
+    await this.addForeignKeyConstraints(client, schemaName);
+
+    // Add CHECK constraints on payments polymorphic columns
+    await this.addPaymentConstraints(client, schemaName);
 
     // Seed default plans if none exist
     try {
@@ -161,17 +180,22 @@ export class TenantService implements OnModuleInit {
 
     for (const table of tablesToMigrate) {
       try {
-        await client.query(`
-          ALTER TABLE "${schemaName}"."${table}"
-          ADD COLUMN IF NOT EXISTS branch_id INTEGER
-        `);
-        this.logger.log(
-          `Ensured 'branch_id' column exists in ${schemaName}.${table}`,
-        );
+        const colExists = await client.query(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = 'branch_id'
+        `, [schemaName, table]);
+
+        if (colExists.rows.length === 0) {
+          await client.query(`
+            ALTER TABLE "${schemaName}"."${table}"
+            ADD COLUMN branch_id INTEGER
+          `);
+          this.logger.log(`Added 'branch_id' column to ${schemaName}.${table}`);
+        }
       } catch (error) {
         this.logger.error(
           `Error adding branch_id to ${schemaName}.${table}:`,
-          error.message,
+          error instanceof Error ? error.message : String(error),
         );
       }
     }
@@ -482,6 +506,37 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
+   * Drop FK constraint on notifications.user_id if it exists.
+   * This allows admin users (who live in public.users, not tenant.users)
+   * to have persistent notifications in the tenant schema.
+   */
+  private async dropNotificationsUserFk(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const result = await client.query(`
+        SELECT constraint_name FROM information_schema.table_constraints
+        WHERE table_schema = $1
+          AND table_name = 'notifications'
+          AND constraint_type = 'FOREIGN KEY'
+      `, [schemaName]);
+
+      for (const row of result.rows) {
+        await client.query(
+          `ALTER TABLE "${schemaName}"."notifications" DROP CONSTRAINT "${row.constraint_name}"`,
+        );
+        this.logger.log(`Dropped FK constraint '${row.constraint_name}' from ${schemaName}.notifications`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error dropping notifications FK for ${schemaName}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
    * Create user_branch_xref table for multi-branch assignments (for branch_admin)
    */
   private async createUserBranchXrefTable(
@@ -528,18 +583,26 @@ export class TenantService implements OnModuleInit {
     schemaName: string,
   ): Promise<void> {
     try {
-      await client.query(`
-        ALTER TABLE "${schemaName}"."users"
-        ADD COLUMN IF NOT EXISTS status_id INTEGER
-      `);
+      const colExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'status_id'
+      `, [schemaName]);
+
+      if (colExists.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE "${schemaName}"."users"
+          ADD COLUMN status_id INTEGER
+        `);
+        this.logger.log(`Added 'status_id' column to ${schemaName}.users`);
+      }
+
       await client.query(
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_status_id" ON "${schemaName}"."users"(status_id)`,
       );
-      this.logger.log(`Ensured 'status_id' column exists in ${schemaName}.users`);
     } catch (error) {
       this.logger.error(
         `Error adding status_id column to ${schemaName}:`,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
     }
   }
@@ -560,41 +623,43 @@ export class TenantService implements OnModuleInit {
       'attendance_history',
       'staff_salaries',
       'announcements',
+      'workout_plans',
+      'workout_assignments',
+      'notifications',
     ];
 
     for (const table of tablesToMigrate) {
       try {
-        // Add is_deleted column
-        await client.query(`
-          ALTER TABLE "${schemaName}"."${table}"
-          ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE
-        `);
+        const softDeleteCols = [
+          { name: 'is_deleted', definition: 'BOOLEAN DEFAULT FALSE' },
+          { name: 'deleted_at', definition: 'TIMESTAMP' },
+          { name: 'deleted_by', definition: 'INTEGER' },
+        ];
 
-        // Add deleted_at column
-        await client.query(`
-          ALTER TABLE "${schemaName}"."${table}"
-          ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
-        `);
+        for (const col of softDeleteCols) {
+          const colExists = await client.query(`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+          `, [schemaName, table, col.name]);
 
-        // Add deleted_by column (references the user who deleted)
-        await client.query(`
-          ALTER TABLE "${schemaName}"."${table}"
-          ADD COLUMN IF NOT EXISTS deleted_by INTEGER
-        `);
+          if (colExists.rows.length === 0) {
+            await client.query(`
+              ALTER TABLE "${schemaName}"."${table}"
+              ADD COLUMN ${col.name} ${col.definition}
+            `);
+            this.logger.log(`Added '${col.name}' column to ${schemaName}.${table}`);
+          }
+        }
 
         // Create partial index for efficient filtering of non-deleted records
         await client.query(`
           CREATE INDEX IF NOT EXISTS "idx_${schemaName}_${table}_not_deleted"
           ON "${schemaName}"."${table}"(is_deleted) WHERE is_deleted = FALSE
         `);
-
-        this.logger.log(
-          `Ensured soft delete columns exist in ${schemaName}.${table}`,
-        );
       } catch (error) {
         this.logger.error(
           `Error adding soft delete columns to ${schemaName}.${table}:`,
-          error.message,
+          error instanceof Error ? error.message : String(error),
         );
       }
     }
@@ -609,49 +674,41 @@ export class TenantService implements OnModuleInit {
     schemaName: string,
   ): Promise<void> {
     try {
-      // Add attendance_date column to attendance table
-      await client.query(`
-        ALTER TABLE "${schemaName}"."attendance"
-        ADD COLUMN IF NOT EXISTS attendance_date DATE
-      `);
+      const dateTables = ['attendance', 'attendance_history'];
 
-      // Migrate existing data from VARCHAR date to DATE attendance_date
-      await client.query(`
-        UPDATE "${schemaName}"."attendance"
-        SET attendance_date = date::DATE
-        WHERE attendance_date IS NULL AND date IS NOT NULL
-      `);
+      for (const table of dateTables) {
+        const colExists = await client.query(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = 'attendance_date'
+        `, [schemaName, table]);
 
-      // Add index on attendance_date
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_date"
-        ON "${schemaName}"."attendance"(attendance_date)
-      `);
+        if (colExists.rows.length === 0) {
+          await client.query(`
+            ALTER TABLE "${schemaName}"."${table}"
+            ADD COLUMN attendance_date DATE
+          `);
+          this.logger.log(`Added 'attendance_date' column to ${schemaName}.${table}`);
+        }
 
-      // Add attendance_date column to attendance_history table
-      await client.query(`
-        ALTER TABLE "${schemaName}"."attendance_history"
-        ADD COLUMN IF NOT EXISTS attendance_date DATE
-      `);
+        // Migrate existing data from VARCHAR date to DATE attendance_date
+        await client.query(`
+          UPDATE "${schemaName}"."${table}"
+          SET attendance_date = date::DATE
+          WHERE attendance_date IS NULL AND date IS NOT NULL
+        `);
 
-      // Migrate existing data in attendance_history
-      await client.query(`
-        UPDATE "${schemaName}"."attendance_history"
-        SET attendance_date = date::DATE
-        WHERE attendance_date IS NULL AND date IS NOT NULL
-      `);
-
-      // Add index on attendance_history attendance_date
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_date"
-        ON "${schemaName}"."attendance_history"(attendance_date)
-      `);
+        // Add index on attendance_date
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS "idx_${schemaName}_${table === 'attendance' ? 'attendance_date' : 'attendance_history_date'}"
+          ON "${schemaName}"."${table}"(attendance_date)
+        `);
+      }
 
       this.logger.log(`Migrated date columns for ${schemaName}`);
     } catch (error) {
       this.logger.error(
         `Error migrating date columns in ${schemaName}:`,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
     }
   }
@@ -1500,6 +1557,9 @@ export class TenantService implements OnModuleInit {
         exercises JSONB DEFAULT '[]',
         status VARCHAR(50) DEFAULT 'draft',
         created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -1517,6 +1577,9 @@ export class TenantService implements OnModuleInit {
         status VARCHAR(50) DEFAULT 'active',
         progress_percentage INTEGER DEFAULT 0,
         notes TEXT,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -1527,7 +1590,7 @@ export class TenantService implements OnModuleInit {
       CREATE TABLE IF NOT EXISTS "${schemaName}"."notifications" (
         id SERIAL PRIMARY KEY,
         branch_id INTEGER,
-        user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
         type VARCHAR(50) NOT NULL,
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
@@ -1538,7 +1601,10 @@ export class TenantService implements OnModuleInit {
         priority VARCHAR(20) DEFAULT 'normal',
         expires_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_by INTEGER
+        created_by INTEGER,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        deleted_by INTEGER
       )
     `);
 
@@ -1546,7 +1612,7 @@ export class TenantService implements OnModuleInit {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."user_branch_xref" (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
         branch_id INTEGER NOT NULL,
         is_primary BOOLEAN DEFAULT FALSE,
         is_active BOOLEAN DEFAULT TRUE,
@@ -1776,6 +1842,166 @@ export class TenantService implements OnModuleInit {
     await client.query(
       `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_active" ON "${schemaName}"."user_branch_xref"(is_active) WHERE is_active = TRUE`,
     );
+
+    // FK column indexes (added for Issue 4 — missing indexes on reference columns)
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_plan" ON "${schemaName}"."memberships"(plan_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_offer" ON "${schemaName}"."memberships"(offer_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_created_by" ON "${schemaName}"."memberships"(created_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_membership" ON "${schemaName}"."attendance"(membership_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_membership" ON "${schemaName}"."attendance_history"(membership_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_marked_by" ON "${schemaName}"."attendance_history"(marked_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_checked_out_by" ON "${schemaName}"."attendance_history"(checked_out_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_user" ON "${schemaName}"."body_metrics_history"(user_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_paid_by" ON "${schemaName}"."staff_salaries"(paid_by_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created_by" ON "${schemaName}"."notifications"(created_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_created_by" ON "${schemaName}"."announcements"(created_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_processed_by" ON "${schemaName}"."payments"(processed_by)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_assigned_by" ON "${schemaName}"."workout_assignments"(assigned_by)`,
+    );
+  }
+
+  /**
+   * Add indexes on FK columns that were missing (migration for existing schemas)
+   */
+  private async addMissingForeignKeyIndexes(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const indexes = [
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_plan" ON "${schemaName}"."memberships"(plan_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_offer" ON "${schemaName}"."memberships"(offer_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_memberships_created_by" ON "${schemaName}"."memberships"(created_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_membership" ON "${schemaName}"."attendance"(membership_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_membership" ON "${schemaName}"."attendance_history"(membership_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_marked_by" ON "${schemaName}"."attendance_history"(marked_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_attendance_history_checked_out_by" ON "${schemaName}"."attendance_history"(checked_out_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_body_metrics_history_user" ON "${schemaName}"."body_metrics_history"(user_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_staff_salaries_paid_by" ON "${schemaName}"."staff_salaries"(paid_by_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_created_by" ON "${schemaName}"."notifications"(created_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_announcements_created_by" ON "${schemaName}"."announcements"(created_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_payments_processed_by" ON "${schemaName}"."payments"(processed_by)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_workout_assignments_assigned_by" ON "${schemaName}"."workout_assignments"(assigned_by)`,
+    ];
+
+    for (const indexQuery of indexes) {
+      try {
+        await client.query(indexQuery);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Error creating FK index in ${schemaName}: ${msg}`);
+      }
+    }
+    this.logger.log(`Ensured FK indexes exist in ${schemaName}`);
+  }
+
+  /**
+   * Add safe FK constraints (within-schema references only).
+   *
+   * NOTE: Most "missing" FK constraints reference public.users (cross-schema),
+   * which we intentionally skip because:
+   * - Cross-schema FKs create tight coupling between tenant and public schemas
+   * - History/audit tables must survive parent record deletion
+   * - deleted_by columns: the deleter might themselves be removed later
+   * - Polymorphic columns (payer_type+payer_id) can't have standard FKs
+   */
+  private async addForeignKeyConstraints(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      // user_branch_xref.user_id → users(id) — safe within-schema FK
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'fk_${schemaName}_user_branch_xref_user'
+          ) THEN
+            ALTER TABLE "${schemaName}"."user_branch_xref"
+            ADD CONSTRAINT "fk_${schemaName}_user_branch_xref_user"
+            FOREIGN KEY (user_id) REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE;
+          END IF;
+        END $$
+      `);
+      this.logger.log(`Ensured FK constraints exist in ${schemaName}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error adding FK constraints in ${schemaName}: ${msg}`);
+    }
+  }
+
+  /**
+   * Add CHECK constraints on payments table polymorphic columns.
+   * Limits valid values for reference_table, payer_type, and payee_type
+   * to prevent invalid string references.
+   */
+  private async addPaymentConstraints(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const schemaClean = schemaName.replace(/[^a-zA-Z0-9_]/g, '');
+    const constraints = [
+      {
+        name: `chk_${schemaClean}_payments_reference_table`,
+        sql: `ALTER TABLE "${schemaName}"."payments"
+              ADD CONSTRAINT "chk_${schemaClean}_payments_reference_table"
+              CHECK (reference_table IN ('memberships', 'staff_salaries', 'plans', 'offers'))`,
+      },
+      {
+        name: `chk_${schemaClean}_payments_payer_type`,
+        sql: `ALTER TABLE "${schemaName}"."payments"
+              ADD CONSTRAINT "chk_${schemaClean}_payments_payer_type"
+              CHECK (payer_type IN ('client', 'gym', 'staff', 'admin'))`,
+      },
+      {
+        name: `chk_${schemaClean}_payments_payee_type`,
+        sql: `ALTER TABLE "${schemaName}"."payments"
+              ADD CONSTRAINT "chk_${schemaClean}_payments_payee_type"
+              CHECK (payee_type IS NULL OR payee_type IN ('client', 'gym', 'staff', 'admin'))`,
+      },
+    ];
+
+    for (const constraint of constraints) {
+      try {
+        // Check if constraint already exists
+        const existing = await client.query(
+          `SELECT 1 FROM pg_constraint WHERE conname = $1`,
+          [constraint.name],
+        );
+        if (existing.rows.length === 0) {
+          await client.query(constraint.sql);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Error adding payment constraint ${constraint.name}: ${msg}`);
+      }
+    }
+    this.logger.log(`Ensured payment CHECK constraints exist in ${schemaName}`);
   }
 
   /**

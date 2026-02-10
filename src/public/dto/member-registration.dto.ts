@@ -8,8 +8,8 @@ import {
   IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { GENDERS } from '../../constants';
-import type { Gender } from '../../constants';
+import { GENDERS } from '../../common/constants';
+import type { Gender } from '../../common/constants';
 
 export class MemberRegistrationDto {
   @ApiProperty({ description: 'User full name' })

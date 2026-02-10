@@ -176,7 +176,7 @@ export class AttendanceService {
         const [existingResult, membershipResult, userResult] =
           await Promise.all([
             client.query(
-              `SELECT id FROM attendance WHERE user_id = $1 AND date = $2 AND status = 'present'`,
+              `SELECT id FROM attendance WHERE user_id = $1 AND attendance_date = $2::DATE AND status = 'present'`,
               [user.id, today],
             ),
             client.query(
@@ -266,7 +266,7 @@ export class AttendanceService {
       membershipId: attendance.membership_id,
       checkInTime: attendance.check_in_time,
       checkOutTime: attendance.check_out_time,
-      date: attendance.date,
+      date: attendance.attendance_date ? new Date(attendance.attendance_date).toISOString().split('T')[0] : attendance.date,
       markedById: attendance.marked_by,
       markedByName: staffName,
       checkInMethod: attendance.check_in_method,
@@ -363,7 +363,7 @@ export class AttendanceService {
       membershipId: attendance.membership_id,
       checkInTime: attendance.check_in_time,
       checkOutTime: checkOutTime,
-      date: attendance.date,
+      date: attendance.attendance_date ? new Date(attendance.attendance_date).toISOString().split('T')[0] : attendance.date,
       markedById: attendance.marked_by,
       markedByName: staffName,
       checkInMethod: attendance.check_in_method,
@@ -384,7 +384,7 @@ export class AttendanceService {
       membershipId: record.membership_id,
       checkInTime: record.check_in_time,
       checkOutTime: record.check_out_time,
-      date: record.date,
+      date: record.attendance_date ? new Date(record.attendance_date).toISOString().split('T')[0] : record.date,
       markedById: record.marked_by,
       markedByName: record.marked_by_name || '',
       checkInMethod: record.check_in_method || 'code',
@@ -406,7 +406,7 @@ export class AttendanceService {
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users mb ON mb.id = a.marked_by
-         WHERE a.date = $1 AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
+         WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const values: SqlValue[] = [today];
 
         // Branch filtering for non-admin users
@@ -448,7 +448,7 @@ export class AttendanceService {
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            LEFT JOIN users mb ON mb.id = a.marked_by
-           WHERE a.date = $1${attendanceBranchFilter}${attendanceSoftDeleteFilter}
+           WHERE a.attendance_date = $1::DATE${attendanceBranchFilter}${attendanceSoftDeleteFilter}
            ORDER BY a.check_in_time DESC`,
             [date],
           ),
@@ -457,7 +457,7 @@ export class AttendanceService {
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            LEFT JOIN users mb ON mb.id = ah.marked_by
-           WHERE ah.date = $1${historyBranchFilter}${historySoftDeleteFilter}
+           WHERE ah.attendance_date = $1::DATE${historyBranchFilter}${historySoftDeleteFilter}
            ORDER BY ah.check_in_time DESC`,
             [date],
           ),
@@ -596,22 +596,22 @@ export class AttendanceService {
           presentResult,
         ] = await Promise.all([
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE date = $1${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date = $1::DATE${branchFilter}`,
             [today],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter}`,
             [weekStart],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE date >= $1${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter}`,
             [monthStart],
           ),
           client.query(
             `SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter}`,
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${branchFilter}`,
             [today],
           ),
         ]);
@@ -641,7 +641,7 @@ export class AttendanceService {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT COUNT(*) as count FROM attendance WHERE date = $1 AND status = 'present'`;
+      let query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`;
       const values: SqlValue[] = [today];
 
       // Branch filtering for non-admin users
@@ -684,13 +684,13 @@ export class AttendanceService {
         }
 
         if (startDate && endDate) {
-          whereClause += ` AND ah.date >= $${paramIndex++} AND ah.date <= $${paramIndex++}`;
+          whereClause += ` AND ah.attendance_date >= $${paramIndex++}::DATE AND ah.attendance_date <= $${paramIndex++}::DATE`;
           values.push(startDate, endDate);
         } else if (startDate) {
-          whereClause += ` AND ah.date >= $${paramIndex++}`;
+          whereClause += ` AND ah.attendance_date >= $${paramIndex++}::DATE`;
           values.push(startDate);
         } else if (endDate) {
-          whereClause += ` AND ah.date <= $${paramIndex++}`;
+          whereClause += ` AND ah.attendance_date <= $${paramIndex++}::DATE`;
           values.push(endDate);
         }
 
@@ -798,9 +798,9 @@ export class AttendanceService {
           COUNT(DISTINCT user_id) as unique_members,
           COALESCE(AVG(duration), 0) as avg_duration
         FROM (
-          SELECT user_id, NULL as duration FROM attendance WHERE date >= $1 AND date <= $2 AND status = 'present'${branchFilter}${softDeleteFilter}
+          SELECT user_id, NULL as duration FROM attendance WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE AND status = 'present'${branchFilter}${softDeleteFilter}
           UNION ALL
-          SELECT user_id, duration FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}${softDeleteFilter}
+          SELECT user_id, duration FROM attendance_history WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE${branchFilter}${softDeleteFilter}
         ) combined
       `,
           [start, end],
@@ -839,9 +839,9 @@ export class AttendanceService {
           `
         SELECT date, COUNT(*) as count
         FROM (
-          SELECT date FROM attendance WHERE date >= $1 AND date <= $2 AND status = 'present'${branchFilter}${softDeleteFilter}
+          SELECT attendance_date as date FROM attendance WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE AND status = 'present'${branchFilter}${softDeleteFilter}
           UNION ALL
-          SELECT date FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}${softDeleteFilter}
+          SELECT attendance_date as date FROM attendance_history WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE${branchFilter}${softDeleteFilter}
         ) combined
         GROUP BY date
         ORDER BY date ASC
@@ -861,9 +861,9 @@ export class AttendanceService {
           EXTRACT(DOW FROM check_in_time) as day_num,
           COUNT(*) as count
         FROM (
-          SELECT check_in_time FROM attendance WHERE date >= $1 AND date <= $2 AND status = 'present'${branchFilter}${softDeleteFilter}
+          SELECT check_in_time FROM attendance WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE AND status = 'present'${branchFilter}${softDeleteFilter}
           UNION ALL
-          SELECT check_in_time FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}${softDeleteFilter}
+          SELECT check_in_time FROM attendance_history WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE${branchFilter}${softDeleteFilter}
         ) combined
         GROUP BY EXTRACT(DOW FROM check_in_time)
         ORDER BY day_num
@@ -889,9 +889,9 @@ export class AttendanceService {
           COALESCE(LOWER(u.gender), 'other') as gender,
           COUNT(*) as count
         FROM (
-          SELECT user_id FROM attendance WHERE date >= $1 AND date <= $2 AND status = 'present'${branchFilter}${softDeleteFilter}
+          SELECT user_id FROM attendance WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE AND status = 'present'${branchFilter}${softDeleteFilter}
           UNION ALL
-          SELECT user_id FROM attendance_history WHERE date >= $1 AND date <= $2${branchFilter}${softDeleteFilter}
+          SELECT user_id FROM attendance_history WHERE attendance_date >= $1::DATE AND attendance_date <= $2::DATE${branchFilter}${softDeleteFilter}
         ) combined
         JOIN users u ON u.id = combined.user_id
         GROUP BY COALESCE(LOWER(u.gender), 'other')
@@ -927,13 +927,13 @@ export class AttendanceService {
           SELECT a.user_id, u.name, COUNT(*) as visits
           FROM attendance a
           JOIN users u ON u.id = a.user_id
-          WHERE a.date >= $1 AND a.date <= $2 AND a.status = 'present'${topMembersBranchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${topMembersBranchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
           GROUP BY a.user_id, u.name
           UNION ALL
           SELECT ah.user_id, u.name, COUNT(*) as visits
           FROM attendance_history ah
           JOIN users u ON u.id = ah.user_id
-          WHERE ah.date >= $1 AND ah.date <= $2${topMembersHistoryBranchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
+          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${topMembersHistoryBranchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
           GROUP BY ah.user_id, u.name
         ) combined
         GROUP BY user_id, name
