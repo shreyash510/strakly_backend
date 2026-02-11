@@ -36,6 +36,7 @@ export interface AttendanceRecord {
   userId: number;
   userName: string;
   userEmail: string;
+  userAvatar: string | null;
   attendanceCode: string | null;
   gymId: number;
   gymName: string;
@@ -288,7 +289,7 @@ export class AttendanceService {
       gymId,
       async (client) => {
         const attResult = await client.query(
-          `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code
+          `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          WHERE a.id = $1`,
@@ -378,6 +379,7 @@ export class AttendanceService {
       userId: record.user_id,
       userName: record.user_name || '',
       userEmail: record.user_email || '',
+      userAvatar: record.user_avatar || null,
       attendanceCode: record.attendance_code || null,
       gymId: gym?.id || record.gym_id,
       gymName: gym?.name || '',
@@ -402,7 +404,7 @@ export class AttendanceService {
     const records = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+        let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users mb ON mb.id = a.marked_by
@@ -444,7 +446,7 @@ export class AttendanceService {
 
         const [activeResult, historyResult] = await Promise.all([
           client.query(
-            `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+            `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            LEFT JOIN users mb ON mb.id = a.marked_by
@@ -453,7 +455,7 @@ export class AttendanceService {
             [date],
           ),
           client.query(
-            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            LEFT JOIN users mb ON mb.id = ah.marked_by
@@ -506,7 +508,7 @@ export class AttendanceService {
       await this.tenantService.executeInTenant(gymId, async (client) => {
         const [activeResult, historyResult, countResult] = await Promise.all([
           client.query(
-            `SELECT a.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+            `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            LEFT JOIN users mb ON mb.id = a.marked_by
@@ -515,7 +517,7 @@ export class AttendanceService {
             [userId],
           ),
           client.query(
-            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            LEFT JOIN users mb ON mb.id = ah.marked_by
@@ -698,7 +700,7 @@ export class AttendanceService {
 
         const [recordsResult, countResult] = await Promise.all([
           client.query(
-            `SELECT ah.*, u.name as user_name, u.email as user_email, u.attendance_code, mb.name as marked_by_name
+            `SELECT ah.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            LEFT JOIN users mb ON mb.id = ah.marked_by
