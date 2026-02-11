@@ -850,7 +850,9 @@ export class AttendanceService {
         );
 
         const dailyTrend = dailyTrendResult.rows.map((row: Record<string, any>) => ({
-          date: row.date,
+          date: row.date instanceof Date
+            ? row.date.toISOString().split('T')[0]
+            : String(row.date),
           count: parseInt(row.count, 10),
         }));
 
