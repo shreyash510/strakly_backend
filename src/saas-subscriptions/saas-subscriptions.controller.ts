@@ -139,51 +139,6 @@ export class SaasSubscriptionsController {
     return this.service.findSubscriptionByGymId(gymId);
   }
 
-  @Get(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get a gym subscription by ID' })
-  findSubscriptionById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findSubscriptionById(id);
-  }
-
-  @Get('gym/:gymId')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get subscription by gym ID' })
-  findSubscriptionByGymId(@Param('gymId', ParseIntPipe) gymId: number) {
-    return this.service.findSubscriptionByGymId(gymId);
-  }
-
-  @Post()
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Create a gym subscription' })
-  createSubscription(@Body() dto: CreateGymSubscriptionDto) {
-    return this.service.createSubscription(dto);
-  }
-
-  @Patch(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Update a gym subscription' })
-  updateSubscription(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateGymSubscriptionDto,
-  ) {
-    return this.service.updateSubscription(id, dto);
-  }
-
-  @Post(':id/cancel')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Cancel a gym subscription' })
-  cancelSubscription(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CancelSubscriptionDto,
-  ) {
-    return this.service.cancelSubscription(id, dto);
-  }
-
-  // ============================================
-  // Payment History Endpoints
-  // ============================================
-
   @Get('me/payment-history')
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Get payment history for current gym' })
@@ -212,6 +167,10 @@ export class SaasSubscriptionsController {
       endDate,
     });
   }
+
+  // ============================================
+  // Payment History Endpoints (static routes before :id)
+  // ============================================
 
   @Get('payments')
   @Roles('superadmin')
@@ -261,6 +220,74 @@ export class SaasSubscriptionsController {
     return this.service.getPaymentById(id);
   }
 
+  @Patch('payments/:id')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Update a payment record' })
+  updatePayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentHistoryDto,
+  ) {
+    return this.service.updatePaymentHistory(id, dto);
+  }
+
+  @Get('gym/:gymId')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get subscription by gym ID' })
+  findSubscriptionByGymId(@Param('gymId', ParseIntPipe) gymId: number) {
+    return this.service.findSubscriptionByGymId(gymId);
+  }
+
+  // ============================================
+  // Wildcard :id routes (MUST be last)
+  // ============================================
+
+  @Get(':id')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Get a gym subscription by ID' })
+  findSubscriptionById(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findSubscriptionById(id);
+  }
+
+  @Post()
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Create a gym subscription' })
+  createSubscription(@Body() dto: CreateGymSubscriptionDto) {
+    return this.service.createSubscription(dto);
+  }
+
+  @Patch(':id')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Update a gym subscription' })
+  updateSubscription(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateGymSubscriptionDto,
+  ) {
+    return this.service.updateSubscription(id, dto);
+  }
+
+  @Post(':id/cancel')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Cancel a gym subscription' })
+  cancelSubscription(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelSubscriptionDto,
+  ) {
+    return this.service.cancelSubscription(id, dto);
+  }
+
+  @Post(':id/payments')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Record a payment for a subscription' })
+  createPayment(
+    @Param('id', ParseIntPipe) subscriptionId: number,
+    @Body() dto: CreatePaymentHistoryDto,
+  ) {
+    return this.service.createPaymentHistory({
+      ...dto,
+      subscriptionId,
+    });
+  }
+
   @Get(':id/payment-history')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Get payment history for a subscription' })
@@ -278,28 +305,5 @@ export class SaasSubscriptionsController {
       limit: limit ? parseInt(limit, 10) : undefined,
       status,
     });
-  }
-
-  @Post(':id/payments')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Record a payment for a subscription' })
-  createPayment(
-    @Param('id', ParseIntPipe) subscriptionId: number,
-    @Body() dto: CreatePaymentHistoryDto,
-  ) {
-    return this.service.createPaymentHistory({
-      ...dto,
-      subscriptionId,
-    });
-  }
-
-  @Patch('payments/:id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Update a payment record' })
-  updatePayment(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePaymentHistoryDto,
-  ) {
-    return this.service.updatePaymentHistory(id, dto);
   }
 }

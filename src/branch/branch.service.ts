@@ -323,7 +323,7 @@ export class BranchService {
     return {
       current: currentCount,
       max: maxBranches,
-      canAdd: currentCount < maxBranches,
+      canAdd: maxBranches === -1 || currentCount < maxBranches,
       plan: subscription?.plan?.name,
     };
   }
