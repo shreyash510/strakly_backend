@@ -140,6 +140,7 @@ export class AttendanceController {
         id: user.id,
         name: user.name,
         email: user.email,
+        avatar: user.avatar,
         attendanceCode: user.attendanceCode,
       },
       body.staffId,

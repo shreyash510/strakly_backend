@@ -145,6 +145,7 @@ export class AttendanceService {
       id: number;
       name: string;
       email: string;
+      avatar?: string | null;
       attendanceCode?: string | null;
     },
     staffId: number,
@@ -261,6 +262,7 @@ export class AttendanceService {
       userId: user.id,
       userName: user.name,
       userEmail: user.email,
+      userAvatar: user.avatar || null,
       attendanceCode: user.attendanceCode || null,
       gymId: gymId,
       gymName: gym.name,
@@ -301,6 +303,7 @@ export class AttendanceService {
             ? {
                 name: attResult.rows[0].user_name,
                 email: attResult.rows[0].user_email,
+                avatar: attResult.rows[0].user_avatar,
                 attendanceCode: attResult.rows[0].attendance_code,
               }
             : null,
@@ -358,6 +361,7 @@ export class AttendanceService {
       userId: attendance.user_id,
       userName: user?.name || '',
       userEmail: user?.email || '',
+      userAvatar: user?.avatar || null,
       attendanceCode: user?.attendanceCode || null,
       gymId: gymId,
       gymName: gym.name,
