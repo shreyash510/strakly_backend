@@ -39,6 +39,8 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'x-user-id', 'Authorization'],
     exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page', 'X-Total-Pages'],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Enable validation
