@@ -19,11 +19,15 @@ import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('lookups')
 @Controller('lookups')
 export class LookupsController {
-  constructor(private readonly lookupsService: LookupsService) {}
+  constructor(
+    private readonly lookupsService: LookupsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ============ LOOKUP TYPES ============
 
@@ -44,8 +48,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new lookup type' })
-  createType(@Body() dto: CreateLookupTypeDto) {
-    return this.lookupsService.createLookupType(dto);
+  async createType(@Body() dto: CreateLookupTypeDto) {
+    const result = await this.lookupsService.createLookupType(dto);
+    this.notificationsGateway.emitLookupChanged({ action: 'type_created' });
+    return result;
   }
 
   @Patch('types/:code')
@@ -53,8 +59,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup type' })
-  updateType(@Param('code') code: string, @Body() dto: UpdateLookupTypeDto) {
-    return this.lookupsService.updateLookupType(code, dto);
+  async updateType(@Param('code') code: string, @Body() dto: UpdateLookupTypeDto) {
+    const result = await this.lookupsService.updateLookupType(code, dto);
+    this.notificationsGateway.emitLookupChanged({ action: 'type_updated' });
+    return result;
   }
 
   @Delete('types/:code')
@@ -62,8 +70,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup type (soft delete)' })
-  deleteType(@Param('code') code: string) {
-    return this.lookupsService.deleteLookupType(code);
+  async deleteType(@Param('code') code: string) {
+    const result = await this.lookupsService.deleteLookupType(code);
+    this.notificationsGateway.emitLookupChanged({ action: 'type_deleted' });
+    return result;
   }
 
   // ============ LOOKUPS (static routes BEFORE wildcard) ============
@@ -79,8 +89,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup value' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLookupDto) {
-    return this.lookupsService.updateLookup(id, dto);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLookupDto) {
+    const result = await this.lookupsService.updateLookup(id, dto);
+    this.notificationsGateway.emitLookupChanged({ action: 'value_updated' });
+    return result;
   }
 
   @Delete('value/:id')
@@ -88,8 +100,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup value (soft delete)' })
-  delete(@Param('id', ParseIntPipe) id: number) {
-    return this.lookupsService.deleteLookup(id);
+  async delete(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.lookupsService.deleteLookup(id);
+    this.notificationsGateway.emitLookupChanged({ action: 'value_deleted' });
+    return result;
   }
 
   // ============ WILDCARD routes (MUST be last) ============
@@ -105,8 +119,10 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new lookup value for a type' })
-  create(@Param('typeCode') typeCode: string, @Body() dto: CreateLookupDto) {
-    return this.lookupsService.createLookup(typeCode, dto);
+  async create(@Param('typeCode') typeCode: string, @Body() dto: CreateLookupDto) {
+    const result = await this.lookupsService.createLookup(typeCode, dto);
+    this.notificationsGateway.emitLookupChanged({ action: 'value_created' });
+    return result;
   }
 
   @Post(':typeCode/bulk')
@@ -114,10 +130,12 @@ export class LookupsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create multiple lookup values for a type' })
-  createBulk(
+  async createBulk(
     @Param('typeCode') typeCode: string,
     @Body() dtos: CreateLookupDto[],
   ) {
-    return this.lookupsService.createBulkLookups(typeCode, dtos);
+    const result = await this.lookupsService.createBulkLookups(typeCode, dtos);
+    this.notificationsGateway.emitLookupChanged({ action: 'bulk_created' });
+    return result;
   }
 }

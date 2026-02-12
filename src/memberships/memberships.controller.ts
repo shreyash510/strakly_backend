@@ -32,13 +32,17 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('memberships')
 @Controller('memberships')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class MembershipsController {
-  constructor(private readonly membershipsService: MembershipsService) {}
+  constructor(
+    private readonly membershipsService: MembershipsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
@@ -284,13 +288,15 @@ export class MembershipsController {
 
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
-  renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
-    return this.membershipsService.renew(
+  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
+    const result = await this.membershipsService.renew(
       req.user.userId,
       req.user.gymId!,
       req.user.branchId,
       dto,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
+    return result;
   }
 
   // ============ USER-SPECIFIC ENDPOINTS (admin - userId from header) ============
@@ -376,7 +382,7 @@ export class MembershipsController {
     type: Number,
     description: 'Branch ID for filtering (admin only)',
   })
-  renew(
+  async renew(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: RenewMembershipDto,
@@ -384,12 +390,14 @@ export class MembershipsController {
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.renew(
+    const result = await this.membershipsService.renew(
       parseInt(userId),
       req.user.gymId!,
       branchId,
       dto,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
+    return result;
   }
 
   // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
@@ -431,17 +439,19 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
-  updateMembershipFacilities(
+  async updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
   ) {
-    return this.membershipsService.updateMembershipFacilitiesAndAmenities(
+    const result = await this.membershipsService.updateMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
       dto.facilityIds || [],
       dto.amenityIds || [],
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post()
@@ -454,17 +464,19 @@ export class MembershipsController {
     type: Number,
     description: 'Branch ID for the membership (admin only)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.create(dto, req.user.gymId!, branchId, {
+    const result = await this.membershipsService.create(dto, req.user.gymId!, branchId, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
     });
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -476,7 +488,9 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMembershipDto,
   ) {
-    return this.membershipsService.update(id, req.user.gymId!, dto);
+    const result = await this.membershipsService.update(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post(':id/payment')
@@ -488,12 +502,14 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RecordPaymentDto,
   ) {
-    return this.membershipsService.recordPayment(
+    const result = await this.membershipsService.recordPayment(
       id,
       req.user.gymId!,
       dto,
       req.user.userId,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'payment_recorded' });
+    return result;
   }
 
   @Post(':id/cancel')
@@ -505,7 +521,9 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelMembershipDto,
   ) {
-    return this.membershipsService.cancel(id, req.user.gymId!, dto);
+    const result = await this.membershipsService.cancel(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'cancelled' });
+    return result;
   }
 
   @Delete(':id')
@@ -523,6 +541,8 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
   ) {
-    return this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 }

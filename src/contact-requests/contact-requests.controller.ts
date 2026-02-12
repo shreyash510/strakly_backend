@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('contact-requests')
@@ -35,13 +36,16 @@ import type { AuthenticatedRequest } from '../common/types';
 export class ContactRequestsController {
   constructor(
     private readonly contactRequestsService: ContactRequestsService,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   // Public endpoint - no auth required
   @Post()
   @ApiOperation({ summary: 'Submit a contact request (public)' })
-  create(@Body() dto: CreateContactRequestDto) {
-    return this.contactRequestsService.create(dto);
+  async create(@Body() dto: CreateContactRequestDto) {
+    const result = await this.contactRequestsService.create(dto);
+    this.notificationsGateway.emitContactRequestChanged({ action: 'created' });
+    return result;
   }
 
   // Protected endpoints - superadmin only
@@ -106,12 +110,14 @@ export class ContactRequestsController {
   @Roles('superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update contact request (superadmin only)' })
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContactRequestDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.contactRequestsService.update(id, dto, req.user?.userId);
+    const result = await this.contactRequestsService.update(id, dto, req.user?.userId);
+    this.notificationsGateway.emitContactRequestChanged({ action: 'updated' });
+    return result;
   }
 
   @Post(':id/mark-read')
@@ -119,8 +125,10 @@ export class ContactRequestsController {
   @Roles('superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Mark contact request as read (superadmin only)' })
-  markAsRead(@Param('id', ParseIntPipe) id: number) {
-    return this.contactRequestsService.markAsRead(id);
+  async markAsRead(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.contactRequestsService.markAsRead(id);
+    this.notificationsGateway.emitContactRequestChanged({ action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
@@ -128,7 +136,9 @@ export class ContactRequestsController {
   @Roles('superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete contact request (superadmin only)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.contactRequestsService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.contactRequestsService.remove(id);
+    this.notificationsGateway.emitContactRequestChanged({ action: 'deleted' });
+    return result;
   }
 }

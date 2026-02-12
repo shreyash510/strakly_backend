@@ -24,13 +24,17 @@ import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @Roles('superadmin', 'admin', 'branch_admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.PAYMENT_GATEWAY)
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get()
   async findAll(
@@ -80,7 +84,9 @@ export class PaymentsController {
     @GymId() gymId: number,
     @UserId() userId: number,
   ) {
-    return this.paymentsService.create(dto, gymId, userId);
+    const result = await this.paymentsService.create(dto, gymId, userId);
+    this.notificationsGateway.emitPaymentChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -89,6 +95,8 @@ export class PaymentsController {
     @Body() dto: UpdatePaymentDto,
     @GymId() gymId: number,
   ) {
-    return this.paymentsService.update(id, gymId, dto);
+    const result = await this.paymentsService.update(id, gymId, dto);
+    this.notificationsGateway.emitPaymentChanged(gymId, { action: 'updated' });
+    return result;
   }
 }

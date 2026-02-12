@@ -26,6 +26,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('gyms')
@@ -34,7 +35,10 @@ import type { AuthenticatedRequest } from '../common/types';
 @Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class GymController {
-  constructor(private readonly gymService: GymService) {}
+  constructor(
+    private readonly gymService: GymService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get('profile')
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
@@ -133,25 +137,31 @@ export class GymController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new gym' })
-  create(@Body() dto: CreateGymDto) {
+  async create(@Body() dto: CreateGymDto) {
     return this.gymService.create(dto);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a gym' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
-    return this.gymService.update(id, dto);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
+    const result = await this.gymService.update(id, dto);
+    this.notificationsGateway.emitGymChanged(id, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a gym' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.gymService.remove(id);
+    this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
+    return result;
   }
 
   @Post(':id/toggle-status')
   @ApiOperation({ summary: 'Toggle gym active status' })
-  toggleStatus(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.toggleStatus(id);
+  async toggleStatus(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.gymService.toggleStatus(id);
+    this.notificationsGateway.emitGymChanged(id, { action: 'status_changed' });
+    return result;
   }
 }

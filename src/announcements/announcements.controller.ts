@@ -25,13 +25,17 @@ import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Controller('announcements')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @Roles('superadmin', 'admin', 'branch_admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ANNOUNCEMENTS)
 export class AnnouncementsController {
-  constructor(private readonly announcementsService: AnnouncementsService) {}
+  constructor(
+    private readonly announcementsService: AnnouncementsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get()
   async findAll(
@@ -70,7 +74,9 @@ export class AnnouncementsController {
     @GymId() gymId: number,
     @UserId() userId: number,
   ) {
-    return this.announcementsService.create(dto, gymId, userId);
+    const result = await this.announcementsService.create(dto, gymId, userId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -79,7 +85,9 @@ export class AnnouncementsController {
     @Body() dto: UpdateAnnouncementDto,
     @GymId() gymId: number,
   ) {
-    return this.announcementsService.update(id, gymId, dto);
+    const result = await this.announcementsService.update(id, gymId, dto);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Patch(':id/toggle-pin')
@@ -87,11 +95,15 @@ export class AnnouncementsController {
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.announcementsService.togglePin(id, gymId);
+    const result = await this.announcementsService.togglePin(id, gymId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   async delete(@Param('id', ParseIntPipe) id: number, @GymId() gymId: number) {
-    return this.announcementsService.delete(id, gymId);
+    const result = await this.announcementsService.delete(id, gymId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'deleted' });
+    return result;
   }
 }

@@ -34,6 +34,7 @@ import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('salary')
 @Controller('salary')
@@ -42,7 +43,10 @@ import { setPaginationHeaders } from '../common/pagination.util';
 @Roles('superadmin', 'admin', 'branch_admin')
 @ApiBearerAuth()
 export class SalaryController {
-  constructor(private readonly salaryService: SalaryService) {}
+  constructor(
+    private readonly salaryService: SalaryService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveGymId(req: AuthenticatedRequest, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
@@ -76,13 +80,15 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() createSalaryDto: CreateSalaryDto,
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.create(createSalaryDto, gymId, req.user.userId);
+    const result = await this.salaryService.create(createSalaryDto, gymId, req.user.userId);
+    this.notificationsGateway.emitSalaryChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Get()
@@ -232,14 +238,16 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSalaryDto: UpdateSalaryDto,
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.update(id, updateSalaryDto, gymId);
+    const result = await this.salaryService.update(id, updateSalaryDto, gymId);
+    this.notificationsGateway.emitSalaryChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Patch(':id/pay')
@@ -250,19 +258,21 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  paySalary(
+  async paySalary(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() paySalaryDto: PaySalaryDto,
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.paySalary(
+    const result = await this.salaryService.paySalary(
       id,
       paySalaryDto,
       gymId,
       req.user.userId,
     );
+    this.notificationsGateway.emitSalaryChanged(gymId, { action: 'paid' });
+    return result;
   }
 
   @Delete(':id')
@@ -273,12 +283,14 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  remove(
+  async remove(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.salaryService.remove(id, gymId);
+    const result = await this.salaryService.remove(id, gymId);
+    this.notificationsGateway.emitSalaryChanged(gymId, { action: 'deleted' });
+    return result;
   }
 }

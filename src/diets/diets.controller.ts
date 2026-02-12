@@ -34,6 +34,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('diets')
 @Controller('diets')
@@ -41,7 +42,10 @@ import { PLAN_FEATURES } from '../common/constants/features';
 @PlanFeatures(PLAN_FEATURES.DIET_PLANNING)
 @ApiBearerAuth()
 export class DietsController {
-  constructor(private readonly dietsService: DietsService) {}
+  constructor(
+    private readonly dietsService: DietsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   /**
    * Resolve branchId from request: null = all branches, number = specific branch
@@ -152,35 +156,41 @@ export class DietsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a new diet plan' })
-  create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
+  async create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
     // Use branchId from request body if provided, otherwise fallback to user's branchId
     const branchId = dto.branchId ?? req.user.branchId ?? null;
-    return this.dietsService.create(
+    const result = await this.dietsService.create(
       dto,
       req.user.gymId!,
       req.user.userId,
       branchId,
     );
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a diet plan' })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDietDto,
   ) {
-    return this.dietsService.update(id, dto, req.user.gymId!);
+    const result = await this.dietsService.update(id, dto, req.user.gymId!);
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Delete a diet plan' })
-  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.dietsService.delete(id, req.user.gymId!);
+  async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.dietsService.delete(id, req.user.gymId!);
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 
   // ============ ASSIGNMENT ENDPOINTS ============
@@ -189,14 +199,16 @@ export class DietsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
-  assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
+  async assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
     const branchId = req.user.branchId ?? null;
-    return this.dietsService.assignDiet(
+    const result = await this.dietsService.assignDiet(
       dto,
       req.user.gymId!,
       req.user.userId,
       branchId,
     );
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'assigned' });
+    return result;
   }
 
   @Get(':id/assignments')
@@ -251,19 +263,23 @@ export class DietsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a diet assignment' })
-  updateAssignment(
+  async updateAssignment(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDietAssignmentDto,
   ) {
-    return this.dietsService.updateAssignment(id, dto, req.user.gymId!);
+    const result = await this.dietsService.updateAssignment(id, dto, req.user.gymId!);
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'assignment_updated' });
+    return result;
   }
 
   @Delete('assignments/:id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Unassign (cancel) a diet assignment' })
-  unassignDiet(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.dietsService.unassignDiet(id, req.user.gymId!);
+  async unassignDiet(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.dietsService.unassignDiet(id, req.user.gymId!);
+    this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'unassigned' });
+    return result;
   }
 }

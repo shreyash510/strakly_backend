@@ -22,6 +22,7 @@ import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('plans')
@@ -29,7 +30,10 @@ import type { AuthenticatedRequest } from '../common/types';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class PlansController {
-  constructor(private readonly plansService: PlansService) {}
+  constructor(
+    private readonly plansService: PlansService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
@@ -146,32 +150,38 @@ export class PlansController {
     type: Number,
     description: 'Branch ID for the plan (admin only)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreatePlanDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.plansService.create(dto, req.user.gymId!, branchId);
+    const result = await this.plansService.create(dto, req.user.gymId!, branchId);
+    this.notificationsGateway.emitPlanChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update a plan' })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdatePlanDto,
   ) {
-    return this.plansService.update(id, req.user.gymId!, dto);
+    const result = await this.plansService.update(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitPlanChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
-  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.plansService.delete(id, req.user.gymId!);
+  async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.plansService.delete(id, req.user.gymId!);
+    this.notificationsGateway.emitPlanChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 }
