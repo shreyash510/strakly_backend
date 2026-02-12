@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('support')
@@ -36,16 +37,19 @@ import type { AuthenticatedRequest } from '../common/types';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class SupportController {
-  constructor(private readonly supportService: SupportService) {}
+  constructor(
+    private readonly supportService: SupportService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new support ticket' })
-  create(@Request() req: AuthenticatedRequest, @Body() createTicketDto: CreateTicketDto) {
+  async create(@Request() req: AuthenticatedRequest, @Body() createTicketDto: CreateTicketDto) {
     // Determine user type: staff roles are 'staff', others are 'client'
     const userType = ['admin', 'manager', 'trainer'].includes(req.user.role)
       ? 'staff'
       : 'client';
-    return this.supportService.create(
+    const result = await this.supportService.create(
       req.user.userId,
       req.user.gymId!,
       req.user.name,
@@ -53,6 +57,8 @@ export class SupportController {
       userType,
       createTicketDto,
     );
+    this.notificationsGateway.emitSupportChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Get()
@@ -181,28 +187,30 @@ export class SupportController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a support ticket' })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateTicketDto: UpdateTicketDto,
   ) {
-    return this.supportService.update(
+    const result = await this.supportService.update(
       id,
       updateTicketDto,
       req.user.userId,
       req.user.role,
       req.user.gymId ?? undefined,
     );
+    if (req.user.gymId) this.notificationsGateway.emitSupportChanged(req.user.gymId, { action: 'updated' });
+    return result;
   }
 
   @Post(':id/messages')
   @ApiOperation({ summary: 'Add a message to a support ticket' })
-  addMessage(
+  async addMessage(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() addMessageDto: AddMessageDto,
   ) {
-    return this.supportService.addMessage(
+    const result = await this.supportService.addMessage(
       id,
       addMessageDto,
       req.user.userId,
@@ -210,18 +218,22 @@ export class SupportController {
       req.user.role,
       req.user.gymId ?? undefined,
     );
+    if (req.user.gymId) this.notificationsGateway.emitSupportChanged(req.user.gymId, { action: 'message_added' });
+    return result;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a support ticket (admin only)' })
-  remove(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.supportService.remove(
+  async remove(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.supportService.remove(
       id,
       req.user.userId,
       req.user.role,
       req.user.gymId ?? undefined,
     );
+    if (req.user.gymId) this.notificationsGateway.emitSupportChanged(req.user.gymId, { action: 'deleted' });
+    return result;
   }
 }

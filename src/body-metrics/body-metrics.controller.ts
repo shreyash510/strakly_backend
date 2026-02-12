@@ -29,6 +29,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('body-metrics')
 @Controller('body-metrics')
@@ -36,7 +37,10 @@ import { PLAN_FEATURES } from '../common/constants/features';
 @PlanFeatures(PLAN_FEATURES.BODY_METRICS)
 @ApiBearerAuth()
 export class BodyMetricsController {
-  constructor(private readonly bodyMetricsService: BodyMetricsService) {}
+  constructor(
+    private readonly bodyMetricsService: BodyMetricsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ============ CURRENT USER ENDPOINTS ============
 
@@ -53,26 +57,30 @@ export class BodyMetricsController {
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user body metrics' })
-  updateMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: UpdateBodyMetricsDto) {
+  async updateMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: UpdateBodyMetricsDto) {
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.updateMetrics(
+    const result = await this.bodyMetricsService.updateMetrics(
       req.user.userId,
       req.user.gymId!,
       dto,
       branchId,
     );
+    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post('me/record')
   @ApiOperation({ summary: 'Record body metrics and save to history' })
-  recordMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: RecordMetricsDto) {
+  async recordMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: RecordMetricsDto) {
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.recordMetrics(
+    const result = await this.bodyMetricsService.recordMetrics(
       req.user.userId,
       req.user.gymId!,
       dto,
       branchId,
     );
+    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'recorded' });
+    return result;
   }
 
   @Get('me/history')
@@ -114,15 +122,17 @@ export class BodyMetricsController {
 
   @Delete('me/history/:id')
   @ApiOperation({ summary: 'Delete a history record' })
-  deleteMyHistoryRecord(
+  async deleteMyHistoryRecord(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.bodyMetricsService.deleteHistoryRecord(
+    const result = await this.bodyMetricsService.deleteHistoryRecord(
       id,
       req.user.userId,
       req.user.gymId!,
     );
+    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============
@@ -156,19 +166,21 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  updateUserMetrics(
+  async updateUserMetrics(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: UpdateBodyMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.updateMetrics(
+    const result = await this.bodyMetricsService.updateMetrics(
       parseInt(userId),
       req.user.gymId!,
       dto,
       branchId,
     );
+    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post('user/record')
@@ -180,19 +192,21 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  recordUserMetrics(
+  async recordUserMetrics(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: RecordMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = req.user.branchId ?? null;
-    return this.bodyMetricsService.recordMetrics(
+    const result = await this.bodyMetricsService.recordMetrics(
       parseInt(userId),
       req.user.gymId!,
       dto,
       branchId,
     );
+    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'recorded' });
+    return result;
   }
 
   @Get('user/history')

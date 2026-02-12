@@ -249,6 +249,186 @@ export class NotificationsGateway
   }
 
   /**
+   * Emit membership:changed event to all connected users in a gym
+   */
+  emitMembershipChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('membership:changed', payload);
+    this.logger.debug(
+      `membership:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit attendance:changed event to all connected users in a gym
+   */
+  emitAttendanceChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('attendance:changed', payload);
+    this.logger.debug(
+      `attendance:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit plan:changed event to all connected users in a gym
+   */
+  emitPlanChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('plan:changed', payload);
+    this.logger.debug(
+      `plan:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit offer:changed event to all connected users in a gym
+   */
+  emitOfferChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('offer:changed', payload);
+    this.logger.debug(
+      `offer:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit announcement:changed event to all connected users in a gym
+   */
+  emitAnnouncementChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('announcement:changed', payload);
+    this.logger.debug(
+      `announcement:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit salary:changed event to all connected users in a gym
+   */
+  emitSalaryChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('salary:changed', payload);
+    this.logger.debug(
+      `salary:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit diet:changed event to all connected users in a gym
+   */
+  emitDietChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('diet:changed', payload);
+    this.logger.debug(
+      `diet:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit payment:changed event to all connected users in a gym
+   */
+  emitPaymentChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('payment:changed', payload);
+    this.logger.debug(
+      `payment:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit support:changed event to all connected users in a gym
+   */
+  emitSupportChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('support:changed', payload);
+    this.logger.debug(
+      `support:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit gym:changed event to all connected users in a gym
+   */
+  emitGymChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('gym:changed', payload);
+    this.logger.debug(
+      `gym:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit facility:changed event to all connected users in a gym
+   */
+  emitFacilityChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('facility:changed', payload);
+    this.logger.debug(
+      `facility:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit amenity:changed event to all connected users in a gym
+   */
+  emitAmenityChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('amenity:changed', payload);
+    this.logger.debug(
+      `amenity:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit body-metrics:changed event to all connected users in a gym
+   */
+  emitBodyMetricsChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('body-metrics:changed', payload);
+    this.logger.debug(
+      `body-metrics:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit permission:changed event to all connected users in a gym
+   */
+  emitPermissionChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('permission:changed', payload);
+    this.logger.debug(
+      `permission:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit permission:changed event to all superadmins
+   */
+  emitPermissionChangedGlobal(payload: { action: string }) {
+    this.server.to('superadmin').emit('permission:changed', payload);
+    this.logger.debug(
+      `permission:changed event emitted to all superadmins (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit saas-subscription:changed event to all superadmins
+   */
+  emitSaasSubscriptionChanged(payload: { action: string }) {
+    this.server.to('superadmin').emit('saas-subscription:changed', payload);
+    this.logger.debug(
+      `saas-subscription:changed event emitted to superadmins (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit contact-request:changed event to all superadmins
+   */
+  emitContactRequestChanged(payload: { action: string }) {
+    this.server.to('superadmin').emit('contact-request:changed', payload);
+    this.logger.debug(
+      `contact-request:changed event emitted to superadmins (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit lookup:changed event to all superadmins
+   */
+  emitLookupChanged(payload: { action: string }) {
+    this.server.to('superadmin').emit('lookup:changed', payload);
+    this.logger.debug(
+      `lookup:changed event emitted to superadmins (action: ${payload.action})`,
+    );
+  }
+
+  /**
    * Get connection stats
    */
   getConnectionStats() {

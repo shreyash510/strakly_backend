@@ -25,6 +25,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('offers')
@@ -33,7 +34,10 @@ import type { AuthenticatedRequest } from '../common/types';
 @PlanFeatures(PLAN_FEATURES.OFFERS)
 @ApiBearerAuth()
 export class OffersController {
-  constructor(private readonly offersService: OffersService) {}
+  constructor(
+    private readonly offersService: OffersService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
@@ -143,32 +147,38 @@ export class OffersController {
     type: Number,
     description: 'Branch ID for the offer (admin only)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateOfferDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.create(dto, req.user.gymId!, branchId);
+    const result = await this.offersService.create(dto, req.user.gymId!, branchId);
+    this.notificationsGateway.emitOfferChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Update an offer' })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOfferDto,
   ) {
-    return this.offersService.update(id, req.user.gymId!, dto);
+    const result = await this.offersService.update(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitOfferChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin')
   @ApiOperation({ summary: 'Delete an offer (soft delete)' })
-  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.offersService.delete(id, req.user.gymId!);
+  async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.offersService.delete(id, req.user.gymId!);
+    this.notificationsGateway.emitOfferChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 }

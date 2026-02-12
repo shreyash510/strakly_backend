@@ -30,13 +30,17 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('attendance')
 @Controller('attendance')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(
+    private readonly attendanceService: AttendanceService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveGymId(req: AuthenticatedRequest, queryGymId?: string): number {
     if (req.user.role === 'superadmin') {
@@ -135,7 +139,7 @@ export class AttendanceController {
       throw new BadRequestException('Invalid attendance code');
     }
 
-    return this.attendanceService.markAttendance(
+    const result = await this.attendanceService.markAttendance(
       {
         id: user.id,
         name: user.name,
@@ -148,6 +152,8 @@ export class AttendanceController {
       branchId,
       body.checkInMethod || 'code',
     );
+    this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'checked_in' });
+    return result;
   }
 
   @Patch('checkout/:id')
@@ -167,7 +173,9 @@ export class AttendanceController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.checkOut(attendanceId, gymId, body?.staffId);
+    const result = await this.attendanceService.checkOut(attendanceId, gymId, body?.staffId);
+    this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'checked_out' });
+    return result;
   }
 
   @Get('me')
@@ -448,6 +456,7 @@ export class AttendanceController {
       attendanceId,
       gymId,
     );
+    this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'deleted' });
     return { success: result };
   }
 }

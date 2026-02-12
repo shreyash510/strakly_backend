@@ -25,12 +25,16 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('permissions')
 @Controller('permissions')
 export class PermissionsController {
-  constructor(private readonly permissionsService: PermissionsService) {}
+  constructor(
+    private readonly permissionsService: PermissionsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ============ PERMISSIONS ============
 
@@ -63,8 +67,10 @@ export class PermissionsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new permission' })
-  create(@Body() dto: CreatePermissionDto) {
-    return this.permissionsService.createPermission(dto);
+  async create(@Body() dto: CreatePermissionDto) {
+    const result = await this.permissionsService.createPermission(dto);
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'created' });
+    return result;
   }
 
   @Patch(':code')
@@ -72,8 +78,10 @@ export class PermissionsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a permission' })
-  update(@Param('code') code: string, @Body() dto: UpdatePermissionDto) {
-    return this.permissionsService.updatePermission(code, dto);
+  async update(@Param('code') code: string, @Body() dto: UpdatePermissionDto) {
+    const result = await this.permissionsService.updatePermission(code, dto);
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'updated' });
+    return result;
   }
 
   @Delete(':code')
@@ -81,8 +89,10 @@ export class PermissionsController {
   @Roles('superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a permission (soft delete)' })
-  delete(@Param('code') code: string) {
-    return this.permissionsService.deletePermission(code);
+  async delete(@Param('code') code: string) {
+    const result = await this.permissionsService.deletePermission(code);
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'deleted' });
+    return result;
   }
 
   // ============ ROLE PERMISSIONS ============
@@ -108,8 +118,10 @@ export class PermissionsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Assign permissions to a role (replaces existing)' })
-  assignPermissionsToRole(@Body() dto: AssignRolePermissionsDto) {
-    return this.permissionsService.assignPermissionsToRole(dto);
+  async assignPermissionsToRole(@Body() dto: AssignRolePermissionsDto) {
+    const result = await this.permissionsService.assignPermissionsToRole(dto);
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'role_assigned' });
+    return result;
   }
 
   @Post('role/:role/permission/:permissionCode')
@@ -117,11 +129,13 @@ export class PermissionsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a single permission to a role' })
-  addPermissionToRole(
+  async addPermissionToRole(
     @Param('role') role: string,
     @Param('permissionCode') permissionCode: string,
   ) {
-    return this.permissionsService.addPermissionToRole(role, permissionCode);
+    const result = await this.permissionsService.addPermissionToRole(role, permissionCode);
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'role_permission_added' });
+    return result;
   }
 
   @Delete('role/:role/permission/:permissionCode')
@@ -129,14 +143,16 @@ export class PermissionsController {
   @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove a permission from a role' })
-  removePermissionFromRole(
+  async removePermissionFromRole(
     @Param('role') role: string,
     @Param('permissionCode') permissionCode: string,
   ) {
-    return this.permissionsService.removePermissionFromRole(
+    const result = await this.permissionsService.removePermissionFromRole(
       role,
       permissionCode,
     );
+    this.notificationsGateway.emitPermissionChangedGlobal({ action: 'role_permission_removed' });
+    return result;
   }
 
   // ============ CURRENT USER PERMISSIONS ============
