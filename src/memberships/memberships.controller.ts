@@ -119,7 +119,7 @@ export class MembershipsController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   @ApiQuery({
     name: 'branchId',
@@ -172,7 +172,7 @@ export class MembershipsController {
 
   @Get('expiring')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   @ApiQuery({
@@ -297,7 +297,7 @@ export class MembershipsController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -326,7 +326,7 @@ export class MembershipsController {
 
   @Get('user/active')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get active membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -346,7 +346,7 @@ export class MembershipsController {
 
   @Get('user/status')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Check membership status for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -363,7 +363,7 @@ export class MembershipsController {
 
   @Post('user/renew')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Renew membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -396,7 +396,7 @@ export class MembershipsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
   @ApiQuery({
     name: 'branchId',
@@ -415,7 +415,7 @@ export class MembershipsController {
 
   @Get(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -429,7 +429,7 @@ export class MembershipsController {
 
   @Patch(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
   updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -446,7 +446,7 @@ export class MembershipsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Create a new membership' })
   @ApiQuery({
     name: 'branchId',
@@ -469,7 +469,7 @@ export class MembershipsController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update a membership' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -481,7 +481,7 @@ export class MembershipsController {
 
   @Post(':id/payment')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
   async recordPayment(
     @Request() req: AuthenticatedRequest,
@@ -498,7 +498,7 @@ export class MembershipsController {
 
   @Post(':id/cancel')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Cancel a membership' })
   async cancel(
     @Request() req: AuthenticatedRequest,

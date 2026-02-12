@@ -26,7 +26,7 @@ import {
   VerifyOtpDto,
   ResetPasswordDto,
 } from './dto/forgot-password.dto';
-import { GymId, UserId } from './decorators';
+import { GymId, UserId, OptionalGymId } from './decorators';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -69,8 +69,8 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@UserId() userId: number, @GymId() gymId: number) {
-    return this.authService.getProfile(userId, gymId);
+  getProfile(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
+    return this.authService.getProfile(userId, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -79,10 +79,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Update current user profile' })
   updateProfile(
     @UserId() userId: number,
-    @GymId() gymId: number,
+    @OptionalGymId() gymId: number | null,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
-    return this.authService.updateProfile(userId, gymId, updateProfileDto);
+    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -91,12 +91,12 @@ export class AuthController {
   @ApiOperation({ summary: 'Change user password' })
   changePassword(
     @UserId() userId: number,
-    @GymId() gymId: number,
+    @OptionalGymId() gymId: number | null,
     @Body() dto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(
       userId,
-      gymId,
+      gymId ?? undefined,
       dto.currentPassword,
       dto.newPassword,
     );
@@ -106,8 +106,8 @@ export class AuthController {
   @Post('refresh')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
-  refreshToken(@UserId() userId: number, @GymId() gymId: number) {
-    return this.authService.refreshToken(userId, gymId);
+  refreshToken(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
+    return this.authService.refreshToken(userId, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -196,8 +196,8 @@ export class AuthController {
   @Get('email-verification-status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check email verification status' })
-  checkEmailVerification(@UserId() userId: number, @GymId() gymId: number) {
-    return this.authService.checkEmailVerification(userId, false, gymId);
+  checkEmailVerification(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
+    return this.authService.checkEmailVerification(userId, false, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

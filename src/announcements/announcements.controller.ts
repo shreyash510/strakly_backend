@@ -17,15 +17,18 @@ import {
   AnnouncementFiltersDto,
 } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { BranchId } from '../common/decorators/branch-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 
 @Controller('announcements')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@Roles('superadmin', 'admin', 'branch_admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ANNOUNCEMENTS)
 export class AnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
@@ -33,7 +36,7 @@ export class AnnouncementsController {
   @Get()
   async findAll(
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
     @Query() filters: AnnouncementFiltersDto,
   ) {
     return this.announcementsService.findAll(gymId, branchId, filters);
@@ -42,7 +45,7 @@ export class AnnouncementsController {
   @Get('active')
   async getActive(
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
     @Query('platform') platform?: 'dashboard' | 'mobile',
   ) {
     return this.announcementsService.getActive(
@@ -56,7 +59,7 @@ export class AnnouncementsController {
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
   ) {
     return this.announcementsService.findOne(id, gymId, branchId);
   }

@@ -9,14 +9,17 @@ import {
 import { ActivityLogsService } from './activity-logs.service';
 import { ActivityLogFiltersDto } from './dto/activity-log.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { BranchId } from '../common/decorators/branch-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 
 @Controller('activity-logs')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@Roles('superadmin', 'admin', 'branch_admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ACTIVITY_LOGS)
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
@@ -24,7 +27,7 @@ export class ActivityLogsController {
   @Get()
   async findAll(
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
     @Query() filters: ActivityLogFiltersDto,
   ) {
     return this.activityLogsService.findAll(gymId, branchId, filters);
@@ -35,7 +38,7 @@ export class ActivityLogsController {
     @Param('type') targetType: string,
     @Param('id', ParseIntPipe) targetId: number,
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
   ) {
     return this.activityLogsService.findByTarget(
       targetType,

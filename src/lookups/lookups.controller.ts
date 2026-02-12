@@ -17,6 +17,8 @@ import {
 } from './dto/create-lookup-type.dto';
 import { CreateLookupDto, UpdateLookupDto } from './dto/create-lookup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('lookups')
 @Controller('lookups')
@@ -38,7 +40,8 @@ export class LookupsController {
   }
 
   @Post('types')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new lookup type' })
   createType(@Body() dto: CreateLookupTypeDto) {
@@ -46,7 +49,8 @@ export class LookupsController {
   }
 
   @Patch('types/:code')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup type' })
   updateType(@Param('code') code: string, @Body() dto: UpdateLookupTypeDto) {
@@ -54,20 +58,15 @@ export class LookupsController {
   }
 
   @Delete('types/:code')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup type (soft delete)' })
   deleteType(@Param('code') code: string) {
     return this.lookupsService.deleteLookupType(code);
   }
 
-  // ============ LOOKUPS ============
-
-  @Get(':typeCode')
-  @ApiOperation({ summary: 'Get all lookup values for a type' })
-  findByType(@Param('typeCode') typeCode: string) {
-    return this.lookupsService.findLookupsByType(typeCode);
-  }
+  // ============ LOOKUPS (static routes BEFORE wildcard) ============
 
   @Get('value/:id')
   @ApiOperation({ summary: 'Get a single lookup value by ID' })
@@ -75,27 +74,9 @@ export class LookupsController {
     return this.lookupsService.findLookupById(id);
   }
 
-  @Post(':typeCode')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new lookup value for a type' })
-  create(@Param('typeCode') typeCode: string, @Body() dto: CreateLookupDto) {
-    return this.lookupsService.createLookup(typeCode, dto);
-  }
-
-  @Post(':typeCode/bulk')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create multiple lookup values for a type' })
-  createBulk(
-    @Param('typeCode') typeCode: string,
-    @Body() dtos: CreateLookupDto[],
-  ) {
-    return this.lookupsService.createBulkLookups(typeCode, dtos);
-  }
-
   @Patch('value/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a lookup value' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLookupDto) {
@@ -103,10 +84,40 @@ export class LookupsController {
   }
 
   @Delete('value/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a lookup value (soft delete)' })
   delete(@Param('id', ParseIntPipe) id: number) {
     return this.lookupsService.deleteLookup(id);
+  }
+
+  // ============ WILDCARD routes (MUST be last) ============
+
+  @Get(':typeCode')
+  @ApiOperation({ summary: 'Get all lookup values for a type' })
+  findByType(@Param('typeCode') typeCode: string) {
+    return this.lookupsService.findLookupsByType(typeCode);
+  }
+
+  @Post(':typeCode')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new lookup value for a type' })
+  create(@Param('typeCode') typeCode: string, @Body() dto: CreateLookupDto) {
+    return this.lookupsService.createLookup(typeCode, dto);
+  }
+
+  @Post(':typeCode/bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create multiple lookup values for a type' })
+  createBulk(
+    @Param('typeCode') typeCode: string,
+    @Body() dtos: CreateLookupDto[],
+  ) {
+    return this.lookupsService.createBulkLookups(typeCode, dtos);
   }
 }

@@ -11,6 +11,7 @@ import {
   Res,
   Request,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -47,7 +48,7 @@ export class GymController {
   async getProfile(@Request() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
     const gymId = req.user?.gymId;
     if (!gymId) {
-      throw new Error('No gym associated with this user');
+      throw new BadRequestException('No gym associated with this user');
     }
     const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
     return this.gymService.getProfile(gymId, parsedBranchId);
