@@ -17,7 +17,9 @@ import {
   CreatePaymentHistoryDto,
   UpdatePaymentHistoryDto,
   PaymentHistoryFiltersDto,
+  InitiateManualPaymentDto,
 } from './dto/saas-subscriptions.dto';
+import { EmailService } from '../email/email.service';
 import {
   PaginationParams,
   PaginatedResponse,
@@ -38,6 +40,7 @@ export class SaasSubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ============================================
@@ -666,12 +669,13 @@ export class SaasSubscriptionsService {
       },
     });
 
-    // If payment is completed, update subscription
+    // If payment is completed, activate the subscription
     if (dto.status === 'completed') {
       await this.prisma.saasGymSubscription.update({
         where: { id: dto.subscriptionId },
         data: {
           paymentStatus: 'paid',
+          status: 'active',
           lastPaymentAt: new Date(),
           paymentRef,
           paymentMethod: dto.paymentMethod,
@@ -719,12 +723,13 @@ export class SaasSubscriptionsService {
       },
     });
 
-    // If payment status changed to completed, update subscription
+    // If payment status changed to completed, activate the subscription
     if (dto.status === 'completed' && payment.status !== 'completed') {
       await this.prisma.saasGymSubscription.update({
         where: { id: payment.subscriptionId },
         data: {
           paymentStatus: 'paid',
+          status: 'active',
           lastPaymentAt: new Date(),
           paymentRef: payment.paymentRef,
           paymentMethod: payment.paymentMethod,
@@ -800,6 +805,196 @@ export class SaasSubscriptionsService {
 
     const sequence = String(count + 1).padStart(4, '0');
     return `INV-${year}${month}-${sequence}`;
+  }
+
+  // ============================================
+  // Manual Payment Flow
+  // ============================================
+
+  async initiateManualPayment(gymId: number, dto: InitiateManualPaymentDto) {
+    // Validate gym exists
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!gym) {
+      throw new NotFoundException('Gym not found');
+    }
+
+    // Validate plan exists and is active
+    const plan = await this.prisma.saasPlan.findUnique({
+      where: { id: dto.planId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found');
+    }
+    if (!plan.isActive) {
+      throw new BadRequestException('Plan is not available');
+    }
+
+    const isFree = plan.price.toNumber() === 0;
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + (plan.durationMonths || 1));
+
+    const amount = plan.price.toNumber();
+    const status = isFree ? 'active' : 'trial';
+    const paymentStatus = isFree ? 'paid' : 'pending';
+
+    // Check for existing subscription (renewal vs new)
+    const existing = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+    });
+
+    let subscription;
+
+    if (existing) {
+      // Renewal: update existing subscription with new plan
+      subscription = await this.prisma.saasGymSubscription.update({
+        where: { gymId },
+        data: {
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status,
+          paymentStatus,
+          amount,
+          paymentMethod: dto.paymentMethod,
+          paymentRef: dto.paymentRef,
+          notes: dto.notes,
+          trialEndsAt: status === 'trial' ? endDate : null,
+          cancelledAt: null,
+          cancelReason: null,
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    } else {
+      // New subscription
+      subscription = await this.prisma.saasGymSubscription.create({
+        data: {
+          gymId,
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status,
+          paymentStatus,
+          amount,
+          paymentMethod: dto.paymentMethod,
+          paymentRef: dto.paymentRef,
+          notes: dto.notes,
+          trialEndsAt: status === 'trial' ? endDate : null,
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    }
+
+    // Create payment history record
+    const invoiceNumber = await this.generateInvoiceNumber();
+    const paymentRef =
+      dto.paymentRef ||
+      `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+
+    const payment = await this.prisma.saasPaymentHistory.create({
+      data: {
+        subscriptionId: subscription.id,
+        gymId,
+        planId: dto.planId,
+        amount,
+        currency: plan.currency,
+        status: isFree ? 'completed' : 'pending',
+        paymentMethod: dto.paymentMethod,
+        paymentRef,
+        gateway: 'manual',
+        billingPeriodStart: startDate,
+        billingPeriodEnd: endDate,
+        invoiceNumber,
+        notes: dto.notes,
+        processedAt: isFree ? new Date() : null,
+      },
+    });
+
+    // For free plans, send receipt email immediately
+    if (isFree) {
+      await this.sendPaymentReceiptEmail(subscription.id);
+    }
+
+    return { subscription, payment };
+  }
+
+  async approvePayment(paymentId: number) {
+    const payment = await this.getPaymentById(paymentId);
+
+    if (payment.status === 'completed') {
+      throw new BadRequestException('Payment is already completed');
+    }
+
+    // Update payment to completed
+    const updatedPayment = await this.prisma.saasPaymentHistory.update({
+      where: { id: paymentId },
+      data: {
+        status: 'completed',
+        processedAt: new Date(),
+      },
+      include: {
+        subscription: true,
+        gym: { select: { id: true, name: true, email: true } },
+        plan: { select: { id: true, name: true } },
+      },
+    });
+
+    // Activate the subscription
+    await this.prisma.saasGymSubscription.update({
+      where: { id: payment.subscriptionId },
+      data: {
+        paymentStatus: 'paid',
+        status: 'active',
+        lastPaymentAt: new Date(),
+        paymentRef: payment.paymentRef,
+        paymentMethod: payment.paymentMethod,
+      },
+    });
+
+    // Send receipt email
+    await this.sendPaymentReceiptEmail(payment.subscriptionId);
+
+    return updatedPayment;
+  }
+
+  private async sendPaymentReceiptEmail(subscriptionId: number) {
+    try {
+      const subscription = await this.prisma.saasGymSubscription.findUnique({
+        where: { id: subscriptionId },
+        include: {
+          gym: { select: { id: true, name: true, email: true } },
+          plan: true,
+        },
+      });
+
+      if (!subscription || !subscription.gym?.email) return;
+
+      // Find the admin user for this gym
+      const admin = await this.prisma.userGymXref.findFirst({
+        where: { gymId: subscription.gymId, role: 'admin', isActive: true },
+        include: { user: { select: { name: true, email: true } } },
+      });
+
+      const recipientEmail = admin?.user?.email || subscription.gym.email;
+      const recipientName = admin?.user?.name || subscription.gym.name;
+
+      await this.emailService.sendPaymentReceiptEmail(
+        recipientEmail,
+        recipientName,
+        subscription.gym.name,
+        subscription.amount.toNumber(),
+        subscription.plan?.currency || 'INR',
+        subscription.plan?.name || 'Subscription',
+        new Date(),
+        undefined,
+        new Date(subscription.endDate),
+      );
+    } catch (error) {
+      this.logger.error('Failed to send payment receipt email', error);
+    }
   }
 
   // ============================================
