@@ -29,13 +29,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('branches')
 @Controller('gyms/:gymId/branches')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class BranchController {
-  constructor(private readonly branchService: BranchService) {}
+  constructor(
+    private readonly branchService: BranchService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get()
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
@@ -131,7 +135,9 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Body() dto: CreateBranchDto,
   ) {
-    return this.branchService.create(gymId, dto);
+    const result = await this.branchService.create(gymId, dto);
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -144,7 +150,9 @@ export class BranchController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateBranchDto,
   ) {
-    return this.branchService.update(gymId, id, dto);
+    const result = await this.branchService.update(gymId, id, dto);
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
@@ -156,7 +164,9 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.branchService.remove(gymId, id);
+    const result = await this.branchService.remove(gymId, id);
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'deleted' });
+    return result;
   }
 
   @Post(':id/set-default')
@@ -168,7 +178,9 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.branchService.setDefaultBranch(gymId, id);
+    const result = await this.branchService.setDefaultBranch(gymId, id);
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'default_changed' });
+    return result;
   }
 
   @Post('transfer-member')
@@ -179,7 +191,9 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Body() dto: TransferMemberDto,
   ) {
-    return this.branchService.transferMember(gymId, dto);
+    const result = await this.branchService.transferMember(gymId, dto);
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'member_transferred' });
+    return result;
   }
 
   @Get('member/:memberId/branch')

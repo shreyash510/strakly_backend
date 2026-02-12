@@ -27,10 +27,12 @@ import {
   CancelSubscriptionDto,
   CreatePaymentHistoryDto,
   UpdatePaymentHistoryDto,
+  InitiateManualPaymentDto,
 } from './dto/saas-subscriptions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('saas-subscriptions')
@@ -38,7 +40,10 @@ import type { AuthenticatedRequest } from '../common/types';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class SaasSubscriptionsController {
-  constructor(private readonly service: SaasSubscriptionsService) {}
+  constructor(
+    private readonly service: SaasSubscriptionsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ============================================
   // SaaS Plans Endpoints
@@ -69,25 +74,31 @@ export class SaasSubscriptionsController {
   @Post('plans')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Create a new SaaS plan' })
-  createPlan(@Body() dto: CreateSaasPlanDto) {
-    return this.service.createPlan(dto);
+  async createPlan(@Body() dto: CreateSaasPlanDto) {
+    const result = await this.service.createPlan(dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'plan_created' });
+    return result;
   }
 
   @Patch('plans/:id')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Update a SaaS plan' })
-  updatePlan(
+  async updatePlan(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateSaasPlanDto,
   ) {
-    return this.service.updatePlan(id, dto);
+    const result = await this.service.updatePlan(id, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'plan_updated' });
+    return result;
   }
 
   @Delete('plans/:id')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Delete a SaaS plan' })
-  deletePlan(@Param('id', ParseIntPipe) id: number) {
-    return this.service.deletePlan(id);
+  async deletePlan(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.service.deletePlan(id);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'plan_deleted' });
+    return result;
   }
 
   // ============================================
@@ -168,6 +179,22 @@ export class SaasSubscriptionsController {
     });
   }
 
+  @Post('me/initiate-payment')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Initiate manual payment for subscription (admin)' })
+  async initiatePayment(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: InitiateManualPaymentDto,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    const result = await this.service.initiateManualPayment(gymId, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_initiated' });
+    return result;
+  }
+
   // ============================================
   // Payment History Endpoints (static routes before :id)
   // ============================================
@@ -220,14 +247,25 @@ export class SaasSubscriptionsController {
     return this.service.getPaymentById(id);
   }
 
+  @Post('payments/:id/approve')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Approve a pending payment and activate subscription' })
+  async approvePayment(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.service.approvePayment(id);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_approved' });
+    return result;
+  }
+
   @Patch('payments/:id')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Update a payment record' })
-  updatePayment(
+  async updatePayment(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdatePaymentHistoryDto,
   ) {
-    return this.service.updatePaymentHistory(id, dto);
+    const result = await this.service.updatePaymentHistory(id, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_updated' });
+    return result;
   }
 
   @Get('gym/:gymId')
@@ -251,41 +289,49 @@ export class SaasSubscriptionsController {
   @Post()
   @Roles('superadmin')
   @ApiOperation({ summary: 'Create a gym subscription' })
-  createSubscription(@Body() dto: CreateGymSubscriptionDto) {
-    return this.service.createSubscription(dto);
+  async createSubscription(@Body() dto: CreateGymSubscriptionDto) {
+    const result = await this.service.createSubscription(dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_created' });
+    return result;
   }
 
   @Patch(':id')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Update a gym subscription' })
-  updateSubscription(
+  async updateSubscription(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateGymSubscriptionDto,
   ) {
-    return this.service.updateSubscription(id, dto);
+    const result = await this.service.updateSubscription(id, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_updated' });
+    return result;
   }
 
   @Post(':id/cancel')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Cancel a gym subscription' })
-  cancelSubscription(
+  async cancelSubscription(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelSubscriptionDto,
   ) {
-    return this.service.cancelSubscription(id, dto);
+    const result = await this.service.cancelSubscription(id, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_cancelled' });
+    return result;
   }
 
   @Post(':id/payments')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Record a payment for a subscription' })
-  createPayment(
+  async createPayment(
     @Param('id', ParseIntPipe) subscriptionId: number,
     @Body() dto: CreatePaymentHistoryDto,
   ) {
-    return this.service.createPaymentHistory({
+    const result = await this.service.createPaymentHistory({
       ...dto,
       subscriptionId,
     });
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_recorded' });
+    return result;
   }
 
   @Get(':id/payment-history')

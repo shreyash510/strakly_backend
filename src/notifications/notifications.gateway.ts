@@ -239,6 +239,16 @@ export class NotificationsGateway
   }
 
   /**
+   * Emit branch:changed event to all connected users in a gym
+   */
+  emitBranchChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('branch:changed', payload);
+    this.logger.debug(
+      `branch:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
    * Get connection stats
    */
   getConnectionStats() {
