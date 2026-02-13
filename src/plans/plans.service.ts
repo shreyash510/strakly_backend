@@ -99,6 +99,9 @@ export class PlansService {
       displayOrder: p.display_order,
       isFeatured: p.is_featured,
       isActive: p.is_active,
+      maxFreezeDays: p.max_freeze_days,
+      includesPtSessions: p.includes_pt_sessions,
+      accessHours: p.access_hours,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
     };
@@ -187,8 +190,8 @@ export class PlansService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO plans (branch_id, code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, NOW(), NOW())
+          `INSERT INTO plans (branch_id, code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, max_freeze_days, includes_pt_sessions, access_hours, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW())
          RETURNING *`,
           [
             branchId,
@@ -202,6 +205,9 @@ export class PlansService {
             JSON.stringify(dto.features || []),
             dto.displayOrder || 0,
             dto.isFeatured || false,
+            dto.maxFreezeDays || 0,
+            dto.includesPtSessions || 0,
+            dto.accessHours || 'all_day',
           ],
         );
         return result.rows[0];
@@ -257,6 +263,18 @@ export class PlansService {
     if (dto.isActive !== undefined) {
       updates.push(`is_active = $${paramIndex++}`);
       values.push(dto.isActive);
+    }
+    if (dto.maxFreezeDays !== undefined) {
+      updates.push(`max_freeze_days = $${paramIndex++}`);
+      values.push(dto.maxFreezeDays);
+    }
+    if (dto.includesPtSessions !== undefined) {
+      updates.push(`includes_pt_sessions = $${paramIndex++}`);
+      values.push(dto.includesPtSessions);
+    }
+    if (dto.accessHours !== undefined) {
+      updates.push(`access_hours = $${paramIndex++}`);
+      values.push(dto.accessHours);
     }
 
     updates.push(`updated_at = NOW()`);

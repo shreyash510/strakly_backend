@@ -201,6 +201,18 @@ model Branch {
   state           String?
   zipCode         String?   @map("zip_code")
 
+  // Operating hours
+  openingTime     String?   @map("opening_time")
+  closingTime     String?   @map("closing_time")
+
+  // Location
+  latitude        Decimal?  @db.Decimal(10, 7)
+  longitude       Decimal?  @db.Decimal(10, 7)
+
+  // Capacity & description
+  capacity        Int?
+  description     String?
+
   // Status
   isActive        Boolean   @default(true) @map("is_active")
   isDefault       Boolean   @default(false) @map("is_default")

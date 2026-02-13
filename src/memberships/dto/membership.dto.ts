@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsDateString,
   IsNumber,
+  IsBoolean,
   Min,
   IsArray,
 } from 'class-validator';
@@ -48,6 +49,10 @@ export class CreateMembershipDto {
   @IsNumber({}, { each: true })
   @Type(() => Number)
   amenityIds?: number[];
+
+  @IsOptional()
+  @IsBoolean()
+  autoRenew?: boolean;
 }
 
 export class UpdateMembershipDto {
@@ -77,8 +82,25 @@ export class UpdateMembershipDto {
 }
 
 export class CancelMembershipDto {
+  @IsOptional()
   @IsString()
-  reason: string;
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  cancellationReasonCode?: string;
+}
+
+export class FreezeMembershipDto {
+  @IsDateString()
+  startDate: string;
+
+  @IsDateString()
+  endDate: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class RenewMembershipDto {

@@ -193,6 +193,17 @@ export class UsersService {
         user.emergency_contact_name || user.emergencyContactName,
       emergencyContactPhone:
         user.emergency_contact_phone || user.emergencyContactPhone,
+      referredBy: user.referred_by || user.referredBy,
+      referralCode: user.referral_code || user.referralCode,
+      leadSource: user.lead_source || user.leadSource,
+      occupation: user.occupation,
+      bloodGroup: user.blood_group || user.bloodGroup,
+      medicalConditions: user.medical_conditions || user.medicalConditions,
+      fitnessGoal: user.fitness_goal || user.fitnessGoal,
+      preferredTimeSlot: user.preferred_time_slot || user.preferredTimeSlot,
+      nationality: user.nationality,
+      idType: user.id_type || user.idType,
+      idNumber: user.id_number || user.idNumber,
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
       branchIds: finalBranchIds,
@@ -1208,8 +1219,10 @@ export class UsersService {
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
           emergency_contact_name, emergency_contact_phone,
+          referred_by, referral_code, lead_source, occupation, blood_group,
+          medical_conditions, fitness_goal, preferred_time_slot, nationality, id_type, id_number,
           join_date, attendance_code, branch_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -1229,6 +1242,17 @@ export class UsersService {
             dto.zipCode || null,
             dto.emergencyContactName || null,
             dto.emergencyContactPhone || null,
+            dto.referredBy || null,
+            dto.referralCode || null,
+            dto.leadSource || null,
+            dto.occupation || null,
+            dto.bloodGroup || null,
+            dto.medicalConditions || null,
+            dto.fitnessGoal || null,
+            dto.preferredTimeSlot || null,
+            dto.nationality || null,
+            dto.idType || null,
+            dto.idNumber || null,
             new Date(),
             attendanceCode,
             dto.branchId || null,
@@ -1616,6 +1640,58 @@ export class UsersService {
     if (updateDto.zipCode !== undefined) {
       updates.push(`zip_code = $${paramIndex++}`);
       values.push(updateDto.zipCode);
+    }
+    if (updateDto.emergencyContactName !== undefined) {
+      updates.push(`emergency_contact_name = $${paramIndex++}`);
+      values.push(updateDto.emergencyContactName);
+    }
+    if (updateDto.emergencyContactPhone !== undefined) {
+      updates.push(`emergency_contact_phone = $${paramIndex++}`);
+      values.push(updateDto.emergencyContactPhone);
+    }
+    if (updateDto.referredBy !== undefined) {
+      updates.push(`referred_by = $${paramIndex++}`);
+      values.push(updateDto.referredBy);
+    }
+    if (updateDto.referralCode !== undefined) {
+      updates.push(`referral_code = $${paramIndex++}`);
+      values.push(updateDto.referralCode);
+    }
+    if (updateDto.leadSource !== undefined) {
+      updates.push(`lead_source = $${paramIndex++}`);
+      values.push(updateDto.leadSource);
+    }
+    if (updateDto.occupation !== undefined) {
+      updates.push(`occupation = $${paramIndex++}`);
+      values.push(updateDto.occupation);
+    }
+    if (updateDto.bloodGroup !== undefined) {
+      updates.push(`blood_group = $${paramIndex++}`);
+      values.push(updateDto.bloodGroup);
+    }
+    if (updateDto.medicalConditions !== undefined) {
+      updates.push(`medical_conditions = $${paramIndex++}`);
+      values.push(updateDto.medicalConditions);
+    }
+    if (updateDto.fitnessGoal !== undefined) {
+      updates.push(`fitness_goal = $${paramIndex++}`);
+      values.push(updateDto.fitnessGoal);
+    }
+    if (updateDto.preferredTimeSlot !== undefined) {
+      updates.push(`preferred_time_slot = $${paramIndex++}`);
+      values.push(updateDto.preferredTimeSlot);
+    }
+    if (updateDto.nationality !== undefined) {
+      updates.push(`nationality = $${paramIndex++}`);
+      values.push(updateDto.nationality);
+    }
+    if (updateDto.idType !== undefined) {
+      updates.push(`id_type = $${paramIndex++}`);
+      values.push(updateDto.idType);
+    }
+    if (updateDto.idNumber !== undefined) {
+      updates.push(`id_number = $${paramIndex++}`);
+      values.push(updateDto.idNumber);
     }
     // Handle branchId (singular) - for backwards compatibility
     if (updateDto.branchId !== undefined && !updateDto.branchIds) {

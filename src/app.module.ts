@@ -34,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { MemberNotesModule } from './member-notes/member-notes.module';
 import { UploadModule } from './upload/upload.module';
 import { MigrationModule } from './migration/migration.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
@@ -79,6 +80,7 @@ import { ConversationsModule } from './conversations/conversations.module';
     PaymentsModule,
     ActivityLogsModule,
     AnnouncementsModule,
+    MemberNotesModule,
     UploadModule,
     MigrationModule,
     ConversationsModule,

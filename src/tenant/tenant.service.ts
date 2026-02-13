@@ -189,6 +189,11 @@ export class TenantService implements OnModuleInit {
     // Add CHECK constraints on payments polymorphic columns
     await this.addPaymentConstraints(client, schemaName);
 
+    // Phase 1: Add competitor enhancement columns and tables
+    await this.addPhase1Columns(client, schemaName);
+    await this.createPhase1Tables(client, schemaName);
+    await this.seedCancellationReasons(client, schemaName);
+
     // Create core table indexes (after all tables are guaranteed to exist)
     try {
       await this.createTenantIndexes(client, schemaName);
@@ -1260,6 +1265,17 @@ export class TenantService implements OnModuleInit {
         attendance_code VARCHAR(20) UNIQUE,
         join_date TIMESTAMP,
         last_login_at TIMESTAMP,
+        referred_by INTEGER,
+        referral_code VARCHAR(20) UNIQUE,
+        lead_source VARCHAR(50),
+        occupation VARCHAR(100),
+        blood_group VARCHAR(10),
+        medical_conditions TEXT,
+        fitness_goal VARCHAR(50),
+        preferred_time_slot VARCHAR(20),
+        nationality VARCHAR(50),
+        id_type VARCHAR(30),
+        id_number VARCHAR(50),
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -1284,6 +1300,9 @@ export class TenantService implements OnModuleInit {
         display_order INTEGER DEFAULT 0,
         is_featured BOOLEAN DEFAULT FALSE,
         is_active BOOLEAN DEFAULT TRUE,
+        max_freeze_days INTEGER DEFAULT 0,
+        includes_pt_sessions INTEGER DEFAULT 0,
+        access_hours VARCHAR(50) DEFAULT 'all_day',
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -1353,9 +1372,15 @@ export class TenantService implements OnModuleInit {
         paid_at TIMESTAMP,
         cancelled_at TIMESTAMP,
         cancel_reason TEXT,
+        cancellation_reason_code VARCHAR(50),
         notes TEXT,
         created_by INTEGER, -- public.users.id (staff who created)
         is_active BOOLEAN DEFAULT TRUE,
+        auto_renew BOOLEAN DEFAULT FALSE,
+        freeze_start_date TIMESTAMP,
+        freeze_end_date TIMESTAMP,
+        freeze_reason TEXT,
+        total_freeze_days INTEGER DEFAULT 0,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -1661,6 +1686,52 @@ export class TenantService implements OnModuleInit {
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER
+      )
+    `);
+
+    // Member notes table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."member_notes" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+        note_type VARCHAR(30) NOT NULL DEFAULT 'general',
+        content TEXT NOT NULL,
+        is_pinned BOOLEAN DEFAULT FALSE,
+        visibility VARCHAR(20) DEFAULT 'all',
+        created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Membership freezes table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_freezes" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        membership_id INTEGER NOT NULL REFERENCES "${schemaName}"."memberships"(id) ON DELETE CASCADE,
+        start_date TIMESTAMP NOT NULL,
+        end_date TIMESTAMP NOT NULL,
+        reason TEXT,
+        approved_by INTEGER,
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Cancellation reasons lookup table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."cancellation_reasons" (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) NOT NULL UNIQUE,
+        label VARCHAR(100) NOT NULL,
+        display_order INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -2155,6 +2226,193 @@ export class TenantService implements OnModuleInit {
     }
 
     this.logger.log(`Seeded default plans for ${schemaName}`);
+  }
+
+  /**
+   * Phase 1: Add new columns to existing tenant tables (users, memberships, plans)
+   */
+  private async addPhase1Columns(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const columnMigrations = [
+      // Users table — 11 new columns
+      { table: 'users', name: 'referred_by', definition: 'INTEGER' },
+      { table: 'users', name: 'referral_code', definition: 'VARCHAR(20)' },
+      { table: 'users', name: 'lead_source', definition: 'VARCHAR(50)' },
+      { table: 'users', name: 'occupation', definition: 'VARCHAR(100)' },
+      { table: 'users', name: 'blood_group', definition: 'VARCHAR(10)' },
+      { table: 'users', name: 'medical_conditions', definition: 'TEXT' },
+      { table: 'users', name: 'fitness_goal', definition: 'VARCHAR(50)' },
+      { table: 'users', name: 'preferred_time_slot', definition: 'VARCHAR(20)' },
+      { table: 'users', name: 'nationality', definition: 'VARCHAR(50)' },
+      { table: 'users', name: 'id_type', definition: 'VARCHAR(30)' },
+      { table: 'users', name: 'id_number', definition: 'VARCHAR(50)' },
+      // Memberships table — 6 new columns
+      { table: 'memberships', name: 'auto_renew', definition: 'BOOLEAN DEFAULT FALSE' },
+      { table: 'memberships', name: 'freeze_start_date', definition: 'TIMESTAMP' },
+      { table: 'memberships', name: 'freeze_end_date', definition: 'TIMESTAMP' },
+      { table: 'memberships', name: 'freeze_reason', definition: 'TEXT' },
+      { table: 'memberships', name: 'total_freeze_days', definition: 'INTEGER DEFAULT 0' },
+      { table: 'memberships', name: 'cancellation_reason_code', definition: 'VARCHAR(50)' },
+      // Plans table — 3 new columns
+      { table: 'plans', name: 'max_freeze_days', definition: 'INTEGER DEFAULT 0' },
+      { table: 'plans', name: 'includes_pt_sessions', definition: 'INTEGER DEFAULT 0' },
+      { table: 'plans', name: 'access_hours', definition: "VARCHAR(50) DEFAULT 'all_day'" },
+    ];
+
+    for (const col of columnMigrations) {
+      try {
+        const colExists = await client.query(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+        `, [schemaName, col.table, col.name]);
+
+        if (colExists.rows.length === 0) {
+          await client.query(`
+            ALTER TABLE "${schemaName}"."${col.table}"
+            ADD COLUMN ${col.name} ${col.definition}
+          `);
+          this.logger.log(`Added '${col.name}' to ${schemaName}.${col.table}`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error adding ${col.name} to ${schemaName}.${col.table}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // Add unique index on referral_code
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "idx_${schemaName}_users_referral_code"
+        ON "${schemaName}"."users"(referral_code) WHERE referral_code IS NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_lead_source"
+        ON "${schemaName}"."users"(lead_source) WHERE lead_source IS NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_fitness_goal"
+        ON "${schemaName}"."users"(fitness_goal) WHERE fitness_goal IS NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_referred_by"
+        ON "${schemaName}"."users"(referred_by) WHERE referred_by IS NOT NULL
+      `);
+    } catch (error) {
+      this.logger.error(
+        `Error creating phase1 indexes for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Phase 1: Create new tables (member_notes, membership_freezes, cancellation_reasons)
+   */
+  private async createPhase1Tables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."member_notes" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
+          note_type VARCHAR(30) NOT NULL DEFAULT 'general',
+          content TEXT NOT NULL,
+          is_pinned BOOLEAN DEFAULT FALSE,
+          visibility VARCHAR(20) DEFAULT 'all',
+          created_by INTEGER NOT NULL,
+          is_deleted BOOLEAN DEFAULT FALSE,
+          deleted_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."membership_freezes" (
+          id SERIAL PRIMARY KEY,
+          branch_id INTEGER,
+          membership_id INTEGER NOT NULL REFERENCES "${schemaName}"."memberships"(id) ON DELETE CASCADE,
+          start_date TIMESTAMP NOT NULL,
+          end_date TIMESTAMP NOT NULL,
+          reason TEXT,
+          approved_by INTEGER,
+          status VARCHAR(20) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."cancellation_reasons" (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(50) NOT NULL UNIQUE,
+          label VARCHAR(100) NOT NULL,
+          display_order INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Indexes for new tables
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_member_notes_user_id"
+        ON "${schemaName}"."member_notes"(user_id) WHERE is_deleted = FALSE
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_membership_freezes_membership_id"
+        ON "${schemaName}"."membership_freezes"(membership_id)
+      `);
+    } catch (error) {
+      this.logger.error(
+        `Error creating phase1 tables for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Seed default cancellation reasons
+   */
+  private async seedCancellationReasons(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const reasons = [
+      { code: 'cost', label: 'Too Expensive', display_order: 1 },
+      { code: 'relocation', label: 'Relocating / Moving', display_order: 2 },
+      { code: 'injury', label: 'Injury / Health Issue', display_order: 3 },
+      { code: 'dissatisfied', label: 'Dissatisfied with Service', display_order: 4 },
+      { code: 'schedule_conflict', label: 'Schedule Conflict', display_order: 5 },
+      { code: 'switching_gym', label: 'Switching to Another Gym', display_order: 6 },
+      { code: 'personal', label: 'Personal Reasons', display_order: 7 },
+      { code: 'other', label: 'Other', display_order: 8 },
+    ];
+
+    for (const reason of reasons) {
+      try {
+        const existing = await client.query(
+          `SELECT id FROM "${schemaName}"."cancellation_reasons" WHERE code = $1`,
+          [reason.code],
+        );
+
+        if (existing.rows.length === 0) {
+          await client.query(
+            `INSERT INTO "${schemaName}"."cancellation_reasons" (code, label, display_order)
+             VALUES ($1, $2, $3)`,
+            [reason.code, reason.label, reason.display_order],
+          );
+        }
+      } catch (error) {
+        // Table might not exist yet on first run — ignore
+      }
+    }
   }
 
   /**
