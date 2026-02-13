@@ -25,6 +25,7 @@ import {
   CreateMembershipDto,
   UpdateMembershipDto,
   CancelMembershipDto,
+  FreezeMembershipDto,
   RenewMembershipDto,
   RecordPaymentDto,
 } from './dto/membership.dto';
@@ -400,6 +401,16 @@ export class MembershipsController {
     return result;
   }
 
+  // ============ LOOKUP ENDPOINTS (must be before :id to avoid route shadowing) ============
+
+  @Get('cancellation-reasons/list')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get cancellation reasons' })
+  async getCancellationReasons(@Request() req: AuthenticatedRequest) {
+    return this.membershipsService.getCancellationReasons(req.user.gymId!);
+  }
+
   // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
 
   @Get(':id')
@@ -545,4 +556,39 @@ export class MembershipsController {
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
     return result;
   }
+
+  @Post(':id/freeze')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Freeze a membership' })
+  async freeze(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: FreezeMembershipDto,
+  ) {
+    return this.membershipsService.freeze(id, req.user.gymId!, dto, req.user.userId);
+  }
+
+  @Post(':id/unfreeze')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Unfreeze a membership' })
+  async unfreeze(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.membershipsService.unfreeze(id, req.user.gymId!);
+  }
+
+  @Get(':id/freezes')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get freeze history for a membership' })
+  async getFreezeHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
+  }
+
 }

@@ -46,6 +46,20 @@ export class CreatePlanDto {
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxFreezeDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  includesPtSessions?: number;
+
+  @IsOptional()
+  @IsString()
+  accessHours?: string;
 }
 
 export class UpdatePlanDto {
@@ -91,4 +105,18 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxFreezeDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  includesPtSessions?: number;
+
+  @IsOptional()
+  @IsString()
+  accessHours?: string;
 }

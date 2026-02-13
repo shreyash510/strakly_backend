@@ -117,6 +117,61 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Referred by (user ID)' })
+  @IsOptional()
+  @IsInt()
+  referredBy?: number;
+
+  @ApiPropertyOptional({ description: 'Personal referral code' })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
+  @ApiPropertyOptional({ description: 'Lead source (walk_in, social_media, website, referral, ad, google, instagram)' })
+  @IsOptional()
+  @IsString()
+  leadSource?: string;
+
+  @ApiPropertyOptional({ description: 'Occupation' })
+  @IsOptional()
+  @IsString()
+  occupation?: string;
+
+  @ApiPropertyOptional({ description: 'Blood group (A+, A-, B+, B-, AB+, AB-, O+, O-)' })
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  @ApiPropertyOptional({ description: 'Medical conditions, allergies, injuries' })
+  @IsOptional()
+  @IsString()
+  medicalConditions?: string;
+
+  @ApiPropertyOptional({ description: 'Fitness goal (weight_loss, muscle_gain, general_fitness, sports, rehab, flexibility)' })
+  @IsOptional()
+  @IsString()
+  fitnessGoal?: string;
+
+  @ApiPropertyOptional({ description: 'Preferred workout time (morning, afternoon, evening)' })
+  @IsOptional()
+  @IsString()
+  preferredTimeSlot?: string;
+
+  @ApiPropertyOptional({ description: 'Nationality' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof type (aadhaar, pan, passport, driving_license)' })
+  @IsOptional()
+  @IsString()
+  idType?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof number' })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
 }
 
 // DTO for creating staff (admin, manager, trainer, branch_admin) - stored in public.users or tenant.users
@@ -285,6 +340,61 @@ export class CreateClientDto {
   @IsString()
   emergencyContactPhone?: string;
 
+  @ApiPropertyOptional({ description: 'Referred by (user ID)' })
+  @IsOptional()
+  @IsInt()
+  referredBy?: number;
+
+  @ApiPropertyOptional({ description: 'Personal referral code' })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
+  @ApiPropertyOptional({ description: 'Lead source' })
+  @IsOptional()
+  @IsString()
+  leadSource?: string;
+
+  @ApiPropertyOptional({ description: 'Occupation' })
+  @IsOptional()
+  @IsString()
+  occupation?: string;
+
+  @ApiPropertyOptional({ description: 'Blood group' })
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  @ApiPropertyOptional({ description: 'Medical conditions' })
+  @IsOptional()
+  @IsString()
+  medicalConditions?: string;
+
+  @ApiPropertyOptional({ description: 'Fitness goal' })
+  @IsOptional()
+  @IsString()
+  fitnessGoal?: string;
+
+  @ApiPropertyOptional({ description: 'Preferred workout time' })
+  @IsOptional()
+  @IsString()
+  preferredTimeSlot?: string;
+
+  @ApiPropertyOptional({ description: 'Nationality' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof type' })
+  @IsOptional()
+  @IsString()
+  idType?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof number' })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+
   @ApiPropertyOptional({ description: 'Branch ID' })
   @IsOptional()
   @IsInt()
@@ -387,6 +497,71 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Referred by (user ID)' })
+  @IsOptional()
+  @IsInt()
+  referredBy?: number;
+
+  @ApiPropertyOptional({ description: 'Personal referral code' })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
+  @ApiPropertyOptional({ description: 'Lead source' })
+  @IsOptional()
+  @IsString()
+  leadSource?: string;
+
+  @ApiPropertyOptional({ description: 'Occupation' })
+  @IsOptional()
+  @IsString()
+  occupation?: string;
+
+  @ApiPropertyOptional({ description: 'Blood group' })
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  @ApiPropertyOptional({ description: 'Medical conditions' })
+  @IsOptional()
+  @IsString()
+  medicalConditions?: string;
+
+  @ApiPropertyOptional({ description: 'Fitness goal' })
+  @IsOptional()
+  @IsString()
+  fitnessGoal?: string;
+
+  @ApiPropertyOptional({ description: 'Preferred workout time' })
+  @IsOptional()
+  @IsString()
+  preferredTimeSlot?: string;
+
+  @ApiPropertyOptional({ description: 'Nationality' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof type' })
+  @IsOptional()
+  @IsString()
+  idType?: string;
+
+  @ApiPropertyOptional({ description: 'ID proof number' })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Emergency contact name' })
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
+
+  @ApiPropertyOptional({ description: 'Emergency contact phone' })
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
 }
 
 export class AdminResetPasswordDto {
