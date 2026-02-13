@@ -299,4 +299,226 @@ export class UploadService {
       size: file.size,
     };
   }
+
+  /**
+   * Delete a file from storage by its public URL
+   */
+  async deleteFile(fileUrl: string): Promise<void> {
+    if (!fileUrl || !fileUrl.includes(this.publicUrl)) {
+      return; // Not our file or no URL
+    }
+
+    try {
+      const key = fileUrl.replace(`${this.publicUrl}/`, '');
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
+    } catch (error) {
+      this.logger.error('Failed to delete file:', error);
+      // Don't throw - deletion failure shouldn't break the flow
+    }
+  }
+
+  /**
+   * Compress a progress photo — max 1200x1200, fit inside (preserve aspect ratio)
+   */
+  private async compressProgressPhoto(
+    buffer: Buffer,
+    mimeType: string,
+    maxSizeKB = 500,
+  ): Promise<{ buffer: Buffer; format: string; contentType: string }> {
+    const maxSize = maxSizeKB * 1024;
+    let quality = 80;
+
+    // Determine format from mime type
+    let format: 'jpeg' | 'png' | 'webp' | 'gif' = 'jpeg';
+    let contentType = 'image/jpeg';
+    let extension = 'jpg';
+
+    if (mimeType === 'image/png') {
+      format = 'png';
+      contentType = 'image/png';
+      extension = 'png';
+    } else if (mimeType === 'image/webp') {
+      format = 'webp';
+      contentType = 'image/webp';
+      extension = 'webp';
+    } else if (mimeType === 'image/gif') {
+      format = 'gif';
+      contentType = 'image/gif';
+      extension = 'gif';
+    }
+
+    // First attempt with quality 80
+    let sharpInstance = sharp(buffer).resize(1200, 1200, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+
+    let result: Buffer;
+    if (format === 'png') {
+      result = await sharpInstance.png({ quality }).toBuffer();
+    } else if (format === 'webp') {
+      result = await sharpInstance.webp({ quality }).toBuffer();
+    } else if (format === 'gif') {
+      result = await sharpInstance.gif().toBuffer();
+    } else {
+      result = await sharpInstance.jpeg({ quality }).toBuffer();
+    }
+
+    // Reduce quality until under max size (skip for gif)
+    while (result.length > maxSize && quality > 20 && format !== 'gif') {
+      quality -= 10;
+      sharpInstance = sharp(buffer).resize(1200, 1200, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+
+      if (format === 'png') {
+        result = await sharpInstance.png({ quality }).toBuffer();
+      } else if (format === 'webp') {
+        result = await sharpInstance.webp({ quality }).toBuffer();
+      } else {
+        result = await sharpInstance.jpeg({ quality }).toBuffer();
+      }
+    }
+
+    // If still too large, resize smaller
+    if (result.length > maxSize && format !== 'gif') {
+      sharpInstance = sharp(buffer).resize(800, 800, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+
+      if (format === 'png') {
+        result = await sharpInstance.png({ quality: 60 }).toBuffer();
+      } else if (format === 'webp') {
+        result = await sharpInstance.webp({ quality: 60 }).toBuffer();
+      } else {
+        result = await sharpInstance.jpeg({ quality: 60 }).toBuffer();
+      }
+    }
+
+    return { buffer: result, format: extension, contentType };
+  }
+
+  /**
+   * Compress image to a thumbnail — 200x200, cover crop
+   */
+  private async compressThumbnail(
+    buffer: Buffer,
+    mimeType: string,
+  ): Promise<{ buffer: Buffer; format: string; contentType: string }> {
+    // Determine format from mime type
+    let format: 'jpeg' | 'png' | 'webp' | 'gif' = 'jpeg';
+    let contentType = 'image/jpeg';
+    let extension = 'jpg';
+
+    if (mimeType === 'image/png') {
+      format = 'png';
+      contentType = 'image/png';
+      extension = 'png';
+    } else if (mimeType === 'image/webp') {
+      format = 'webp';
+      contentType = 'image/webp';
+      extension = 'webp';
+    } else if (mimeType === 'image/gif') {
+      format = 'gif';
+      contentType = 'image/gif';
+      extension = 'gif';
+    }
+
+    const sharpInstance = sharp(buffer).resize(200, 200, {
+      fit: 'cover',
+      position: 'center',
+    });
+
+    let result: Buffer;
+    if (format === 'png') {
+      result = await sharpInstance.png({ quality: 70 }).toBuffer();
+    } else if (format === 'webp') {
+      result = await sharpInstance.webp({ quality: 70 }).toBuffer();
+    } else if (format === 'gif') {
+      result = await sharpInstance.gif().toBuffer();
+    } else {
+      result = await sharpInstance.jpeg({ quality: 70 }).toBuffer();
+    }
+
+    return { buffer: result, format: extension, contentType };
+  }
+
+  /**
+   * Upload a progress photo with thumbnail
+   */
+  async uploadProgressPhoto(
+    file: Express.Multer.File,
+    userId: string | number,
+    oldUrl?: string,
+  ): Promise<{ url: string; thumbnailUrl: string; size: number }> {
+    // Validate file type
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Invalid file type. Only JPG, PNG, WebP, and GIF are allowed.',
+      );
+    }
+
+    // Delete old photo if provided
+    if (oldUrl) {
+      await this.deleteFile(oldUrl);
+    }
+
+    // Compress main photo — max 1200x1200, fit inside (preserve aspect ratio), max 500KB
+    const compressed = await this.compressProgressPhoto(file.buffer, file.mimetype);
+
+    // Generate thumbnail — 200x200
+    const thumbnail = await this.compressThumbnail(file.buffer, file.mimetype);
+
+    const timestamp = Date.now();
+    const mainFilename = `users/${userId}/progress/${timestamp}.${compressed.format}`;
+    const thumbFilename = `users/${userId}/progress/thumb_${timestamp}.${compressed.format}`;
+
+    // Upload main photo
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: mainFilename,
+          Body: compressed.buffer,
+          ContentType: compressed.contentType,
+        }),
+      );
+    } catch (error) {
+      this.logger.error('S3 Upload Error (progress photo):', error);
+      throw new BadRequestException('Failed to upload progress photo. Please check storage configuration.');
+    }
+
+    // Upload thumbnail
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: thumbFilename,
+          Body: thumbnail.buffer,
+          ContentType: thumbnail.contentType,
+        }),
+      );
+    } catch (error) {
+      this.logger.error('S3 Upload Error (thumbnail):', error);
+      throw new BadRequestException('Failed to upload thumbnail. Please check storage configuration.');
+    }
+
+    const mainUrl = `${this.publicUrl}/${mainFilename}`;
+    const thumbUrl = `${this.publicUrl}/${thumbFilename}`;
+    this.logger.log('Uploaded progress photo:', { url: mainUrl, thumbnailUrl: thumbUrl, size: compressed.buffer.length });
+
+    return {
+      url: mainUrl,
+      thumbnailUrl: thumbUrl,
+      size: compressed.buffer.length,
+    };
+  }
 }
