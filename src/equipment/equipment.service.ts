@@ -257,7 +257,7 @@ export class EquipmentService {
         {} as Record<string, number>,
       );
 
-      const totalEquipment = Object.values(statusCounts).reduce((sum, c) => sum + c, 0);
+      const totalEquipment = Object.values(statusCounts).reduce((sum: number, c: number) => sum + c, 0);
 
       return {
         totalEquipment,
