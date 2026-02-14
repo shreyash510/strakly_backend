@@ -22,6 +22,11 @@ export class UpdateLoyaltyConfigDto {
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
+  pointsPerAttendance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   pointsPerReferral?: number;
 
   @IsOptional()
@@ -32,12 +37,22 @@ export class UpdateLoyaltyConfigDto {
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
+  pointsPerPurchase?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   pointsPerClassBooking?: number;
 
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
   pointExpiryDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  pointsExpiry?: number;
 }
 
 // ─── Tiers ───
@@ -71,6 +86,11 @@ export class CreateLoyaltyTierDto {
   @IsNumber()
   @Type(() => Number)
   displayOrder?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  sortOrder?: number;
 }
 
 export class UpdateLoyaltyTierDto {
@@ -103,6 +123,11 @@ export class UpdateLoyaltyTierDto {
   @IsNumber()
   @Type(() => Number)
   displayOrder?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  sortOrder?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -140,9 +165,13 @@ export class CreateRewardDto {
   @Type(() => Number)
   pointsCost: number;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  rewardType: string;
+  rewardType?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @IsOptional()
   rewardValue?: any;
@@ -175,6 +204,10 @@ export class UpdateRewardDto {
   @IsOptional()
   @IsString()
   rewardType?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @IsOptional()
   rewardValue?: any;

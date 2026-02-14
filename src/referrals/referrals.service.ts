@@ -174,8 +174,8 @@ export class ReferralsService {
       const referralCode = dto.referralCode || this.generateReferralCode();
 
       const result = await client.query(
-        `INSERT INTO referrals (branch_id, referrer_id, referred_id, referral_code, status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'pending', $5, NOW(), NOW())
+        `INSERT INTO referrals (branch_id, referrer_id, referred_id, referral_code, status, notes)
+         VALUES ($1, $2, $3, $4, 'pending', $5)
          RETURNING *`,
         [
           branchId,
@@ -221,7 +221,6 @@ export class ReferralsService {
 
     if (updates.length === 0) return this.findOne(id, gymId);
 
-    updates.push(`updated_at = NOW()`);
     values.push(id);
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
@@ -245,7 +244,7 @@ export class ReferralsService {
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `UPDATE referrals
-         SET status = 'rewarded', reward_type = $1, reward_amount = $2, rewarded_at = NOW(), updated_at = NOW()
+         SET status = 'rewarded', reward_type = $1, reward_amount = $2, rewarded_at = NOW()
          WHERE id = $3`,
         [rewardType, rewardAmount, id],
       );
@@ -289,9 +288,9 @@ export class ReferralsService {
       const row = result.rows[0];
       return {
         total: parseInt(row.total),
-        pendingCount: parseInt(row.pending_count),
-        convertedCount: parseInt(row.converted_count),
-        rewardedCount: parseInt(row.rewarded_count),
+        pending: parseInt(row.pending_count),
+        converted: parseInt(row.converted_count),
+        rewarded: parseInt(row.rewarded_count),
         totalRewardAmount: parseFloat(row.total_reward_amount),
       };
     });

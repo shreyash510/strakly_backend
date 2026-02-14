@@ -77,9 +77,9 @@ export class CurrenciesService {
         `INSERT INTO exchange_rates (from_currency, to_currency, rate, source, effective_date)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (from_currency, to_currency, effective_date)
-         DO UPDATE SET rate = EXCLUDED.rate, source = EXCLUDED.source, updated_at = CURRENT_TIMESTAMP
+         DO UPDATE SET rate = EXCLUDED.rate, source = EXCLUDED.source
          RETURNING *`,
-        [dto.fromCurrency, dto.toCurrency, dto.rate, dto.source || null, effectiveDate],
+        [dto.fromCurrency, dto.toCurrency, dto.rate, dto.source || 'manual', effectiveDate],
       );
       return this.formatExchangeRate(result.rows[0]);
     });
