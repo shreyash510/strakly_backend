@@ -23,6 +23,13 @@ export const PLAN_FEATURES = {
   LOYALTY_PROGRAM: 'loyalty_program',
   WEARABLE_INTEGRATION: 'wearable_integration',
   MULTI_CURRENCY: 'multi_currency',
+  // Operations
+  CLASS_SCHEDULING: 'class_scheduling',
+  APPOINTMENT_BOOKING: 'appointment_booking',
+  GUEST_DAY_PASS: 'guest_day_pass',
+  LEAD_CRM: 'lead_crm',
+  REFERRAL_TRACKING: 'referral_tracking',
+  DIGITAL_WAIVERS: 'digital_waivers',
 } as const;
 
 export type PlanFeature = (typeof PLAN_FEATURES)[keyof typeof PLAN_FEATURES];

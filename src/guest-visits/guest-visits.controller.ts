@@ -14,7 +14,10 @@ import { GuestVisitsService } from './guest-visits.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
@@ -22,7 +25,8 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('guest-visits')
 @Controller('guest-visits')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.GUEST_DAY_PASS)
 @ApiBearerAuth()
 export class GuestVisitsController {
   constructor(private readonly guestVisitsService: GuestVisitsService) {}
