@@ -37,6 +37,15 @@ export class BodyMetricsService {
       calves: m.calves,
       shoulders: m.shoulders,
       neck: m.neck,
+      forearms: m.forearms,
+      upperAbdomen: m.upper_abdomen,
+      middleAbdomen: m.middle_abdomen,
+      lowerAbdomen: m.lower_abdomen,
+      upperCalf: m.upper_calf,
+      lowerCalf: m.lower_calf,
+      subcutaneousFat: m.subcutaneous_fat,
+      visceralFat: m.visceral_fat,
+      restingMetabolism: m.resting_metabolism,
       restingHeartRate: m.resting_heart_rate,
       bloodPressureSys: m.blood_pressure_sys,
       bloodPressureDia: m.blood_pressure_dia,
@@ -219,6 +228,42 @@ export class BodyMetricsService {
             updates.push(`neck = $${paramIndex++}`);
             values.push(dto.neck);
           }
+          if (dto.forearms !== undefined) {
+            updates.push(`forearms = $${paramIndex++}`);
+            values.push(dto.forearms);
+          }
+          if (dto.upperAbdomen !== undefined) {
+            updates.push(`upper_abdomen = $${paramIndex++}`);
+            values.push(dto.upperAbdomen);
+          }
+          if (dto.middleAbdomen !== undefined) {
+            updates.push(`middle_abdomen = $${paramIndex++}`);
+            values.push(dto.middleAbdomen);
+          }
+          if (dto.lowerAbdomen !== undefined) {
+            updates.push(`lower_abdomen = $${paramIndex++}`);
+            values.push(dto.lowerAbdomen);
+          }
+          if (dto.upperCalf !== undefined) {
+            updates.push(`upper_calf = $${paramIndex++}`);
+            values.push(dto.upperCalf);
+          }
+          if (dto.lowerCalf !== undefined) {
+            updates.push(`lower_calf = $${paramIndex++}`);
+            values.push(dto.lowerCalf);
+          }
+          if (dto.subcutaneousFat !== undefined) {
+            updates.push(`subcutaneous_fat = $${paramIndex++}`);
+            values.push(dto.subcutaneousFat);
+          }
+          if (dto.visceralFat !== undefined) {
+            updates.push(`visceral_fat = $${paramIndex++}`);
+            values.push(dto.visceralFat);
+          }
+          if (dto.restingMetabolism !== undefined) {
+            updates.push(`resting_metabolism = $${paramIndex++}`);
+            values.push(dto.restingMetabolism);
+          }
 
           updates.push(`last_measured_at = NOW()`);
           updates.push(`updated_at = NOW()`);
@@ -274,8 +319,8 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, notes, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+          `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, biceps, thighs, calves, shoulders, neck, forearms, upper_abdomen, middle_abdomen, lower_abdomen, upper_calf, lower_calf, subcutaneous_fat, visceral_fat, resting_metabolism, bone_mass, water_percentage, resting_heart_rate, blood_pressure_sys, blood_pressure_dia, target_weight, target_body_fat, measured_by, notes, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW())
          RETURNING *`,
           [
             userId,
@@ -289,6 +334,28 @@ export class BodyMetricsService {
             dto.waist || null,
             dto.chest || null,
             dto.hips || null,
+            dto.biceps || null,
+            dto.thighs || null,
+            dto.calves || null,
+            dto.shoulders || null,
+            dto.neck || null,
+            dto.forearms || null,
+            dto.upperAbdomen || null,
+            dto.middleAbdomen || null,
+            dto.lowerAbdomen || null,
+            dto.upperCalf || null,
+            dto.lowerCalf || null,
+            dto.subcutaneousFat || null,
+            dto.visceralFat || null,
+            dto.restingMetabolism || null,
+            dto.boneMass || null,
+            dto.waterPercentage || null,
+            dto.restingHeartRate || null,
+            dto.bloodPressureSys || null,
+            dto.bloodPressureDia || null,
+            dto.targetWeight || null,
+            dto.targetBodyFat || null,
+            dto.measuredBy || null,
             dto.notes || null,
           ],
         );
@@ -317,6 +384,15 @@ export class BodyMetricsService {
       calves: historyRecord.calves,
       shoulders: historyRecord.shoulders,
       neck: historyRecord.neck,
+      forearms: historyRecord.forearms,
+      upperAbdomen: historyRecord.upper_abdomen,
+      middleAbdomen: historyRecord.middle_abdomen,
+      lowerAbdomen: historyRecord.lower_abdomen,
+      upperCalf: historyRecord.upper_calf,
+      lowerCalf: historyRecord.lower_calf,
+      subcutaneousFat: historyRecord.subcutaneous_fat,
+      visceralFat: historyRecord.visceral_fat,
+      restingMetabolism: historyRecord.resting_metabolism,
       restingHeartRate: historyRecord.resting_heart_rate,
       bloodPressureSys: historyRecord.blood_pressure_sys,
       bloodPressureDia: historyRecord.blood_pressure_dia,
@@ -397,6 +473,15 @@ export class BodyMetricsService {
         calves: h.calves,
         shoulders: h.shoulders,
         neck: h.neck,
+        forearms: h.forearms,
+        upperAbdomen: h.upper_abdomen,
+        middleAbdomen: h.middle_abdomen,
+        lowerAbdomen: h.lower_abdomen,
+        upperCalf: h.upper_calf,
+        lowerCalf: h.lower_calf,
+        subcutaneousFat: h.subcutaneous_fat,
+        visceralFat: h.visceral_fat,
+        restingMetabolism: h.resting_metabolism,
         restingHeartRate: h.resting_heart_rate,
         bloodPressureSys: h.blood_pressure_sys,
         bloodPressureDia: h.blood_pressure_dia,

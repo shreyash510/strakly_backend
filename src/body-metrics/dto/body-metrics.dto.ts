@@ -110,6 +110,70 @@ export class UpdateBodyMetricsDto {
   @Type(() => Number)
   neck?: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(15)
+  @Max(50)
+  @Type(() => Number)
+  forearms?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(40)
+  @Max(200)
+  @Type(() => Number)
+  upperAbdomen?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(40)
+  @Max(200)
+  @Type(() => Number)
+  middleAbdomen?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(40)
+  @Max(200)
+  @Type(() => Number)
+  lowerAbdomen?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(20)
+  @Max(60)
+  @Type(() => Number)
+  upperCalf?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(15)
+  @Max(50)
+  @Type(() => Number)
+  lowerCalf?: number;
+
+  // BMI Check Report
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(60)
+  @Type(() => Number)
+  subcutaneousFat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(60)
+  @Type(() => Number)
+  visceralFat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(500)
+  @Max(5000)
+  @Type(() => Number)
+  restingMetabolism?: number;
+
   // Health indicators
   @IsOptional()
   @IsNumber()
