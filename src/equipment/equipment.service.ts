@@ -252,14 +252,22 @@ export class EquipmentService {
         branchValues,
       );
 
+      const statusCounts = countByStatus.rows.reduce(
+        (acc, row) => ({ ...acc, [row.status]: parseInt(row.count) }),
+        {} as Record<string, number>,
+      );
+
+      const totalEquipment = Object.values(statusCounts).reduce((sum, c) => sum + c, 0);
+
       return {
-        countByStatus: countByStatus.rows.reduce(
-          (acc, row) => ({ ...acc, [row.status]: parseInt(row.count) }),
-          {},
-        ),
+        totalEquipment,
+        operational: statusCounts['operational'] || 0,
+        underMaintenance: statusCounts['under_maintenance'] || 0,
+        outOfOrder: statusCounts['out_of_order'] || 0,
+        retired: statusCounts['retired'] || 0,
         totalPurchaseCost: parseFloat(totalCost.rows[0].total),
-        warrantyExpiringIn30Days: parseInt(warrantyExpiring.rows[0].count),
-        maintenanceDueIn7Days: parseInt(maintenanceDue.rows[0].count),
+        warrantyExpiringSoon: parseInt(warrantyExpiring.rows[0].count),
+        maintenanceDueSoon: parseInt(maintenanceDue.rows[0].count),
       };
     });
   }

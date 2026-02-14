@@ -32,12 +32,17 @@ export class LoyaltyService {
       branchId: row.branch_id,
       isEnabled: row.is_enabled,
       pointsPerVisit: row.points_per_visit,
+      pointsPerAttendance: row.points_per_visit,
       pointsPerReferral: row.points_per_referral,
       pointsPerPurchaseUnit: row.points_per_purchase_unit
         ? parseFloat(row.points_per_purchase_unit)
         : null,
+      pointsPerPurchase: row.points_per_purchase_unit
+        ? parseFloat(row.points_per_purchase_unit)
+        : null,
       pointsPerClassBooking: row.points_per_class_booking,
       pointExpiryDays: row.point_expiry_days,
+      pointsExpiry: row.point_expiry_days,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -54,6 +59,7 @@ export class LoyaltyService {
       icon: row.icon,
       color: row.color,
       displayOrder: row.display_order,
+      sortOrder: row.display_order,
       isActive: row.is_active,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -100,6 +106,7 @@ export class LoyaltyService {
       name: row.name,
       description: row.description,
       pointsCost: row.points_cost,
+      category: row.reward_type,
       rewardType: row.reward_type,
       rewardValue: row.reward_value,
       stock: row.stock,
@@ -173,25 +180,28 @@ export class LoyaltyService {
         setClauses.push(`is_enabled = $${paramIndex++}`);
         values.push(dto.isEnabled);
       }
-      if (dto.pointsPerVisit !== undefined) {
+      const perVisit = dto.pointsPerVisit ?? dto.pointsPerAttendance;
+      if (perVisit !== undefined) {
         setClauses.push(`points_per_visit = $${paramIndex++}`);
-        values.push(dto.pointsPerVisit);
+        values.push(perVisit);
       }
       if (dto.pointsPerReferral !== undefined) {
         setClauses.push(`points_per_referral = $${paramIndex++}`);
         values.push(dto.pointsPerReferral);
       }
-      if (dto.pointsPerPurchaseUnit !== undefined) {
+      const perPurchase = dto.pointsPerPurchaseUnit ?? dto.pointsPerPurchase;
+      if (perPurchase !== undefined) {
         setClauses.push(`points_per_purchase_unit = $${paramIndex++}`);
-        values.push(dto.pointsPerPurchaseUnit);
+        values.push(perPurchase);
       }
       if (dto.pointsPerClassBooking !== undefined) {
         setClauses.push(`points_per_class_booking = $${paramIndex++}`);
         values.push(dto.pointsPerClassBooking);
       }
-      if (dto.pointExpiryDays !== undefined) {
+      const expiryDays = dto.pointExpiryDays ?? dto.pointsExpiry;
+      if (expiryDays !== undefined) {
         setClauses.push(`point_expiry_days = $${paramIndex++}`);
-        values.push(dto.pointExpiryDays);
+        values.push(expiryDays);
       }
 
       if (setClauses.length === 0) {
@@ -269,7 +279,7 @@ export class LoyaltyService {
           dto.benefits ? JSON.stringify(dto.benefits) : null,
           dto.icon ?? null,
           dto.color ?? null,
-          dto.displayOrder ?? 0,
+          dto.displayOrder ?? dto.sortOrder ?? 0,
         ],
       );
 
@@ -307,9 +317,10 @@ export class LoyaltyService {
         setClauses.push(`color = $${paramIndex++}`);
         values.push(dto.color);
       }
-      if (dto.displayOrder !== undefined) {
+      const displayOrder = dto.displayOrder ?? dto.sortOrder;
+      if (displayOrder !== undefined) {
         setClauses.push(`display_order = $${paramIndex++}`);
-        values.push(dto.displayOrder);
+        values.push(displayOrder);
       }
       if (dto.isActive !== undefined) {
         setClauses.push(`is_active = $${paramIndex++}`);
@@ -765,6 +776,8 @@ export class LoyaltyService {
     dto: CreateRewardDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
+      const rewardType = dto.rewardType || dto.category || 'custom';
+
       const result = await client.query(
         `INSERT INTO loyalty_rewards (branch_id, name, description, points_cost, reward_type, reward_value, stock, max_per_user)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -774,7 +787,7 @@ export class LoyaltyService {
           dto.name,
           dto.description ?? null,
           dto.pointsCost,
-          dto.rewardType,
+          rewardType,
           dto.rewardValue ? JSON.stringify(dto.rewardValue) : null,
           dto.stock ?? null,
           dto.maxPerUser ?? null,
@@ -803,9 +816,10 @@ export class LoyaltyService {
         setClauses.push(`points_cost = $${paramIndex++}`);
         values.push(dto.pointsCost);
       }
-      if (dto.rewardType !== undefined) {
+      const rewardType = dto.rewardType ?? dto.category;
+      if (rewardType !== undefined) {
         setClauses.push(`reward_type = $${paramIndex++}`);
-        values.push(dto.rewardType);
+        values.push(rewardType);
       }
       if (dto.rewardValue !== undefined) {
         setClauses.push(`reward_value = $${paramIndex++}`);
