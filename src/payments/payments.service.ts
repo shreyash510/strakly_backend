@@ -497,4 +497,38 @@ export class PaymentsService {
       processedBy,
     );
   }
+
+  /**
+   * Create payment for product sale
+   */
+  async createProductSalePayment(
+    saleId: number,
+    gymId: number,
+    branchId: number | null,
+    buyerId: number | null,
+    buyerName: string,
+    amount: number,
+    taxAmount: number,
+    netAmount: number,
+    paymentMethod: string,
+    processedBy?: number,
+  ): Promise<PaymentRecord> {
+    return this.create(
+      {
+        branchId: branchId || undefined,
+        paymentType: PaymentType.PRODUCT_SALE,
+        referenceId: saleId,
+        referenceTable: 'product_sales',
+        payerType: buyerId ? ROLES.CLIENT : 'guest',
+        payerId: buyerId || 0,
+        payerName: buyerName,
+        amount,
+        taxAmount,
+        netAmount,
+        paymentMethod,
+      },
+      gymId,
+      processedBy,
+    );
+  }
 }

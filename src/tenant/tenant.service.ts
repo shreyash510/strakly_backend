@@ -194,6 +194,25 @@ export class TenantService implements OnModuleInit {
     await this.createPhase1Tables(client, schemaName);
     await this.seedCancellationReasons(client, schemaName);
 
+    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos, Member Goals
+    await this.createPhase2Tables(client, schemaName);
+    await this.seedLeadSources(client, schemaName);
+    await this.addPhase2GapColumns(client, schemaName);
+
+    // Phase 3: Class Scheduling, Appointments, Guest Visits
+    await this.createPhase3Tables(client, schemaName);
+
+    // Phase 4: POS / Retail, Campaigns, Equipment
+    await this.createPhase4Tables(client, schemaName);
+    await this.seedProductCategories(client, schemaName);
+    await this.seedCampaignTemplates(client, schemaName);
+
+    // Phase 5: Custom Fields, Surveys, Engagement, Gamification, Loyalty, Wearables, Currencies
+    await this.createPhase5Tables(client, schemaName);
+    await this.seedDefaultCurrencies(client, schemaName);
+    await this.seedDefaultLoyaltyTiers(client, schemaName);
+    await this.seedDefaultAchievements(client, schemaName);
+
     // Create core table indexes (after all tables are guaranteed to exist)
     try {
       await this.createTenantIndexes(client, schemaName);
@@ -2310,6 +2329,50 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
+   * Phase 2 Gaps: Add new columns to existing Phase 2 tables
+   * (leads.stage_entered_at, signed_documents.signature_data/pdf_url)
+   */
+  private async addPhase2GapColumns(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const columnMigrations = [
+      // Leads — stage timing
+      { table: 'leads', name: 'stage_entered_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
+      // Signed Documents — signature drawing + PDF
+      { table: 'signed_documents', name: 'signature_data', definition: 'TEXT' },
+      { table: 'signed_documents', name: 'pdf_url', definition: 'TEXT' },
+      // Progress Photos — missing columns
+      { table: 'progress_photos', name: 'file_size', definition: 'INTEGER' },
+      { table: 'progress_photos', name: 'updated_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
+      // Services — buffer time between appointments
+      { table: 'services', name: 'buffer_minutes', definition: 'INTEGER DEFAULT 0' },
+    ];
+
+    for (const col of columnMigrations) {
+      try {
+        const colExists = await client.query(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+        `, [schemaName, col.table, col.name]);
+
+        if (colExists.rows.length === 0) {
+          await client.query(`
+            ALTER TABLE "${schemaName}"."${col.table}"
+            ADD COLUMN ${col.name} ${col.definition}
+          `);
+          this.logger.log(`Added '${col.name}' to ${schemaName}.${col.table}`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error adding ${col.name} to ${schemaName}.${col.table}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+  }
+
+  /**
    * Phase 1: Create new tables (member_notes, membership_freezes, cancellation_reasons)
    */
   private async createPhase1Tables(
@@ -2412,6 +2475,1317 @@ export class TenantService implements OnModuleInit {
       } catch (error) {
         // Table might not exist yet on first run — ignore
       }
+    }
+  }
+
+  /* ============================================================ */
+  /* Phase 2: Lead CRM, Referrals, Documents, Photos, Goals       */
+  /* ============================================================ */
+
+  private async createPhase2Tables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    // Lead Sources (lookup)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_sources" (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Leads
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."leads" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(30),
+        lead_source VARCHAR(50),
+        pipeline_stage VARCHAR(30) NOT NULL DEFAULT 'new',
+        assigned_to INTEGER,
+        score VARCHAR(10) DEFAULT 'warm',
+        inquiry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expected_close_date DATE,
+        deal_value NUMERIC(10,2),
+        win_loss_reason TEXT,
+        notes TEXT,
+        converted_user_id INTEGER,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Lead Activities
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_activities" (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES "${schemaName}"."leads"(id) ON DELETE CASCADE,
+        type VARCHAR(30) NOT NULL,
+        notes TEXT,
+        scheduled_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        performed_by INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Referrals
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."referrals" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        referrer_id INTEGER NOT NULL,
+        referred_id INTEGER,
+        referral_code VARCHAR(20) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        reward_type VARCHAR(20),
+        reward_amount NUMERIC(10,2),
+        converted_at TIMESTAMP,
+        rewarded_at TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Document Templates
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."document_templates" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        type VARCHAR(30) NOT NULL DEFAULT 'waiver',
+        content TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Signed Documents
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."signed_documents" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        template_id INTEGER NOT NULL REFERENCES "${schemaName}"."document_templates"(id),
+        user_id INTEGER NOT NULL,
+        signer_name VARCHAR(200) NOT NULL,
+        agreed BOOLEAN NOT NULL DEFAULT TRUE,
+        signed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        version_signed INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Progress Photos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."progress_photos" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        photo_url TEXT NOT NULL,
+        thumbnail_url TEXT,
+        category VARCHAR(20) NOT NULL DEFAULT 'other',
+        taken_at DATE DEFAULT CURRENT_DATE,
+        notes TEXT,
+        body_metrics_id INTEGER,
+        uploaded_by INTEGER NOT NULL,
+        visibility VARCHAR(20) DEFAULT 'all',
+        file_size INTEGER,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Member Goals
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."member_goals" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        user_id INTEGER NOT NULL,
+        goal_type VARCHAR(30) NOT NULL DEFAULT 'general_fitness',
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        target_value NUMERIC(10,2),
+        current_value NUMERIC(10,2) DEFAULT 0,
+        unit VARCHAR(20),
+        start_date DATE DEFAULT CURRENT_DATE,
+        target_date DATE,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        achieved_at TIMESTAMP,
+        assigned_by INTEGER,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Lead Stage History
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_stage_history" (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES "${schemaName}"."leads"(id) ON DELETE CASCADE,
+        from_stage VARCHAR(30),
+        to_stage VARCHAR(30) NOT NULL,
+        changed_by INTEGER,
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Goal Milestones
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."goal_milestones" (
+        id SERIAL PRIMARY KEY,
+        goal_id INTEGER NOT NULL REFERENCES "${schemaName}"."member_goals"(id) ON DELETE CASCADE,
+        title VARCHAR(200) NOT NULL,
+        target_value NUMERIC(10,2),
+        current_value NUMERIC(10,2) DEFAULT 0,
+        unit VARCHAR(20),
+        order_index INTEGER DEFAULT 0,
+        is_completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP,
+        target_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Indexes
+    try {
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_leads_stage" ON "${schemaName}"."leads"(pipeline_stage) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_leads_branch" ON "${schemaName}"."leads"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_leads_source" ON "${schemaName}"."leads"(lead_source) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_leads_assigned" ON "${schemaName}"."leads"(assigned_to) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_lead_activities_lead" ON "${schemaName}"."lead_activities"(lead_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_lead_stage_history_lead" ON "${schemaName}"."lead_stage_history"(lead_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referrer" ON "${schemaName}"."referrals"(referrer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referred" ON "${schemaName}"."referrals"(referred_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_signed_docs_user" ON "${schemaName}"."signed_documents"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_progress_photos_user" ON "${schemaName}"."progress_photos"(user_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_member_goals_user" ON "${schemaName}"."member_goals"(user_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_goal_milestones_goal" ON "${schemaName}"."goal_milestones"(goal_id)`);
+    } catch {
+      // Indexes may already exist
+    }
+  }
+
+  private async seedLeadSources(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    const sources = [
+      { code: 'walk_in', name: 'Walk-in' },
+      { code: 'website', name: 'Website' },
+      { code: 'social_media', name: 'Social Media' },
+      { code: 'referral', name: 'Referral' },
+      { code: 'ad_campaign', name: 'Ad Campaign' },
+      { code: 'google', name: 'Google' },
+      { code: 'instagram', name: 'Instagram' },
+      { code: 'other', name: 'Other' },
+    ];
+
+    for (const source of sources) {
+      try {
+        const existing = await client.query(
+          `SELECT id FROM "${schemaName}"."lead_sources" WHERE code = $1`,
+          [source.code],
+        );
+        if (existing.rows.length === 0) {
+          await client.query(
+            `INSERT INTO "${schemaName}"."lead_sources" (code, name) VALUES ($1, $2)`,
+            [source.code, source.name],
+          );
+        }
+      } catch {
+        // Table might not exist yet
+      }
+    }
+  }
+
+  /**
+   * Phase 3: Create Class Scheduling, Appointment/PT Booking, and Guest Visit tables
+   */
+  private async createPhase3Tables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    // ─── Class Scheduling ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."class_types" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        category VARCHAR(50),
+        default_duration INTEGER NOT NULL DEFAULT 60,
+        default_capacity INTEGER NOT NULL DEFAULT 20,
+        color VARCHAR(20),
+        icon VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."class_schedules" (
+        id SERIAL PRIMARY KEY,
+        class_type_id INTEGER NOT NULL REFERENCES "${schemaName}"."class_types"(id) ON DELETE CASCADE,
+        branch_id INTEGER,
+        instructor_id INTEGER,
+        room VARCHAR(100),
+        day_of_week INTEGER NOT NULL,
+        start_time VARCHAR(10) NOT NULL,
+        end_time VARCHAR(10) NOT NULL,
+        capacity INTEGER NOT NULL DEFAULT 20,
+        is_recurring BOOLEAN DEFAULT TRUE,
+        start_date DATE,
+        end_date DATE,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."class_sessions" (
+        id SERIAL PRIMARY KEY,
+        schedule_id INTEGER NOT NULL REFERENCES "${schemaName}"."class_schedules"(id) ON DELETE CASCADE,
+        branch_id INTEGER,
+        date DATE NOT NULL,
+        instructor_id INTEGER,
+        status VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+        actual_capacity INTEGER,
+        notes TEXT,
+        cancelled_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."class_bookings" (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES "${schemaName}"."class_sessions"(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'booked',
+        booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        cancelled_at TIMESTAMP,
+        cancel_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── Appointment / PT Booking ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."services" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        duration_minutes INTEGER NOT NULL DEFAULT 60,
+        price NUMERIC(10,2) NOT NULL DEFAULT 0,
+        currency VARCHAR(10) DEFAULT 'INR',
+        max_participants INTEGER DEFAULT 1,
+        category VARCHAR(50),
+        buffer_minutes INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."trainer_availability" (
+        id SERIAL PRIMARY KEY,
+        trainer_id INTEGER NOT NULL,
+        branch_id INTEGER,
+        day_of_week INTEGER NOT NULL,
+        start_time VARCHAR(10) NOT NULL,
+        end_time VARCHAR(10) NOT NULL,
+        is_available BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."appointments" (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER REFERENCES "${schemaName}"."services"(id),
+        trainer_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        branch_id INTEGER,
+        start_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'booked',
+        notes TEXT,
+        cancelled_reason TEXT,
+        cancelled_at TIMESTAMP,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."session_packages" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        service_id INTEGER REFERENCES "${schemaName}"."services"(id),
+        branch_id INTEGER,
+        total_sessions INTEGER NOT NULL,
+        used_sessions INTEGER NOT NULL DEFAULT 0,
+        remaining_sessions INTEGER NOT NULL,
+        purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        payment_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── Guest / Day Pass ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."guest_visits" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        guest_name VARCHAR(200) NOT NULL,
+        guest_phone VARCHAR(30),
+        guest_email VARCHAR(255),
+        brought_by INTEGER,
+        visit_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        day_pass_amount NUMERIC(10,2) DEFAULT 0,
+        payment_method VARCHAR(30),
+        converted_to_member BOOLEAN DEFAULT FALSE,
+        notes TEXT,
+        checked_in_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── Indexes ───
+    try {
+      // Class types
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_types_branch" ON "${schemaName}"."class_types"(branch_id) WHERE is_deleted = FALSE`);
+      // Class schedules
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_type" ON "${schemaName}"."class_schedules"(class_type_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_branch" ON "${schemaName}"."class_schedules"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_instructor" ON "${schemaName}"."class_schedules"(instructor_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_day" ON "${schemaName}"."class_schedules"(day_of_week)`);
+      // Class sessions
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_schedule_date" ON "${schemaName}"."class_sessions"(schedule_id, date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_date" ON "${schemaName}"."class_sessions"(date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_status" ON "${schemaName}"."class_sessions"(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_branch" ON "${schemaName}"."class_sessions"(branch_id)`);
+      // Class bookings
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_bookings_session" ON "${schemaName}"."class_bookings"(session_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_bookings_user" ON "${schemaName}"."class_bookings"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_bookings_status" ON "${schemaName}"."class_bookings"(status)`);
+      // Services
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_services_branch" ON "${schemaName}"."services"(branch_id) WHERE is_deleted = FALSE`);
+      // Trainer availability
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_avail_trainer" ON "${schemaName}"."trainer_availability"(trainer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_avail_day" ON "${schemaName}"."trainer_availability"(day_of_week)`);
+      // Appointments
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_trainer" ON "${schemaName}"."appointments"(trainer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_user" ON "${schemaName}"."appointments"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_branch" ON "${schemaName}"."appointments"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_status" ON "${schemaName}"."appointments"(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_time" ON "${schemaName}"."appointments"(start_time, end_time)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_service" ON "${schemaName}"."appointments"(service_id) WHERE service_id IS NOT NULL`);
+      // Session packages
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_session_pkgs_user" ON "${schemaName}"."session_packages"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_session_pkgs_status" ON "${schemaName}"."session_packages"(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_session_pkgs_service" ON "${schemaName}"."session_packages"(service_id) WHERE service_id IS NOT NULL`);
+      // Guest visits
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_branch" ON "${schemaName}"."guest_visits"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_date" ON "${schemaName}"."guest_visits"(visit_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_brought_by" ON "${schemaName}"."guest_visits"(brought_by) WHERE brought_by IS NOT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_checked_in" ON "${schemaName}"."guest_visits"(checked_in_by) WHERE checked_in_by IS NOT NULL`);
+    } catch {
+      // Indexes may already exist
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Phase 4: POS / Retail, Campaigns, Equipment
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private async createPhase4Tables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    // ─── Equipment Tracking ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."equipment" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        brand VARCHAR(100),
+        model VARCHAR(100),
+        serial_number VARCHAR(100),
+        purchase_date DATE,
+        purchase_cost DECIMAL(10, 2),
+        warranty_expiry DATE,
+        status VARCHAR(30) NOT NULL DEFAULT 'operational',
+        location VARCHAR(200),
+        notes TEXT,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."equipment_maintenance" (
+        id SERIAL PRIMARY KEY,
+        equipment_id INTEGER NOT NULL REFERENCES "${schemaName}"."equipment"(id) ON DELETE CASCADE,
+        branch_id INTEGER,
+        type VARCHAR(30) NOT NULL DEFAULT 'preventive',
+        description TEXT NOT NULL,
+        scheduled_date DATE NOT NULL,
+        completed_date DATE,
+        performed_by INTEGER,
+        cost DECIMAL(10, 2),
+        notes TEXT,
+        status VARCHAR(30) NOT NULL DEFAULT 'scheduled',
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── POS / Retail / Inventory ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."product_categories" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        display_order INTEGER DEFAULT 0,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."products" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        category_id INTEGER REFERENCES "${schemaName}"."product_categories"(id) ON DELETE SET NULL,
+        name VARCHAR(200) NOT NULL,
+        sku VARCHAR(50),
+        barcode VARCHAR(100),
+        description TEXT,
+        price DECIMAL(10, 2) NOT NULL,
+        cost_price DECIMAL(10, 2),
+        tax_rate DECIMAL(5, 2) DEFAULT 0,
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
+        low_stock_threshold INTEGER DEFAULT 5,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."product_sales" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        product_id INTEGER NOT NULL REFERENCES "${schemaName}"."products"(id) ON DELETE RESTRICT,
+        user_id INTEGER,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price DECIMAL(10, 2) NOT NULL,
+        tax_amount DECIMAL(10, 2) DEFAULT 0,
+        total_amount DECIMAL(10, 2) NOT NULL,
+        payment_method VARCHAR(50) NOT NULL,
+        payment_id INTEGER,
+        sold_by INTEGER NOT NULL,
+        sold_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        notes TEXT,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── Email / SMS Campaign System ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."campaign_templates" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        type VARCHAR(10) NOT NULL DEFAULT 'email',
+        subject VARCHAR(500),
+        content TEXT NOT NULL,
+        merge_fields JSONB,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."campaigns" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        template_id INTEGER REFERENCES "${schemaName}"."campaign_templates"(id) ON DELETE SET NULL,
+        name VARCHAR(200) NOT NULL,
+        type VARCHAR(10) NOT NULL DEFAULT 'email',
+        subject VARCHAR(500),
+        content TEXT,
+        audience_filter JSONB,
+        scheduled_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        status VARCHAR(30) NOT NULL DEFAULT 'draft',
+        total_recipients INTEGER DEFAULT 0,
+        total_sent INTEGER DEFAULT 0,
+        total_opened INTEGER DEFAULT 0,
+        total_clicked INTEGER DEFAULT 0,
+        total_bounced INTEGER DEFAULT 0,
+        total_unsubscribed INTEGER DEFAULT 0,
+        created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."campaign_recipients" (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER NOT NULL REFERENCES "${schemaName}"."campaigns"(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(30),
+        status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        sent_at TIMESTAMP,
+        delivered_at TIMESTAMP,
+        opened_at TIMESTAMP,
+        clicked_at TIMESTAMP,
+        bounced_at TIMESTAMP,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── Phase 4 Indexes ───
+    try {
+      // Equipment
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equipment_branch" ON "${schemaName}"."equipment"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equipment_status" ON "${schemaName}"."equipment"(status) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equipment_serial" ON "${schemaName}"."equipment"(serial_number) WHERE is_deleted = FALSE`);
+      // Equipment maintenance
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equip_maint_equipment" ON "${schemaName}"."equipment_maintenance"(equipment_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equip_maint_scheduled" ON "${schemaName}"."equipment_maintenance"(scheduled_date) WHERE is_deleted = FALSE AND status = 'scheduled'`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equip_maint_branch" ON "${schemaName}"."equipment_maintenance"(branch_id) WHERE is_deleted = FALSE`);
+      // Product categories
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_categories_branch" ON "${schemaName}"."product_categories"(branch_id) WHERE is_deleted = FALSE`);
+      // Products
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_branch" ON "${schemaName}"."products"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_category" ON "${schemaName}"."products"(category_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_sku" ON "${schemaName}"."products"(sku) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_barcode" ON "${schemaName}"."products"(barcode) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_active" ON "${schemaName}"."products"(is_active) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_low_stock" ON "${schemaName}"."products"(stock_quantity, low_stock_threshold) WHERE is_deleted = FALSE AND is_active = TRUE`);
+      // Product sales
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_branch" ON "${schemaName}"."product_sales"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_product" ON "${schemaName}"."product_sales"(product_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_user" ON "${schemaName}"."product_sales"(user_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_sold_at" ON "${schemaName}"."product_sales"(sold_at) WHERE is_deleted = FALSE`);
+      // Campaign templates
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaign_templates_branch" ON "${schemaName}"."campaign_templates"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaign_templates_type" ON "${schemaName}"."campaign_templates"(type) WHERE is_deleted = FALSE`);
+      // Campaigns
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaigns_branch" ON "${schemaName}"."campaigns"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaigns_status" ON "${schemaName}"."campaigns"(status) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaigns_scheduled" ON "${schemaName}"."campaigns"(scheduled_at) WHERE is_deleted = FALSE AND status = 'scheduled'`);
+      // Campaign recipients
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaign_recipients_campaign" ON "${schemaName}"."campaign_recipients"(campaign_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaign_recipients_user" ON "${schemaName}"."campaign_recipients"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_campaign_recipients_status" ON "${schemaName}"."campaign_recipients"(campaign_id, status)`);
+    } catch {
+      // Indexes may already exist
+    }
+  }
+
+  private async seedProductCategories(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const existing = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}"."product_categories" WHERE is_deleted = FALSE`,
+      );
+      if (parseInt(existing.rows[0].count) > 0) return;
+
+      const categories = [
+        { name: 'Supplements', description: 'Protein, pre-workout, vitamins', display_order: 1 },
+        { name: 'Beverages', description: 'Water, energy drinks, shakes', display_order: 2 },
+        { name: 'Apparel', description: 'T-shirts, shorts, gym wear', display_order: 3 },
+        { name: 'Accessories', description: 'Gloves, bands, bottles', display_order: 4 },
+        { name: 'Snacks', description: 'Protein bars, healthy snacks', display_order: 5 },
+      ];
+
+      for (const cat of categories) {
+        await client.query(
+          `INSERT INTO "${schemaName}"."product_categories" (name, description, display_order) VALUES ($1, $2, $3)`,
+          [cat.name, cat.description, cat.display_order],
+        );
+      }
+      this.logger.log(`Seeded product categories for ${schemaName}`);
+    } catch (error) {
+      this.logger.error(
+        `Error seeding product categories for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async seedCampaignTemplates(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const existing = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}"."campaign_templates" WHERE is_deleted = FALSE`,
+      );
+      if (parseInt(existing.rows[0].count) > 0) return;
+
+      const templates = [
+        {
+          name: 'Welcome New Member',
+          type: 'email',
+          subject: 'Welcome to {{gym_name}}!',
+          content: '<h1>Welcome {{name}}!</h1><p>We are thrilled to have you join {{gym_name}}. Your fitness journey starts now!</p>',
+          merge_fields: JSON.stringify({ '{{name}}': 'Member name', '{{email}}': 'Member email', '{{gym_name}}': 'Gym name' }),
+        },
+        {
+          name: 'Membership Expiry Reminder',
+          type: 'email',
+          subject: 'Your membership at {{gym_name}} is expiring soon',
+          content: '<h1>Hi {{name}}</h1><p>Your membership is expiring soon. Renew now to keep your fitness journey going!</p>',
+          merge_fields: JSON.stringify({ '{{name}}': 'Member name', '{{gym_name}}': 'Gym name' }),
+        },
+        {
+          name: 'Special Offer',
+          type: 'email',
+          subject: 'Exclusive Offer from {{gym_name}}',
+          content: '<h1>Hi {{name}}</h1><p>We have a special offer just for you at {{gym_name}}!</p>',
+          merge_fields: JSON.stringify({ '{{name}}': 'Member name', '{{gym_name}}': 'Gym name' }),
+        },
+      ];
+
+      for (const tmpl of templates) {
+        await client.query(
+          `INSERT INTO "${schemaName}"."campaign_templates" (name, type, subject, content, merge_fields) VALUES ($1, $2, $3, $4, $5)`,
+          [tmpl.name, tmpl.type, tmpl.subject, tmpl.content, tmpl.merge_fields],
+        );
+      }
+      this.logger.log(`Seeded campaign templates for ${schemaName}`);
+    } catch (error) {
+      this.logger.error(
+        `Error seeding campaign templates for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  PHASE 5: Custom Fields, Surveys, Engagement, Gamification,
+  //           Loyalty, Wearables, Currencies
+  // ═══════════════════════════════════════════════════════════════════
+
+  private async createPhase5Tables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    // ─── 1. Custom Fields System ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."custom_fields" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        entity_type VARCHAR(30) NOT NULL DEFAULT 'user',
+        name VARCHAR(100) NOT NULL,
+        label VARCHAR(200) NOT NULL,
+        field_type VARCHAR(30) NOT NULL,
+        options JSONB,
+        default_value TEXT,
+        is_required BOOLEAN DEFAULT FALSE,
+        is_active BOOLEAN DEFAULT TRUE,
+        visibility VARCHAR(20) DEFAULT 'all',
+        display_order INTEGER DEFAULT 0,
+        validation_rules JSONB,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_by INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."custom_field_values" (
+        id SERIAL PRIMARY KEY,
+        custom_field_id INTEGER NOT NULL REFERENCES "${schemaName}"."custom_fields"(id) ON DELETE CASCADE,
+        entity_id INTEGER NOT NULL,
+        value TEXT,
+        file_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(custom_field_id, entity_id)
+      )
+    `);
+
+    // ─── 2. NPS & Member Surveys ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."surveys" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        type VARCHAR(30) NOT NULL DEFAULT 'custom',
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        is_anonymous BOOLEAN DEFAULT FALSE,
+        trigger_type VARCHAR(30),
+        trigger_config JSONB,
+        start_date TIMESTAMP,
+        end_date TIMESTAMP,
+        created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_questions" (
+        id SERIAL PRIMARY KEY,
+        survey_id INTEGER NOT NULL REFERENCES "${schemaName}"."surveys"(id) ON DELETE CASCADE,
+        question_text TEXT NOT NULL,
+        question_type VARCHAR(30) NOT NULL,
+        options JSONB,
+        is_required BOOLEAN DEFAULT TRUE,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_responses" (
+        id SERIAL PRIMARY KEY,
+        survey_id INTEGER NOT NULL REFERENCES "${schemaName}"."surveys"(id) ON DELETE CASCADE,
+        user_id INTEGER,
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_answers" (
+        id SERIAL PRIMARY KEY,
+        response_id INTEGER NOT NULL REFERENCES "${schemaName}"."survey_responses"(id) ON DELETE CASCADE,
+        question_id INTEGER NOT NULL REFERENCES "${schemaName}"."survey_questions"(id) ON DELETE CASCADE,
+        answer_text TEXT,
+        answer_numeric NUMERIC(5,2),
+        answer_choices JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── 3. Engagement Scoring & Churn Prediction ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."engagement_scores" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        user_id INTEGER NOT NULL,
+        overall_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+        risk_level VARCHAR(10) NOT NULL DEFAULT 'low',
+        visit_frequency_score NUMERIC(5,2) DEFAULT 0,
+        visit_recency_score NUMERIC(5,2) DEFAULT 0,
+        attendance_trend_score NUMERIC(5,2) DEFAULT 0,
+        payment_reliability_score NUMERIC(5,2) DEFAULT 0,
+        membership_tenure_score NUMERIC(5,2) DEFAULT 0,
+        engagement_depth_score NUMERIC(5,2) DEFAULT 0,
+        factors JSONB NOT NULL DEFAULT '{}',
+        is_current BOOLEAN DEFAULT TRUE,
+        calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."churn_alerts" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        user_id INTEGER NOT NULL,
+        risk_level VARCHAR(10) NOT NULL,
+        previous_risk_level VARCHAR(10),
+        alert_type VARCHAR(30) NOT NULL,
+        message TEXT NOT NULL,
+        factors JSONB,
+        is_acknowledged BOOLEAN DEFAULT FALSE,
+        acknowledged_by INTEGER,
+        acknowledged_at TIMESTAMP,
+        action_taken TEXT,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── 4. Challenges & Gamification ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."challenges" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        type VARCHAR(30) NOT NULL,
+        metric VARCHAR(50),
+        goal_value NUMERIC(10,2),
+        goal_direction VARCHAR(10) DEFAULT 'increase',
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        max_participants INTEGER,
+        points_reward INTEGER DEFAULT 0,
+        badge_name VARCHAR(100),
+        badge_icon VARCHAR(100),
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        rules JSONB,
+        created_by INTEGER NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."challenge_participants" (
+        id SERIAL PRIMARY KEY,
+        challenge_id INTEGER NOT NULL REFERENCES "${schemaName}"."challenges"(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        start_value NUMERIC(10,2),
+        current_value NUMERIC(10,2),
+        progress_pct NUMERIC(5,2) DEFAULT 0,
+        rank INTEGER,
+        points_earned INTEGER DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        completed_at TIMESTAMP,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(challenge_id, user_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."achievements" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        icon VARCHAR(100),
+        category VARCHAR(30) NOT NULL,
+        criteria JSONB NOT NULL,
+        points_value INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."user_achievements" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        achievement_id INTEGER NOT NULL REFERENCES "${schemaName}"."achievements"(id) ON DELETE CASCADE,
+        earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        challenge_id INTEGER REFERENCES "${schemaName}"."challenges"(id) ON DELETE SET NULL,
+        points_earned INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, achievement_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."streaks" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        streak_type VARCHAR(30) NOT NULL,
+        current_count INTEGER NOT NULL DEFAULT 0,
+        longest_count INTEGER NOT NULL DEFAULT 0,
+        last_activity_date DATE,
+        streak_start_date DATE,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, streak_type)
+      )
+    `);
+
+    // ─── 5. Loyalty / Rewards Program ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_config" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        points_per_visit INTEGER DEFAULT 10,
+        points_per_referral INTEGER DEFAULT 100,
+        points_per_purchase_unit NUMERIC(5,2) DEFAULT 1,
+        points_per_class_booking INTEGER DEFAULT 5,
+        point_expiry_days INTEGER DEFAULT 365,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_tiers" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(50) NOT NULL,
+        min_points INTEGER NOT NULL DEFAULT 0,
+        multiplier NUMERIC(3,2) DEFAULT 1.00,
+        benefits JSONB,
+        icon VARCHAR(100),
+        color VARCHAR(20),
+        display_order INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_points" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE,
+        total_earned INTEGER NOT NULL DEFAULT 0,
+        total_redeemed INTEGER NOT NULL DEFAULT 0,
+        current_balance INTEGER NOT NULL DEFAULT 0,
+        tier_id INTEGER REFERENCES "${schemaName}"."loyalty_tiers"(id) ON DELETE SET NULL,
+        tier_updated_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_transactions" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        type VARCHAR(10) NOT NULL,
+        points INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        source VARCHAR(30) NOT NULL,
+        reference_type VARCHAR(30),
+        reference_id INTEGER,
+        description TEXT,
+        expires_at TIMESTAMP,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_rewards" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        points_cost INTEGER NOT NULL,
+        reward_type VARCHAR(30) NOT NULL,
+        reward_value JSONB,
+        stock INTEGER,
+        max_per_user INTEGER,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ─── 6. Wearable Integration ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."wearable_connections" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        provider VARCHAR(30) NOT NULL,
+        access_token TEXT,
+        refresh_token TEXT,
+        token_expires_at TIMESTAMP,
+        provider_user_id VARCHAR(200),
+        scopes TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        last_synced_at TIMESTAMP,
+        sync_error TEXT,
+        connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        disconnected_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, provider)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."wearable_data" (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        provider VARCHAR(30) NOT NULL,
+        data_type VARCHAR(30) NOT NULL,
+        value NUMERIC(10,2) NOT NULL,
+        unit VARCHAR(20),
+        recorded_at TIMESTAMP NOT NULL,
+        recorded_date DATE NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, provider, data_type, recorded_date)
+      )
+    `);
+
+    // ─── 7. Multi-Currency Support ───
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."currencies" (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(3) NOT NULL UNIQUE,
+        name VARCHAR(50) NOT NULL,
+        symbol VARCHAR(10) NOT NULL,
+        decimal_places INTEGER DEFAULT 2,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."exchange_rates" (
+        id SERIAL PRIMARY KEY,
+        from_currency VARCHAR(3) NOT NULL,
+        to_currency VARCHAR(3) NOT NULL,
+        rate NUMERIC(15,6) NOT NULL,
+        source VARCHAR(30) DEFAULT 'manual',
+        effective_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(from_currency, to_currency, effective_date)
+      )
+    `);
+
+    // ─── Phase 5 Indexes ───
+    try {
+      // Custom Fields
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_fields_entity_type" ON "${schemaName}"."custom_fields"(entity_type) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_fields_branch" ON "${schemaName}"."custom_fields"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_field" ON "${schemaName}"."custom_field_values"(custom_field_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_entity" ON "${schemaName}"."custom_field_values"(entity_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_composite" ON "${schemaName}"."custom_field_values"(custom_field_id, entity_id)`);
+      // Surveys
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_surveys_branch" ON "${schemaName}"."surveys"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_surveys_status" ON "${schemaName}"."surveys"(status) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_surveys_type" ON "${schemaName}"."surveys"(type) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_questions_survey" ON "${schemaName}"."survey_questions"(survey_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_responses_survey" ON "${schemaName}"."survey_responses"(survey_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_responses_user" ON "${schemaName}"."survey_responses"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_response" ON "${schemaName}"."survey_answers"(response_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_question" ON "${schemaName}"."survey_answers"(question_id)`);
+      // Engagement Scores
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_engagement_scores_user" ON "${schemaName}"."engagement_scores"(user_id) WHERE is_current = TRUE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_engagement_scores_risk" ON "${schemaName}"."engagement_scores"(risk_level) WHERE is_current = TRUE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_engagement_scores_branch" ON "${schemaName}"."engagement_scores"(branch_id) WHERE is_current = TRUE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_engagement_scores_score" ON "${schemaName}"."engagement_scores"(overall_score) WHERE is_current = TRUE`);
+      // Churn Alerts
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_churn_alerts_user" ON "${schemaName}"."churn_alerts"(user_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_churn_alerts_risk" ON "${schemaName}"."churn_alerts"(risk_level) WHERE is_deleted = FALSE AND is_acknowledged = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_churn_alerts_branch" ON "${schemaName}"."churn_alerts"(branch_id) WHERE is_deleted = FALSE`);
+      // Challenges
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_branch" ON "${schemaName}"."challenges"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_status" ON "${schemaName}"."challenges"(status) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_dates" ON "${schemaName}"."challenges"(start_date, end_date) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_challenge" ON "${schemaName}"."challenge_participants"(challenge_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_user" ON "${schemaName}"."challenge_participants"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_rank" ON "${schemaName}"."challenge_participants"(challenge_id, rank) WHERE status = 'active'`);
+      // Achievements
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_achievements_branch" ON "${schemaName}"."achievements"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_achievements_category" ON "${schemaName}"."achievements"(category) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_achievements_user" ON "${schemaName}"."user_achievements"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_achievements_achievement" ON "${schemaName}"."user_achievements"(achievement_id)`);
+      // Streaks
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_streaks_user" ON "${schemaName}"."streaks"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_streaks_type" ON "${schemaName}"."streaks"(streak_type, is_active)`);
+      // Loyalty
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_user" ON "${schemaName}"."loyalty_points"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_tier" ON "${schemaName}"."loyalty_points"(tier_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_user" ON "${schemaName}"."loyalty_transactions"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_type" ON "${schemaName}"."loyalty_transactions"(type)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_source" ON "${schemaName}"."loyalty_transactions"(source)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_created" ON "${schemaName}"."loyalty_transactions"(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_rewards_branch" ON "${schemaName}"."loyalty_rewards"(branch_id) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_rewards_active" ON "${schemaName}"."loyalty_rewards"(is_active) WHERE is_deleted = FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_tiers_branch" ON "${schemaName}"."loyalty_tiers"(branch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_tiers_points" ON "${schemaName}"."loyalty_tiers"(min_points)`);
+      // Wearables
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_conn_user" ON "${schemaName}"."wearable_connections"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_conn_provider" ON "${schemaName}"."wearable_connections"(provider, is_active)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_user" ON "${schemaName}"."wearable_data"(user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_type_date" ON "${schemaName}"."wearable_data"(user_id, data_type, recorded_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_provider" ON "${schemaName}"."wearable_data"(provider)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_date" ON "${schemaName}"."wearable_data"(recorded_date)`);
+      // Currencies
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_exchange_rates_pair" ON "${schemaName}"."exchange_rates"(from_currency, to_currency)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_exchange_rates_date" ON "${schemaName}"."exchange_rates"(effective_date DESC)`);
+    } catch {
+      // Indexes may already exist
+    }
+  }
+
+  private async seedDefaultCurrencies(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const existing = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}"."currencies"`,
+      );
+      if (parseInt(existing.rows[0].count) > 0) return;
+
+      const currencies = [
+        { code: 'INR', name: 'Indian Rupee', symbol: '₹', decimal_places: 2 },
+        { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 },
+        { code: 'EUR', name: 'Euro', symbol: '€', decimal_places: 2 },
+        { code: 'GBP', name: 'British Pound', symbol: '£', decimal_places: 2 },
+        { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', decimal_places: 2 },
+        { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', decimal_places: 2 },
+        { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', decimal_places: 2 },
+        { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', decimal_places: 2 },
+      ];
+
+      for (const cur of currencies) {
+        await client.query(
+          `INSERT INTO "${schemaName}"."currencies" (code, name, symbol, decimal_places) VALUES ($1, $2, $3, $4)`,
+          [cur.code, cur.name, cur.symbol, cur.decimal_places],
+        );
+      }
+      this.logger.log(`Seeded currencies for ${schemaName}`);
+    } catch (error) {
+      this.logger.error(
+        `Error seeding currencies for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async seedDefaultLoyaltyTiers(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const existing = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}"."loyalty_tiers"`,
+      );
+      if (parseInt(existing.rows[0].count) > 0) return;
+
+      const tiers = [
+        { name: 'Bronze', min_points: 0, multiplier: 1.00, color: '#CD7F32', display_order: 1, benefits: '{"discount_pct":0}' },
+        { name: 'Silver', min_points: 500, multiplier: 1.25, color: '#C0C0C0', display_order: 2, benefits: '{"discount_pct":5}' },
+        { name: 'Gold', min_points: 2000, multiplier: 1.50, color: '#FFD700', display_order: 3, benefits: '{"discount_pct":10,"priority_booking":true}' },
+        { name: 'Platinum', min_points: 5000, multiplier: 2.00, color: '#E5E4E2', display_order: 4, benefits: '{"discount_pct":15,"priority_booking":true,"free_guest_passes":2}' },
+      ];
+
+      for (const tier of tiers) {
+        await client.query(
+          `INSERT INTO "${schemaName}"."loyalty_tiers" (name, min_points, multiplier, color, display_order, benefits) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [tier.name, tier.min_points, tier.multiplier, tier.color, tier.display_order, tier.benefits],
+        );
+      }
+      this.logger.log(`Seeded loyalty tiers for ${schemaName}`);
+    } catch (error) {
+      this.logger.error(
+        `Error seeding loyalty tiers for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async seedDefaultAchievements(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    try {
+      const existing = await client.query(
+        `SELECT COUNT(*) as count FROM "${schemaName}"."achievements" WHERE is_deleted = FALSE`,
+      );
+      if (parseInt(existing.rows[0].count) > 0) return;
+
+      const achievements = [
+        { name: 'First Step', description: 'Complete your first gym visit', icon: 'footprints', category: 'milestone', criteria: '{"type":"visit_count","threshold":1}', points_value: 10 },
+        { name: 'Week Warrior', description: 'Visit 7 days in a row', icon: 'flame', category: 'attendance', criteria: '{"type":"daily_streak","threshold":7}', points_value: 50 },
+        { name: 'Month Master', description: 'Visit 30 days in a row', icon: 'trophy', category: 'attendance', criteria: '{"type":"daily_streak","threshold":30}', points_value: 200 },
+        { name: 'Century Club', description: 'Complete 100 total visits', icon: 'star', category: 'milestone', criteria: '{"type":"visit_count","threshold":100}', points_value: 500 },
+        { name: 'Social Butterfly', description: 'Refer 3 friends who sign up', icon: 'users', category: 'social', criteria: '{"type":"referral_count","threshold":3}', points_value: 150 },
+        { name: 'Goal Getter', description: 'Achieve your first fitness goal', icon: 'target', category: 'milestone', criteria: '{"type":"goal_achieved","threshold":1}', points_value: 100 },
+      ];
+
+      for (const ach of achievements) {
+        await client.query(
+          `INSERT INTO "${schemaName}"."achievements" (name, description, icon, category, criteria, points_value, created_by) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
+          [ach.name, ach.description, ach.icon, ach.category, ach.criteria, ach.points_value],
+        );
+      }
+      this.logger.log(`Seeded default achievements for ${schemaName}`);
+    } catch (error) {
+      this.logger.error(
+        `Error seeding achievements for ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 

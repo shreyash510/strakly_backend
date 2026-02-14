@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SqlValue } from '../common/types';
 
 export interface AttendanceStats {
@@ -70,6 +71,7 @@ export class AttendanceService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly activityLogsService: ActivityLogsService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   private getTodayDate(): string {
@@ -255,6 +257,11 @@ export class AttendanceService {
         user.name,
       )
       .catch((err) => this.logger.error('Failed to log attendance activity', err));
+
+    // Award loyalty points for attendance (fire-and-forget)
+    this.loyaltyService
+      .awardPoints(gymId, user.id, 'visit', 'attendance', attendance.id, 'Points for gym visit')
+      .catch((err) => this.logger.error('Failed to award loyalty points for attendance', err));
 
     return {
       id: attendance.id,

@@ -30,6 +30,30 @@ export const UserId = createParamDecorator(
 );
 
 /**
+ * Parameter decorator that extracts the user's role from the authenticated user.
+ *
+ * @example
+ * ```typescript
+ * @Patch(':id/status')
+ * updateStatus(@CurrentUserRole() role: string) {
+ *   // role = 'admin' | 'client' | etc.
+ * }
+ * ```
+ */
+export const CurrentUserRole = createParamDecorator(
+  (data: unknown, ctx: ExecutionContext): string => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user as AuthenticatedUser;
+
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    return user.role || 'client';
+  },
+);
+
+/**
  * Parameter decorator that extracts the full authenticated user object.
  *
  * @example

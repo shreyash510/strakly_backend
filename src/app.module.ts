@@ -35,10 +35,29 @@ import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { MemberNotesModule } from './member-notes/member-notes.module';
+import { MemberGoalsModule } from './member-goals/member-goals.module';
 import { UploadModule } from './upload/upload.module';
 import { MigrationModule } from './migration/migration.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { ProgressPhotosModule } from './progress-photos/progress-photos.module';
+import { LeadsModule } from './leads/leads.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { DocumentsModule } from './documents/documents.module';
+import { ClassesModule } from './classes/classes.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { GuestVisitsModule } from './guest-visits/guest-visits.module';
+import { EquipmentModule } from './equipment/equipment.module';
+import { ProductsModule } from './products/products.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
+// Phase 5: Advanced / Differentiators
+import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { SurveysModule } from './surveys/surveys.module';
+import { EngagementModule } from './engagement/engagement.module';
+import { GamificationModule } from './gamification/gamification.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { WearablesModule } from './wearables/wearables.module';
+import { CurrenciesModule } from './currencies/currencies.module';
 
 @Module({
   imports: [
@@ -81,9 +100,28 @@ import { ConversationsModule } from './conversations/conversations.module';
     ActivityLogsModule,
     AnnouncementsModule,
     MemberNotesModule,
+    MemberGoalsModule,
     UploadModule,
     MigrationModule,
     ConversationsModule,
+    ProgressPhotosModule,
+    LeadsModule,
+    ReferralsModule,
+    DocumentsModule,
+    ClassesModule,
+    AppointmentsModule,
+    GuestVisitsModule,
+    EquipmentModule,
+    ProductsModule,
+    CampaignsModule,
+    // Phase 5: Advanced / Differentiators
+    CustomFieldsModule,
+    SurveysModule,
+    EngagementModule,
+    GamificationModule,
+    LoyaltyModule,
+    WearablesModule,
+    CurrenciesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

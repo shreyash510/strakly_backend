@@ -12,6 +12,7 @@ export enum PaymentType {
   MEMBERSHIP = 'membership',
   SALARY = 'salary',
   REFUND = 'refund',
+  PRODUCT_SALE = 'product_sale',
   FEE = 'fee',
   OTHER = 'other',
 }
