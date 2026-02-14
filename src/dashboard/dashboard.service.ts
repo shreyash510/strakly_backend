@@ -12,6 +12,7 @@ import {
   RecentTicketDto,
   AdminDashboardDto,
   AdminDashboardStatsDto,
+  ExpiringMembershipDto,
   RecentClientDto,
   RecentAttendanceDto,
   ClientDashboardDto,
@@ -250,11 +251,13 @@ export class DashboardService {
     gymId: number,
     branchId: number | null = null,
   ): Promise<AdminDashboardDto> {
-    const [stats, newClients, newInquiries, recentTickets] = await Promise.all([
+    const [stats, newClients, newInquiries, recentTickets, recentAttendance, expiringMemberships] = await Promise.all([
       this.getAdminStats(gymId, branchId),
       this.getNewClients(gymId, branchId, 1, 5),
       this.getNewInquiries(gymId, branchId, 1, 5),
       this.getRecentTicketsForGym(gymId),
+      this.getRecentAttendance(gymId, branchId, 5),
+      this.getExpiringMemberships(gymId, branchId, 5),
     ]);
 
     return {
@@ -262,6 +265,8 @@ export class DashboardService {
       newClients,
       newInquiries,
       recentTickets,
+      recentAttendance,
+      expiringMemberships,
     };
   }
 
@@ -421,6 +426,7 @@ export class DashboardService {
           femaleClientsResult,
           newClientsThisMonthResult,
           newEnquiriesThisMonthResult,
+          expiringSoonResult,
         ] = await Promise.all([
           client.query(
             `SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`,
@@ -472,6 +478,10 @@ export class DashboardService {
             `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1${userBranchFilter}`,
             [startOfMonth],
           ),
+          client.query(
+            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1::TIMESTAMP AND end_date <= $2::TIMESTAMP${membershipBranchFilter}`,
+            [now, endOfWeek],
+          ),
         ]);
 
         return {
@@ -496,6 +506,7 @@ export class DashboardService {
           femaleClients: parseInt(femaleClientsResult.rows[0].count, 10),
           newClientsThisMonth: parseInt(newClientsThisMonthResult.rows[0].count, 10),
           newEnquiriesThisMonth: parseInt(newEnquiriesThisMonthResult.rows[0].count, 10),
+          expiringSoon: parseInt(expiringSoonResult.rows[0].count, 10),
         };
       },
     );
@@ -576,6 +587,7 @@ export class DashboardService {
       femaleClients: stats.femaleClients,
       newClientsThisMonth: stats.newClientsThisMonth,
       newEnquiriesThisMonth: stats.newEnquiriesThisMonth,
+      expiringSoon: stats.expiringSoon,
       monthlyRevenueHistory,
     };
   }
@@ -619,20 +631,23 @@ export class DashboardService {
     branchId: number | null = null,
     limit = 5,
   ): Promise<RecentAttendanceDto[]> {
+    const today = new Date().toISOString().split('T')[0];
+
     const attendance = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const values: SqlValue[] = [today];
         let query = `SELECT a.id, a.attendance_date as date, a.check_in_time, a.check_out_time, a.status, u.name as user_name
          FROM attendance a
-         JOIN users u ON u.id = a.user_id`;
-        const values: SqlValue[] = [];
+         JOIN users u ON u.id = a.user_id
+         WHERE a.attendance_date = $1::DATE`;
 
         if (branchId !== null) {
-          query += ` WHERE a.branch_id = $1`;
+          query += ` AND a.branch_id = $2`;
           values.push(branchId);
         }
 
-        query += ` ORDER BY a.created_at DESC LIMIT $${values.length + 1}`;
+        query += ` ORDER BY a.check_in_time DESC LIMIT $${values.length + 1}`;
         values.push(limit);
 
         const result = await client.query(query, values);
@@ -658,6 +673,56 @@ export class DashboardService {
         : undefined,
       status: record.status,
     }));
+  }
+
+  private async getExpiringMemberships(
+    gymId: number,
+    branchId: number | null = null,
+    limit = 5,
+  ): Promise<ExpiringMembershipDto[]> {
+    const now = new Date();
+    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const memberships = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const values: SqlValue[] = [now, sevenDaysLater];
+        let query = `SELECT m.id, m.end_date, p.name as plan_name, u.id as user_id, u.name as user_name, u.avatar
+         FROM memberships m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE m.status = 'active' AND m.end_date >= $1::TIMESTAMP AND m.end_date <= $2::TIMESTAMP`;
+
+        if (branchId !== null) {
+          query += ` AND m.branch_id = $3`;
+          values.push(branchId);
+        }
+
+        query += ` ORDER BY m.end_date ASC LIMIT $${values.length + 1}`;
+        values.push(limit);
+
+        const result = await client.query(query, values);
+        return result.rows;
+      },
+    );
+
+    return memberships.map((m: Record<string, any>) => {
+      const endDate = new Date(m.end_date);
+      const diffMs = endDate.getTime() - now.getTime();
+      const daysRemaining = Math.max(
+        0,
+        Math.ceil(diffMs / (1000 * 60 * 60 * 24)),
+      );
+      return {
+        id: m.id,
+        userId: m.user_id,
+        userName: m.user_name,
+        avatar: m.avatar || undefined,
+        planName: m.plan_name || 'Unknown Plan',
+        endDate: endDate.toISOString().split('T')[0],
+        daysRemaining,
+      };
+    });
   }
 
   private async getRecentTicketsForGym(
