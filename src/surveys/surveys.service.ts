@@ -11,10 +11,17 @@ import {
   SurveyFiltersDto,
 } from './dto/surveys.dto';
 import { SqlValue } from '../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class SurveysService {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
 
   private formatSurvey(row: Record<string, any>) {
     return {
@@ -274,7 +281,7 @@ export class SurveysService {
       );
     }
 
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const survey = await this.tenantService.executeInTenant(gymId, async (client) => {
       const existing = await client.query(
         `SELECT id, status FROM surveys WHERE id = $1 AND is_deleted = FALSE`,
         [id],
@@ -290,6 +297,20 @@ export class SurveysService {
 
       return this.formatSurvey(result.rows[0]);
     });
+
+    // Notify staff when survey becomes active
+    if (status === 'active') {
+      try {
+        await this.notificationHelper.notifyStaff(gymId, survey.branchId, {
+          type: NotificationType.SURVEY_ASSIGNED,
+          title: 'New Survey Available',
+          message: `A new survey "${survey.title}" is now live and ready for responses.`,
+          actionUrl: '/surveys',
+        });
+      } catch { /* notifications are non-critical */ }
+    }
+
+    return survey;
   }
 
   // ─── Soft Delete ───
@@ -315,10 +336,10 @@ export class SurveysService {
     userId: number,
     dto: SubmitSurveyResponseDto,
   ) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
       // Verify survey exists and is active
       const survey = await client.query(
-        `SELECT id, status, is_anonymous FROM surveys WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT id, status, is_anonymous, title, branch_id FROM surveys WHERE id = $1 AND is_deleted = FALSE`,
         [surveyId],
       );
       if (survey.rows.length === 0) {
@@ -336,6 +357,12 @@ export class SurveysService {
       if (existingResponse.rows.length > 0) {
         throw new BadRequestException('You have already responded to this survey');
       }
+
+      // Get respondent name
+      const userResult = await client.query(
+        `SELECT name FROM users WHERE id = $1`,
+        [userId],
+      );
 
       // Insert response
       const responseResult = await client.query(
@@ -364,8 +391,28 @@ export class SurveysService {
       return {
         message: 'Survey response submitted successfully',
         responseId,
+        _notifData: {
+          surveyTitle: survey.rows[0].title,
+          branchId: survey.rows[0].branch_id,
+          respondentName: userResult.rows[0]?.name || 'A member',
+        },
       };
     });
+
+    // Notify staff about new response
+    try {
+      await this.notificationHelper.notifyStaff(gymId, result._notifData.branchId, {
+        type: NotificationType.SURVEY_RESPONSE_SUBMITTED,
+        title: 'Survey Response Received',
+        message: `${result._notifData.respondentName} responded to "${result._notifData.surveyTitle}".`,
+        actionUrl: '/surveys',
+      }, { excludeUserId: userId });
+    } catch { /* notifications are non-critical */ }
+
+    return {
+      message: result.message,
+      responseId: result.responseId,
+    };
   }
 
   // ─── Get Responses ───

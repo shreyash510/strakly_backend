@@ -5,6 +5,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 import {
   UpdateLoyaltyConfigDto,
   CreateLoyaltyTierDto,
@@ -20,7 +23,11 @@ import { SqlValue } from '../common/types';
 export class LoyaltyService {
   private readonly logger = new Logger(LoyaltyService.name);
 
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
 
   // ═══════════════════════════════════════════════
   //  Formatters
@@ -526,7 +533,7 @@ export class LoyaltyService {
     referenceId: number | null,
     description?: string,
   ) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
       // Get config
       const configResult = await client.query(
         `SELECT * FROM loyalty_config ORDER BY branch_id NULLS FIRST LIMIT 1`,
@@ -645,32 +652,56 @@ export class LoyaltyService {
       );
 
       // Check tier upgrade
-      await this.checkAndUpdateTier(client, userId);
+      const tierChange = await this.checkAndUpdateTier(client, userId);
 
-      return this.formatTransaction(txResult.rows[0]);
+      return {
+        transaction: this.formatTransaction(txResult.rows[0]),
+        _notif: { finalPoints, source, tierChange },
+      };
     });
+
+    if (!result) return null;
+
+    // Send notifications after transaction committed
+    try {
+      await this.notificationsService.notifyPointsEarned(
+        userId, gymId, null,
+        { points: result._notif.finalPoints, source: result._notif.source, balance: 0 },
+      );
+    } catch { /* notifications are non-critical */ }
+
+    if (result._notif.tierChange) {
+      try {
+        await this.notificationsService.notifyTierUpgraded(
+          userId, gymId, null, { tierName: result._notif.tierChange.newTierName },
+        );
+      } catch { /* notifications are non-critical */ }
+    }
+
+    return result.transaction;
   }
 
   /**
    * Check if the user's total_earned qualifies for a higher tier, and upgrade if so.
+   * Returns tier change info if upgraded, null otherwise.
    */
   private async checkAndUpdateTier(
     client: any,
     userId: number,
-  ): Promise<void> {
+  ): Promise<{ oldTierId: number | null; newTierId: number; newTierName: string } | null> {
     // Get user's total earned
     const pointsResult = await client.query(
       `SELECT total_earned, tier_id FROM loyalty_points WHERE user_id = $1`,
       [userId],
     );
 
-    if (pointsResult.rows.length === 0) return;
+    if (pointsResult.rows.length === 0) return null;
 
     const { total_earned, tier_id: currentTierId } = pointsResult.rows[0];
 
     // Get the highest qualifying tier
     const tierResult = await client.query(
-      `SELECT id FROM loyalty_tiers
+      `SELECT id, name FROM loyalty_tiers
        WHERE min_points <= $1 AND is_active = TRUE
        ORDER BY min_points DESC
        LIMIT 1`,
@@ -686,7 +717,18 @@ export class LoyaltyService {
          WHERE user_id = $2`,
         [newTierId, userId],
       );
+
+      // Only return upgrade info when moving to a higher tier (not downgrade/removal)
+      if (newTierId !== null && (currentTierId === null || newTierId !== currentTierId)) {
+        return {
+          oldTierId: currentTierId,
+          newTierId,
+          newTierName: tierResult.rows[0].name,
+        };
+      }
     }
+
+    return null;
   }
 
   // ═══════════════════════════════════════════════
@@ -879,11 +921,13 @@ export class LoyaltyService {
   }
 
   async redeemReward(rewardId: number, userId: number, gymId: number) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const result = await this.tenantService.executeInTenant(gymId, async (client) => {
       // Get reward
       const rewardResult = await client.query(
-        `SELECT * FROM loyalty_rewards WHERE id = $1 AND is_deleted = FALSE AND is_active = TRUE`,
-        [rewardId],
+        `SELECT r.*, u.branch_id AS user_branch_id FROM loyalty_rewards r
+         LEFT JOIN users u ON u.id = $2
+         WHERE r.id = $1 AND r.is_deleted = FALSE AND r.is_active = TRUE`,
+        [rewardId, userId],
       );
 
       if (rewardResult.rows.length === 0) {
@@ -974,8 +1018,36 @@ export class LoyaltyService {
       return {
         transaction: this.formatTransaction(txResult.rows[0]),
         reward: this.formatReward(reward),
+        _notif: {
+          rewardName: reward.name,
+          pointsSpent: reward.points_cost,
+          branchId: reward.user_branch_id ?? reward.branch_id,
+        },
       };
     });
+
+    // Notify user about reward redemption
+    try {
+      await this.notificationsService.notifyRewardRedeemed(
+        userId, gymId, result._notif.branchId,
+        { rewardId: rewardId, rewardName: result._notif.rewardName, pointsSpent: result._notif.pointsSpent },
+      );
+    } catch { /* notifications are non-critical */ }
+
+    // Notify staff about the redemption
+    try {
+      await this.notificationHelper.notifyStaff(gymId, result._notif.branchId, {
+        type: NotificationType.REWARD_REDEEMED,
+        title: 'Reward Redeemed',
+        message: `A member redeemed "${result._notif.rewardName}" for ${result._notif.pointsSpent} points.`,
+        actionUrl: '/loyalty',
+      }, { excludeUserId: userId });
+    } catch { /* notifications are non-critical */ }
+
+    return {
+      transaction: result.transaction,
+      reward: result.reward,
+    };
   }
 
   // ═══════════════════════════════════════════════

@@ -16,6 +16,14 @@ export enum NotificationType {
   CLASS_SCHEDULE_ASSIGNED = 'class_schedule_assigned',
   APPOINTMENT_BOOKED = 'appointment_booked',
   APPOINTMENT_STATUS_CHANGED = 'appointment_status_changed',
+  SURVEY_ASSIGNED = 'survey_assigned',
+  SURVEY_RESPONSE_SUBMITTED = 'survey_response_submitted',
+  CHALLENGE_CREATED = 'challenge_created',
+  ACHIEVEMENT_EARNED = 'achievement_earned',
+  STREAK_MILESTONE = 'streak_milestone',
+  POINTS_EARNED = 'points_earned',
+  REWARD_REDEEMED = 'reward_redeemed',
+  TIER_UPGRADED = 'tier_upgraded',
 }
 
 export enum NotificationPriority {
