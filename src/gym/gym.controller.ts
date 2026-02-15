@@ -128,6 +128,38 @@ export class GymController {
     return result.data;
   }
 
+  // ---- Onboarding Tour (must be before :id routes) ----
+
+  @Get('onboarding-tour/status')
+  @ApiOperation({ summary: 'Get onboarding tour status for current gym' })
+  async getOnboardingTourStatus(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.getOnboardingTourStatus(gymId);
+  }
+
+  @Patch('onboarding-tour/complete')
+  @ApiOperation({ summary: 'Mark onboarding tour as completed' })
+  async completeOnboardingTour(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.completeOnboardingTour(gymId);
+  }
+
+  @Patch('onboarding-tour/skip')
+  @ApiOperation({ summary: 'Mark onboarding tour as skipped' })
+  async skipOnboardingTour(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.skipOnboardingTour(gymId);
+  }
+
   @Get(':id')
   @Roles('superadmin', 'admin', 'branch_admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
@@ -164,4 +196,5 @@ export class GymController {
     this.notificationsGateway.emitGymChanged(id, { action: 'status_changed' });
     return result;
   }
+
 }
