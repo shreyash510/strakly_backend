@@ -211,6 +211,24 @@ export class TenantService implements OnModuleInit {
     await this.createPhase5Tables(client, schemaName);
     await this.seedDefaultCurrencies(client, schemaName);
     await this.seedDefaultLoyaltyTiers(client, schemaName);
+
+    // Add created_by column to achievements if missing (for schemas created before fix)
+    try {
+      const createdByExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'achievements' AND column_name = 'created_by'
+      `, [schemaName]);
+      if (createdByExists.rows.length === 0) {
+        await client.query(`ALTER TABLE "${schemaName}"."achievements" ADD COLUMN created_by INTEGER`);
+        this.logger.log(`Added 'created_by' column to ${schemaName}.achievements`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error adding created_by to ${schemaName}.achievements:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
     await this.seedDefaultAchievements(client, schemaName);
 
     // Create core table indexes (after all tables are guaranteed to exist)
@@ -1232,10 +1250,11 @@ export class TenantService implements OnModuleInit {
       // Create the schema
       await client.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
 
-      // Create tenant tables
-      await this.createTenantTables(client, schemaName);
+      // Run full migration which creates all tables, columns, indexes, and Phase 1-5 tables.
+      // All operations are idempotent (IF NOT EXISTS / information_schema checks).
+      await this.migrateTenantSchema(client, schemaName);
 
-      // Seed default plans
+      // Seed default plans (not included in migrateTenantSchema)
       await this.seedDefaultPlans(client, schemaName);
 
       await client.query('COMMIT');
@@ -1449,6 +1468,7 @@ export class TenantService implements OnModuleInit {
         check_in_time TIMESTAMP NOT NULL,
         check_out_time TIMESTAMP,
         date VARCHAR(20) NOT NULL,
+        attendance_date DATE,
         marked_by INTEGER NOT NULL, -- public.users.id (staff who marked)
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'present',
@@ -1467,6 +1487,7 @@ export class TenantService implements OnModuleInit {
         check_in_time TIMESTAMP NOT NULL,
         check_out_time TIMESTAMP NOT NULL,
         date VARCHAR(20) NOT NULL,
+        attendance_date DATE,
         duration INTEGER,
         marked_by INTEGER NOT NULL,
         checked_out_by INTEGER,
@@ -3445,6 +3466,7 @@ export class TenantService implements OnModuleInit {
         is_active BOOLEAN DEFAULT TRUE,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
+        created_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
