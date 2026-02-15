@@ -1245,22 +1245,21 @@ export class TenantService implements OnModuleInit {
     const client = await this.pool.connect();
 
     try {
-      await client.query('BEGIN');
-
-      // Create the schema
+      // Create the schema (outside transaction — DDL is auto-committed in PG anyway)
       await client.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
 
       // Run full migration which creates all tables, columns, indexes, and Phase 1-5 tables.
       // All operations are idempotent (IF NOT EXISTS / information_schema checks).
+      // NOTE: No wrapping transaction — migrateTenantSchema tolerates individual step failures
+      // (some steps have their own try-catch). A wrapping transaction would cause PostgreSQL to
+      // abort ALL subsequent steps if any single step fails ("current transaction is aborted").
       await this.migrateTenantSchema(client, schemaName);
 
-      // Seed default plans (not included in migrateTenantSchema)
+      // Seed default plans (idempotent — checks for existing rows before inserting)
       await this.seedDefaultPlans(client, schemaName);
 
-      await client.query('COMMIT');
       this.logger.log(`Created tenant schema: ${schemaName}`);
     } catch (error) {
-      await client.query('ROLLBACK');
       this.logger.error(`Failed to create tenant schema ${schemaName}:`, error);
       throw error;
     } finally {
