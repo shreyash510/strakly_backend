@@ -17,10 +17,17 @@ import {
   AvailableSlotsDto,
 } from './dto/appointment.dto';
 import { SqlValue } from '../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class AppointmentsService {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
 
   // ─── Formatters ───
 
@@ -385,7 +392,7 @@ export class AppointmentsService {
       throw new ForbiddenException('You can only book appointments for yourself');
     }
 
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const appointment = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query('BEGIN');
       try {
         // Lock trainer's appointments to prevent race conditions on concurrent bookings
@@ -438,6 +445,37 @@ export class AppointmentsService {
         throw error;
       }
     });
+
+    // Notifications (non-blocking, after successful creation)
+    try {
+      // Notify the client
+      await this.notificationsService.notifyAppointmentBooked(
+        dto.userId, gymId, branchId, {
+          appointmentId: appointment.id,
+          otherPartyName: appointment.trainerName || 'Trainer',
+          startTime: appointment.startTime,
+          serviceName: appointment.serviceName,
+        },
+      );
+      // Notify the trainer
+      await this.notificationsService.notifyAppointmentBooked(
+        dto.trainerId, gymId, branchId, {
+          appointmentId: appointment.id,
+          otherPartyName: appointment.userName || 'Client',
+          startTime: appointment.startTime,
+          serviceName: appointment.serviceName,
+        },
+      );
+      // Notify staff
+      await this.notificationHelper.notifyStaff(gymId, branchId, {
+        type: NotificationType.APPOINTMENT_BOOKED,
+        title: 'New Appointment',
+        message: `${appointment.userName || 'A client'} booked an appointment with ${appointment.trainerName || 'a trainer'}.`,
+        actionUrl: '/appointments',
+      }, { excludeUserId: createdBy });
+    } catch { /* notifications are non-critical */ }
+
+    return appointment;
   }
 
   async updateAppointment(id: number, gymId: number, dto: UpdateAppointmentDto, userId: number, userRole: string) {
@@ -622,6 +660,25 @@ export class AppointmentsService {
         );
 
         await client.query('COMMIT');
+
+        // Notifications (after commit, non-blocking)
+        try {
+          const apt = full.rows[0];
+          // Notify the client
+          await this.notificationsService.notifyAppointmentStatusChanged(
+            apt.user_id, gymId, apt.branch_id, {
+              appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
+            },
+          );
+          // Notify the trainer
+          if (apt.trainer_id) {
+            await this.notificationsService.notifyAppointmentStatusChanged(
+              apt.trainer_id, gymId, apt.branch_id, {
+                appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
+              },
+            );
+          }
+        } catch { /* notifications are non-critical */ }
 
         const response: Record<string, any> = this.formatAppointment(full.rows[0]);
         if (sessionDeduction) {

@@ -892,6 +892,223 @@ export class NotificationsService {
     }
   }
 
+  // ============================================
+  // CLASS NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify user about class booking (confirmed or waitlisted)
+   */
+  async notifyClassBooked(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string; startTime: string; isWaitlisted: boolean; position?: number | null },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_BOOKED,
+          title: data.isWaitlisted ? 'Added to Waitlist' : 'Class Booking Confirmed',
+          message: data.isWaitlisted
+            ? `You've been added to the waitlist (position #${data.position}) for ${data.className} on ${data.date}.`
+            : `Your booking for ${data.className} on ${data.date} at ${data.startTime} is confirmed.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class booked notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about class booking cancellation
+   */
+  async notifyClassBookingCancelled(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_BOOKING_CANCELLED,
+          title: 'Class Booking Cancelled',
+          message: `Your booking for ${data.className} on ${data.date} has been cancelled.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class booking cancelled notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user promoted from waitlist
+   */
+  async notifyClassWaitlistPromoted(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string; startTime: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_WAITLIST_PROMOTED,
+          title: 'Moved Off Waitlist',
+          message: `A spot opened up! You're now booked for ${data.className} on ${data.date} at ${data.startTime}.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.HIGH,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class waitlist promoted notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify instructor about class schedule assignment
+   */
+  async notifyClassScheduleAssigned(
+    instructorId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { scheduleId: number; className: string; dayOfWeek: number; startTime: string },
+  ): Promise<void> {
+    try {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      await this.create(
+        {
+          userId: instructorId,
+          branchId,
+          type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
+          title: 'Class Schedule Assigned',
+          message: `You've been assigned to teach ${data.className} on ${days[data.dayOfWeek]}s at ${data.startTime}.`,
+          data: {
+            entityType: 'class_schedule',
+            entityId: data.scheduleId,
+          },
+          actionUrl: '/classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class schedule assigned notification: ${msg}`);
+    }
+  }
+
+  // ============================================
+  // APPOINTMENT NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify user about appointment booking
+   */
+  async notifyAppointmentBooked(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { appointmentId: number; otherPartyName: string; startTime: string; serviceName?: string },
+  ): Promise<void> {
+    try {
+      const dateStr = new Date(data.startTime).toLocaleDateString();
+      const timeStr = new Date(data.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.APPOINTMENT_BOOKED,
+          title: 'Appointment Booked',
+          message: data.serviceName
+            ? `${data.serviceName} appointment with ${data.otherPartyName} on ${dateStr} at ${timeStr}.`
+            : `Appointment with ${data.otherPartyName} on ${dateStr} at ${timeStr}.`,
+          data: {
+            entityType: 'appointment',
+            entityId: data.appointmentId,
+          },
+          actionUrl: '/my-appointments',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create appointment booked notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about appointment status change
+   */
+  async notifyAppointmentStatusChanged(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { appointmentId: number; status: string; startTime: string },
+  ): Promise<void> {
+    try {
+      const statusMessages: Record<string, string> = {
+        confirmed: 'has been confirmed',
+        completed: 'has been marked as completed',
+        cancelled: 'has been cancelled',
+        no_show: 'was marked as no-show',
+      };
+      const statusText = statusMessages[data.status] || `status changed to ${data.status}`;
+      const dateStr = new Date(data.startTime).toLocaleDateString();
+
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.APPOINTMENT_STATUS_CHANGED,
+          title: 'Appointment Updated',
+          message: `Your appointment on ${dateStr} ${statusText}.`,
+          data: {
+            entityType: 'appointment',
+            entityId: data.appointmentId,
+            status: data.status,
+          },
+          actionUrl: '/my-appointments',
+          priority: data.status === 'cancelled' ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create appointment status notification: ${msg}`);
+    }
+  }
+
   /**
    * Map database row to Notification interface
    */

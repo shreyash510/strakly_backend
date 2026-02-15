@@ -17,10 +17,17 @@ import {
   SessionFiltersDto,
 } from './dto/class.dto';
 import { SqlValue } from '../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class ClassesService {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
 
   // ─── Formatters ───
 
@@ -119,7 +126,7 @@ export class ClassesService {
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`ct.branch_id = $${paramIndex++}`);
+        conditions.push(`(ct.branch_id = $${paramIndex++} OR ct.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -247,7 +254,7 @@ export class ClassesService {
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`cs.branch_id = $${paramIndex++}`);
+        conditions.push(`(cs.branch_id = $${paramIndex++} OR cs.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -276,7 +283,7 @@ export class ClassesService {
   }
 
   async createSchedule(gymId: number, branchId: number | null, dto: CreateClassScheduleDto) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO class_schedules (class_type_id, branch_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
@@ -308,6 +315,29 @@ export class ClassesService {
 
       return this.formatSchedule(full.rows[0]);
     });
+
+    // Notifications (non-blocking, after successful creation)
+    try {
+      if (dto.instructorId) {
+        await this.notificationsService.notifyClassScheduleAssigned(
+          dto.instructorId, gymId, branchId, {
+            scheduleId: schedule.id,
+            className: schedule.classTypeName,
+            dayOfWeek: dto.dayOfWeek,
+            startTime: dto.startTime,
+          },
+        );
+      }
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      await this.notificationHelper.notifyStaff(gymId, branchId, {
+        type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
+        title: 'New Class Schedule',
+        message: `${schedule.classTypeName} scheduled on ${days[dto.dayOfWeek]}s at ${dto.startTime}.`,
+        actionUrl: '/classes',
+      });
+    } catch { /* notifications are non-critical */ }
+
+    return schedule;
   }
 
   async updateSchedule(id: number, gymId: number, dto: UpdateClassScheduleDto) {
@@ -389,7 +419,7 @@ export class ClassesService {
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -728,6 +758,38 @@ export class ClassesService {
 
         await client.query('COMMIT');
 
+        // Notifications (after commit, non-blocking)
+        try {
+          const classInfo = await client.query(
+            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id, cs.instructor_id
+             FROM class_sessions s
+             JOIN class_schedules cs ON cs.id = s.schedule_id
+             JOIN class_types ct ON ct.id = cs.class_type_id
+             WHERE s.id = $1`,
+            [sessionId],
+          );
+          const info = classInfo.rows[0];
+          if (info) {
+            const dateStr = info.date?.toISOString?.().split('T')[0] || String(info.date);
+            // Notify the client
+            await this.notificationsService.notifyClassBooked(
+              userId, gymId, info.branch_id, {
+                sessionId, className: info.class_type_name, date: dateStr,
+                startTime: info.start_time, isWaitlisted, position,
+              },
+            );
+            // Notify the instructor
+            if (info.instructor_id) {
+              await this.notificationHelper.notifyStaff(gymId, info.branch_id, {
+                type: NotificationType.CLASS_BOOKED,
+                title: 'New Class Booking',
+                message: `${booking.rows[0].user_name || 'A member'} booked ${info.class_type_name} on ${dateStr}.`,
+                actionUrl: '/classes',
+              }, { excludeUserId: userId });
+            }
+          }
+        } catch { /* notifications are non-critical */ }
+
         return {
           booking: this.formatBooking(booking.rows[0]),
           waitlisted: isWaitlisted,
@@ -799,10 +861,11 @@ export class ClassesService {
         );
 
         // Promote waitlisted person if a 'booked' booking was cancelled or marked no_show (frees a spot)
+        let promotedUserId: number | null = null;
         if ((dto.status === 'cancelled' || dto.status === 'no_show') && previousStatus === 'booked') {
           const sessionId = result.rows[0].session_id;
           const waitlisted = await client.query(
-            `SELECT id FROM class_bookings WHERE session_id = $1 AND status = 'waitlisted' ORDER BY booked_at ASC LIMIT 1 FOR UPDATE`,
+            `SELECT id, user_id FROM class_bookings WHERE session_id = $1 AND status = 'waitlisted' ORDER BY booked_at ASC LIMIT 1 FOR UPDATE`,
             [sessionId],
           );
 
@@ -811,6 +874,7 @@ export class ClassesService {
               `UPDATE class_bookings SET status = 'booked' WHERE id = $1`,
               [waitlisted.rows[0].id],
             );
+            promotedUserId = waitlisted.rows[0].user_id;
           }
         }
 
@@ -824,6 +888,40 @@ export class ClassesService {
         );
 
         await client.query('COMMIT');
+
+        // Notifications (after commit, non-blocking)
+        try {
+          const classInfo = await client.query(
+            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id
+             FROM class_sessions s
+             JOIN class_schedules cs ON cs.id = s.schedule_id
+             JOIN class_types ct ON ct.id = cs.class_type_id
+             WHERE s.id = $1`,
+            [current.rows[0].session_id],
+          );
+          const info = classInfo.rows[0];
+          if (info) {
+            const dateStr = info.date?.toISOString?.().split('T')[0] || String(info.date);
+            // Notify booking owner about cancellation
+            if (dto.status === 'cancelled') {
+              await this.notificationsService.notifyClassBookingCancelled(
+                current.rows[0].user_id, gymId, info.branch_id, {
+                  sessionId: current.rows[0].session_id, className: info.class_type_name, date: dateStr,
+                },
+              );
+            }
+            // Notify promoted waitlist user
+            if (promotedUserId) {
+              await this.notificationsService.notifyClassWaitlistPromoted(
+                promotedUserId, gymId, info.branch_id, {
+                  sessionId: current.rows[0].session_id, className: info.class_type_name,
+                  date: dateStr, startTime: info.start_time,
+                },
+              );
+            }
+          }
+        } catch { /* notifications are non-critical */ }
+
         return this.formatBooking(updated.rows[0]);
       } catch (error) {
         await client.query('ROLLBACK');
