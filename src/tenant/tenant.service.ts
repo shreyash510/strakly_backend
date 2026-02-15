@@ -1769,6 +1769,15 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    // Create payments table
+    await this.createPaymentsTable(client, schemaName);
+
+    // Create activity logs table
+    await this.createActivityLogsTable(client, schemaName);
+
+    // Create announcements table
+    await this.createAnnouncementsTable(client, schemaName);
+
     // Create indexes for better query performance
     await this.createTenantIndexes(client, schemaName);
   }

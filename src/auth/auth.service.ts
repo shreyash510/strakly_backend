@@ -224,11 +224,19 @@ export class AuthService {
             if (gym?.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
               await this.tenantService.dropTenantSchema(assignment.gymId);
             }
+            // Delete payment history first (references subscription)
+            await this.prisma.saasPaymentHistory.deleteMany({
+              where: { gymId: assignment.gymId },
+            });
             // Delete subscriptions
             await this.prisma.saasGymSubscription.deleteMany({
               where: { gymId: assignment.gymId },
             });
-            // Delete the gym
+            // Delete email verifications linked to this gym
+            await this.prisma.emailVerification.deleteMany({
+              where: { gymId: assignment.gymId },
+            });
+            // Delete the gym (cascades to branches, xref, support tickets)
             await this.prisma.gym.delete({ where: { id: assignment.gymId } });
             this.logger.log(`Cleaned up orphaned gym: ${assignment.gymId}`);
           } catch (cleanupError) {
@@ -325,124 +333,165 @@ export class AuthService {
       throw error;
     }
 
-    // Create user-gym assignment with admin role
-    await this.prisma.userGymXref.create({
-      data: {
-        userId: createdUser.id,
-        gymId: gym.id,
-        role: ROLES.ADMIN,
-        isPrimary: true,
-        isActive: true,
-      },
-    });
-
-    // Create free trial subscription
-    const freePlan = await this.prisma.saasPlan.findFirst({
-      where: { code: 'free' },
-    });
-
-    if (freePlan) {
-      const now = new Date();
-      const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
-      const endDate = new Date(now);
-      endDate.setMonth(endDate.getMonth() + (freePlan.durationMonths || 3));
-
-      await this.prisma.saasGymSubscription.create({
+    // Complete registration: create assignments, subscription, and build response
+    try {
+      // Create user-gym assignment with admin role
+      await this.prisma.userGymXref.create({
         data: {
+          userId: createdUser.id,
           gymId: gym.id,
-          planId: freePlan.id,
-          startDate: now,
-          endDate: endDate,
-          status: 'trial',
-          trialEndsAt: trialEnd,
-          amount: 0,
-          currency: 'INR',
-          paymentStatus: 'paid',
-          autoRenew: true,
+          role: ROLES.ADMIN,
+          isPrimary: true,
           isActive: true,
         },
       });
-    }
 
-    const updatedGym = await this.prisma.gym.findUnique({
-      where: { id: gym.id },
-    });
-
-    // Generate and send email verification OTP
-    const verificationOtp = this.generateOtp();
-    const verificationExpiry = new Date(
-      Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
-    );
-
-    await this.prisma.emailVerification.create({
-      data: {
-        email: dto.user.email,
-        otp: verificationOtp,
-        expiresAt: verificationExpiry,
-        userType: 'admin',
-        userId: createdUser.id,
-        gymId: null, // Admin users are in public schema
-      },
-    });
-
-    // Send verification email (non-blocking)
-    this.emailService
-      .sendEmailVerificationEmail(
-        dto.user.email,
-        dto.user.name,
-        verificationOtp,
-        this.VERIFICATION_EXPIRY_MINUTES,
-      )
-      .catch((error) => {
-        this.logger.error('Failed to send verification email:', error);
+      // Create free trial subscription
+      const freePlan = await this.prisma.saasPlan.findFirst({
+        where: { code: 'free' },
       });
 
-    // Notify superadmins about new gym registration (non-blocking)
-    this.notificationsService
-      .notifyNewGymRegistration({
+      if (freePlan) {
+        const now = new Date();
+        const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
+        const endDate = new Date(now);
+        endDate.setMonth(endDate.getMonth() + (freePlan.durationMonths || 3));
+
+        await this.prisma.saasGymSubscription.create({
+          data: {
+            gymId: gym.id,
+            planId: freePlan.id,
+            startDate: now,
+            endDate: endDate,
+            status: 'trial',
+            trialEndsAt: trialEnd,
+            amount: 0,
+            currency: 'INR',
+            paymentStatus: 'paid',
+            autoRenew: true,
+            isActive: true,
+          },
+        });
+      }
+
+      const updatedGym = await this.prisma.gym.findUnique({
+        where: { id: gym.id },
+      });
+
+      if (!updatedGym) {
+        throw new BadRequestException(
+          'Failed to complete registration. Please try again.',
+        );
+      }
+
+      // Generate and send email verification OTP
+      const verificationOtp = this.generateOtp();
+      const verificationExpiry = new Date(
+        Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
+      );
+
+      await this.prisma.emailVerification.create({
+        data: {
+          email: dto.user.email,
+          otp: verificationOtp,
+          expiresAt: verificationExpiry,
+          userType: 'admin',
+          userId: createdUser.id,
+          gymId: null, // Admin users are in public schema
+        },
+      });
+
+      // Send verification email (non-blocking)
+      this.emailService
+        .sendEmailVerificationEmail(
+          dto.user.email,
+          dto.user.name,
+          verificationOtp,
+          this.VERIFICATION_EXPIRY_MINUTES,
+        )
+        .catch((error) => {
+          this.logger.error('Failed to send verification email:', error);
+        });
+
+      // Notify superadmins about new gym registration (non-blocking)
+      this.notificationsService
+        .notifyNewGymRegistration({
+          gymId: gym.id,
+          gymName: dto.gym.name,
+          ownerName: dto.user.name,
+        })
+        .catch((error) => {
+          this.logger.error('Failed to send new gym notification:', error);
+        });
+
+      // Get the subscription we just created
+      const subscription = await this.getGymSubscription(gym.id);
+
+      const gymAssignment: GymAssignment = {
         gymId: gym.id,
-        gymName: dto.gym.name,
-        ownerName: dto.user.name,
-      })
-      .catch((error) => {
-        this.logger.error('Failed to send new gym notification:', error);
-      });
+        branchId: null, // Admin has access to all branches
+        role: ROLES.ADMIN,
+        isPrimary: true,
+        gym: {
+          id: updatedGym.id,
+          name: updatedGym.name,
+          logo: updatedGym.logo || undefined,
+          city: updatedGym.city || undefined,
+          state: updatedGym.state || undefined,
+          tenantSchemaName: updatedGym.tenantSchemaName!,
+        },
+      };
 
-    // Get the subscription we just created
-    const subscription = await this.getGymSubscription(gym.id);
+      const user = this.toUserResponse(
+        { ...createdUser, role: ROLES.ADMIN, emailVerified: false },
+        updatedGym,
+        [gymAssignment],
+        subscription,
+      );
+      const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
 
-    const gymAssignment: GymAssignment = {
-      gymId: gym.id,
-      branchId: null, // Admin has access to all branches
-      role: ROLES.ADMIN,
-      isPrimary: true,
-      gym: {
-        id: updatedGym!.id,
-        name: updatedGym!.name,
-        logo: updatedGym!.logo || undefined,
-        city: updatedGym!.city || undefined,
-        state: updatedGym!.state || undefined,
-        tenantSchemaName: updatedGym!.tenantSchemaName!,
-      },
-    };
-
-    const user = this.toUserResponse(
-      { ...createdUser, role: ROLES.ADMIN, emailVerified: false },
-      updatedGym,
-      [gymAssignment],
-      subscription,
-    );
-    const accessToken = this.generateToken(user, gymAssignment, true); // isAdmin = true
-
-    return {
-      user,
-      accessToken,
-      tokens: {
+      return {
+        user,
         accessToken,
-        expiresIn: 604800, // 7 days in seconds
-        tokenType: 'Bearer',
-      },
-    };
+        tokens: {
+          accessToken,
+          expiresIn: 604800, // 7 days in seconds
+          tokenType: 'Bearer',
+        },
+      };
+    } catch (postCreateError: unknown) {
+      const msg =
+        postCreateError instanceof Error
+          ? postCreateError.message
+          : String(postCreateError);
+      this.logger.error('Registration post-creation failed:', msg);
+
+      // Clean up created records to allow retry
+      try {
+        await this.prisma.user.delete({ where: { id: createdUser.id } });
+      } catch {
+        // ignore - cascade will handle xref
+      }
+      try {
+        await this.prisma.saasPaymentHistory.deleteMany({
+          where: { gymId: gym.id },
+        });
+        await this.prisma.saasGymSubscription.deleteMany({
+          where: { gymId: gym.id },
+        });
+        await this.prisma.gym.delete({ where: { id: gym.id } });
+      } catch {
+        // ignore - best effort cleanup
+      }
+
+      // Re-throw BadRequestException as-is, wrap others
+      if (postCreateError instanceof BadRequestException) {
+        throw postCreateError;
+      }
+      throw new BadRequestException(
+        'Registration failed. Please try again.',
+      );
+    }
   }
 
   /**
