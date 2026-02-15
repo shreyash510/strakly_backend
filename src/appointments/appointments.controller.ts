@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import {
   CreateServiceDto,
   UpdateServiceDto,
@@ -40,7 +41,10 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 @PlanFeatures(PLAN_FEATURES.APPOINTMENT_BOOKING)
 @ApiBearerAuth()
 export class AppointmentsController {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
+  constructor(
+    private readonly appointmentsService: AppointmentsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ─── Services ───
 
@@ -62,7 +66,9 @@ export class AppointmentsController {
     @GymId() gymId: number,
     @OptionalBranchId() branchId: number | null,
   ) {
-    return this.appointmentsService.createService(gymId, branchId, dto);
+    const result = await this.appointmentsService.createService(gymId, branchId, dto);
+    this.notificationsGateway.emitServiceChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch('services/:id')
@@ -73,7 +79,9 @@ export class AppointmentsController {
     @Body() dto: UpdateServiceDto,
     @GymId() gymId: number,
   ) {
-    return this.appointmentsService.updateService(id, gymId, dto);
+    const result = await this.appointmentsService.updateService(id, gymId, dto);
+    this.notificationsGateway.emitServiceChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete('services/:id')
@@ -83,7 +91,9 @@ export class AppointmentsController {
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.appointmentsService.deleteService(id, gymId);
+    const result = await this.appointmentsService.deleteService(id, gymId);
+    this.notificationsGateway.emitServiceChanged(gymId, { action: 'deleted' });
+    return result;
   }
 
   // ─── Trainer Availability ───
@@ -167,7 +177,9 @@ export class AppointmentsController {
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.createAppointment(gymId, branchId, dto, userId, userRole);
+    const result = await this.appointmentsService.createAppointment(gymId, branchId, dto, userId, userRole);
+    this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -180,7 +192,9 @@ export class AppointmentsController {
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.updateAppointment(id, gymId, dto, userId, userRole);
+    const result = await this.appointmentsService.updateAppointment(id, gymId, dto, userId, userRole);
+    this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Patch(':id/status')
@@ -193,7 +207,9 @@ export class AppointmentsController {
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.updateAppointmentStatus(id, gymId, dto, userId, userRole);
+    const result = await this.appointmentsService.updateAppointmentStatus(id, gymId, dto, userId, userRole);
+    this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'status_changed' });
+    return result;
   }
 
   // ─── Session Packages ───
