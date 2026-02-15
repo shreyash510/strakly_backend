@@ -1,5 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 import {
   CreateChallengeDto,
   UpdateChallengeDto,
@@ -13,7 +16,11 @@ import { SqlValue } from '../common/types';
 export class GamificationService {
   private readonly logger = new Logger(GamificationService.name);
 
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
 
   // ─── Format Helpers ───
 
@@ -187,6 +194,16 @@ export class GamificationService {
         return result.rows[0];
       },
     );
+
+    // Notify staff about the new challenge
+    try {
+      await this.notificationHelper.notifyStaff(gymId, branchId, {
+        type: NotificationType.CHALLENGE_CREATED,
+        title: 'New Challenge',
+        message: `A new challenge "${dto.title}" has been created.`,
+        actionUrl: '/gamification',
+      }, { excludeUserId: userId });
+    } catch { /* notifications are non-critical */ }
 
     return this.formatChallenge(challenge);
   }
@@ -512,8 +529,13 @@ export class GamificationService {
     userId: number,
     branchId: number | null,
   ) {
+    const STREAK_MILESTONES = [7, 14, 30, 60, 90, 180, 365];
+
     try {
-      await this.tenantService.executeInTenant(gymId, async (client) => {
+      const notifData = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const earnedAchievements: { name: string; icon: string | null }[] = [];
+        let streakCount = 0;
+
         // 1. Update daily_visit streak (INSERT ON CONFLICT)
         await client.query(
           `INSERT INTO streaks (user_id, streak_type, current_count, longest_count, last_activity_date, created_at, updated_at)
@@ -583,7 +605,7 @@ export class GamificationService {
            WHERE user_id = $1 AND streak_type = 'daily_visit'`,
           [userId],
         );
-        const currentStreak = streakResult.rows[0]?.current_count || 0;
+        streakCount = streakResult.rows[0]?.current_count || 0;
 
         // Find achievements the user qualifies for but hasn't earned yet
         const unearned = await client.query(
@@ -609,7 +631,7 @@ export class GamificationService {
               qualifies = true;
             } else if (
               criteriaObj.type === 'streak_days' &&
-              currentStreak >= (criteriaObj.value || 0)
+              streakCount >= (criteriaObj.value || 0)
             ) {
               qualifies = true;
             }
@@ -618,15 +640,38 @@ export class GamificationService {
           }
 
           if (qualifies) {
-            await client.query(
+            const inserted = await client.query(
               `INSERT INTO user_achievements (user_id, achievement_id, earned_at)
                VALUES ($1, $2, NOW())
-               ON CONFLICT (user_id, achievement_id) DO NOTHING`,
+               ON CONFLICT (user_id, achievement_id) DO NOTHING
+               RETURNING id`,
               [userId, ach.id],
             );
+            if (inserted.rows.length > 0) {
+              earnedAchievements.push({ name: ach.name, icon: ach.icon });
+            }
           }
         }
+
+        return { earnedAchievements, streakCount };
       });
+
+      // Send notifications after transaction committed
+      for (const ach of notifData.earnedAchievements) {
+        try {
+          await this.notificationsService.notifyAchievementEarned(
+            userId, gymId, branchId, { achievementId: 0, name: ach.name },
+          );
+        } catch { /* notifications are non-critical */ }
+      }
+
+      if (STREAK_MILESTONES.includes(notifData.streakCount)) {
+        try {
+          await this.notificationsService.notifyStreakMilestone(
+            userId, gymId, branchId, { streakDays: notifData.streakCount },
+          );
+        } catch { /* notifications are non-critical */ }
+      }
     } catch (error) {
       this.logger.error(
         `Error in onAttendanceMarked for gym ${gymId}, user ${userId}: ${error instanceof Error ? error.message : String(error)}`,

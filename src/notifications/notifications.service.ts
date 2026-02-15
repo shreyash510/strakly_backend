@@ -80,6 +80,10 @@ export class NotificationsService {
     const notification = await this.executeWithTable(
       gymId,
       async (client) => {
+        // Default expiry: 15 days from now
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
         const result = await client.query(
           `
         INSERT INTO notifications
@@ -96,7 +100,7 @@ export class NotificationsService {
             dto.data ? JSON.stringify(dto.data) : null,
             dto.actionUrl || null,
             dto.priority || NotificationPriority.NORMAL,
-            dto.expiresAt || null,
+            dto.expiresAt || defaultExpiry,
             dto.createdBy || null,
           ],
         );
@@ -134,6 +138,10 @@ export class NotificationsService {
         const placeholders: string[] = [];
         let paramIndex = 1;
 
+        // Default expiry: 15 days from now
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
         for (const userId of dto.userIds) {
           placeholders.push(
             `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
@@ -147,7 +155,7 @@ export class NotificationsService {
             dto.data ? JSON.stringify(dto.data) : null,
             dto.actionUrl || null,
             dto.priority || NotificationPriority.NORMAL,
-            dto.expiresAt || null,
+            dto.expiresAt || defaultExpiry,
             dto.createdBy || null,
           );
         }
@@ -362,7 +370,6 @@ export class NotificationsService {
         `
         DELETE FROM notifications
         WHERE created_at < NOW() - INTERVAL '${daysOld} days'
-        AND is_read = TRUE
       `,
         [],
       );
@@ -572,6 +579,10 @@ export class NotificationsService {
     priority?: string;
   }): Promise<Record<string, any>> {
     try {
+      // Default expiry: 15 days from now
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
       const notification = await this.prisma.systemNotification.create({
         data: {
           userId: data.userId,
@@ -581,6 +592,7 @@ export class NotificationsService {
           data: data.data || undefined,
           actionUrl: data.actionUrl || null,
           priority: data.priority || 'normal',
+          expiresAt: defaultExpiry,
         },
       });
 
@@ -636,6 +648,10 @@ export class NotificationsService {
         select: { id: true },
       });
 
+      // Default expiry: 15 days from now
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
       const notifications = superadmins.map((admin) => ({
         userId: admin.id,
         type: data.type,
@@ -644,6 +660,7 @@ export class NotificationsService {
         data: data.data || undefined,
         actionUrl: data.actionUrl || null,
         priority: data.priority || 'normal',
+        expiresAt: defaultExpiry,
       }));
 
       const result = await this.prisma.systemNotification.createMany({
@@ -794,7 +811,6 @@ export class NotificationsService {
     const result = await this.prisma.systemNotification.deleteMany({
       where: {
         createdAt: { lt: cutoffDate },
-        isRead: true,
       },
     });
     return result.count;
@@ -889,6 +905,495 @@ export class NotificationsService {
       this.logger.error(
         `Failed to create support ticket resolved notification: ${msg}`,
       );
+    }
+  }
+
+  // ============================================
+  // CLASS NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify user about class booking (confirmed or waitlisted)
+   */
+  async notifyClassBooked(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string; startTime: string; isWaitlisted: boolean; position?: number | null },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_BOOKED,
+          title: data.isWaitlisted ? 'Added to Waitlist' : 'Class Booking Confirmed',
+          message: data.isWaitlisted
+            ? `You've been added to the waitlist (position #${data.position}) for ${data.className} on ${data.date}.`
+            : `Your booking for ${data.className} on ${data.date} at ${data.startTime} is confirmed.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class booked notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about class booking cancellation
+   */
+  async notifyClassBookingCancelled(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_BOOKING_CANCELLED,
+          title: 'Class Booking Cancelled',
+          message: `Your booking for ${data.className} on ${data.date} has been cancelled.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class booking cancelled notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user promoted from waitlist
+   */
+  async notifyClassWaitlistPromoted(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { sessionId: number; className: string; date: string; startTime: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CLASS_WAITLIST_PROMOTED,
+          title: 'Moved Off Waitlist',
+          message: `A spot opened up! You're now booked for ${data.className} on ${data.date} at ${data.startTime}.`,
+          data: {
+            entityType: 'class_session',
+            entityId: data.sessionId,
+          },
+          actionUrl: '/my-classes',
+          priority: NotificationPriority.HIGH,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class waitlist promoted notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify instructor about class schedule assignment
+   */
+  async notifyClassScheduleAssigned(
+    instructorId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { scheduleId: number; className: string; dayOfWeek: number; startTime: string },
+  ): Promise<void> {
+    try {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      await this.create(
+        {
+          userId: instructorId,
+          branchId,
+          type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
+          title: 'Class Schedule Assigned',
+          message: `You've been assigned to teach ${data.className} on ${days[data.dayOfWeek]}s at ${data.startTime}.`,
+          data: {
+            entityType: 'class_schedule',
+            entityId: data.scheduleId,
+          },
+          actionUrl: '/classes',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create class schedule assigned notification: ${msg}`);
+    }
+  }
+
+  // ============================================
+  // APPOINTMENT NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify user about appointment booking
+   */
+  async notifyAppointmentBooked(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { appointmentId: number; otherPartyName: string; startTime: string; serviceName?: string },
+  ): Promise<void> {
+    try {
+      const dateStr = new Date(data.startTime).toLocaleDateString();
+      const timeStr = new Date(data.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.APPOINTMENT_BOOKED,
+          title: 'Appointment Booked',
+          message: data.serviceName
+            ? `${data.serviceName} appointment with ${data.otherPartyName} on ${dateStr} at ${timeStr}.`
+            : `Appointment with ${data.otherPartyName} on ${dateStr} at ${timeStr}.`,
+          data: {
+            entityType: 'appointment',
+            entityId: data.appointmentId,
+          },
+          actionUrl: '/my-appointments',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create appointment booked notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about appointment status change
+   */
+  async notifyAppointmentStatusChanged(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { appointmentId: number; status: string; startTime: string },
+  ): Promise<void> {
+    try {
+      const statusMessages: Record<string, string> = {
+        confirmed: 'has been confirmed',
+        completed: 'has been marked as completed',
+        cancelled: 'has been cancelled',
+        no_show: 'was marked as no-show',
+      };
+      const statusText = statusMessages[data.status] || `status changed to ${data.status}`;
+      const dateStr = new Date(data.startTime).toLocaleDateString();
+
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.APPOINTMENT_STATUS_CHANGED,
+          title: 'Appointment Updated',
+          message: `Your appointment on ${dateStr} ${statusText}.`,
+          data: {
+            entityType: 'appointment',
+            entityId: data.appointmentId,
+            status: data.status,
+          },
+          actionUrl: '/my-appointments',
+          priority: data.status === 'cancelled' ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create appointment status notification: ${msg}`);
+    }
+  }
+
+  // ============================================
+  // SURVEY NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify staff about a new survey becoming active
+   */
+  async notifySurveyAssigned(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { surveyId: number; title: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.SURVEY_ASSIGNED,
+          title: 'New Survey Available',
+          message: `A new survey "${data.title}" is now live and ready for responses.`,
+          data: {
+            entityType: 'survey',
+            entityId: data.surveyId,
+          },
+          actionUrl: '/surveys',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create survey assigned notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify staff about a survey response submission
+   */
+  async notifySurveyResponseSubmitted(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { surveyId: number; surveyTitle: string; respondentName: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.SURVEY_RESPONSE_SUBMITTED,
+          title: 'Survey Response Received',
+          message: `${data.respondentName} responded to "${data.surveyTitle}".`,
+          data: {
+            entityType: 'survey',
+            entityId: data.surveyId,
+          },
+          actionUrl: '/surveys',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create survey response notification: ${msg}`);
+    }
+  }
+
+  // ============================================
+  // GAMIFICATION NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify staff about a new challenge
+   */
+  async notifyChallengeCreated(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { challengeId: number; title: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.CHALLENGE_CREATED,
+          title: 'New Challenge',
+          message: `A new challenge "${data.title}" has been created.`,
+          data: {
+            entityType: 'challenge',
+            entityId: data.challengeId,
+          },
+          actionUrl: '/challenges',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create challenge created notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about earning an achievement/badge
+   */
+  async notifyAchievementEarned(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { achievementId: number; name: string; description?: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.ACHIEVEMENT_EARNED,
+          title: 'Badge Earned!',
+          message: `Congratulations! You've earned the "${data.name}" badge.`,
+          data: {
+            entityType: 'achievement',
+            entityId: data.achievementId,
+          },
+          actionUrl: '/my-achievements',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create achievement earned notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about a streak milestone
+   */
+  async notifyStreakMilestone(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { streakDays: number },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.STREAK_MILESTONE,
+          title: 'Streak Milestone!',
+          message: `You're on a ${data.streakDays}-day streak! Keep it up!`,
+          data: {
+            entityType: 'streak',
+          },
+          actionUrl: '/my-achievements',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create streak milestone notification: ${msg}`);
+    }
+  }
+
+  // ============================================
+  // LOYALTY NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify user about earning loyalty points
+   */
+  async notifyPointsEarned(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { points: number; source: string; balance: number },
+  ): Promise<void> {
+    try {
+      const sourceLabels: Record<string, string> = {
+        visit: 'gym visit',
+        referral: 'referral',
+        purchase: 'purchase',
+        class_booking: 'class booking',
+      };
+      const sourceText = sourceLabels[data.source] || data.source;
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.POINTS_EARNED,
+          title: 'Points Earned!',
+          message: `You earned ${data.points} points for your ${sourceText}. Balance: ${data.balance} pts.`,
+          data: {
+            entityType: 'loyalty',
+          },
+          actionUrl: '/my-rewards',
+          priority: NotificationPriority.LOW,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create points earned notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about reward redemption
+   */
+  async notifyRewardRedeemed(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { rewardId: number; rewardName: string; pointsSpent: number },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.REWARD_REDEEMED,
+          title: 'Reward Redeemed!',
+          message: `You redeemed "${data.rewardName}" for ${data.pointsSpent} points.`,
+          data: {
+            entityType: 'loyalty_reward',
+            entityId: data.rewardId,
+          },
+          actionUrl: '/my-rewards',
+          priority: NotificationPriority.NORMAL,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create reward redeemed notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Notify user about tier upgrade
+   */
+  async notifyTierUpgraded(
+    userId: number,
+    gymId: number,
+    branchId: number | null,
+    data: { tierName: string },
+  ): Promise<void> {
+    try {
+      await this.create(
+        {
+          userId,
+          branchId,
+          type: NotificationType.TIER_UPGRADED,
+          title: 'Tier Upgraded!',
+          message: `Congratulations! You've reached the ${data.tierName} tier!`,
+          data: {
+            entityType: 'loyalty_tier',
+          },
+          actionUrl: '/my-rewards',
+          priority: NotificationPriority.HIGH,
+        },
+        gymId,
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create tier upgraded notification: ${msg}`);
     }
   }
 

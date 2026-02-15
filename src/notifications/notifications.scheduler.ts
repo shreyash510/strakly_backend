@@ -234,7 +234,7 @@ export class NotificationsScheduler {
 
   /**
    * Run every day at 2:00 AM to clean up old notifications
-   * Deletes read notifications older than 30 days
+   * Deletes all notifications older than 15 days
    */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleNotificationCleanup() {
@@ -254,7 +254,7 @@ export class NotificationsScheduler {
           const deleted =
             await this.notificationsService.deleteOldNotifications(
               gym.id,
-              30, // Delete notifications older than 30 days
+              15, // Delete all notifications older than 15 days
             );
           totalDeleted += deleted;
         } catch (error) {
@@ -267,7 +267,7 @@ export class NotificationsScheduler {
       // Clean up superadmin notifications
       try {
         const systemDeleted =
-          await this.notificationsService.deleteOldSystemNotifications(30);
+          await this.notificationsService.deleteOldSystemNotifications(15);
         totalDeleted += systemDeleted;
         this.logger.log(
           `Deleted ${systemDeleted} old superadmin notifications.`,

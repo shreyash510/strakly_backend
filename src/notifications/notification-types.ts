@@ -10,6 +10,20 @@ export enum NotificationType {
   NEW_STAFF_ADDED = 'new_staff_added',
   NEW_ENROLLMENT = 'new_enrollment',
   NEW_BRANCH_CREATED = 'new_branch_created',
+  CLASS_BOOKED = 'class_booked',
+  CLASS_BOOKING_CANCELLED = 'class_booking_cancelled',
+  CLASS_WAITLIST_PROMOTED = 'class_waitlist_promoted',
+  CLASS_SCHEDULE_ASSIGNED = 'class_schedule_assigned',
+  APPOINTMENT_BOOKED = 'appointment_booked',
+  APPOINTMENT_STATUS_CHANGED = 'appointment_status_changed',
+  SURVEY_ASSIGNED = 'survey_assigned',
+  SURVEY_RESPONSE_SUBMITTED = 'survey_response_submitted',
+  CHALLENGE_CREATED = 'challenge_created',
+  ACHIEVEMENT_EARNED = 'achievement_earned',
+  STREAK_MILESTONE = 'streak_milestone',
+  POINTS_EARNED = 'points_earned',
+  REWARD_REDEEMED = 'reward_redeemed',
+  TIER_UPGRADED = 'tier_upgraded',
 }
 
 export enum NotificationPriority {

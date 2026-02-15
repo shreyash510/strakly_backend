@@ -17,10 +17,31 @@ import {
   AvailableSlotsDto,
 } from './dto/appointment.dto';
 import { SqlValue } from '../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationHelperService } from '../notifications/notification-helper.service';
+import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class AppointmentsService {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationHelper: NotificationHelperService,
+  ) {}
+
+  /**
+   * Resolve the default branchId for a gym when admin has all-branch access (branchId = null).
+   * Falls back to the gym's first active branch.
+   */
+  private async resolveDefaultBranchId(gymId: number): Promise<number | null> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM public.branches WHERE gym_id = $1 AND is_active = TRUE ORDER BY is_default DESC, id ASC LIMIT 1`,
+        [gymId],
+      );
+      return result.rows[0]?.id ?? null;
+    });
+  }
 
   // ─── Formatters ───
 
@@ -133,13 +154,16 @@ export class AppointmentsService {
   }
 
   async createService(gymId: number, branchId: number | null, dto: CreateServiceDto) {
+    // Resolve branchId: if admin has all-branch access, use the gym's first branch
+    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
+
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO services (branch_id, name, description, duration_minutes, price, currency, max_participants, category, buffer_minutes, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
+          resolvedBranchId,
           dto.name,
           dto.description ?? null,
           dto.durationMinutes,
@@ -231,6 +255,18 @@ export class AppointmentsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query('BEGIN');
       try {
+        // Resolve branchId: if admin has all-branch access, use the trainer's branch
+        let resolvedBranchId = branchId;
+        if (resolvedBranchId === null) {
+          const trainerResult = await client.query(
+            `SELECT branch_id FROM users WHERE id = $1`,
+            [dto.trainerId],
+          );
+          if (trainerResult.rows.length > 0) {
+            resolvedBranchId = trainerResult.rows[0].branch_id ?? null;
+          }
+        }
+
         // Upsert: delete existing for this trainer + day, then insert
         await client.query(
           `DELETE FROM trainer_availability WHERE trainer_id = $1 AND day_of_week = $2`,
@@ -243,7 +279,7 @@ export class AppointmentsService {
            RETURNING *`,
           [
             dto.trainerId,
-            branchId,
+            resolvedBranchId,
             dto.dayOfWeek,
             dto.startTime,
             dto.endTime,
@@ -385,7 +421,7 @@ export class AppointmentsService {
       throw new ForbiddenException('You can only book appointments for yourself');
     }
 
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    const appointment = await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query('BEGIN');
       try {
         // Lock trainer's appointments to prevent race conditions on concurrent bookings
@@ -403,6 +439,18 @@ export class AppointmentsService {
           throw new BadRequestException('Trainer has a conflicting appointment at this time');
         }
 
+        // Resolve branchId: use admin's branch if set, otherwise fall back to client's branch
+        let resolvedBranchId = branchId;
+        if (resolvedBranchId === null) {
+          const userResult = await client.query(
+            `SELECT branch_id FROM users WHERE id = $1`,
+            [dto.userId],
+          );
+          if (userResult.rows.length > 0) {
+            resolvedBranchId = userResult.rows[0].branch_id ?? null;
+          }
+        }
+
         const result = await client.query(
           `INSERT INTO appointments (service_id, trainer_id, user_id, branch_id, start_time, end_time, status, notes, created_by, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, 'booked', $7, $8, NOW(), NOW())
@@ -411,7 +459,7 @@ export class AppointmentsService {
             dto.serviceId ?? null,
             dto.trainerId,
             dto.userId,
-            branchId,
+            resolvedBranchId,
             dto.startTime,
             dto.endTime,
             dto.notes ?? null,
@@ -438,6 +486,39 @@ export class AppointmentsService {
         throw error;
       }
     });
+
+    // Notifications (non-blocking, after successful creation)
+    // Use the appointment's resolved branchId so notifications match the client's branch
+    const notifBranchId = appointment.branchId ?? branchId;
+    try {
+      // Notify the client
+      await this.notificationsService.notifyAppointmentBooked(
+        dto.userId, gymId, notifBranchId, {
+          appointmentId: appointment.id,
+          otherPartyName: appointment.trainerName || 'Trainer',
+          startTime: appointment.startTime,
+          serviceName: appointment.serviceName,
+        },
+      );
+      // Notify the trainer
+      await this.notificationsService.notifyAppointmentBooked(
+        dto.trainerId, gymId, notifBranchId, {
+          appointmentId: appointment.id,
+          otherPartyName: appointment.userName || 'Client',
+          startTime: appointment.startTime,
+          serviceName: appointment.serviceName,
+        },
+      );
+      // Notify staff
+      await this.notificationHelper.notifyStaff(gymId, notifBranchId, {
+        type: NotificationType.APPOINTMENT_BOOKED,
+        title: 'New Appointment',
+        message: `${appointment.userName || 'A client'} booked an appointment with ${appointment.trainerName || 'a trainer'}.`,
+        actionUrl: '/appointments',
+      }, { excludeUserId: createdBy });
+    } catch { /* notifications are non-critical */ }
+
+    return appointment;
   }
 
   async updateAppointment(id: number, gymId: number, dto: UpdateAppointmentDto, userId: number, userRole: string) {
@@ -623,6 +704,25 @@ export class AppointmentsService {
 
         await client.query('COMMIT');
 
+        // Notifications (after commit, non-blocking)
+        try {
+          const apt = full.rows[0];
+          // Notify the client
+          await this.notificationsService.notifyAppointmentStatusChanged(
+            apt.user_id, gymId, apt.branch_id, {
+              appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
+            },
+          );
+          // Notify the trainer
+          if (apt.trainer_id) {
+            await this.notificationsService.notifyAppointmentStatusChanged(
+              apt.trainer_id, gymId, apt.branch_id, {
+                appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
+              },
+            );
+          }
+        } catch { /* notifications are non-critical */ }
+
         const response: Record<string, any> = this.formatAppointment(full.rows[0]);
         if (sessionDeduction) {
           response.sessionDeduction = sessionDeduction;
@@ -732,6 +832,18 @@ export class AppointmentsService {
 
   async createPackage(gymId: number, branchId: number | null, dto: CreateSessionPackageDto) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
+      // Resolve branchId: if admin has all-branch access, use the client's branch
+      let resolvedBranchId = branchId;
+      if (resolvedBranchId === null) {
+        const userResult = await client.query(
+          `SELECT branch_id FROM users WHERE id = $1`,
+          [dto.userId],
+        );
+        if (userResult.rows.length > 0) {
+          resolvedBranchId = userResult.rows[0].branch_id ?? null;
+        }
+      }
+
       const result = await client.query(
         `INSERT INTO session_packages (user_id, service_id, branch_id, total_sessions, used_sessions, remaining_sessions, purchased_at, expires_at, status, payment_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, 0, $4, NOW(), $5, 'active', $6, NOW(), NOW())
@@ -739,7 +851,7 @@ export class AppointmentsService {
         [
           dto.userId,
           dto.serviceId ?? null,
-          branchId,
+          resolvedBranchId,
           dto.totalSessions,
           dto.expiresAt ?? null,
           dto.paymentId ?? null,

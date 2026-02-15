@@ -369,6 +369,26 @@ export class NotificationsGateway
   }
 
   /**
+   * Emit appointment:changed event to all connected users in a gym
+   */
+  emitAppointmentChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('appointment:changed', payload);
+    this.logger.debug(
+      `appointment:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
+   * Emit service:changed event to all connected users in a gym
+   */
+  emitServiceChanged(gymId: number, payload: { action: string }) {
+    this.server.to(`gym:${gymId}`).emit('service:changed', payload);
+    this.logger.debug(
+      `service:changed event emitted to gym ${gymId} (action: ${payload.action})`,
+    );
+  }
+
+  /**
    * Emit body-metrics:changed event to all connected users in a gym
    */
   emitBodyMetricsChanged(gymId: number, payload: { action: string }) {
