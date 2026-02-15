@@ -643,4 +643,45 @@ export class GymService {
       branches,
     };
   }
+
+  // ---- Onboarding Tour ----
+
+  async getOnboardingTourStatus(gymId: number) {
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: {
+        onboardingTourCompleted: true,
+        onboardingTourCompletedAt: true,
+        onboardingTourSkippedAt: true,
+      },
+    });
+    if (!gym) throw new NotFoundException(`Gym #${gymId} not found`);
+    return gym;
+  }
+
+  async completeOnboardingTour(gymId: number) {
+    return this.prisma.gym.update({
+      where: { id: gymId },
+      data: {
+        onboardingTourCompleted: true,
+        onboardingTourCompletedAt: new Date(),
+      },
+      select: {
+        onboardingTourCompleted: true,
+        onboardingTourCompletedAt: true,
+      },
+    });
+  }
+
+  async skipOnboardingTour(gymId: number) {
+    return this.prisma.gym.update({
+      where: { id: gymId },
+      data: {
+        onboardingTourSkippedAt: new Date(),
+      },
+      select: {
+        onboardingTourSkippedAt: true,
+      },
+    });
+  }
 }
