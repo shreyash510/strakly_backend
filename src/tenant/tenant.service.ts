@@ -195,20 +195,36 @@ export class TenantService implements OnModuleInit {
     await this.seedCancellationReasons(client, schemaName);
 
     // Phase 2: Lead CRM, Referrals, Documents, Progress Photos, Member Goals
-    await this.createPhase2Tables(client, schemaName);
+    try {
+      await this.createPhase2Tables(client, schemaName);
+    } catch (error) {
+      this.logger.error(`Error creating Phase 2 tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
+    }
     await this.seedLeadSources(client, schemaName);
     await this.addPhase2GapColumns(client, schemaName);
 
     // Phase 3: Class Scheduling, Appointments, Guest Visits
-    await this.createPhase3Tables(client, schemaName);
+    try {
+      await this.createPhase3Tables(client, schemaName);
+    } catch (error) {
+      this.logger.error(`Error creating Phase 3 tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
+    }
 
     // Phase 4: POS / Retail, Campaigns, Equipment
-    await this.createPhase4Tables(client, schemaName);
+    try {
+      await this.createPhase4Tables(client, schemaName);
+    } catch (error) {
+      this.logger.error(`Error creating Phase 4 tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
+    }
     await this.seedProductCategories(client, schemaName);
     await this.seedCampaignTemplates(client, schemaName);
 
     // Phase 5: Custom Fields, Surveys, Engagement, Gamification, Loyalty, Wearables, Currencies
-    await this.createPhase5Tables(client, schemaName);
+    try {
+      await this.createPhase5Tables(client, schemaName);
+    } catch (error) {
+      this.logger.error(`Error creating Phase 5 tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
+    }
     await this.seedDefaultCurrencies(client, schemaName);
     await this.seedDefaultLoyaltyTiers(client, schemaName);
 
