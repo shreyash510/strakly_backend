@@ -29,6 +29,19 @@ export class ClassesService {
     private readonly notificationHelper: NotificationHelperService,
   ) {}
 
+  /**
+   * Resolve the default branchId for a gym when admin has all-branch access (branchId = null).
+   */
+  private async resolveDefaultBranchId(gymId: number): Promise<number | null> {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT id FROM public.branches WHERE gym_id = $1 AND is_active = TRUE ORDER BY is_default DESC, id ASC LIMIT 1`,
+        [gymId],
+      );
+      return result.rows[0]?.id ?? null;
+    });
+  }
+
   // ─── Formatters ───
 
   private formatClassType(row: Record<string, any>) {
@@ -180,13 +193,15 @@ export class ClassesService {
   }
 
   async createType(gymId: number, branchId: number | null, dto: CreateClassTypeDto) {
+    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
+
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO class_types (branch_id, name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
+          resolvedBranchId,
           dto.name,
           dto.description ?? null,
           dto.category ?? null,
@@ -283,6 +298,8 @@ export class ClassesService {
   }
 
   async createSchedule(gymId: number, branchId: number | null, dto: CreateClassScheduleDto) {
+    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
+
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO class_schedules (class_type_id, branch_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
@@ -290,7 +307,7 @@ export class ClassesService {
          RETURNING *`,
         [
           dto.classTypeId,
-          branchId,
+          resolvedBranchId,
           dto.instructorId ?? null,
           dto.room ?? null,
           dto.dayOfWeek,
@@ -320,7 +337,7 @@ export class ClassesService {
     try {
       if (dto.instructorId) {
         await this.notificationsService.notifyClassScheduleAssigned(
-          dto.instructorId, gymId, branchId, {
+          dto.instructorId, gymId, resolvedBranchId, {
             scheduleId: schedule.id,
             className: schedule.classTypeName,
             dayOfWeek: dto.dayOfWeek,
@@ -329,7 +346,7 @@ export class ClassesService {
         );
       }
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      await this.notificationHelper.notifyStaff(gymId, branchId, {
+      await this.notificationHelper.notifyStaff(gymId, resolvedBranchId, {
         type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
         title: 'New Class Schedule',
         message: `${schedule.classTypeName} scheduled on ${days[dto.dayOfWeek]}s at ${dto.startTime}.`,
