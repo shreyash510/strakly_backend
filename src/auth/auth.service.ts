@@ -299,9 +299,12 @@ export class AuthService {
       });
       this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
 
-      // Create the tenant schema with all tables (for clients)
-      await this.tenantService.createTenantSchema(gym.id);
-      this.logger.log('Tenant schema created');
+      // Create the tenant schema in background (non-blocking — schema is only needed
+      // when admin starts adding clients/plans, not for login/dashboard)
+      const gymIdForSchema = gym.id;
+      this.tenantService.createTenantSchema(gymIdForSchema)
+        .then(() => this.logger.log(`Tenant schema created for gym ${gymIdForSchema}`))
+        .catch((err) => this.logger.error(`Failed to create tenant schema for gym ${gymIdForSchema}:`, err));
 
       // Create default branch for the gym
       await this.branchService.createDefaultBranch(gym.id, gym);
@@ -2356,9 +2359,12 @@ export class AuthService {
       });
       this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
 
-      // Create the tenant schema with all tables (for clients)
-      await this.tenantService.createTenantSchema(gym.id);
-      this.logger.log('Tenant schema created');
+      // Create the tenant schema in background (non-blocking — schema is only needed
+      // when admin starts adding clients/plans, not for login/dashboard)
+      const gymIdForSchema = gym.id;
+      this.tenantService.createTenantSchema(gymIdForSchema)
+        .then(() => this.logger.log(`Tenant schema created for gym ${gymIdForSchema}`))
+        .catch((err) => this.logger.error(`Failed to create tenant schema for gym ${gymIdForSchema}:`, err));
 
       // Create default branch for the gym
       await this.branchService.createDefaultBranch(gym.id, gym);
