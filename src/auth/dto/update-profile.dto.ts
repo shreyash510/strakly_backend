@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUrl, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsUrl, MaxLength, IsArray } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateProfileDto {
@@ -24,4 +24,10 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(20)
   phone?: string;
+
+  @ApiPropertyOptional({ description: 'Array of unlocked sidebar item IDs', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  unlockedSidebarItems?: string[];
 }

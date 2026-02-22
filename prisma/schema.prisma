@@ -82,6 +82,7 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   googleId      String?   @unique @map("google_id") // Google OAuth ID
   lastLoginAt   DateTime? @map("last_login_at")
+  unlockedSidebarItems Json? @map("unlocked_sidebar_items") // Array of unlocked sidebar item IDs
   isDeleted     Boolean   @default(false) @map("is_deleted") // Soft delete
   deletedAt     DateTime? @map("deleted_at")
   deletedBy     Int?      @map("deleted_by") // User ID who performed the deletion

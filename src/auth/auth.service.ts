@@ -62,6 +62,7 @@ export interface UserResponse {
   phone?: string;
   emailVerified?: boolean;
   attendanceCode?: string;
+  unlockedSidebarItems?: string[];
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
@@ -149,6 +150,7 @@ export class AuthService {
       phone: user.phone,
       emailVerified: user.emailVerified ?? user.email_verified ?? false,
       attendanceCode: user.attendance_code || user.attendanceCode,
+      unlockedSidebarItems: user.unlockedSidebarItems || user.unlocked_sidebar_items || undefined,
       gymId: gym?.id,
       gym: gym
         ? {
@@ -967,7 +969,7 @@ export class AuthService {
   async updateProfile(
     userId: number,
     gymId: number | undefined,
-    data: { name?: string; bio?: string; avatar?: string; phone?: string },
+    data: { name?: string; bio?: string; avatar?: string; phone?: string; unlockedSidebarItems?: string[] },
     isTenantUser: boolean = false,
   ): Promise<UserResponse> {
     if (isTenantUser && gymId) {
@@ -1000,6 +1002,10 @@ export class AuthService {
         updates.push(`phone = $${paramIndex++}`);
         values.push(data.phone);
       }
+      if (data.unlockedSidebarItems !== undefined) {
+        updates.push(`unlocked_sidebar_items = $${paramIndex++}`);
+        values.push(JSON.stringify(data.unlockedSidebarItems));
+      }
 
       updates.push(`updated_at = NOW()`);
       values.push(userId);
@@ -1025,11 +1031,12 @@ export class AuthService {
     }
 
     // Update admin in public.users
-    const updateData: Record<string, string | undefined> = {};
+    const updateData: Record<string, any> = {};
     if (data.name) updateData.name = data.name;
     if (data.bio !== undefined) updateData.bio = data.bio;
     if (data.avatar !== undefined) updateData.avatar = data.avatar;
     if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.unlockedSidebarItems !== undefined) updateData.unlockedSidebarItems = data.unlockedSidebarItems;
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
