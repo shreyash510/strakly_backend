@@ -518,7 +518,7 @@ export class UsersController {
 
   @Get('trainers/:trainerId/clients')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager', 'trainer')
+  @Roles('admin', 'branch_admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get clients assigned to a trainer' })
   getTrainerClients(
     @CurrentUser() user: AuthenticatedUser,

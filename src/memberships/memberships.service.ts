@@ -134,6 +134,12 @@ export class MembershipsService {
       paidAt: m.paid_at,
       cancelledAt: m.cancelled_at,
       cancelReason: m.cancel_reason,
+      cancellationReasonCode: m.cancellation_reason_code,
+      autoRenew: m.auto_renew,
+      freezeStartDate: m.freeze_start_date,
+      freezeEndDate: m.freeze_end_date,
+      freezeReason: m.freeze_reason,
+      totalFreezeDays: m.total_freeze_days,
       notes: m.notes,
       createdAt: m.created_at,
       updatedAt: m.updated_at,
@@ -423,8 +429,8 @@ export class MembershipsService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
-          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, NOW(), NOW())
+          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
          RETURNING *`,
           [
             membershipBranchId,
@@ -439,6 +445,7 @@ export class MembershipsService {
             'INR',
             dto.paymentMethod || 'cash',
             dto.notes || null,
+            dto.autoRenew || false,
           ],
         );
         return result.rows[0];
@@ -772,8 +779,8 @@ export class MembershipsService {
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, updated_at = NOW() WHERE id = $2`,
-        [dto.reason || null, id],
+        `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, cancellation_reason_code = $2, updated_at = NOW() WHERE id = $3`,
+        [dto.reason || null, dto.cancellationReasonCode || null, id],
       );
     });
 
@@ -1051,5 +1058,123 @@ export class MembershipsService {
     }
 
     return endDate;
+  }
+
+  async freeze(id: number, gymId: number, dto: { startDate: string; endDate: string; reason?: string }, approvedBy: number) {
+    const membership = await this.findOne(id, gymId);
+
+    if (membership.status !== 'active') {
+      throw new BadRequestException('Only active memberships can be frozen');
+    }
+
+    if (membership.freezeStartDate) {
+      throw new BadRequestException('Membership is already frozen');
+    }
+
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
+    const freezeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (freezeDays <= 0) {
+      throw new BadRequestException('End date must be after start date');
+    }
+
+    // Check against plan's max freeze days
+    const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(`SELECT * FROM plans WHERE id = $1`, [membership.planId]);
+      return result.rows[0];
+    });
+
+    const maxFreezeDays = plan?.max_freeze_days || 0;
+    const usedFreezeDays = membership.totalFreezeDays || 0;
+
+    if (maxFreezeDays > 0 && (usedFreezeDays + freezeDays) > maxFreezeDays) {
+      throw new BadRequestException(
+        `Cannot freeze for ${freezeDays} days. Max allowed: ${maxFreezeDays}, already used: ${usedFreezeDays}`,
+      );
+    }
+
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Create freeze record
+      await client.query(
+        `INSERT INTO membership_freezes (branch_id, membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())`,
+        [membership.branchId, id, startDate, endDate, dto.reason || null, approvedBy],
+      );
+
+      // Update membership
+      await client.query(
+        `UPDATE memberships SET freeze_start_date = $1, freeze_end_date = $2, freeze_reason = $3,
+         total_freeze_days = total_freeze_days + $4, updated_at = NOW() WHERE id = $5`,
+        [startDate, endDate, dto.reason || null, freezeDays, id],
+      );
+    });
+
+    return this.findOne(id, gymId);
+  }
+
+  async unfreeze(id: number, gymId: number) {
+    const membership = await this.findOne(id, gymId);
+
+    if (!membership.freezeStartDate) {
+      throw new BadRequestException('Membership is not frozen');
+    }
+
+    const freezeStart = new Date(membership.freezeStartDate);
+    const now = new Date();
+    const actualFreezeDays = Math.ceil((now.getTime() - freezeStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Mark active freeze as completed
+      await client.query(
+        `UPDATE membership_freezes SET status = 'completed', end_date = NOW(), updated_at = NOW()
+         WHERE membership_id = $1 AND status = 'active'`,
+        [id],
+      );
+
+      // Extend membership end_date by freeze duration and clear freeze fields
+      await client.query(
+        `UPDATE memberships SET
+         end_date = end_date + INTERVAL '1 day' * $1,
+         freeze_start_date = NULL, freeze_end_date = NULL, freeze_reason = NULL,
+         updated_at = NOW() WHERE id = $2`,
+        [actualFreezeDays, id],
+      );
+    });
+
+    return this.findOne(id, gymId);
+  }
+
+  async getFreezeHistory(membershipId: number, gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM membership_freezes WHERE membership_id = $1 ORDER BY created_at DESC`,
+        [membershipId],
+      );
+      return result.rows.map((f) => ({
+        id: f.id,
+        membershipId: f.membership_id,
+        startDate: f.start_date,
+        endDate: f.end_date,
+        reason: f.reason,
+        approvedBy: f.approved_by,
+        status: f.status,
+        createdAt: f.created_at,
+        updatedAt: f.updated_at,
+      }));
+    });
+  }
+
+  async getCancellationReasons(gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM cancellation_reasons WHERE is_active = TRUE ORDER BY display_order ASC`,
+      );
+      return result.rows.map((r) => ({
+        id: r.id,
+        code: r.code,
+        label: r.label,
+      }));
+    });
   }
 }

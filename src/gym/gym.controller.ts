@@ -11,6 +11,7 @@ import {
   Res,
   Request,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('gyms')
@@ -33,7 +35,10 @@ import type { AuthenticatedRequest } from '../common/types';
 @Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class GymController {
-  constructor(private readonly gymService: GymService) {}
+  constructor(
+    private readonly gymService: GymService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get('profile')
   @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
@@ -47,7 +52,7 @@ export class GymController {
   async getProfile(@Request() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
     const gymId = req.user?.gymId;
     if (!gymId) {
-      throw new Error('No gym associated with this user');
+      throw new BadRequestException('No gym associated with this user');
     }
     const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
     return this.gymService.getProfile(gymId, parsedBranchId);
@@ -123,6 +128,38 @@ export class GymController {
     return result.data;
   }
 
+  // ---- Onboarding Tour (must be before :id routes) ----
+
+  @Get('onboarding-tour/status')
+  @ApiOperation({ summary: 'Get onboarding tour status for current gym' })
+  async getOnboardingTourStatus(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.getOnboardingTourStatus(gymId);
+  }
+
+  @Patch('onboarding-tour/complete')
+  @ApiOperation({ summary: 'Mark onboarding tour as completed' })
+  async completeOnboardingTour(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.completeOnboardingTour(gymId);
+  }
+
+  @Patch('onboarding-tour/skip')
+  @ApiOperation({ summary: 'Mark onboarding tour as skipped' })
+  async skipOnboardingTour(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user?.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this user');
+    }
+    return this.gymService.skipOnboardingTour(gymId);
+  }
+
   @Get(':id')
   @Roles('superadmin', 'admin', 'branch_admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
@@ -132,25 +169,32 @@ export class GymController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new gym' })
-  create(@Body() dto: CreateGymDto) {
+  async create(@Body() dto: CreateGymDto) {
     return this.gymService.create(dto);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a gym' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
-    return this.gymService.update(id, dto);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
+    const result = await this.gymService.update(id, dto);
+    this.notificationsGateway.emitGymChanged(id, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a gym' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.gymService.remove(id);
+    this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
+    return result;
   }
 
   @Post(':id/toggle-status')
   @ApiOperation({ summary: 'Toggle gym active status' })
-  toggleStatus(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.toggleStatus(id);
+  async toggleStatus(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.gymService.toggleStatus(id);
+    this.notificationsGateway.emitGymChanged(id, { action: 'status_changed' });
+    return result;
   }
+
 }

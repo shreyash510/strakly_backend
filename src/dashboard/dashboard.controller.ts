@@ -102,7 +102,7 @@ export class DashboardController {
   }
 
   @Get('client')
-  @Roles('superadmin', 'admin', 'manager', 'trainer', 'client')
+  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get client dashboard data' })
   @ApiResponse({
     status: 200,

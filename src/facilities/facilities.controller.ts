@@ -22,15 +22,23 @@ import { CreateFacilityDto } from './dto/create-facility.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('facilities')
 @Controller('facilities')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.AMENITIES_MANAGEMENT)
 @ApiBearerAuth()
 export class FacilitiesController {
-  constructor(private readonly facilitiesService: FacilitiesService) {}
+  constructor(
+    private readonly facilitiesService: FacilitiesService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
@@ -93,32 +101,38 @@ export class FacilitiesController {
     type: Number,
     description: 'Branch ID for the facility (admin only)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateFacilityDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.facilitiesService.create(dto, req.user.gymId!, branchId);
+    const result = await this.facilitiesService.create(dto, req.user.gymId!, branchId);
+    this.notificationsGateway.emitFacilityChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update a facility' })
-  update(
+  async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateFacilityDto,
   ) {
-    return this.facilitiesService.update(id, req.user.gymId!, dto);
+    const result = await this.facilitiesService.update(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitFacilityChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Delete a facility (soft delete)' })
-  delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
-    return this.facilitiesService.delete(id, req.user.gymId!);
+  async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    const result = await this.facilitiesService.delete(id, req.user.gymId!);
+    this.notificationsGateway.emitFacilityChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
 }

@@ -52,6 +52,36 @@ export class CreateBranchDto {
   @IsString()
   zipCode?: string;
 
+  @ApiPropertyOptional({ description: 'Opening time (HH:MM)', example: '06:00' })
+  @IsOptional()
+  @IsString()
+  openingTime?: string;
+
+  @ApiPropertyOptional({ description: 'Closing time (HH:MM)', example: '22:00' })
+  @IsOptional()
+  @IsString()
+  closingTime?: string;
+
+  @ApiPropertyOptional({ description: 'GPS latitude' })
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @ApiPropertyOptional({ description: 'GPS longitude' })
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum occupancy' })
+  @IsOptional()
+  @IsNumber()
+  capacity?: number;
+
+  @ApiPropertyOptional({ description: 'Branch description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @ApiPropertyOptional({ description: 'Is branch active', default: true })
   @IsOptional()
   @IsBoolean()
@@ -90,6 +120,24 @@ export class BranchResponseDto {
 
   @ApiPropertyOptional()
   zipCode?: string;
+
+  @ApiPropertyOptional()
+  openingTime?: string;
+
+  @ApiPropertyOptional()
+  closingTime?: string;
+
+  @ApiPropertyOptional()
+  latitude?: number;
+
+  @ApiPropertyOptional()
+  longitude?: number;
+
+  @ApiPropertyOptional()
+  capacity?: number;
+
+  @ApiPropertyOptional()
+  description?: string;
 
   @ApiProperty()
   isActive: boolean;

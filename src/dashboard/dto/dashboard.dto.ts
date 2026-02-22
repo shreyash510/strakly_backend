@@ -170,6 +170,9 @@ export class AdminDashboardStatsDto {
   @ApiProperty({ description: 'New enquiries this month' })
   newEnquiriesThisMonth: number;
 
+  @ApiProperty({ description: 'Memberships expiring within 7 days' })
+  expiringSoon: number;
+
   @ApiProperty({ description: 'Monthly revenue for last 5 months', type: [Object] })
   monthlyRevenueHistory: { month: string; revenue: number }[];
 }
@@ -242,6 +245,29 @@ export class PaginatedClientsDto {
   pagination: PaginationMetaDto;
 }
 
+export class ExpiringMembershipDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  userId: number;
+
+  @ApiProperty()
+  userName: string;
+
+  @ApiProperty({ required: false })
+  avatar?: string;
+
+  @ApiProperty()
+  planName: string;
+
+  @ApiProperty()
+  endDate: string;
+
+  @ApiProperty()
+  daysRemaining: number;
+}
+
 export class AdminDashboardDto {
   @ApiProperty({ type: AdminDashboardStatsDto })
   stats: AdminDashboardStatsDto;
@@ -254,6 +280,12 @@ export class AdminDashboardDto {
 
   @ApiProperty({ type: [RecentTicketDto] })
   recentTickets: RecentTicketDto[];
+
+  @ApiProperty({ type: [RecentAttendanceDto] })
+  recentAttendance: RecentAttendanceDto[];
+
+  @ApiProperty({ type: [ExpiringMembershipDto] })
+  expiringMemberships: ExpiringMembershipDto[];
 }
 
 // Client Dashboard DTOs

@@ -280,6 +280,27 @@ export class CancelSubscriptionDto {
   cancelReason?: string;
 }
 
+export class InitiateManualPaymentDto {
+  @ApiProperty({ example: 1, description: 'Plan ID to subscribe to' })
+  @IsNumber()
+  planId: number;
+
+  @ApiPropertyOptional({ example: 'UPI', description: 'Payment method used (e.g. UPI, Bank Transfer, Cash)' })
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ example: 'UTR123456789', description: 'Transaction reference / UTR number' })
+  @IsString()
+  @IsOptional()
+  paymentRef?: string;
+
+  @ApiPropertyOptional({ description: 'Additional notes about the payment' })
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+
 // ============================================
 // Payment History DTOs
 // ============================================

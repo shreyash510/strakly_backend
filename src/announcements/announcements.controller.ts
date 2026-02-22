@@ -17,23 +17,30 @@ import {
   AnnouncementFiltersDto,
 } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { BranchId } from '../common/decorators/branch-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Controller('announcements')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@Roles('superadmin', 'admin', 'branch_admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ANNOUNCEMENTS)
 export class AnnouncementsController {
-  constructor(private readonly announcementsService: AnnouncementsService) {}
+  constructor(
+    private readonly announcementsService: AnnouncementsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   @Get()
   async findAll(
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
     @Query() filters: AnnouncementFiltersDto,
   ) {
     return this.announcementsService.findAll(gymId, branchId, filters);
@@ -42,7 +49,7 @@ export class AnnouncementsController {
   @Get('active')
   async getActive(
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
     @Query('platform') platform?: 'dashboard' | 'mobile',
   ) {
     return this.announcementsService.getActive(
@@ -56,7 +63,7 @@ export class AnnouncementsController {
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @BranchId() branchId: number | null,
+    @OptionalBranchId() branchId: number | null,
   ) {
     return this.announcementsService.findOne(id, gymId, branchId);
   }
@@ -67,7 +74,9 @@ export class AnnouncementsController {
     @GymId() gymId: number,
     @UserId() userId: number,
   ) {
-    return this.announcementsService.create(dto, gymId, userId);
+    const result = await this.announcementsService.create(dto, gymId, userId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
@@ -76,7 +85,9 @@ export class AnnouncementsController {
     @Body() dto: UpdateAnnouncementDto,
     @GymId() gymId: number,
   ) {
-    return this.announcementsService.update(id, gymId, dto);
+    const result = await this.announcementsService.update(id, gymId, dto);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Patch(':id/toggle-pin')
@@ -84,11 +95,15 @@ export class AnnouncementsController {
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.announcementsService.togglePin(id, gymId);
+    const result = await this.announcementsService.togglePin(id, gymId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   @Delete(':id')
   async delete(@Param('id', ParseIntPipe) id: number, @GymId() gymId: number) {
-    return this.announcementsService.delete(id, gymId);
+    const result = await this.announcementsService.delete(id, gymId);
+    this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'deleted' });
+    return result;
   }
 }

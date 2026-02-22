@@ -12,6 +12,24 @@ export const PLAN_FEATURES = {
   ADVANCED_REPORTS: 'advanced_reports',
   TRAINER_ASSIGNMENT: 'trainer_assignment',
   AMENITIES_MANAGEMENT: 'amenities_management',
+  POS_RETAIL: 'pos_retail',
+  CAMPAIGNS: 'campaigns',
+  EQUIPMENT_TRACKING: 'equipment_tracking',
+  // Phase 5: Advanced / Differentiators
+  CUSTOM_FIELDS: 'custom_fields',
+  NPS_SURVEYS: 'nps_surveys',
+  ENGAGEMENT_SCORING: 'engagement_scoring',
+  GAMIFICATION: 'gamification',
+  LOYALTY_PROGRAM: 'loyalty_program',
+  WEARABLE_INTEGRATION: 'wearable_integration',
+  MULTI_CURRENCY: 'multi_currency',
+  // Operations
+  CLASS_SCHEDULING: 'class_scheduling',
+  APPOINTMENT_BOOKING: 'appointment_booking',
+  GUEST_DAY_PASS: 'guest_day_pass',
+  LEAD_CRM: 'lead_crm',
+  REFERRAL_TRACKING: 'referral_tracking',
+  DIGITAL_WAIVERS: 'digital_waivers',
 } as const;
 
 export type PlanFeature = (typeof PLAN_FEATURES)[keyof typeof PLAN_FEATURES];

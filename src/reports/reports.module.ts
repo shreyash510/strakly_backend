@@ -11,6 +11,6 @@ import { AttendanceModule } from '../attendance/attendance.module';
   imports: [DatabaseModule, TenantModule, AttendanceModule],
   controllers: [ReportsController],
   providers: [ReportsService, PdfGeneratorService, PdfTemplateService],
-  exports: [ReportsService],
+  exports: [ReportsService, PdfGeneratorService],
 })
 export class ReportsModule {}

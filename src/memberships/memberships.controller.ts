@@ -25,6 +25,7 @@ import {
   CreateMembershipDto,
   UpdateMembershipDto,
   CancelMembershipDto,
+  FreezeMembershipDto,
   RenewMembershipDto,
   RecordPaymentDto,
 } from './dto/membership.dto';
@@ -32,13 +33,17 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('memberships')
 @Controller('memberships')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class MembershipsController {
-  constructor(private readonly membershipsService: MembershipsService) {}
+  constructor(
+    private readonly membershipsService: MembershipsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
     // If user has a specific branch assigned, they can only see their branch
@@ -119,7 +124,7 @@ export class MembershipsController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   @ApiQuery({
     name: 'branchId',
@@ -172,7 +177,7 @@ export class MembershipsController {
 
   @Get('expiring')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   @ApiQuery({
@@ -284,20 +289,22 @@ export class MembershipsController {
 
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
-  renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
-    return this.membershipsService.renew(
+  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
+    const result = await this.membershipsService.renew(
       req.user.userId,
       req.user.gymId!,
       req.user.branchId,
       dto,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
+    return result;
   }
 
   // ============ USER-SPECIFIC ENDPOINTS (admin - userId from header) ============
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -326,7 +333,7 @@ export class MembershipsController {
 
   @Get('user/active')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get active membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -346,7 +353,7 @@ export class MembershipsController {
 
   @Get('user/status')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Check membership status for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -363,7 +370,7 @@ export class MembershipsController {
 
   @Post('user/renew')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Renew membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -376,7 +383,7 @@ export class MembershipsController {
     type: Number,
     description: 'Branch ID for filtering (admin only)',
   })
-  renew(
+  async renew(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
     @Body() dto: RenewMembershipDto,
@@ -384,19 +391,31 @@ export class MembershipsController {
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.renew(
+    const result = await this.membershipsService.renew(
       parseInt(userId),
       req.user.gymId!,
       branchId,
       dto,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
+    return result;
+  }
+
+  // ============ LOOKUP ENDPOINTS (must be before :id to avoid route shadowing) ============
+
+  @Get('cancellation-reasons/list')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get cancellation reasons' })
+  async getCancellationReasons(@Request() req: AuthenticatedRequest) {
+    return this.membershipsService.getCancellationReasons(req.user.gymId!);
   }
 
   // ============ INDIVIDUAL MEMBERSHIP ENDPOINTS (by membership ID) ============
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
   @ApiQuery({
     name: 'branchId',
@@ -415,7 +434,7 @@ export class MembershipsController {
 
   @Get(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -429,24 +448,26 @@ export class MembershipsController {
 
   @Patch(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
-  updateMembershipFacilities(
+  async updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
   ) {
-    return this.membershipsService.updateMembershipFacilitiesAndAmenities(
+    const result = await this.membershipsService.updateMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
       dto.facilityIds || [],
       dto.amenityIds || [],
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Create a new membership' })
   @ApiQuery({
     name: 'branchId',
@@ -454,58 +475,66 @@ export class MembershipsController {
     type: Number,
     description: 'Branch ID for the membership (admin only)',
   })
-  create(
+  async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
     @Query('branchId') queryBranchId?: string,
   ) {
     const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.create(dto, req.user.gymId!, branchId, {
+    const result = await this.membershipsService.create(dto, req.user.gymId!, branchId, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
     });
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'created' });
+    return result;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Update a membership' })
   async update(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMembershipDto,
   ) {
-    return this.membershipsService.update(id, req.user.gymId!, dto);
+    const result = await this.membershipsService.update(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
+    return result;
   }
 
   @Post(':id/payment')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
   async recordPayment(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RecordPaymentDto,
   ) {
-    return this.membershipsService.recordPayment(
+    const result = await this.membershipsService.recordPayment(
       id,
       req.user.gymId!,
       dto,
       req.user.userId,
     );
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'payment_recorded' });
+    return result;
   }
 
   @Post(':id/cancel')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'branch_admin', 'manager')
   @ApiOperation({ summary: 'Cancel a membership' })
   async cancel(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelMembershipDto,
   ) {
-    return this.membershipsService.cancel(id, req.user.gymId!, dto);
+    const result = await this.membershipsService.cancel(id, req.user.gymId!, dto);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'cancelled' });
+    return result;
   }
 
   @Delete(':id')
@@ -523,6 +552,43 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
   ) {
-    return this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
+    return result;
   }
+
+  @Post(':id/freeze')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Freeze a membership' })
+  async freeze(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: FreezeMembershipDto,
+  ) {
+    return this.membershipsService.freeze(id, req.user.gymId!, dto, req.user.userId);
+  }
+
+  @Post(':id/unfreeze')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Unfreeze a membership' })
+  async unfreeze(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.membershipsService.unfreeze(id, req.user.gymId!);
+  }
+
+  @Get(':id/freezes')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get freeze history for a membership' })
+  async getFreezeHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
+  }
+
 }
