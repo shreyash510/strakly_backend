@@ -2160,7 +2160,7 @@ export class AuthService {
     name: string;
     email: string;
     picture?: string;
-  }): Promise<AuthResponse> {
+  }): Promise<AuthResponse | GoogleSignupPendingResponse> {
     // Try to find user by googleId first
     let user = await this.prisma.user.findFirst({
       where: {
@@ -2179,7 +2179,16 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('No account found with this email');
+      // No account found — redirect to signup flow instead of throwing
+      return {
+        requiresGymSetup: true,
+        googleUser: {
+          googleId: googleUser.googleId,
+          name: googleUser.name,
+          email: googleUser.email,
+          picture: googleUser.picture,
+        },
+      };
     }
 
     // Check user status
