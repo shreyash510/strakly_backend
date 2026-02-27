@@ -544,6 +544,7 @@ export class AuthService {
         email: systemUser.email,
         role: systemUser.role,
         status: USER_STATUS.ACTIVE,
+        unlockedSidebarItems: systemUser.unlockedSidebarItems as string[] || undefined,
       };
 
       const payload = {
