@@ -2077,10 +2077,10 @@ export class AuthService {
    * Get redirect URI based on environment
    */
   private getGoogleRedirectUri(): string {
-    const environment = this.configService.get<string>('ENVIRONMENT') || 'dev';
-    return environment === 'prod'
-      ? 'https://app.strakly.com/auth/google/callback'
-      : 'http://localhost:5173/auth/google/callback';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'http://localhost:5173';
+    return `${frontendUrl}/auth/google/callback`;
   }
 
   /**
@@ -2125,12 +2125,19 @@ export class AuthService {
         email: userInfo.email,
         picture: userInfo.picture,
       };
-    } catch (error) {
-      this.logger.error('Google OAuth error:', error);
+    } catch (error: any) {
+      const errorDetail =
+        error?.response?.data?.error_description ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Unknown error';
+      this.logger.error(`Google OAuth error: ${errorDetail}`, error?.stack);
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to authenticate with Google');
+      throw new BadRequestException(
+        `Failed to authenticate with Google: ${errorDetail}`,
+      );
     }
   }
 
