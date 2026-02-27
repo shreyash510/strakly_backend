@@ -1146,87 +1146,70 @@ export class LoyaltyService {
 
   async expireOldPoints(gymId: number): Promise<number> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Find expired earn transactions that haven't been voided yet
-      const expiredResult = await client.query(
-        `SELECT id, user_id, points
-         FROM loyalty_transactions
-         WHERE type = 'earn'
-           AND expires_at IS NOT NULL
-           AND expires_at < NOW()
-           AND id NOT IN (
-             SELECT reference_id FROM loyalty_transactions
-             WHERE type = 'expire' AND reference_type = 'loyalty_transactions'
-             AND reference_id IS NOT NULL
-           )`,
+      // Batch expire: find expired transactions, update balances, insert expire records in one CTE
+      const result = await client.query(
+        `WITH expired AS (
+           SELECT lt.id, lt.user_id, lt.points
+           FROM loyalty_transactions lt
+           WHERE lt.type = 'earn'
+             AND lt.expires_at IS NOT NULL
+             AND lt.expires_at < NOW()
+             AND NOT EXISTS (
+               SELECT 1 FROM loyalty_transactions lt2
+               WHERE lt2.type = 'expire'
+                 AND lt2.reference_type = 'loyalty_transactions'
+                 AND lt2.reference_id = lt.id
+             )
+         ),
+         expired_per_user AS (
+           SELECT user_id, SUM(points) AS total_points
+           FROM expired
+           GROUP BY user_id
+         ),
+         updated_balances AS (
+           UPDATE loyalty_points lp
+           SET current_balance = GREATEST(lp.current_balance - epu.total_points, 0),
+               updated_at = CURRENT_TIMESTAMP
+           FROM expired_per_user epu
+           WHERE lp.user_id = epu.user_id
+           RETURNING lp.user_id, lp.current_balance
+         ),
+         inserted_txns AS (
+           INSERT INTO loyalty_transactions (user_id, type, points, balance_after, source, reference_type, reference_id, description)
+           SELECT e.user_id, 'expire', e.points,
+                  COALESCE(ub.current_balance, 0),
+                  'system_expiry', 'loyalty_transactions', e.id, 'Points expired'
+           FROM expired e
+           LEFT JOIN updated_balances ub ON ub.user_id = e.user_id
+           RETURNING points
+         )
+         SELECT COALESCE(SUM(points), 0) AS total_expired FROM inserted_txns`,
       );
 
-      let totalExpired = 0;
-
-      for (const row of expiredResult.rows) {
-        // Deduct expired points from balance (but not below 0)
-        await client.query(
-          `UPDATE loyalty_points
-           SET current_balance = GREATEST(current_balance - $1, 0),
-               updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2`,
-          [row.points, row.user_id],
-        );
-
-        // Get updated balance
-        const balResult = await client.query(
-          `SELECT current_balance FROM loyalty_points WHERE user_id = $1`,
-          [row.user_id],
-        );
-        const balanceAfter = balResult.rows[0]?.current_balance ?? 0;
-
-        // Record expire transaction
-        await client.query(
-          `INSERT INTO loyalty_transactions (user_id, type, points, balance_after, source, reference_type, reference_id, description)
-           VALUES ($1, 'expire', $2, $3, 'system_expiry', 'loyalty_transactions', $4, 'Points expired')`,
-          [row.user_id, row.points, balanceAfter, row.id],
-        );
-
-        totalExpired += row.points;
-      }
-
-      return totalExpired;
+      return parseInt(result.rows[0].total_expired) || 0;
     });
   }
 
   async recalculateTiers(gymId: number): Promise<number> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Get all users with loyalty points
-      const usersResult = await client.query(
-        `SELECT user_id, total_earned, tier_id FROM loyalty_points`,
+      // Single UPDATE with lateral join to find correct tier for each user
+      const result = await client.query(
+        `UPDATE loyalty_points lp
+         SET tier_id = best_tier.id,
+             tier_updated_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         FROM (
+           SELECT lp2.user_id,
+                  (SELECT lt.id FROM loyalty_tiers lt
+                   WHERE lt.min_points <= lp2.total_earned AND lt.is_active = TRUE
+                   ORDER BY lt.min_points DESC LIMIT 1) AS id
+           FROM loyalty_points lp2
+         ) best_tier
+         WHERE lp.user_id = best_tier.user_id
+           AND lp.tier_id IS DISTINCT FROM best_tier.id`,
       );
 
-      let upgrades = 0;
-
-      for (const row of usersResult.rows) {
-        // Get the highest qualifying tier
-        const tierResult = await client.query(
-          `SELECT id FROM loyalty_tiers
-           WHERE min_points <= $1 AND is_active = TRUE
-           ORDER BY min_points DESC
-           LIMIT 1`,
-          [row.total_earned],
-        );
-
-        const newTierId =
-          tierResult.rows.length > 0 ? tierResult.rows[0].id : null;
-
-        if (newTierId !== row.tier_id) {
-          await client.query(
-            `UPDATE loyalty_points
-             SET tier_id = $1, tier_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = $2`,
-            [newTierId, row.user_id],
-          );
-          upgrades++;
-        }
-      }
-
-      return upgrades;
+      return result.rowCount ?? 0;
     });
   }
 }

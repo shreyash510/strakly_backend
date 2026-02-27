@@ -8,7 +8,7 @@ export class CampaignsScheduler {
 
   constructor(private readonly campaignsService: CampaignsService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduledCampaigns() {
     this.logger.debug('Checking for scheduled campaigns...');
     await this.campaignsService.processScheduledCampaigns();

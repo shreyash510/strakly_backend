@@ -580,18 +580,19 @@ export class WearablesService {
     const dataPoints = await provider.fetchData(accessToken, startDate, endDate);
 
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      for (const point of dataPoints) {
-        await client.query(
-          `INSERT INTO wearable_data
-            (user_id, provider, data_type, value, unit, recorded_at, recorded_date, metadata, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-           ON CONFLICT (user_id, provider, data_type, recorded_date)
-           DO UPDATE SET
-             value = EXCLUDED.value,
-             unit = EXCLUDED.unit,
-             recorded_at = EXCLUDED.recorded_at,
-             metadata = EXCLUDED.metadata`,
-          [
+      // Batch insert data points in chunks of 50
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < dataPoints.length; i += BATCH_SIZE) {
+        const batch = dataPoints.slice(i, i + BATCH_SIZE);
+        const values: any[] = [];
+        const placeholders: string[] = [];
+
+        batch.forEach((point, idx) => {
+          const offset = idx * 8;
+          placeholders.push(
+            `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, NOW())`,
+          );
+          values.push(
             userId,
             providerName,
             point.dataType,
@@ -600,8 +601,23 @@ export class WearablesService {
             point.recordedAt,
             point.recordedDate,
             point.metadata ? JSON.stringify(point.metadata) : null,
-          ],
-        );
+          );
+        });
+
+        if (placeholders.length > 0) {
+          await client.query(
+            `INSERT INTO wearable_data
+              (user_id, provider, data_type, value, unit, recorded_at, recorded_date, metadata, created_at)
+             VALUES ${placeholders.join(', ')}
+             ON CONFLICT (user_id, provider, data_type, recorded_date)
+             DO UPDATE SET
+               value = EXCLUDED.value,
+               unit = EXCLUDED.unit,
+               recorded_at = EXCLUDED.recorded_at,
+               metadata = EXCLUDED.metadata`,
+            values,
+          );
+        }
       }
 
       await client.query(

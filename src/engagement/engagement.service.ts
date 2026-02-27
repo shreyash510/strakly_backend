@@ -169,243 +169,263 @@ export class EngagementService {
 
   async calculateForUser(userId: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-      // Get user info including branch
-      const userResult = await client.query(
-        `SELECT id, branch_id, join_date FROM users WHERE id = $1 AND is_deleted = FALSE`,
-        [userId],
-      );
-
-      if (userResult.rows.length === 0) {
-        this.logger.warn(`User ${userId} not found or deleted in gym ${gymId}`);
-        return null;
-      }
-
-      const user = userResult.rows[0];
-      const userBranchId = user.branch_id;
-
-      // ─── Query Attendance Data ───
-      const attendanceResult = await client.query(
-        `SELECT
-           COUNT(*) FILTER (WHERE check_in_time >= $2) AS visits_7d,
-           COUNT(*) FILTER (WHERE check_in_time >= $3) AS visits_30d,
-           MAX(check_in_time) AS last_visit,
-           COUNT(*) AS total_visits
-         FROM attendance_history
-         WHERE user_id = $1`,
-        [userId, sevenDaysAgo.toISOString(), thirtyDaysAgo.toISOString()],
-      );
-
-      const attendance = attendanceResult.rows[0];
-      const visits7d = parseInt(attendance.visits_7d) || 0;
-      const visits30d = parseInt(attendance.visits_30d) || 0;
-      const lastVisit = attendance.last_visit ? new Date(attendance.last_visit) : null;
-      const totalVisits = parseInt(attendance.total_visits) || 0;
-
-      // Previous 30-day window for trend comparison
-      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-      const prevPeriodResult = await client.query(
-        `SELECT COUNT(*) AS visits_prev_30d
-         FROM attendance_history
-         WHERE user_id = $1
-           AND check_in_time >= $2
-           AND check_in_time < $3`,
-        [userId, sixtyDaysAgo.toISOString(), thirtyDaysAgo.toISOString()],
-      );
-      const visitsPrev30d = parseInt(prevPeriodResult.rows[0].visits_prev_30d) || 0;
-
-      // ─── Query Membership Data ───
-      const membershipResult = await client.query(
-        `SELECT
-           MIN(start_date) AS earliest_start,
-           COUNT(*) FILTER (WHERE payment_status = 'failed' OR payment_status = 'overdue') AS payment_failures,
-           COUNT(*) AS total_memberships
-         FROM memberships
-         WHERE user_id = $1`,
-        [userId],
-      );
-
-      const membership = membershipResult.rows[0];
-      const earliestStart = membership.earliest_start ? new Date(membership.earliest_start) : null;
-      const paymentFailures = parseInt(membership.payment_failures) || 0;
-      const totalMemberships = parseInt(membership.total_memberships) || 0;
-
-      // ─── Query Engagement Depth Data ───
-      const classBookingsResult = await client.query(
-        `SELECT COUNT(*) AS class_bookings_30d
-         FROM class_bookings
-         WHERE user_id = $1 AND booked_at >= $2`,
-        [userId, thirtyDaysAgo.toISOString()],
-      );
-      const classBookings30d = parseInt(classBookingsResult.rows[0].class_bookings_30d) || 0;
-
-      const appointmentsResult = await client.query(
-        `SELECT COUNT(*) AS appointments_30d
-         FROM appointments
-         WHERE user_id = $1 AND start_time >= $2`,
-        [userId, thirtyDaysAgo.toISOString()],
-      );
-      const appointments30d = parseInt(appointmentsResult.rows[0].appointments_30d) || 0;
-
-      // ─── Calculate Component Scores ───
-      const visitFrequencyScore = this.calculateVisitFrequencyScore(visits7d, visits30d);
-      const visitRecencyScore = this.calculateVisitRecencyScore(lastVisit, now);
-      const attendanceTrendScore = this.calculateAttendanceTrendScore(visits30d, visitsPrev30d);
-      const paymentReliabilityScore = this.calculatePaymentReliabilityScore(paymentFailures, totalMemberships);
-      const membershipTenureScore = this.calculateMembershipTenureScore(earliestStart, now);
-      const engagementDepthScore = this.calculateEngagementDepthScore(classBookings30d, appointments30d, totalVisits);
-
-      // ─── Calculate Overall Score ───
-      // Weights: frequency 30%, recency 25%, trend 15%, payment 15%, tenure 10%, depth 5%
-      const overallScore = Math.round(
-        (visitFrequencyScore * 0.30 +
-          visitRecencyScore * 0.25 +
-          attendanceTrendScore * 0.15 +
-          paymentReliabilityScore * 0.15 +
-          membershipTenureScore * 0.10 +
-          engagementDepthScore * 0.05) * 100,
-      ) / 100;
-
-      // ─── Determine Risk Level ───
-      let riskLevel: string;
-      if (overallScore >= 80) {
-        riskLevel = 'low';
-      } else if (overallScore >= 60) {
-        riskLevel = 'medium';
-      } else if (overallScore >= 40) {
-        riskLevel = 'high';
-      } else {
-        riskLevel = 'critical';
-      }
-
-      // Build factors JSON for context
-      const factors = {
-        visits7d,
-        visits30d,
-        visitsPrev30d,
-        lastVisit: lastVisit ? lastVisit.toISOString() : null,
-        totalVisits,
-        paymentFailures,
-        totalMemberships,
-        classBookings30d,
-        appointments30d,
-        tenureMonths: earliestStart
-          ? Math.floor((now.getTime() - earliestStart.getTime()) / (30 * 24 * 60 * 60 * 1000))
-          : 0,
-      };
-
-      // ─── Get Previous Risk Level ───
-      const previousScoreResult = await client.query(
-        `SELECT risk_level FROM engagement_scores
-         WHERE user_id = $1 AND is_current = TRUE
-         LIMIT 1`,
-        [userId],
-      );
-      const previousRiskLevel = previousScoreResult.rows.length > 0
-        ? previousScoreResult.rows[0].risk_level
-        : null;
-
-      // ─── Mark Previous Scores as Not Current ───
-      await client.query(
-        `UPDATE engagement_scores SET is_current = FALSE WHERE user_id = $1 AND is_current = TRUE`,
-        [userId],
-      );
-
-      // ─── Insert New Score Record ───
-      const insertResult = await client.query(
-        `INSERT INTO engagement_scores (
-           branch_id, user_id, overall_score, risk_level,
-           visit_frequency_score, visit_recency_score, attendance_trend_score,
-           payment_reliability_score, membership_tenure_score, engagement_depth_score,
-           factors, is_current, calculated_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, CURRENT_TIMESTAMP)
-         RETURNING *`,
-        [
-          userBranchId,
-          userId,
-          overallScore,
-          riskLevel,
-          visitFrequencyScore,
-          visitRecencyScore,
-          attendanceTrendScore,
-          paymentReliabilityScore,
-          membershipTenureScore,
-          engagementDepthScore,
-          JSON.stringify(factors),
-        ],
-      );
-
-      // ─── Create Churn Alert if Risk Increased to High/Critical ───
-      const riskOrder = { low: 0, medium: 1, high: 2, critical: 3 };
-      const currentRiskOrder = riskOrder[riskLevel as keyof typeof riskOrder] ?? 0;
-      const previousRiskOrder = previousRiskLevel
-        ? (riskOrder[previousRiskLevel as keyof typeof riskOrder] ?? 0)
-        : 0;
-
-      if (
-        (riskLevel === 'high' || riskLevel === 'critical') &&
-        currentRiskOrder > previousRiskOrder
-      ) {
-        const alertType = riskLevel === 'critical' ? 'critical_churn_risk' : 'high_churn_risk';
-        const message = riskLevel === 'critical'
-          ? `Member is at critical risk of churning. Engagement score dropped to ${overallScore}. Immediate action recommended.`
-          : `Member is at high risk of churning. Engagement score dropped to ${overallScore}. Follow-up recommended.`;
-
-        await client.query(
-          `INSERT INTO churn_alerts (
-             branch_id, user_id, risk_level, previous_risk_level,
-             alert_type, message, factors
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            userBranchId,
-            userId,
-            riskLevel,
-            previousRiskLevel,
-            alertType,
-            message,
-            JSON.stringify(factors),
-          ],
-        );
-      }
-
-      return this.formatScore(insertResult.rows[0]);
+      return this.calculateForUserWithClient(client, userId, gymId);
     });
   }
 
-  async calculateForAllMembers(gymId: number) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Get all active clients
-      const usersResult = await client.query(
-        `SELECT id FROM users WHERE role = 'client' AND is_deleted = FALSE`,
+  private async calculateForUserWithClient(client: any, userId: number, gymId: number) {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Get user info including branch
+    const userResult = await client.query(
+      `SELECT id, branch_id, join_date FROM users WHERE id = $1 AND is_deleted = FALSE`,
+      [userId],
+    );
+
+    if (userResult.rows.length === 0) {
+      this.logger.warn(`User ${userId} not found or deleted in gym ${gymId}`);
+      return null;
+    }
+
+    const user = userResult.rows[0];
+    const userBranchId = user.branch_id;
+
+    // ─── Query Attendance Data ───
+    const attendanceResult = await client.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE check_in_time >= $2) AS visits_7d,
+         COUNT(*) FILTER (WHERE check_in_time >= $3) AS visits_30d,
+         MAX(check_in_time) AS last_visit,
+         COUNT(*) AS total_visits
+       FROM attendance_history
+       WHERE user_id = $1`,
+      [userId, sevenDaysAgo.toISOString(), thirtyDaysAgo.toISOString()],
+    );
+
+    const attendance = attendanceResult.rows[0];
+    const visits7d = parseInt(attendance.visits_7d) || 0;
+    const visits30d = parseInt(attendance.visits_30d) || 0;
+    const lastVisit = attendance.last_visit ? new Date(attendance.last_visit) : null;
+    const totalVisits = parseInt(attendance.total_visits) || 0;
+
+    // Previous 30-day window for trend comparison
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const prevPeriodResult = await client.query(
+      `SELECT COUNT(*) AS visits_prev_30d
+       FROM attendance_history
+       WHERE user_id = $1
+         AND check_in_time >= $2
+         AND check_in_time < $3`,
+      [userId, sixtyDaysAgo.toISOString(), thirtyDaysAgo.toISOString()],
+    );
+    const visitsPrev30d = parseInt(prevPeriodResult.rows[0].visits_prev_30d) || 0;
+
+    // ─── Query Membership Data ───
+    const membershipResult = await client.query(
+      `SELECT
+         MIN(start_date) AS earliest_start,
+         COUNT(*) FILTER (WHERE payment_status = 'failed' OR payment_status = 'overdue') AS payment_failures,
+         COUNT(*) AS total_memberships
+       FROM memberships
+       WHERE user_id = $1`,
+      [userId],
+    );
+
+    const membership = membershipResult.rows[0];
+    const earliestStart = membership.earliest_start ? new Date(membership.earliest_start) : null;
+    const paymentFailures = parseInt(membership.payment_failures) || 0;
+    const totalMemberships = parseInt(membership.total_memberships) || 0;
+
+    // ─── Query Engagement Depth Data ───
+    const classBookingsResult = await client.query(
+      `SELECT COUNT(*) AS class_bookings_30d
+       FROM class_bookings
+       WHERE user_id = $1 AND booked_at >= $2`,
+      [userId, thirtyDaysAgo.toISOString()],
+    );
+    const classBookings30d = parseInt(classBookingsResult.rows[0].class_bookings_30d) || 0;
+
+    const appointmentsResult = await client.query(
+      `SELECT COUNT(*) AS appointments_30d
+       FROM appointments
+       WHERE user_id = $1 AND start_time >= $2`,
+      [userId, thirtyDaysAgo.toISOString()],
+    );
+    const appointments30d = parseInt(appointmentsResult.rows[0].appointments_30d) || 0;
+
+    // ─── Calculate Component Scores ───
+    const visitFrequencyScore = this.calculateVisitFrequencyScore(visits7d, visits30d);
+    const visitRecencyScore = this.calculateVisitRecencyScore(lastVisit, now);
+    const attendanceTrendScore = this.calculateAttendanceTrendScore(visits30d, visitsPrev30d);
+    const paymentReliabilityScore = this.calculatePaymentReliabilityScore(paymentFailures, totalMemberships);
+    const membershipTenureScore = this.calculateMembershipTenureScore(earliestStart, now);
+    const engagementDepthScore = this.calculateEngagementDepthScore(classBookings30d, appointments30d, totalVisits);
+
+    // ─── Calculate Overall Score ───
+    // Weights: frequency 30%, recency 25%, trend 15%, payment 15%, tenure 10%, depth 5%
+    const overallScore = Math.round(
+      (visitFrequencyScore * 0.30 +
+        visitRecencyScore * 0.25 +
+        attendanceTrendScore * 0.15 +
+        paymentReliabilityScore * 0.15 +
+        membershipTenureScore * 0.10 +
+        engagementDepthScore * 0.05) * 100,
+    ) / 100;
+
+    // ─── Determine Risk Level ───
+    let riskLevel: string;
+    if (overallScore >= 80) {
+      riskLevel = 'low';
+    } else if (overallScore >= 60) {
+      riskLevel = 'medium';
+    } else if (overallScore >= 40) {
+      riskLevel = 'high';
+    } else {
+      riskLevel = 'critical';
+    }
+
+    // Build factors JSON for context
+    const factors = {
+      visits7d,
+      visits30d,
+      visitsPrev30d,
+      lastVisit: lastVisit ? lastVisit.toISOString() : null,
+      totalVisits,
+      paymentFailures,
+      totalMemberships,
+      classBookings30d,
+      appointments30d,
+      tenureMonths: earliestStart
+        ? Math.floor((now.getTime() - earliestStart.getTime()) / (30 * 24 * 60 * 60 * 1000))
+        : 0,
+    };
+
+    // ─── Get Previous Risk Level ───
+    const previousScoreResult = await client.query(
+      `SELECT risk_level FROM engagement_scores
+       WHERE user_id = $1 AND is_current = TRUE
+       LIMIT 1`,
+      [userId],
+    );
+    const previousRiskLevel = previousScoreResult.rows.length > 0
+      ? previousScoreResult.rows[0].risk_level
+      : null;
+
+    // ─── Mark Previous Scores as Not Current ───
+    await client.query(
+      `UPDATE engagement_scores SET is_current = FALSE WHERE user_id = $1 AND is_current = TRUE`,
+      [userId],
+    );
+
+    // ─── Insert New Score Record ───
+    const insertResult = await client.query(
+      `INSERT INTO engagement_scores (
+         branch_id, user_id, overall_score, risk_level,
+         visit_frequency_score, visit_recency_score, attendance_trend_score,
+         payment_reliability_score, membership_tenure_score, engagement_depth_score,
+         factors, is_current, calculated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        userBranchId,
+        userId,
+        overallScore,
+        riskLevel,
+        visitFrequencyScore,
+        visitRecencyScore,
+        attendanceTrendScore,
+        paymentReliabilityScore,
+        membershipTenureScore,
+        engagementDepthScore,
+        JSON.stringify(factors),
+      ],
+    );
+
+    // ─── Create Churn Alert if Risk Increased to High/Critical ───
+    const riskOrder = { low: 0, medium: 1, high: 2, critical: 3 };
+    const currentRiskOrder = riskOrder[riskLevel as keyof typeof riskOrder] ?? 0;
+    const previousRiskOrder = previousRiskLevel
+      ? (riskOrder[previousRiskLevel as keyof typeof riskOrder] ?? 0)
+      : 0;
+
+    if (
+      (riskLevel === 'high' || riskLevel === 'critical') &&
+      currentRiskOrder > previousRiskOrder
+    ) {
+      const alertType = riskLevel === 'critical' ? 'critical_churn_risk' : 'high_churn_risk';
+      const message = riskLevel === 'critical'
+        ? `Member is at critical risk of churning. Engagement score dropped to ${overallScore}. Immediate action recommended.`
+        : `Member is at high risk of churning. Engagement score dropped to ${overallScore}. Follow-up recommended.`;
+
+      await client.query(
+        `INSERT INTO churn_alerts (
+           branch_id, user_id, risk_level, previous_risk_level,
+           alert_type, message, factors
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          userBranchId,
+          userId,
+          riskLevel,
+          previousRiskLevel,
+          alertType,
+          message,
+          JSON.stringify(factors),
+        ],
       );
+    }
 
-      const userIds: number[] = usersResult.rows.map((row) => row.id);
-      this.logger.log(`Calculating engagement scores for ${userIds.length} members in gym ${gymId}`);
+    return this.formatScore(insertResult.rows[0]);
+  }
 
-      let calculated = 0;
-      let errors = 0;
+  async calculateForAllMembers(gymId: number) {
+    const BATCH_SIZE = 100;
+    let offset = 0;
+    let totalMembers = 0;
+    let calculated = 0;
+    let errors = 0;
 
-      for (const userId of userIds) {
-        try {
-          await this.calculateForUser(userId, gymId);
-          calculated++;
-        } catch (error) {
-          errors++;
-          this.logger.error(
-            `Failed to calculate engagement score for user ${userId} in gym ${gymId}: ${error instanceof Error ? error.message : String(error)}`,
-          );
+    // Process users in batches of 100, each batch shares one DB connection
+    while (true) {
+      const result = await this.tenantService.executeInTenant(gymId, async (client) => {
+        const usersResult = await client.query(
+          `SELECT id FROM users WHERE role = 'client' AND is_deleted = FALSE ORDER BY id LIMIT $1 OFFSET $2`,
+          [BATCH_SIZE, offset],
+        );
+
+        const userIds: number[] = usersResult.rows.map((row: any) => row.id);
+        let batchCalculated = 0;
+        let batchErrors = 0;
+
+        for (const userId of userIds) {
+          try {
+            await this.calculateForUserWithClient(client, userId, gymId);
+            batchCalculated++;
+          } catch (error) {
+            batchErrors++;
+            this.logger.error(
+              `Failed to calculate engagement score for user ${userId} in gym ${gymId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
 
-      return {
-        totalMembers: userIds.length,
-        calculated,
-        errors,
-      };
-    });
+        return { count: userIds.length, batchCalculated, batchErrors };
+      });
+
+      totalMembers += result.count;
+      calculated += result.batchCalculated;
+      errors += result.batchErrors;
+
+      if (result.count < BATCH_SIZE) break;
+      offset += BATCH_SIZE;
+    }
+
+    if (totalMembers > 0) {
+      this.logger.log(`Calculating engagement scores for ${totalMembers} members in gym ${gymId}`);
+    }
+
+    return { totalMembers, calculated, errors };
   }
 
   async getAlerts(

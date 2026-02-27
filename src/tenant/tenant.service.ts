@@ -225,7 +225,6 @@ export class TenantService implements OnModuleInit {
     } catch (error) {
       this.logger.error(`Error creating Phase 5 tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
     }
-    await this.seedDefaultCurrencies(client, schemaName);
     await this.seedDefaultLoyaltyTiers(client, schemaName);
 
     // Add created_by column to achievements if missing (for schemas created before fix)
@@ -3656,33 +3655,6 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // ─── 7. Multi-Currency Support ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."currencies" (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(3) NOT NULL UNIQUE,
-        name VARCHAR(50) NOT NULL,
-        symbol VARCHAR(10) NOT NULL,
-        decimal_places INTEGER DEFAULT 2,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."exchange_rates" (
-        id SERIAL PRIMARY KEY,
-        from_currency VARCHAR(3) NOT NULL,
-        to_currency VARCHAR(3) NOT NULL,
-        rate NUMERIC(15,6) NOT NULL,
-        source VARCHAR(30) DEFAULT 'manual',
-        effective_date DATE NOT NULL DEFAULT CURRENT_DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(from_currency, to_currency, effective_date)
-      )
-    `);
-
     // ─── Phase 5 Indexes ───
     try {
       // Custom Fields
@@ -3742,47 +3714,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_type_date" ON "${schemaName}"."wearable_data"(user_id, data_type, recorded_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_provider" ON "${schemaName}"."wearable_data"(provider)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_date" ON "${schemaName}"."wearable_data"(recorded_date)`);
-      // Currencies
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_exchange_rates_pair" ON "${schemaName}"."exchange_rates"(from_currency, to_currency)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_exchange_rates_date" ON "${schemaName}"."exchange_rates"(effective_date DESC)`);
     } catch {
       // Indexes may already exist
-    }
-  }
-
-  private async seedDefaultCurrencies(
-    client: PoolClient,
-    schemaName: string,
-  ): Promise<void> {
-    try {
-      const existing = await client.query(
-        `SELECT COUNT(*) as count FROM "${schemaName}"."currencies"`,
-      );
-      if (parseInt(existing.rows[0].count) > 0) return;
-
-      const currencies = [
-        { code: 'INR', name: 'Indian Rupee', symbol: '₹', decimal_places: 2 },
-        { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 },
-        { code: 'EUR', name: 'Euro', symbol: '€', decimal_places: 2 },
-        { code: 'GBP', name: 'British Pound', symbol: '£', decimal_places: 2 },
-        { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', decimal_places: 2 },
-        { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', decimal_places: 2 },
-        { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', decimal_places: 2 },
-        { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', decimal_places: 2 },
-      ];
-
-      for (const cur of currencies) {
-        await client.query(
-          `INSERT INTO "${schemaName}"."currencies" (code, name, symbol, decimal_places) VALUES ($1, $2, $3, $4)`,
-          [cur.code, cur.name, cur.symbol, cur.decimal_places],
-        );
-      }
-      this.logger.log(`Seeded currencies for ${schemaName}`);
-    } catch (error) {
-      this.logger.error(
-        `Error seeding currencies for ${schemaName}:`,
-        error instanceof Error ? error.message : String(error),
-      );
     }
   }
 

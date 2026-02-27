@@ -480,12 +480,23 @@ export class CampaignsService {
       return { ...this.formatCampaign({ ...c, status: 'sent', total_recipients: 0 }), message: 'No recipients matched the audience filter' };
     }
 
-    // Batch insert recipients
-    for (const r of recipients) {
+    // Batch insert recipients in chunks of 100
+    const RECIPIENT_BATCH = 100;
+    for (let i = 0; i < recipients.length; i += RECIPIENT_BATCH) {
+      const batch = recipients.slice(i, i + RECIPIENT_BATCH);
+      const values: any[] = [];
+      const placeholders: string[] = [];
+
+      batch.forEach((r, idx) => {
+        const offset = idx * 4;
+        placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, 'pending')`);
+        values.push(id, r.userId, r.email, r.phone);
+      });
+
       await client.query(
         `INSERT INTO campaign_recipients (campaign_id, user_id, email, phone, status)
-         VALUES ($1, $2, $3, $4, 'pending')`,
-        [id, r.userId, r.email, r.phone],
+         VALUES ${placeholders.join(', ')}`,
+        values,
       );
     }
 
@@ -502,43 +513,57 @@ export class CampaignsService {
     });
     const gymName = gym?.name || 'Our Gym';
 
-    // Send emails
+    // Send emails in chunks of 10 for controlled concurrency
     let sentCount = 0;
     let bouncedCount = 0;
+    const emailRecipients = recipients.filter((r) => r.email);
 
-    for (const r of recipients) {
-      if (!r.email) continue;
+    const EMAIL_CHUNK = 10;
+    for (let i = 0; i < emailRecipients.length; i += EMAIL_CHUNK) {
+      const chunk = emailRecipients.slice(i, i + EMAIL_CHUNK);
 
-      const personalizedContent = this.replaceMergeFields(c.content, r, gymName);
-      const personalizedSubject = this.replaceMergeFields(c.subject, r, gymName);
+      const results = await Promise.allSettled(
+        chunk.map(async (r) => {
+          const personalizedContent = this.replaceMergeFields(c.content, r, gymName);
+          const personalizedSubject = this.replaceMergeFields(c.subject, r, gymName);
 
-      try {
-        const result = await this.emailService.sendEmail({
-          to: r.email,
-          subject: personalizedSubject,
-          html: personalizedContent,
-        });
+          try {
+            const result = await this.emailService.sendEmail({
+              to: r.email,
+              subject: personalizedSubject,
+              html: personalizedContent,
+            });
 
-        if (result.success) {
-          await client.query(
-            `UPDATE campaign_recipients SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $1 AND user_id = $2`,
-            [id, r.userId],
-          );
+            if (result.success) {
+              await client.query(
+                `UPDATE campaign_recipients SET status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $1 AND user_id = $2`,
+                [id, r.userId],
+              );
+              return true;
+            } else {
+              await client.query(
+                `UPDATE campaign_recipients SET status = 'failed', error_message = $1, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $2 AND user_id = $3`,
+                [result.error || 'Send failed', id, r.userId],
+              );
+              return false;
+            }
+          } catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error);
+            await client.query(
+              `UPDATE campaign_recipients SET status = 'failed', error_message = $1, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $2 AND user_id = $3`,
+              [errMsg, id, r.userId],
+            );
+            return false;
+          }
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
           sentCount++;
         } else {
-          await client.query(
-            `UPDATE campaign_recipients SET status = 'failed', error_message = $1, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $2 AND user_id = $3`,
-            [result.error || 'Send failed', id, r.userId],
-          );
           bouncedCount++;
         }
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        await client.query(
-          `UPDATE campaign_recipients SET status = 'failed', error_message = $1, updated_at = CURRENT_TIMESTAMP WHERE campaign_id = $2 AND user_id = $3`,
-          [errMsg, id, r.userId],
-        );
-        bouncedCount++;
       }
     }
 
@@ -682,10 +707,15 @@ export class CampaignsService {
           const campaigns = await this.tenantService.executeInTenant(
             gym.id,
             async (client) => {
-              // Atomically claim scheduled campaigns to prevent double-send
+              // Atomically claim up to 3 scheduled campaigns to prevent double-send and limit memory
               const result = await client.query(
                 `UPDATE campaigns SET status = 'sending', updated_at = CURRENT_TIMESTAMP
-                 WHERE status = 'scheduled' AND scheduled_at <= CURRENT_TIMESTAMP AND is_deleted = FALSE
+                 WHERE id IN (
+                   SELECT id FROM campaigns
+                   WHERE status = 'scheduled' AND scheduled_at <= CURRENT_TIMESTAMP AND is_deleted = FALSE
+                   ORDER BY scheduled_at ASC
+                   LIMIT 3
+                 )
                  RETURNING id`,
               );
               return result.rows;
