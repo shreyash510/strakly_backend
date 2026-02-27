@@ -3,8 +3,8 @@ services:
   - name: strakly-backend
     health_check:
       http_path: /api/health
-      initial_delay_seconds: 30
-      period_seconds: 10
+      initial_delay_seconds: 60
+      period_seconds: 15
       timeout_seconds: 5
-      failure_threshold: 6
+      failure_threshold: 10
       success_threshold: 1
