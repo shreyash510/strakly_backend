@@ -520,6 +520,185 @@ export class ReportsService {
   }
 
   // ============================================
+  // DAILY SALES REPORT
+  // ============================================
+
+  async getDailySalesReport(
+    gymId: number,
+    date: string,
+    branchId: number | null = null,
+  ) {
+    // 1. Get membership payments for the day
+    const membershipSales = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = `m.payment_status = 'paid' AND DATE(m.paid_at) = $1`;
+        const values: SqlValue[] = [date];
+        let paramIndex = 2;
+
+        if (branchId !== null) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
+        const result = await client.query(
+          `SELECT
+            m.id,
+            u.name as client_name,
+            p.name as plan_name,
+            m.final_amount as amount,
+            m.payment_method,
+            m.paid_at
+          FROM memberships m
+          LEFT JOIN users u ON u.id = m.user_id
+          LEFT JOIN plans p ON p.id = m.plan_id
+          WHERE ${whereClause}
+          ORDER BY m.paid_at DESC`,
+          values,
+        );
+
+        return result.rows.map((r: Record<string, any>) => ({
+          id: r.id,
+          clientName: r.client_name || 'Unknown',
+          planName: r.plan_name || 'Unknown',
+          amount: parseFloat(r.amount || 0),
+          paymentMethod: r.payment_method || 'unknown',
+          paidAt: r.paid_at,
+        }));
+      },
+    );
+
+    // 2. Get product sales for the day
+    const productSales = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = `ps.is_deleted = FALSE AND DATE(ps.sold_at) = $1`;
+        const values: SqlValue[] = [date];
+        let paramIndex = 2;
+
+        if (branchId !== null) {
+          whereClause += ` AND ps.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
+        const result = await client.query(
+          `SELECT
+            ps.id,
+            pr.name as product_name,
+            u.name as buyer_name,
+            ps.quantity,
+            ps.unit_price,
+            ps.tax_amount,
+            ps.total_amount,
+            ps.payment_method,
+            ps.sold_at
+          FROM product_sales ps
+          LEFT JOIN products pr ON ps.product_id = pr.id
+          LEFT JOIN users u ON ps.user_id = u.id
+          WHERE ${whereClause}
+          ORDER BY ps.sold_at DESC`,
+          values,
+        );
+
+        return result.rows.map((r: Record<string, any>) => ({
+          id: r.id,
+          productName: r.product_name || 'Unknown',
+          buyerName: r.buyer_name || 'Walk-in',
+          quantity: parseInt(r.quantity, 10),
+          unitPrice: parseFloat(r.unit_price || 0),
+          taxAmount: parseFloat(r.tax_amount || 0),
+          totalAmount: parseFloat(r.total_amount || 0),
+          paymentMethod: r.payment_method || 'unknown',
+          soldAt: r.sold_at,
+        }));
+      },
+    );
+
+    // 3. Get salary/expense payments for the day
+    const expenses = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = `s.payment_status = 'paid' AND DATE(s.paid_at) = $1`;
+        const values: SqlValue[] = [date];
+        let paramIndex = 2;
+
+        if (branchId !== null) {
+          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          values.push(branchId);
+        }
+
+        const result = await client.query(
+          `SELECT
+            s.id,
+            u.name as staff_name,
+            'salary' as type,
+            s.net_amount as amount,
+            s.paid_at
+          FROM staff_salaries s
+          JOIN users u ON u.id = s.staff_id
+          WHERE ${whereClause}
+          ORDER BY s.paid_at DESC`,
+          values,
+        );
+
+        return result.rows.map((r: Record<string, any>) => ({
+          id: r.id,
+          staffName: r.staff_name || 'Unknown',
+          type: r.type,
+          amount: parseFloat(r.amount || 0),
+          paidAt: r.paid_at,
+        }));
+      },
+    );
+
+    // 4. Calculate summaries
+    const membershipRevenue = membershipSales.reduce((sum: number, s: any) => sum + s.amount, 0);
+    const productRevenue = productSales.reduce((sum: number, s: any) => sum + s.totalAmount, 0);
+    const totalRevenue = membershipRevenue + productRevenue;
+    const totalExpenses = expenses.reduce((sum: number, e: any) => sum + e.amount, 0);
+
+    // 5. Aggregate payment methods across memberships + product sales
+    const methodMap: Record<string, { amount: number; count: number }> = {};
+    for (const sale of membershipSales) {
+      const method = sale.paymentMethod;
+      if (!methodMap[method]) methodMap[method] = { amount: 0, count: 0 };
+      methodMap[method].amount += sale.amount;
+      methodMap[method].count += 1;
+    }
+    for (const sale of productSales) {
+      const method = sale.paymentMethod;
+      if (!methodMap[method]) methodMap[method] = { amount: 0, count: 0 };
+      methodMap[method].amount += sale.totalAmount;
+      methodMap[method].count += 1;
+    }
+
+    const paymentMethodBreakdown = Object.entries(methodMap).map(
+      ([method, data]) => ({
+        method,
+        amount: data.amount,
+        count: data.count,
+      }),
+    );
+
+    return {
+      date,
+      summary: {
+        membershipRevenue,
+        productRevenue,
+        totalRevenue,
+        totalExpenses,
+        netProfit: totalRevenue - totalExpenses,
+        membershipCount: membershipSales.length,
+        productSaleCount: productSales.length,
+      },
+      paymentMethodBreakdown,
+      membershipSales,
+      productSales,
+      expenses,
+    };
+  }
+
+  // ============================================
   // TRAINER CLIENT REPORTS
   // ============================================
 

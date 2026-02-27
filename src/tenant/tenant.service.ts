@@ -3104,6 +3104,26 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES "${schemaName}"."products"(id),
+        branch_id INTEGER,
+        movement_type VARCHAR(50) NOT NULL,
+        quantity INTEGER NOT NULL,
+        stock_before INTEGER NOT NULL,
+        stock_after INTEGER NOT NULL,
+        reference_id INTEGER,
+        reason TEXT,
+        performed_by INTEGER NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS "idx_${schemaName}_stock_movements_product" ON "${schemaName}"."product_stock_movements"(product_id)
+    `);
+
     // ─── Email / SMS Campaign System ───
 
     await client.query(`

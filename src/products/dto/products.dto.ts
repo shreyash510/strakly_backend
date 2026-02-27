@@ -347,3 +347,32 @@ export class SalesStatsFiltersDto {
   @IsString()
   endDate?: string;
 }
+
+export class StockMovementFiltersDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  movementType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  limit?: number;
+}

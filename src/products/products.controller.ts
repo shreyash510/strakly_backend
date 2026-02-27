@@ -28,6 +28,7 @@ import {
   ProductFiltersDto,
   SalesFiltersDto,
   SalesStatsFiltersDto,
+  StockMovementFiltersDto,
 } from './dto/products.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -216,9 +217,23 @@ export class ProductsController {
   adjustStock(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
+    @UserId() userId: number,
     @Body() dto: AdjustStockDto,
   ) {
-    return this.productsService.adjustStock(id, gymId, dto);
+    return this.productsService.adjustStock(id, gymId, dto, userId);
+  }
+
+  @Get(':id/stock-movements')
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get stock movements for a product' })
+  @ApiParam({ name: 'id', type: Number })
+  getStockMovements(
+    @Param('id', ParseIntPipe) id: number,
+    @GymId() gymId: number,
+    @OptionalBranchId() branchId: number | null,
+    @Query() filters: StockMovementFiltersDto,
+  ) {
+    return this.productsService.getStockMovements(gymId, id, branchId, filters);
   }
 
   @Delete(':id')
