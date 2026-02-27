@@ -591,81 +591,78 @@ export class SalaryService {
 
     for (const gym of gyms) {
       try {
-        // Find recurring salaries from previous month in this tenant
-        const recurringSalaries = await this.tenantService.executeInTenant(
+        // Process all salaries for this gym in a single connection
+        const result = await this.tenantService.executeInTenant(
           gym.id,
           async (client) => {
-            const result = await client.query(
-              `SELECT * FROM staff_salaries
-             WHERE is_recurring = true AND month = $1 AND year = $2`,
+            let gymCreated = 0;
+            let gymSkipped = 0;
+            let gymErrors = 0;
+
+            // Find recurring salaries from previous month (select only needed columns)
+            const salariesResult = await client.query(
+              `SELECT id, staff_id, base_salary, bonus, deductions, net_amount
+               FROM staff_salaries
+               WHERE is_recurring = true AND month = $1 AND year = $2`,
               [prevMonth, prevYear],
             );
-            return result.rows;
-          },
-        );
 
-        for (const salary of recurringSalaries) {
-          try {
-            // Check if salary already exists for current month
-            const existing = await this.tenantService.executeInTenant(
-              gym.id,
-              async (client) => {
-                const result = await client.query(
+            for (const salary of salariesResult.rows) {
+              try {
+                // Check if salary already exists for current month
+                const existingResult = await client.query(
                   `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
                   [salary.staff_id, currentMonth, currentYear],
                 );
-                return result.rows[0];
-              },
-            );
 
-            if (existing) {
-              skipped++;
-              continue;
-            }
+                if (existingResult.rows.length > 0) {
+                  gymSkipped++;
+                  continue;
+                }
 
-            // Check if staff is still active
-            const staffActive = await this.tenantService.executeInTenant(
-              gym.id,
-              async (client) => {
-                const result = await client.query(
+                // Check if staff is still active
+                const staffResult = await client.query(
                   `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('branch_admin', 'manager', 'trainer')`,
                   [salary.staff_id],
                 );
-                return result.rows.length > 0;
-              },
-            );
 
-            if (!staffActive) {
-              skipped++;
-              continue;
+                if (staffResult.rows.length === 0) {
+                  gymSkipped++;
+                  continue;
+                }
+
+                // Create new salary record for current month
+                await client.query(
+                  `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pending', 'Auto-generated recurring salary', NOW(), NOW())`,
+                  [
+                    salary.staff_id,
+                    currentMonth,
+                    currentYear,
+                    salary.base_salary,
+                    salary.bonus,
+                    salary.deductions,
+                    salary.net_amount,
+                  ],
+                );
+
+                gymCreated++;
+              } catch (error) {
+                this.logger.error(
+                  `Error creating recurring salary for staff ${salary.staff_id}:`,
+                  error,
+                );
+                gymErrors++;
+              }
             }
 
-            // Create new salary record for current month
-            await this.tenantService.executeInTenant(gym.id, async (client) => {
-              await client.query(
-                `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pending', 'Auto-generated recurring salary', NOW(), NOW())`,
-                [
-                  salary.staff_id,
-                  currentMonth,
-                  currentYear,
-                  salary.base_salary,
-                  salary.bonus,
-                  salary.deductions,
-                  salary.net_amount,
-                ],
-              );
-            });
+            return { gymCreated, gymSkipped, gymErrors };
+          },
+        );
 
-            created++;
-          } catch (error) {
-            this.logger.error(
-              `Error creating recurring salary for staff ${salary.staff_id}:`,
-              error,
-            );
-            errors++;
-          }
-        }
+        created += result.gymCreated;
+        skipped += result.gymSkipped;
+        errors += result.gymErrors;
       } catch (error) {
         this.logger.error(`Error processing gym ${gym.id}:`, error);
         errors++;

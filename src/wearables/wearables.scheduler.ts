@@ -39,7 +39,8 @@ export class WearablesScheduler {
             gym.id,
             async (client) => {
               const result = await client.query(
-                `SELECT * FROM wearable_connections
+                `SELECT id, user_id, provider, access_token, refresh_token, token_expires_at
+                 FROM wearable_connections
                  WHERE is_active = TRUE
                    AND access_token IS NOT NULL
                    AND refresh_token IS NOT NULL`,

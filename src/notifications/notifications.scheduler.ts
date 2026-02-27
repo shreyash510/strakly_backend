@@ -58,6 +58,8 @@ export class NotificationsScheduler {
    */
   private async checkExpiringMemberships(gymId: number): Promise<number> {
     const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
     const daysToCheck = [7, 3, 1]; // Notify at 7, 3, and 1 day(s) before expiry
     let notificationsSent = 0;
 
@@ -65,18 +67,16 @@ export class NotificationsScheduler {
       const targetDate = new Date(now);
       targetDate.setDate(targetDate.getDate() + days);
 
-      // Set to start of day
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
 
-      // Set to end of day
       const endOfDay = new Date(targetDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const expiringMemberships = await this.tenantService.executeInTenant(
-        gymId,
-        async (client) => {
-          const result = await client.query(
+      // Fetch expiring memberships AND already-notified user IDs in a single connection
+      const { memberships, alreadyNotifiedUserIds } =
+        await this.tenantService.executeInTenant(gymId, async (client) => {
+          const membershipsResult = await client.query(
             `SELECT m.id, m.user_id, m.branch_id, m.end_date, p.name as plan_name
              FROM memberships m
              LEFT JOIN plans p ON p.id = m.plan_id
@@ -85,19 +85,27 @@ export class NotificationsScheduler {
                AND m.end_date <= $2`,
             [startOfDay, endOfDay],
           );
-          return result.rows;
-        },
-      );
 
-      for (const membership of expiringMemberships) {
-        // Check if we already sent a notification for this expiry period
-        const alreadyNotified = await this.hasExpiryNotification(
-          gymId,
-          membership.user_id,
-          days,
-        );
+          // Batch dedup: get all user IDs already notified today for this day count
+          const notifiedResult = await client.query(
+            `SELECT DISTINCT user_id FROM notifications
+             WHERE type = 'membership_expiry'
+               AND created_at >= $1
+               AND data->>'daysRemaining' = $2`,
+            [today, String(days)],
+          );
 
-        if (!alreadyNotified) {
+          const notifiedSet = new Set(
+            notifiedResult.rows.map((r: any) => r.user_id as number),
+          );
+          return {
+            memberships: membershipsResult.rows,
+            alreadyNotifiedUserIds: notifiedSet,
+          };
+        });
+
+      for (const membership of memberships) {
+        if (!alreadyNotifiedUserIds.has(membership.user_id)) {
           await this.notificationsService.notifyMembershipExpiry(
             membership.user_id,
             gymId,
@@ -115,36 +123,6 @@ export class NotificationsScheduler {
     }
 
     return notificationsSent;
-  }
-
-  /**
-   * Check if a notification was already sent for this expiry period
-   * Prevents duplicate notifications on the same day
-   */
-  private async hasExpiryNotification(
-    gymId: number,
-    userId: number,
-    daysRemaining: number,
-  ): Promise<boolean> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const result = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const queryResult = await client.query(
-          `SELECT id FROM notifications
-         WHERE user_id = $1
-           AND type = 'membership_expiry'
-           AND created_at >= $2
-           AND data->>'daysRemaining' = $3`,
-          [userId, today, String(daysRemaining)],
-        );
-        return queryResult.rows.length > 0;
-      },
-    );
-
-    return result;
   }
 
   /**
