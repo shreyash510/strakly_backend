@@ -162,20 +162,20 @@ export class AuthService {
       gymId: gym?.id,
       gym: gym
         ? {
-            id: gym.id,
-            name: gym.name,
-            logo: gym.logo || undefined,
-            city: gym.city || undefined,
-            state: gym.state || undefined,
-            tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
-            subscription: subscription
-              ? {
-                  planCode: subscription.plan?.code,
-                  planName: subscription.plan?.name,
-                  status: subscription.status,
-                }
-              : undefined,
-          }
+          id: gym.id,
+          name: gym.name,
+          logo: gym.logo || undefined,
+          city: gym.city || undefined,
+          state: gym.state || undefined,
+          tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
+          subscription: subscription
+            ? {
+              planCode: subscription.plan?.code,
+              planName: subscription.plan?.name,
+              status: subscription.status,
+            }
+            : undefined,
+        }
         : undefined,
       gyms,
       branchIds: user.branchIds, // For branch_admin with multiple branches
@@ -2067,10 +2067,10 @@ export class AuthService {
         tenantSchemaName: gym.tenantSchemaName!,
         subscription: subscription
           ? {
-              planCode: subscription.plan?.code,
-              planName: subscription.plan?.name,
-              status: subscription.status,
-            }
+            planCode: subscription.plan?.code,
+            planName: subscription.plan?.name,
+            status: subscription.status,
+          }
           : undefined,
       },
       expiresIn: 7200, // 2 hours in seconds
@@ -2104,6 +2104,12 @@ export class AuthService {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
       const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
       const redirectUri = this.getGoogleRedirectUri();
+
+      // DEBUG: Log what we're sending to Google (masked)
+      const maskedSecret = clientSecret
+        ? `${clientSecret.substring(0, 8)}...${clientSecret.substring(clientSecret.length - 4)} (len=${clientSecret.length})`
+        : 'NOT SET';
+      this.logger.warn(`[DEBUG] Token exchange: clientId=${clientId}, secret=${maskedSecret}, redirectUri=${redirectUri}, code=${code.substring(0, 10)}...`);
 
       // Create a new OAuth2Client with proper redirect URI for token exchange
       const oAuth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
