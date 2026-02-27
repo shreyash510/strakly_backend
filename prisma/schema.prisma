@@ -22,6 +22,7 @@ model SystemUser {
   role          String    @default("superadmin")
   isActive      Boolean   @default(true) @map("is_active")
   lastLoginAt   DateTime? @map("last_login_at")
+  unlockedSidebarItems Json? @map("unlocked_sidebar_items") // Array of unlocked sidebar item IDs
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
