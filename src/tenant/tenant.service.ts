@@ -2177,19 +2177,19 @@ export class TenantService implements OnModuleInit {
         name: `chk_${schemaClean}_payments_reference_table`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_reference_table"
-              CHECK (reference_table IN ('memberships', 'staff_salaries', 'plans', 'offers'))`,
+              CHECK (reference_table IN ('memberships', 'staff_salaries', 'plans', 'offers', 'product_sales'))`,
       },
       {
         name: `chk_${schemaClean}_payments_payer_type`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_payer_type"
-              CHECK (payer_type IN ('client', 'gym', 'staff', 'admin'))`,
+              CHECK (payer_type IN ('client', 'gym', 'staff', 'admin', 'guest'))`,
       },
       {
         name: `chk_${schemaClean}_payments_payee_type`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_payee_type"
-              CHECK (payee_type IS NULL OR payee_type IN ('client', 'gym', 'staff', 'admin'))`,
+              CHECK (payee_type IS NULL OR payee_type IN ('client', 'gym', 'staff', 'admin', 'guest'))`,
       },
     ];
 

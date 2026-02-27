@@ -51,7 +51,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
-  ) {}
+  ) { }
 
   private formatPayment(p: Record<string, any>): PaymentRecord {
     return {
@@ -254,7 +254,7 @@ export class PaymentsService {
             dto.referenceId,
             dto.referenceTable,
             dto.payerType,
-            dto.payerId,
+            dto.payerId || null,
             dto.payerName || null,
             dto.payeeType || null,
             dto.payeeId || null,
@@ -520,7 +520,7 @@ export class PaymentsService {
         referenceId: saleId,
         referenceTable: 'product_sales',
         payerType: buyerId ? ROLES.CLIENT : 'guest',
-        payerId: buyerId || 0,
+        payerId: buyerId || undefined,
         payerName: buyerName,
         amount,
         taxAmount,

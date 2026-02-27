@@ -47,9 +47,9 @@ export class CreatePaymentDto {
   @IsString()
   payerType: string; // 'client', 'gym', 'staff'
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
-  payerId: number;
+  payerId?: number;
 
   @IsOptional()
   @IsString()
