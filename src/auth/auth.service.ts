@@ -103,6 +103,14 @@ export class AuthService {
     // Initialize Google OAuth2 client
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+
+    // Debug: log masked credentials to verify env vars are loaded correctly
+    const maskedSecret = clientSecret
+      ? `${clientSecret.substring(0, 8)}...${clientSecret.substring(clientSecret.length - 4)}`
+      : 'NOT SET';
+    this.logger.log(`Google OAuth Config: clientId=${clientId}, secret=${maskedSecret}, redirectUri=${frontendUrl}/auth/google/callback`);
+
     this.googleOAuth2Client = new OAuth2Client(clientId, clientSecret);
   }
 
