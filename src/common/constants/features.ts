@@ -22,7 +22,6 @@ export const PLAN_FEATURES = {
   GAMIFICATION: 'gamification',
   LOYALTY_PROGRAM: 'loyalty_program',
   WEARABLE_INTEGRATION: 'wearable_integration',
-  MULTI_CURRENCY: 'multi_currency',
   // Operations
   CLASS_SCHEDULING: 'class_scheduling',
   APPOINTMENT_BOOKING: 'appointment_booking',

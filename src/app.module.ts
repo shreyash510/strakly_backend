@@ -57,7 +57,6 @@ import { EngagementModule } from './engagement/engagement.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { WearablesModule } from './wearables/wearables.module';
-import { CurrenciesModule } from './currencies/currencies.module';
 
 @Module({
   imports: [
@@ -121,7 +120,6 @@ import { CurrenciesModule } from './currencies/currencies.module';
     GamificationModule,
     LoyaltyModule,
     WearablesModule,
-    CurrenciesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
