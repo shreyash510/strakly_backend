@@ -575,7 +575,7 @@ export class ReportsService {
     const productSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `ps.is_deleted = FALSE AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
+        let whereClause = `(ps.is_deleted = FALSE OR ps.is_deleted IS NULL) AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
         const values: SqlValue[] = [dayStart, dayEnd];
         let paramIndex = 3;
 

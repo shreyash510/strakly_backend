@@ -87,7 +87,7 @@ export class ProductsService {
 
   async findAllCategories(gymId: number, branchId: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['is_deleted = FALSE'];
+      const conditions: string[] = ['(is_deleted = FALSE OR is_deleted IS NULL)'];
       const values: SqlValue[] = [];
 
       if (branchId !== null) {
@@ -126,7 +126,7 @@ export class ProductsService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const existing = await client.query(
-        `SELECT id FROM product_categories WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT id FROM product_categories WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
         [id],
       );
       if (existing.rows.length === 0) {
@@ -431,12 +431,12 @@ export class ProductsService {
     const offset = (page - 1) * limit;
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['s.is_deleted = FALSE'];
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -764,12 +764,12 @@ export class ProductsService {
     filters: SalesStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['s.is_deleted = FALSE'];
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(branchId);
       }
 
