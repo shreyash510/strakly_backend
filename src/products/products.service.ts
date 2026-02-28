@@ -25,7 +25,7 @@ export class ProductsService {
   constructor(
     private readonly tenantService: TenantService,
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   private formatCategory(row: Record<string, any>) {
     return {
@@ -79,6 +79,7 @@ export class ProductsService {
       soldAt: row.sold_at,
       notes: row.notes,
       createdAt: row.created_at,
+      updatedAt: row.updated_at,
     };
   }
 
@@ -587,10 +588,10 @@ export class ProductsService {
       // Create payment record
       const buyerName = dto.userId
         ? (
-            await client.query(`SELECT name FROM users WHERE id = $1`, [
-              dto.userId,
-            ])
-          ).rows[0]?.name || 'Unknown'
+          await client.query(`SELECT name FROM users WHERE id = $1`, [
+            dto.userId,
+          ])
+        ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
       const payment = await this.paymentsService.createProductSalePayment(
@@ -636,6 +637,12 @@ export class ProductsService {
 
       const productMap = new Map(products.rows.map((p) => [p.id, p]));
 
+      // Aggregate quantities per product for proper stock validation
+      const aggregatedQty = new Map<number, number>();
+      for (const item of dto.items) {
+        aggregatedQty.set(item.productId, (aggregatedQty.get(item.productId) || 0) + item.quantity);
+      }
+
       for (const item of dto.items) {
         const p = productMap.get(item.productId);
         if (!p) {
@@ -644,9 +651,14 @@ export class ProductsService {
         if (!p.is_active) {
           throw new BadRequestException(`Product "${p.name}" is not active`);
         }
-        if (p.stock_quantity < item.quantity) {
+      }
+
+      // Validate aggregated stock
+      for (const [productId, totalQty] of aggregatedQty) {
+        const p = productMap.get(productId)!;
+        if (parseInt(p.stock_quantity) < totalQty) {
           throw new BadRequestException(
-            `Insufficient stock for "${p.name}". Available: ${p.stock_quantity}, requested: ${item.quantity}`,
+            `Insufficient stock for "${p.name}". Available: ${p.stock_quantity}, requested: ${totalQty}`,
           );
         }
       }
@@ -678,8 +690,8 @@ export class ProductsService {
         }
 
         // Record stock movement
-        const batchStockBefore = parseInt(p.stock_quantity);
-        const batchStockAfter = stockResult.rows[0].stock_quantity;
+        const batchStockAfter = parseInt(stockResult.rows[0].stock_quantity);
+        const batchStockBefore = batchStockAfter + item.quantity;
 
         // Create sale record
         const sale = await client.query(
@@ -712,10 +724,10 @@ export class ProductsService {
       // Create single payment for the batch
       const buyerName = dto.userId
         ? (
-            await client.query(`SELECT name FROM users WHERE id = $1`, [
-              dto.userId,
-            ])
-          ).rows[0]?.name || 'Unknown'
+          await client.query(`SELECT name FROM users WHERE id = $1`, [
+            dto.userId,
+          ])
+        ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
       const payment = await this.paymentsService.createProductSalePayment(
@@ -787,7 +799,7 @@ export class ProductsService {
 
       // Top 5 products by revenue
       const topProducts = await client.query(
-        `SELECT p.name, SUM(s.total_amount) as revenue, SUM(s.quantity) as units_sold
+        `SELECT p.id, p.name, SUM(s.total_amount) as revenue, SUM(s.quantity) as units_sold
          FROM product_sales s
          JOIN products p ON p.id = s.product_id
          WHERE ${whereClause}
@@ -809,16 +821,17 @@ export class ProductsService {
         totalRevenue: parseFloat(stats.total_revenue),
         totalTax: parseFloat(stats.total_tax),
         totalItems: parseInt(stats.total_items),
-        totalTransactions: parseInt(stats.total_transactions),
-        avgSaleValue: parseFloat(stats.avg_sale_value),
+        totalSales: parseInt(stats.total_transactions),
+        averageOrderValue: parseFloat(stats.avg_sale_value),
         topProducts: topProducts.rows.map((r) => ({
-          name: r.name,
-          revenue: parseFloat(r.revenue),
-          unitsSold: parseInt(r.units_sold),
+          productId: r.id,
+          productName: r.name,
+          totalRevenue: parseFloat(r.revenue),
+          totalSold: parseInt(r.units_sold),
         })),
         byPaymentMethod: byPaymentMethod.rows.map((r) => ({
           method: r.payment_method,
-          revenue: parseFloat(r.revenue),
+          total: parseFloat(r.revenue),
           count: parseInt(r.count),
         })),
       };

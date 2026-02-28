@@ -22,6 +22,7 @@ export class CreatePlanDto {
 
   @IsNumber()
   @Min(1)
+  @Type(() => Number)
   durationValue: number;
 
   @IsString()
@@ -43,6 +44,7 @@ export class CreatePlanDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   displayOrder?: number;
 
   @IsOptional()
@@ -52,11 +54,13 @@ export class CreatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   maxFreezeDays?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   includesPtSessions?: number;
 
   @IsOptional()
@@ -76,6 +80,7 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Type(() => Number)
   durationValue?: number;
 
   @IsOptional()
@@ -99,6 +104,7 @@ export class UpdatePlanDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   displayOrder?: number;
 
   @IsOptional()
@@ -112,11 +118,13 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   maxFreezeDays?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   includesPtSessions?: number;
 
   @IsOptional()
