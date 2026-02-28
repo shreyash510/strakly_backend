@@ -2177,19 +2177,19 @@ export class TenantService implements OnModuleInit {
         name: `chk_${schemaClean}_payments_reference_table`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_reference_table"
-              CHECK (reference_table IN ('memberships', 'staff_salaries', 'plans', 'offers'))`,
+              CHECK (reference_table IN ('memberships', 'staff_salaries', 'plans', 'offers', 'product_sales'))`,
       },
       {
         name: `chk_${schemaClean}_payments_payer_type`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_payer_type"
-              CHECK (payer_type IN ('client', 'gym', 'staff', 'admin'))`,
+              CHECK (payer_type IN ('client', 'gym', 'staff', 'admin', 'guest'))`,
       },
       {
         name: `chk_${schemaClean}_payments_payee_type`,
         sql: `ALTER TABLE "${schemaName}"."payments"
               ADD CONSTRAINT "chk_${schemaClean}_payments_payee_type"
-              CHECK (payee_type IS NULL OR payee_type IN ('client', 'gym', 'staff', 'admin'))`,
+              CHECK (payee_type IS NULL OR payee_type IN ('client', 'gym', 'staff', 'admin', 'guest'))`,
       },
     ];
 
@@ -3102,6 +3102,26 @@ export class TenantService implements OnModuleInit {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES "${schemaName}"."products"(id),
+        branch_id INTEGER,
+        movement_type VARCHAR(50) NOT NULL,
+        quantity INTEGER NOT NULL,
+        stock_before INTEGER NOT NULL,
+        stock_after INTEGER NOT NULL,
+        reference_id INTEGER,
+        reason TEXT,
+        performed_by INTEGER NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS "idx_${schemaName}_stock_movements_product" ON "${schemaName}"."product_stock_movements"(product_id)
     `);
 
     // ─── Email / SMS Campaign System ───

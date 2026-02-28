@@ -175,7 +175,7 @@ export class PlansService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id FROM plans WHERE code = $1`,
+          `SELECT id FROM plans WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [dto.code],
         );
         return result.rows[0];
@@ -287,7 +287,7 @@ export class PlansService {
           `UPDATE plans SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
           values,
         );
-        const result = await client.query(`SELECT * FROM plans WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM plans WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           id,
         ]);
         return result.rows[0];

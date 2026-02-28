@@ -16,7 +16,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ReportsService } from './reports.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { PdfTemplateService } from './pdf-template.service';
-import { ReportFilterDto } from './dto/reports.dto';
+import { ReportFilterDto, DailySalesFilterDto } from './dto/reports.dto';
 import { PdfReportFilterDto } from './dto/pdf-report.dto';
 import { ClientReportFilterDto } from './dto/client-reports.dto';
 import type { AuthenticatedRequest } from '../common/types';
@@ -163,6 +163,22 @@ export class ReportsController {
     const gymId = req.user.gymId!;
     const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getPaymentDuesReport(gymId, branchId);
+  }
+
+  @Get('daily-sales')
+  @Roles('admin', 'branch_admin', 'manager')
+  @ApiOperation({ summary: 'Get daily sales report (memberships + products + expenses)' })
+  @ApiQuery({ name: 'date', required: false, type: String, description: 'Date (YYYY-MM-DD), defaults to today' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
+  async getDailySalesReport(
+    @Query() filters: DailySalesFilterDto,
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') queryBranchId?: string,
+  ) {
+    const gymId = req.user.gymId!;
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    const date = filters.date || new Date().toISOString().slice(0, 10);
+    return this.reportsService.getDailySalesReport(gymId, date, branchId);
   }
 
   // ============================================

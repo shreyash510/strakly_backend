@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsBoolean,
   IsArray,
+  IsIn,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -21,10 +22,12 @@ export class CreatePlanDto {
 
   @IsNumber()
   @Min(1)
+  @Type(() => Number)
   durationValue: number;
 
   @IsString()
-  durationType: string; // day, month, year
+  @IsIn(['day', 'week', 'month', 'year'])
+  durationType: string; // day, week, month, year
 
   @IsNumber()
   @Min(0)
@@ -41,6 +44,7 @@ export class CreatePlanDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   displayOrder?: number;
 
   @IsOptional()
@@ -50,11 +54,13 @@ export class CreatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   maxFreezeDays?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   includesPtSessions?: number;
 
   @IsOptional()
@@ -74,10 +80,12 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Type(() => Number)
   durationValue?: number;
 
   @IsOptional()
   @IsString()
+  @IsIn(['day', 'week', 'month', 'year'])
   durationType?: string;
 
   @IsOptional()
@@ -96,6 +104,7 @@ export class UpdatePlanDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   displayOrder?: number;
 
   @IsOptional()
@@ -109,11 +118,13 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   maxFreezeDays?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   includesPtSessions?: number;
 
   @IsOptional()

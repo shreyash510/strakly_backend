@@ -16,6 +16,7 @@ import {
   ProductFiltersDto,
   SalesFiltersDto,
   SalesStatsFiltersDto,
+  StockMovementFiltersDto,
 } from './dto/products.dto';
 import { SqlValue } from '../common/types';
 
@@ -24,7 +25,7 @@ export class ProductsService {
   constructor(
     private readonly tenantService: TenantService,
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   private formatCategory(row: Record<string, any>) {
     return {
@@ -78,6 +79,7 @@ export class ProductsService {
       soldAt: row.sold_at,
       notes: row.notes,
       createdAt: row.created_at,
+      updatedAt: row.updated_at,
     };
   }
 
@@ -85,7 +87,7 @@ export class ProductsService {
 
   async findAllCategories(gymId: number, branchId: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['is_deleted = FALSE'];
+      const conditions: string[] = ['(is_deleted = FALSE OR is_deleted IS NULL)'];
       const values: SqlValue[] = [];
 
       if (branchId !== null) {
@@ -124,7 +126,7 @@ export class ProductsService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const existing = await client.query(
-        `SELECT id FROM product_categories WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT id FROM product_categories WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
         [id],
       );
       if (existing.rows.length === 0) {
@@ -366,27 +368,39 @@ export class ProductsService {
     });
   }
 
-  async adjustStock(id: number, gymId: number, dto: AdjustStockDto) {
+  async adjustStock(id: number, gymId: number, dto: AdjustStockDto, userId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2 AND is_deleted = FALSE AND stock_quantity + $1 >= 0
-         RETURNING *`,
-        [dto.adjustment, id],
+      // Get current stock before adjustment
+      const current = await client.query(
+        `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+        [id],
       );
+      if (current.rows.length === 0) {
+        throw new NotFoundException(`Product with ID ${id} not found`);
+      }
 
-      if (result.rows.length === 0) {
-        const exists = await client.query(
-          `SELECT stock_quantity FROM products WHERE id = $1 AND is_deleted = FALSE`,
-          [id],
-        );
-        if (exists.rows.length === 0) {
-          throw new NotFoundException(`Product with ID ${id} not found`);
-        }
+      const stockBefore = current.rows[0].stock_quantity;
+      const stockAfter = stockBefore + dto.adjustment;
+
+      if (stockAfter < 0) {
         throw new BadRequestException(
-          `Insufficient stock. Current stock: ${exists.rows[0].stock_quantity}, adjustment: ${dto.adjustment}`,
+          `Insufficient stock. Current stock: ${stockBefore}, adjustment: ${dto.adjustment}`,
         );
       }
+
+      const result = await client.query(
+        `UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2 AND is_deleted = FALSE
+         RETURNING *`,
+        [stockAfter, id],
+      );
+
+      // Record stock movement
+      await client.query(
+        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, current.rows[0].branch_id, 'adjustment', dto.adjustment, stockBefore, stockAfter, dto.reason || null, userId],
+      );
 
       return this.formatProduct(result.rows[0]);
     });
@@ -417,12 +431,12 @@ export class ProductsService {
     const offset = (page - 1) * limit;
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['s.is_deleted = FALSE'];
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -562,13 +576,22 @@ export class ProductsService {
 
       const saleRecord = sale.rows[0];
 
+      // Record stock movement
+      const stockBefore = parseInt(p.stock_quantity) + dto.quantity; // stock before decrement
+      const stockAfter = parseInt(p.stock_quantity); // RETURNING gave us the post-update value
+      await client.query(
+        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [dto.productId, branchId, 'sale', -dto.quantity, stockBefore, stockAfter, saleRecord.id, soldBy],
+      );
+
       // Create payment record
       const buyerName = dto.userId
         ? (
-            await client.query(`SELECT name FROM users WHERE id = $1`, [
-              dto.userId,
-            ])
-          ).rows[0]?.name || 'Unknown'
+          await client.query(`SELECT name FROM users WHERE id = $1`, [
+            dto.userId,
+          ])
+        ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
       const payment = await this.paymentsService.createProductSalePayment(
@@ -614,6 +637,12 @@ export class ProductsService {
 
       const productMap = new Map(products.rows.map((p) => [p.id, p]));
 
+      // Aggregate quantities per product for proper stock validation
+      const aggregatedQty = new Map<number, number>();
+      for (const item of dto.items) {
+        aggregatedQty.set(item.productId, (aggregatedQty.get(item.productId) || 0) + item.quantity);
+      }
+
       for (const item of dto.items) {
         const p = productMap.get(item.productId);
         if (!p) {
@@ -622,9 +651,14 @@ export class ProductsService {
         if (!p.is_active) {
           throw new BadRequestException(`Product "${p.name}" is not active`);
         }
-        if (p.stock_quantity < item.quantity) {
+      }
+
+      // Validate aggregated stock
+      for (const [productId, totalQty] of aggregatedQty) {
+        const p = productMap.get(productId)!;
+        if (parseInt(p.stock_quantity) < totalQty) {
           throw new BadRequestException(
-            `Insufficient stock for "${p.name}". Available: ${p.stock_quantity}, requested: ${item.quantity}`,
+            `Insufficient stock for "${p.name}". Available: ${p.stock_quantity}, requested: ${totalQty}`,
           );
         }
       }
@@ -655,6 +689,10 @@ export class ProductsService {
           );
         }
 
+        // Record stock movement
+        const batchStockAfter = parseInt(stockResult.rows[0].stock_quantity);
+        const batchStockBefore = batchStockAfter + item.quantity;
+
         // Create sale record
         const sale = await client.query(
           `INSERT INTO product_sales (branch_id, product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
@@ -674,16 +712,22 @@ export class ProductsService {
           ],
         );
 
+        await client.query(
+          `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [item.productId, branchId, 'sale', -item.quantity, batchStockBefore, batchStockAfter, sale.rows[0].id, soldBy],
+        );
+
         sales.push({ ...sale.rows[0], product_name: p.name });
       }
 
       // Create single payment for the batch
       const buyerName = dto.userId
         ? (
-            await client.query(`SELECT name FROM users WHERE id = $1`, [
-              dto.userId,
-            ])
-          ).rows[0]?.name || 'Unknown'
+          await client.query(`SELECT name FROM users WHERE id = $1`, [
+            dto.userId,
+          ])
+        ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
       const payment = await this.paymentsService.createProductSalePayment(
@@ -720,12 +764,12 @@ export class ProductsService {
     filters: SalesStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const conditions: string[] = ['s.is_deleted = FALSE'];
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
       if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -755,7 +799,7 @@ export class ProductsService {
 
       // Top 5 products by revenue
       const topProducts = await client.query(
-        `SELECT p.name, SUM(s.total_amount) as revenue, SUM(s.quantity) as units_sold
+        `SELECT p.id, p.name, SUM(s.total_amount) as revenue, SUM(s.quantity) as units_sold
          FROM product_sales s
          JOIN products p ON p.id = s.product_id
          WHERE ${whereClause}
@@ -777,18 +821,111 @@ export class ProductsService {
         totalRevenue: parseFloat(stats.total_revenue),
         totalTax: parseFloat(stats.total_tax),
         totalItems: parseInt(stats.total_items),
-        totalTransactions: parseInt(stats.total_transactions),
-        avgSaleValue: parseFloat(stats.avg_sale_value),
+        totalSales: parseInt(stats.total_transactions),
+        averageOrderValue: parseFloat(stats.avg_sale_value),
         topProducts: topProducts.rows.map((r) => ({
-          name: r.name,
-          revenue: parseFloat(r.revenue),
-          unitsSold: parseInt(r.units_sold),
+          productId: r.id,
+          productName: r.name,
+          totalRevenue: parseFloat(r.revenue),
+          totalSold: parseInt(r.units_sold),
         })),
         byPaymentMethod: byPaymentMethod.rows.map((r) => ({
           method: r.payment_method,
-          revenue: parseFloat(r.revenue),
+          total: parseFloat(r.revenue),
           count: parseInt(r.count),
         })),
+      };
+    });
+  }
+
+  // ─── Stock Movements ───
+
+  private formatStockMovement(row: Record<string, any>) {
+    return {
+      id: row.id,
+      productId: row.product_id,
+      productName: row.product_name,
+      branchId: row.branch_id,
+      movementType: row.movement_type,
+      quantity: row.quantity,
+      stockBefore: row.stock_before,
+      stockAfter: row.stock_after,
+      referenceId: row.reference_id,
+      reason: row.reason,
+      performedBy: row.performed_by,
+      performedByName: row.performed_by_name,
+      createdAt: row.created_at,
+    };
+  }
+
+  async getStockMovements(
+    gymId: number,
+    productId: number,
+    branchId: number | null,
+    filters: StockMovementFiltersDto = {},
+  ) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 15;
+    const offset = (page - 1) * limit;
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      // Verify product exists
+      const product = await client.query(
+        `SELECT id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+        [productId],
+      );
+      if (product.rows.length === 0) {
+        throw new NotFoundException(`Product with ID ${productId} not found`);
+      }
+
+      const conditions: string[] = ['sm.product_id = $1'];
+      const values: SqlValue[] = [productId];
+      let paramIndex = 2;
+
+      if (branchId !== null) {
+        conditions.push(`sm.branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
+
+      if (filters.movementType) {
+        conditions.push(`sm.movement_type = $${paramIndex++}`);
+        values.push(filters.movementType);
+      }
+
+      if (filters.startDate) {
+        conditions.push(`sm.created_at >= $${paramIndex++}`);
+        values.push(filters.startDate);
+      }
+
+      if (filters.endDate) {
+        conditions.push(`sm.created_at <= $${paramIndex++}`);
+        values.push(filters.endDate);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const countResult = await client.query(
+        `SELECT COUNT(*) as total FROM product_stock_movements sm WHERE ${whereClause}`,
+        values,
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      const result = await client.query(
+        `SELECT sm.*, p.name as product_name, staff.name as performed_by_name
+         FROM product_stock_movements sm
+         LEFT JOIN products p ON p.id = sm.product_id
+         LEFT JOIN users staff ON staff.id = sm.performed_by
+         WHERE ${whereClause}
+         ORDER BY sm.created_at DESC
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...values, limit, offset],
+      );
+
+      return {
+        data: result.rows.map((r) => this.formatStockMovement(r)),
+        total,
+        page,
+        limit,
       };
     });
   }
