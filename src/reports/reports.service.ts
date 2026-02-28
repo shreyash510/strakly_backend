@@ -528,16 +528,19 @@ export class ReportsService {
     date: string,
     branchId: number | null = null,
   ) {
+    const dayStart = `${date} 00:00:00`;
+    const dayEnd = `${date} 23:59:59.999`;
+
     // 1. Get membership payments for the day
     const membershipSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `m.payment_status = 'paid' AND DATE(m.paid_at) = $1`;
-        const values: SqlValue[] = [date];
-        let paramIndex = 2;
+        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL) AND m.paid_at >= $1 AND m.paid_at <= $2`;
+        const values: SqlValue[] = [dayStart, dayEnd];
+        let paramIndex = 3;
 
         if (branchId !== null) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          whereClause += ` AND (m.branch_id = $${paramIndex++} OR m.branch_id IS NULL)`;
           values.push(branchId);
         }
 
@@ -572,12 +575,12 @@ export class ReportsService {
     const productSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `ps.is_deleted = FALSE AND DATE(ps.sold_at) = $1`;
-        const values: SqlValue[] = [date];
-        let paramIndex = 2;
+        let whereClause = `ps.is_deleted = FALSE AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
+        const values: SqlValue[] = [dayStart, dayEnd];
+        let paramIndex = 3;
 
         if (branchId !== null) {
-          whereClause += ` AND ps.branch_id = $${paramIndex++}`;
+          whereClause += ` AND (ps.branch_id = $${paramIndex++} OR ps.branch_id IS NULL)`;
           values.push(branchId);
         }
 
@@ -618,12 +621,12 @@ export class ReportsService {
     const expenses = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `s.payment_status = 'paid' AND DATE(s.paid_at) = $1`;
-        const values: SqlValue[] = [date];
-        let paramIndex = 2;
+        let whereClause = `s.payment_status = 'paid' AND (s.is_deleted = FALSE OR s.is_deleted IS NULL) AND s.paid_at >= $1 AND s.paid_at <= $2`;
+        const values: SqlValue[] = [dayStart, dayEnd];
+        let paramIndex = 3;
 
         if (branchId !== null) {
-          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          whereClause += ` AND (u.branch_id = $${paramIndex++} OR u.branch_id IS NULL)`;
           values.push(branchId);
         }
 
