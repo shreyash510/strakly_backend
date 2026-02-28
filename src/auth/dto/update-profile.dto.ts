@@ -30,4 +30,10 @@ export class UpdateProfileDto {
   @IsArray()
   @IsString({ each: true })
   unlockedSidebarItems?: string[];
+
+  @ApiPropertyOptional({ description: 'Array of pinned sidebar item IDs', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  pinnedSidebarItems?: string[];
 }

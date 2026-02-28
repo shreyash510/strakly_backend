@@ -63,6 +63,7 @@ export interface UserResponse {
   emailVerified?: boolean;
   attendanceCode?: string;
   unlockedSidebarItems?: string[];
+  pinnedSidebarItems?: string[];
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
@@ -159,6 +160,7 @@ export class AuthService {
       emailVerified: user.emailVerified ?? user.email_verified ?? false,
       attendanceCode: user.attendance_code || user.attendanceCode,
       unlockedSidebarItems: user.unlockedSidebarItems || user.unlocked_sidebar_items || undefined,
+      pinnedSidebarItems: user.pinnedSidebarItems || user.pinned_sidebar_items || undefined,
       gymId: gym?.id,
       gym: gym
         ? {
@@ -545,6 +547,7 @@ export class AuthService {
         role: systemUser.role,
         status: USER_STATUS.ACTIVE,
         unlockedSidebarItems: systemUser.unlockedSidebarItems as string[] || undefined,
+        pinnedSidebarItems: systemUser.pinnedSidebarItems as string[] || undefined,
       };
 
       const payload = {
@@ -978,7 +981,7 @@ export class AuthService {
   async updateProfile(
     userId: number,
     gymId: number | undefined,
-    data: { name?: string; bio?: string; avatar?: string; phone?: string; unlockedSidebarItems?: string[] },
+    data: { name?: string; bio?: string; avatar?: string; phone?: string; unlockedSidebarItems?: string[]; pinnedSidebarItems?: string[] },
     isTenantUser: boolean = false,
   ): Promise<UserResponse> {
     if (isTenantUser && gymId) {
@@ -1015,6 +1018,10 @@ export class AuthService {
         updates.push(`unlocked_sidebar_items = $${paramIndex++}`);
         values.push(JSON.stringify(data.unlockedSidebarItems));
       }
+      if (data.pinnedSidebarItems !== undefined) {
+        updates.push(`pinned_sidebar_items = $${paramIndex++}`);
+        values.push(JSON.stringify(data.pinnedSidebarItems));
+      }
 
       updates.push(`updated_at = NOW()`);
       values.push(userId);
@@ -1046,6 +1053,7 @@ export class AuthService {
     if (data.avatar !== undefined) updateData.avatar = data.avatar;
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.unlockedSidebarItems !== undefined) updateData.unlockedSidebarItems = data.unlockedSidebarItems;
+    if (data.pinnedSidebarItems !== undefined) updateData.pinnedSidebarItems = data.pinnedSidebarItems;
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },

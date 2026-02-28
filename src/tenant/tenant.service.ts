@@ -263,6 +263,23 @@ export class TenantService implements OnModuleInit {
       );
     }
 
+    // Add pinned_sidebar_items column to users table
+    try {
+      const colExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'pinned_sidebar_items'
+      `, [schemaName]);
+      if (colExists.rows.length === 0) {
+        await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN pinned_sidebar_items JSONB`);
+        this.logger.log(`Added 'pinned_sidebar_items' column to ${schemaName}.users`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error adding pinned_sidebar_items to ${schemaName}.users:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
     // Create core table indexes (after all tables are guaranteed to exist)
     try {
       await this.createTenantIndexes(client, schemaName);
