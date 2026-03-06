@@ -33,6 +33,7 @@ import {
   BulkUpdateUserDto,
   BulkDeleteUserDto,
   BulkCreateUserDto,
+  UpdateManagerPermissionsDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
 import type { AuthenticatedRequest } from '../common/types';
@@ -462,6 +463,38 @@ export class UsersController {
     }
 
     return result.data;
+  }
+
+  // ============ MANAGER PERMISSIONS ENDPOINTS ============
+
+  @Patch(':id/permissions')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'branch_admin')
+  @ApiOperation({ summary: 'Update manager permissions for a user' })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async updatePermissions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateManagerPermissionsDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = resolveGymId(
+      user.gymId,
+      queryGymId,
+      user.role === 'superadmin',
+    );
+    const result = await this.usersService.updateManagerPermissions(
+      id,
+      gymId,
+      dto.permissions,
+    );
+    this.notificationsGateway.emitUserChanged(gymId, { action: 'updated' });
+    return result;
   }
 
   // ============ REQUEST APPROVAL ENDPOINTS ============
