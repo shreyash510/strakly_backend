@@ -163,6 +163,10 @@ const permissions = [
 
   // Programs/Diet module
   { code: 'programs.manage', name: 'Manage Programs', module: 'programs', description: 'Create and manage diet programs' },
+
+  // Products (POS / Retail) module
+  { code: 'products.view', name: 'View Products', module: 'products', description: 'View retail products and POS' },
+  { code: 'products.manage', name: 'Manage Products', module: 'products', description: 'Create/edit/delete products and process sales' },
 ];
 
 // Role permissions mapping - which permissions each role has
@@ -235,6 +239,9 @@ const rolePermissions: Record<string, string[]> = {
     'salary.manage',
     // Programs/Diet
     'programs.manage',
+    // Products (POS / Retail)
+    'products.view',
+    'products.manage',
   ],
 
   branch_admin: [
@@ -271,6 +278,9 @@ const rolePermissions: Record<string, string[]> = {
     'salary.manage',
     // Programs/Diet (branch-specific)
     'programs.manage',
+    // Products (POS / Retail)
+    'products.view',
+    'products.manage',
   ],
 
   manager: [
@@ -301,6 +311,9 @@ const rolePermissions: Record<string, string[]> = {
     'share_app.view',
     // Programs/Diet
     'programs.manage',
+    // Products (POS / Retail)
+    'products.view',
+    'products.manage',
   ],
 
   trainer: [
@@ -318,6 +331,8 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Share App
     'share_app.view',
+    // Products (view only for selling)
+    'products.view',
   ],
 
   client: [
@@ -385,6 +400,7 @@ const saasPlans = [
       'class_scheduling',
       'appointment_booking',
       'guest_day_pass',
+      'pos_retail',
     ],
     displayOrder: 2,
     isFeatured: true,
