@@ -204,6 +204,7 @@ export class UsersService {
       nationality: user.nationality,
       idType: user.id_type || user.idType,
       idNumber: user.id_number || user.idNumber,
+      managerPermissions: user.manager_permissions || user.managerPermissions || null,
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
       branchIds: finalBranchIds,
@@ -1079,6 +1080,43 @@ export class UsersService {
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
     return this.formatTenantUser(updatedStaff, gym, branchAssignments);
+  }
+
+  /**
+   * Update manager permissions for a user in tenant schema
+   */
+  async updateManagerPermissions(
+    id: number,
+    gymId: number,
+    permissions: Record<string, any>,
+  ): Promise<any> {
+    const result = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        // Verify user exists
+        const userResult = await client.query(
+          `SELECT id, role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          [id],
+        );
+        if (userResult.rows.length === 0) {
+          throw new NotFoundException(`User with ID ${id} not found`);
+        }
+
+        await client.query(
+          `UPDATE users SET manager_permissions = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(permissions), id],
+        );
+
+        const updatedResult = await client.query(
+          `SELECT * FROM users WHERE id = $1`,
+          [id],
+        );
+        return updatedResult.rows[0];
+      },
+    );
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
+    return this.formatTenantUser(result, gym);
   }
 
   /**

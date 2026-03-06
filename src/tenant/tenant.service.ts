@@ -280,6 +280,23 @@ export class TenantService implements OnModuleInit {
       );
     }
 
+    // Add manager_permissions JSONB column to users table
+    try {
+      const colExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'manager_permissions'
+      `, [schemaName]);
+      if (colExists.rows.length === 0) {
+        await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN manager_permissions JSONB`);
+        this.logger.log(`Added 'manager_permissions' column to ${schemaName}.users`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error adding manager_permissions to ${schemaName}.users:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
     // Create core table indexes (after all tables are guaranteed to exist)
     try {
       await this.createTenantIndexes(client, schemaName);
@@ -1362,6 +1379,7 @@ export class TenantService implements OnModuleInit {
         nationality VARCHAR(50),
         id_type VARCHAR(30),
         id_number VARCHAR(50),
+        manager_permissions JSONB,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,

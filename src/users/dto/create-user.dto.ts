@@ -564,6 +564,12 @@ export class UpdateUserDto {
   emergencyContactPhone?: string;
 }
 
+export class UpdateManagerPermissionsDto {
+  @ApiProperty({ description: 'Manager permissions object' })
+  @IsNotEmpty()
+  permissions: Record<string, any>;
+}
+
 export class AdminResetPasswordDto {
   @IsString()
   newPassword: string;
