@@ -181,6 +181,15 @@ export class GymController {
     return result;
   }
 
+  @Delete(':id/force')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Force delete a gym and ALL associated data (superadmin only)' })
+  async forceRemove(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.gymService.forceRemove(id);
+    this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
+    return result;
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a gym' })
   async remove(@Param('id', ParseIntPipe) id: number) {

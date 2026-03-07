@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { BranchService } from '../branch/branch.service';
+import { UploadService } from '../upload/upload.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
   PaginationParams,
@@ -32,6 +33,7 @@ export class GymService {
     private readonly tenantService: TenantService,
     @Inject(forwardRef(() => BranchService))
     private readonly branchService: BranchService,
+    private readonly uploadService: UploadService,
   ) {}
 
   async findAll(filters: GymFilters = {}): Promise<PaginatedResponse<Record<string, any>>> {
@@ -363,6 +365,137 @@ export class GymService {
     // Note: Tenant schema deletion should be handled separately (manual or background job)
 
     return { success: true, message: 'Gym deleted successfully' };
+  }
+
+  /**
+   * Force-delete a gym and ALL associated data. Superadmin only. Irreversible.
+   */
+  async forceRemove(id: number): Promise<{ success: boolean; message: string; details: Record<string, any> }> {
+    const gym = await this.prisma.gym.findUnique({ where: { id } });
+    if (!gym) {
+      throw new NotFoundException(`Gym with ID ${id} not found`);
+    }
+
+    const details: Record<string, any> = { gymId: id, gymName: gym.name };
+
+    // 1. Collect all staff user IDs assigned to this gym
+    const userAssignments = await this.prisma.userGymXref.findMany({
+      where: { gymId: id },
+      select: { userId: true },
+    });
+    const userIds = [...new Set(userAssignments.map((a) => a.userId))];
+    details.staffCount = userIds.length;
+
+    // 2. Collect S3 URLs from tenant schema BEFORE dropping it
+    const s3UrlsToDelete: string[] = [];
+    if (gym.logo) {
+      s3UrlsToDelete.push(gym.logo);
+    }
+
+    try {
+      const schemaExists = await this.tenantService.tenantSchemaExists(id);
+      if (schemaExists) {
+        const tenantUrls = await this.tenantService.executeInTenant(id, async (client) => {
+          const urls: string[] = [];
+
+          // Progress photos
+          try {
+            const result = await client.query(
+              `SELECT photo_url, thumbnail_url FROM progress_photos WHERE photo_url IS NOT NULL`,
+            );
+            for (const row of result.rows) {
+              if (row.photo_url) urls.push(row.photo_url);
+              if (row.thumbnail_url) urls.push(row.thumbnail_url);
+            }
+          } catch { /* table may not exist */ }
+
+          // Signed documents
+          try {
+            const result = await client.query(
+              `SELECT pdf_url FROM signed_documents WHERE pdf_url IS NOT NULL`,
+            );
+            for (const row of result.rows) {
+              if (row.pdf_url) urls.push(row.pdf_url);
+            }
+          } catch { /* table may not exist */ }
+
+          // Client avatars in tenant schema
+          try {
+            const result = await client.query(
+              `SELECT avatar FROM users WHERE avatar IS NOT NULL`,
+            );
+            for (const row of result.rows) {
+              if (row.avatar) urls.push(row.avatar);
+            }
+          } catch { /* table may not exist */ }
+
+          return urls;
+        });
+        s3UrlsToDelete.push(...tenantUrls);
+      }
+    } catch {
+      // If we fail to read tenant data, we'll still clean up by prefix later
+    }
+
+    // 3. Drop tenant schema
+    try {
+      if (gym.tenantSchemaName && gym.tenantSchemaName !== 'pending') {
+        await this.tenantService.dropTenantSchema(id);
+        details.tenantSchemaDropped = true;
+      }
+    } catch {
+      details.tenantSchemaDropped = false;
+    }
+
+    // 4. Delete conversations (no FK to gym, messages cascade from conversation FK)
+    const convResult = await this.prisma.conversation.deleteMany({ where: { gymId: id } });
+    details.conversationsDeleted = convResult.count;
+
+    // 5. Delete email verifications (nullable gymId, no FK)
+    const emailResult = await this.prisma.emailVerification.deleteMany({ where: { gymId: id } });
+    details.emailVerificationsDeleted = emailResult.count;
+
+    // 6. Delete payment history (FK to subscription, must go before subscription)
+    await this.prisma.saasPaymentHistory.deleteMany({ where: { gymId: id } });
+
+    // 7. Delete subscription
+    await this.prisma.saasGymSubscription.deleteMany({ where: { gymId: id } });
+
+    // 8. Delete gym record (cascades: user_gym_xref, branches, support_tickets+messages)
+    await this.prisma.gym.delete({ where: { id } });
+    details.gymDeleted = true;
+
+    // 9. Delete orphaned users (staff with no remaining gym assignments)
+    let orphanedUsersDeleted = 0;
+    for (const userId of userIds) {
+      const remaining = await this.prisma.userGymXref.count({ where: { userId } });
+      if (remaining === 0) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { avatar: true },
+        });
+        if (user?.avatar) s3UrlsToDelete.push(user.avatar);
+        await this.prisma.user.delete({ where: { id: userId } });
+        orphanedUsersDeleted++;
+      }
+    }
+    details.orphanedUsersDeleted = orphanedUsersDeleted;
+
+    // 10. Delete S3 assets
+    let s3Deleted = 0;
+    for (const url of s3UrlsToDelete) {
+      await this.uploadService.deleteFile(url);
+      s3Deleted++;
+    }
+    // Safety net: delete any remaining files under the gym's S3 prefix
+    s3Deleted += await this.uploadService.deleteByPrefix(`gyms/${id}/`);
+    details.s3AssetsDeleted = s3Deleted;
+
+    return {
+      success: true,
+      message: `Gym "${gym.name}" and all associated data permanently deleted`,
+      details,
+    };
   }
 
   async toggleStatus(id: number) {

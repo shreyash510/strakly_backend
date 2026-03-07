@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
 @Injectable()
@@ -320,6 +320,44 @@ export class UploadService {
       this.logger.error('Failed to delete file:', error);
       // Don't throw - deletion failure shouldn't break the flow
     }
+  }
+
+  /**
+   * Delete all S3 objects under a given key prefix (e.g., "gyms/42/").
+   * Silently ignores errors so it never blocks the main deletion flow.
+   */
+  async deleteByPrefix(prefix: string): Promise<number> {
+    let deleted = 0;
+    let continuationToken: string | undefined;
+
+    try {
+      do {
+        const listResult = await this.s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+        );
+
+        if (listResult.Contents) {
+          for (const obj of listResult.Contents) {
+            if (obj.Key) {
+              await this.s3Client.send(
+                new DeleteObjectCommand({ Bucket: this.bucket, Key: obj.Key }),
+              );
+              deleted++;
+            }
+          }
+        }
+
+        continuationToken = listResult.NextContinuationToken;
+      } while (continuationToken);
+    } catch (error) {
+      this.logger.error(`Failed to delete S3 objects with prefix "${prefix}":`, error);
+    }
+
+    return deleted;
   }
 
   /**
