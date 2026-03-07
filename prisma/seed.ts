@@ -230,8 +230,9 @@ const rolePermissions: Record<string, string[]> = {
     'settings.manage',
     // Profile
     'profile.view',
-    // Support (view only)
+    // Support
     'support.view',
+    'support.manage',
     // Share App
     'share_app.view',
     // Salary
@@ -271,6 +272,7 @@ const rolePermissions: Record<string, string[]> = {
     'profile.view',
     // Support
     'support.view',
+    'support.manage',
     // Share App
     'share_app.view',
     // Salary (branch-specific)
