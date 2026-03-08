@@ -25,7 +25,10 @@ import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('payments')
+@ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @Roles('superadmin', 'admin', 'branch_admin', 'manager')

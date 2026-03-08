@@ -1,23 +1,49 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
 @Injectable()
-export class PdfGeneratorService {
+export class PdfGeneratorService implements OnModuleDestroy {
   private readonly logger = new Logger(PdfGeneratorService.name);
+  private browserInstance: any = null;
+  private browserLaunchPromise: Promise<any> | null = null;
+
+  private async getBrowser() {
+    if (this.browserInstance?.connected) {
+      return this.browserInstance;
+    }
+
+    if (this.browserLaunchPromise) {
+      return this.browserLaunchPromise;
+    }
+
+    this.browserLaunchPromise = (async () => {
+      const puppeteer = await import('puppeteer');
+      this.browserInstance = await puppeteer.default.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+      });
+
+      this.browserInstance.on('disconnected', () => {
+        this.browserInstance = null;
+        this.browserLaunchPromise = null;
+      });
+
+      this.browserLaunchPromise = null;
+      return this.browserInstance;
+    })();
+
+    return this.browserLaunchPromise;
+  }
 
   async generatePdf(htmlContent: string): Promise<Buffer> {
-    const puppeteer = await import('puppeteer');
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
+    const browser = await this.getBrowser();
 
+    const page = await browser.newPage();
     try {
-      const page = await browser.newPage();
       await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
       const pdfBuffer = await page.pdf({
@@ -43,7 +69,14 @@ export class PdfGeneratorService {
       this.logger.error('Failed to generate PDF', error);
       throw error;
     } finally {
-      await browser.close();
+      await page.close();
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.browserInstance) {
+      await this.browserInstance.close();
+      this.browserInstance = null;
     }
   }
 }

@@ -2,10 +2,15 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression');
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable gzip/deflate compression for all responses
+  app.use(compression());
 
   // Body size limit for base64 image uploads (images compressed on frontend)
   app.use(json({ limit: '2mb' }));

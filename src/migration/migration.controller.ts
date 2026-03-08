@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -35,6 +35,7 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 @ApiTags('migration')
+@ApiBearerAuth()
 @Controller('migration')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @PlanFeatures(PLAN_FEATURES.DATA_MIGRATION)
