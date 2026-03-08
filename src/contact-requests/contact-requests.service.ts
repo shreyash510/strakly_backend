@@ -159,8 +159,9 @@ export class ContactRequestsService {
   async remove(id: number) {
     await this.findOne(id);
 
-    await this.prisma.contactRequest.delete({
+    await this.prisma.contactRequest.update({
       where: { id },
+      data: { isActive: false },
     });
 
     return { success: true, message: 'Contact request deleted successfully' };

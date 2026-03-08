@@ -1,3 +1,4 @@
+import { BadGatewayException } from '@nestjs/common';
 import {
   BaseWearableProvider,
   WearableDataPoint,
@@ -69,7 +70,7 @@ export class GoogleFitProvider extends BaseWearableProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
+      throw new BadGatewayException(
         `Google Fit token exchange failed (${response.status}): ${errorBody}`,
       );
     }
@@ -119,7 +120,7 @@ export class GoogleFitProvider extends BaseWearableProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
+      throw new BadGatewayException(
         `Google Fit token refresh failed (${response.status}): ${errorBody}`,
       );
     }
@@ -171,7 +172,7 @@ export class GoogleFitProvider extends BaseWearableProvider {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        throw new Error(
+        throw new BadGatewayException(
           `Google Fit aggregate request failed (${response.status}): ${errorBody}`,
         );
       }

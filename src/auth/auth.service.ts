@@ -669,9 +669,10 @@ export class AuthService {
     // Phase 1: Query all gyms in parallel to find which tenant has this user
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
+      select: { id: true, name: true, logo: true, tenantSchemaName: true },
     });
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     let matchedGym: Record<string, any> | null = null;
     let matchedUser: Record<string, any> | null = null;
 
@@ -1530,9 +1531,10 @@ export class AuthService {
     // Check all tenant schemas for staff and clients (batched parallel)
     const gyms = await this.prisma.gym.findMany({
       where: { isActive: true, tenantSchemaName: { not: null } },
+      select: { id: true, name: true, logo: true, tenantSchemaName: true },
     });
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     for (let i = 0; i < gyms.length; i += BATCH_SIZE) {
       const batch = gyms.slice(i, i + BATCH_SIZE);
 
@@ -2001,13 +2003,13 @@ export class AuthService {
   // ============================================
 
   async register(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
-    throw new Error(
+    throw new BadRequestException(
       'Direct registration not supported. Use registerAdminWithGym for new gyms or invite users to existing gyms.',
     );
   }
 
   async registerAdmin(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
-    throw new Error(
+    throw new BadRequestException(
       'Direct admin registration not supported. Use registerAdminWithGym instead.',
     );
   }

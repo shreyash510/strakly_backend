@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
@@ -52,6 +53,8 @@ export interface UserFilters extends PaginationParams {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
@@ -2036,7 +2039,7 @@ export class UsersService {
       } catch (error: unknown) {
         // Skip gyms that don't have tenant schema yet
         const msg = error instanceof Error ? error.message : String(error);
-        console.warn(
+        this.logger.warn(
           `Could not fetch users for gym ${gym.id}: ${msg}`,
         );
       }

@@ -16,7 +16,10 @@ import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('activity-logs')
+@ApiBearerAuth()
 @Controller('activity-logs')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @Roles('superadmin', 'admin', 'branch_admin', 'manager')

@@ -1,3 +1,4 @@
+import { BadGatewayException } from '@nestjs/common';
 import {
   BaseWearableProvider,
   WearableDataPoint,
@@ -58,7 +59,7 @@ export class FitbitProvider extends BaseWearableProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
+      throw new BadGatewayException(
         `Fitbit token exchange failed (${response.status}): ${errorBody}`,
       );
     }
@@ -90,7 +91,7 @@ export class FitbitProvider extends BaseWearableProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
+      throw new BadGatewayException(
         `Fitbit token refresh failed (${response.status}): ${errorBody}`,
       );
     }

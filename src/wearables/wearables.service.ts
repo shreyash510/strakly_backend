@@ -539,7 +539,7 @@ export class WearablesService {
     const provider = this.providers.get(providerName);
 
     if (!provider) {
-      throw new Error(`Unknown provider: ${providerName}`);
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
     }
 
     let accessToken = connection.access_token;

@@ -13,7 +13,17 @@ export class TenantService implements OnModuleInit {
     if (!databaseUrl) {
       throw new Error('DATABASE_URL not configured');
     }
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = new Pool({
+      connectionString: databaseUrl,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+
+    // Prevent unhandled 'error' events from crashing the process
+    this.pool.on('error', (err) => {
+      this.logger.error('Unexpected pool client error:', err.message);
+    });
   }
 
   async onModuleInit() {
@@ -3882,8 +3892,12 @@ export class TenantService implements OnModuleInit {
       await client.query(`SET search_path TO "${schemaName}", public`);
       return await callback(client, schemaName);
     } finally {
-      // Reset search path
-      await client.query(`SET search_path TO public`);
+      // Reset search path — wrapped in try/catch in case connection already dropped
+      try {
+        await client.query(`SET search_path TO public`);
+      } catch {
+        // Connection may already be dead; just release
+      }
       client.release();
     }
   }

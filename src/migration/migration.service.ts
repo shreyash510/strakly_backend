@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, OnModuleDestroy } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
 import * as ExcelJS from 'exceljs';
 import * as bcrypt from 'bcrypt';
@@ -113,14 +113,19 @@ const FIELD_DEFS: Record<DataType, FieldDef[]> = {
 };
 
 @Injectable()
-export class MigrationService {
+export class MigrationService implements OnModuleDestroy {
   /* in-memory storage for parsed files (TTL: 30 min) */
   private fileStore = new Map<string, StoredFile>();
   private readonly TTL = 30 * 60 * 1000;
+  private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor(private readonly tenantService: TenantService) {
     /* cleanup expired entries every 10 min */
-    setInterval(() => this.cleanup(), 10 * 60 * 1000);
+    this.cleanupInterval = setInterval(() => this.cleanup(), 10 * 60 * 1000);
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.cleanupInterval);
   }
 
   /* ========== public API ========== */

@@ -9,7 +9,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiQuery, ApiParam, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiQuery, ApiParam, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -22,6 +22,7 @@ import { ClientReportFilterDto } from './dto/client-reports.dto';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('reports')
+@ApiBearerAuth()
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReportsController {
