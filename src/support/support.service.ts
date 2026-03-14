@@ -333,6 +333,11 @@ export class SupportService {
       });
     }
 
+    // Only superadmin can change ticket status
+    if (!isSuperadmin && updateTicketDto.status) {
+      throw new ForbiddenException('Only superadmin can change ticket status');
+    }
+
     const updateData: Record<string, any> = { ...updateTicketDto };
 
     if (updateTicketDto.status === 'resolved' && !ticket.resolvedAt) {
