@@ -379,7 +379,6 @@ const saasPlans = [
     maxBranches: -1, // unlimited
     features: [
       'ai_chat',
-      'advanced_ai_chat',
       'diet_planning',
       'body_metrics',
       'salary_management',
@@ -398,11 +397,6 @@ const saasPlans = [
       'guest_day_pass',
       'pos_retail',
       'equipment_tracking',
-      'custom_fields',
-      'multi_currency',
-      'nps_surveys',
-      'loyalty_program',
-      'wearable_integration',
     ],
     displayOrder: 3,
     isFeatured: false,

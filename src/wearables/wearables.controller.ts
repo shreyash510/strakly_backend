@@ -26,7 +26,6 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import type { Response as ExpressResponse } from 'express';
 
 @ApiTags('wearables')
@@ -38,7 +37,7 @@ export class WearablesController {
 
   @Get('providers')
   @UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get list of supported wearable providers' })
   getProviders() {
@@ -50,7 +49,7 @@ export class WearablesController {
   @Get('connections/me')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get my wearable connections' })
   getMyConnections(@Request() req: AuthenticatedRequest) {
@@ -63,7 +62,7 @@ export class WearablesController {
   @Get('connect/:provider')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get OAuth authorization URL for a wearable provider' })
   @ApiParam({ name: 'provider', description: 'Provider name (e.g. fitbit, google_fit)' })
@@ -130,7 +129,7 @@ export class WearablesController {
   @Delete('disconnect/:provider')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Disconnect a wearable provider' })
   @ApiParam({ name: 'provider', description: 'Provider name' })
@@ -150,7 +149,7 @@ export class WearablesController {
   @Post('sync/:provider')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Manually sync data from a wearable provider' })
   @ApiParam({ name: 'provider', description: 'Provider name' })
@@ -170,7 +169,7 @@ export class WearablesController {
   @Get('data/me')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get my wearable data' })
   @ApiQuery({ name: 'dataType', required: false })
@@ -193,7 +192,7 @@ export class WearablesController {
   @Get('data/me/summary')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Get today's wearable data summary" })
   getMySummary(@Request() req: AuthenticatedRequest) {
@@ -206,7 +205,7 @@ export class WearablesController {
   @Get('data/me/chart/:dataType')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('client', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get chart data for a specific data type' })
   @ApiParam({ name: 'dataType', description: 'Data type (e.g. steps, heart_rate, calories_burned)' })
@@ -229,7 +228,7 @@ export class WearablesController {
   @Get('data/user/:userId')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
   @Roles('admin', 'manager', 'trainer')
-  @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
+  @PlanFeatures('wearable_integration' as any)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get wearable data for a specific user (admin view)' })
   @ApiParam({ name: 'userId', type: Number })
