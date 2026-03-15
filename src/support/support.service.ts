@@ -42,12 +42,6 @@ export class SupportService {
     private emailService: EmailService,
   ) {}
 
-  private generateTicketNumber(): string {
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `TKT-${timestamp}-${random}`;
-  }
-
   async create(
     userId: number,
     gymId: number,
@@ -56,11 +50,10 @@ export class SupportService {
     userType: string,
     createTicketDto: CreateTicketDto,
   ) {
-    const ticketNumber = this.generateTicketNumber();
-
+    // Create with a temporary ticket number, then update with the sequential T-{id} format
     const ticket = await this.prisma.supportTicket.create({
       data: {
-        ticketNumber,
+        ticketNumber: `TKT-TEMP-${Date.now()}`,
         subject: createTicketDto.subject,
         description: createTicketDto.description,
         category: createTicketDto.category || 'general',
@@ -72,6 +65,12 @@ export class SupportService {
         gymId: gymId,
         status: 'open',
       },
+    });
+
+    // Update with sequential ticket number based on auto-incremented ID
+    await this.prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { ticketNumber: `T-${ticket.id}` },
     });
 
     await this.prisma.supportTicketMessage.create({
@@ -88,7 +87,7 @@ export class SupportService {
     this.notificationsService
       .notifySupportTicketCreated({
         ticketId: ticket.id,
-        ticketNumber: ticket.ticketNumber,
+        ticketNumber: `T-${ticket.id}`,
         subject: ticket.subject,
         priority: ticket.priority,
       })
