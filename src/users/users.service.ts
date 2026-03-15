@@ -1884,6 +1884,13 @@ export class UsersService {
   ): Promise<any> {
     const role = createUserDto.role || ROLES.CLIENT;
 
+    // Normalize branchId / branchIds so both paths work regardless of which field the caller sends
+    if (createUserDto.branchIds?.length && !createUserDto.branchId) {
+      createUserDto.branchId = createUserDto.branchIds[0];
+    } else if (createUserDto.branchId && !createUserDto.branchIds?.length) {
+      createUserDto.branchIds = [createUserDto.branchId];
+    }
+
     // Validate role hierarchy if callerRole is provided
     if (callerRole) {
       this.validateRoleHierarchy(callerRole, role, 'create');
