@@ -19,7 +19,6 @@ export const PLAN_FEATURES = {
   GUEST_DAY_PASS: 'guest_day_pass',
   LEAD_CRM: 'lead_crm',
   REFERRAL_TRACKING: 'referral_tracking',
-  DIGITAL_WAIVERS: 'digital_waivers',
 } as const;
 
 export type PlanFeature = (typeof PLAN_FEATURES)[keyof typeof PLAN_FEATURES];

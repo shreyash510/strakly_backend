@@ -12,7 +12,10 @@ import type { Response } from 'express';
 import { ApiQuery, ApiParam, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { PLAN_FEATURES } from '../common/constants/features';
 import { ReportsService } from './reports.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { PdfTemplateService } from './pdf-template.service';
@@ -24,7 +27,8 @@ import type { AuthenticatedRequest } from '../common/types';
 @ApiTags('reports')
 @ApiBearerAuth()
 @Controller('reports')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@PlanFeatures(PLAN_FEATURES.ADVANCED_REPORTS)
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,

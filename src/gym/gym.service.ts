@@ -414,18 +414,6 @@ export class GymService {
             this.logger.warn('Could not read progress_photos during gym deletion (table may not exist)', err);
           }
 
-          // Signed documents
-          try {
-            const result = await client.query(
-              `SELECT pdf_url FROM signed_documents WHERE pdf_url IS NOT NULL`,
-            );
-            for (const row of result.rows) {
-              if (row.pdf_url) urls.push(row.pdf_url);
-            }
-          } catch (err) {
-            this.logger.warn('Could not read signed_documents during gym deletion (table may not exist)', err);
-          }
-
           // Client avatars in tenant schema
           try {
             const result = await client.query(
