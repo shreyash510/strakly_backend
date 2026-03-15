@@ -39,7 +39,6 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { MemberNotesModule } from './member-notes/member-notes.module';
 import { UploadModule } from './upload/upload.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
-import { ConversationsModule } from './conversations/conversations.module';
 import { ProgressPhotosModule } from './progress-photos/progress-photos.module';
 import { LeadsModule } from './leads/leads.module';
 import { ReferralsModule } from './referrals/referrals.module';
@@ -103,7 +102,6 @@ import { WearablesModule } from './wearables/wearables.module';
     AnnouncementsModule,
     MemberNotesModule,
     UploadModule,
-    ConversationsModule,
     ProgressPhotosModule,
     LeadsModule,
     ReferralsModule,

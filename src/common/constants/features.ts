@@ -1,6 +1,5 @@
 export const PLAN_FEATURES = {
   AI_CHAT: 'ai_chat',
-  ADVANCED_AI_CHAT: 'advanced_ai_chat',
   DIET_PLANNING: 'diet_planning',
   BODY_METRICS: 'body_metrics',
   SALARY_MANAGEMENT: 'salary_management',
