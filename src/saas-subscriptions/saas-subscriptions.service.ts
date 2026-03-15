@@ -158,11 +158,17 @@ export class SaasSubscriptionsService {
 
     if (activeSubscriptions > 0) {
       throw new BadRequestException(
-        `Cannot delete plan with ${activeSubscriptions} active subscriptions`,
+        'Cannot delete plan with active subscribers. Deactivate or migrate them first.',
       );
     }
 
-    return this.prisma.saasPlan.delete({ where: { id } });
+    // Soft-delete: mark plan as inactive
+    await this.prisma.saasPlan.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    return { message: `Plan "${plan.name}" has been successfully deleted.` };
   }
 
   // ============================================
