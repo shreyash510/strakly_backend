@@ -341,7 +341,7 @@ const saasPlans = [
     code: 'pro',
     name: 'Pro',
     description: 'For growing gyms and fitness centers',
-    price: 5,
+    price: 12,
     currency: 'USD',
     billingPeriod: 'monthly',
     maxClients: 500,
@@ -371,7 +371,7 @@ const saasPlans = [
     code: 'enterprise',
     name: 'Enterprise',
     description: 'For large fitness chains and franchises',
-    price: 10,
+    price: 20,
     currency: 'USD',
     billingPeriod: 'monthly',
     maxClients: -1, // unlimited
