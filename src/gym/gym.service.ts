@@ -457,11 +457,7 @@ export class GymService {
       details.tenantSchemaDropped = false;
     }
 
-    // 4. Delete conversations (no FK to gym, messages cascade from conversation FK)
-    const convResult = await this.prisma.conversation.deleteMany({ where: { gymId: id } });
-    details.conversationsDeleted = convResult.count;
-
-    // 5. Delete email verifications (nullable gymId, no FK)
+    // 4. Delete email verifications (nullable gymId, no FK)
     const emailResult = await this.prisma.emailVerification.deleteMany({ where: { gymId: id } });
     details.emailVerificationsDeleted = emailResult.count;
 
