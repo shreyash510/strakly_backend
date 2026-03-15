@@ -61,7 +61,7 @@ export class MembershipsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
@@ -126,7 +126,7 @@ export class MembershipsController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   @ApiQuery({
     name: 'branchId',
@@ -141,7 +141,7 @@ export class MembershipsController {
 
   @Get('overview')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({
     summary: 'Get membership overview (stats, expiring, recent)',
   })
@@ -179,7 +179,7 @@ export class MembershipsController {
 
   @Get('expiring')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   @ApiQuery({
@@ -203,7 +203,7 @@ export class MembershipsController {
 
   @Get('history')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get membership history for a client' })
   @ApiQuery({
     name: 'clientId',
@@ -306,7 +306,7 @@ export class MembershipsController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -335,7 +335,7 @@ export class MembershipsController {
 
   @Get('user/active')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get active membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -355,7 +355,7 @@ export class MembershipsController {
 
   @Get('user/status')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Check membership status for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -372,7 +372,7 @@ export class MembershipsController {
 
   @Post('user/renew')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Renew membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -407,7 +407,7 @@ export class MembershipsController {
 
   @Get('cancellation-reasons/list')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get cancellation reasons' })
   async getCancellationReasons(@Request() req: AuthenticatedRequest) {
     return this.membershipsService.getCancellationReasons(req.user.gymId!);
@@ -417,7 +417,7 @@ export class MembershipsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
   @ApiQuery({
     name: 'branchId',
@@ -436,7 +436,7 @@ export class MembershipsController {
 
   @Get(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -450,7 +450,7 @@ export class MembershipsController {
 
   @Patch(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
   async updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -469,7 +469,7 @@ export class MembershipsController {
 
   @Post()
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'create')
   @ApiOperation({ summary: 'Create a new membership' })
   @ApiQuery({
@@ -495,7 +495,7 @@ export class MembershipsController {
 
   @Patch(':id')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Update a membership' })
   async update(
@@ -510,7 +510,7 @@ export class MembershipsController {
 
   @Post(':id/payment')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Record payment for a membership' })
   async recordPayment(
     @Request() req: AuthenticatedRequest,
@@ -529,7 +529,7 @@ export class MembershipsController {
 
   @Post(':id/cancel')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Cancel a membership' })
   async cancel(
@@ -565,7 +565,7 @@ export class MembershipsController {
 
   @Post(':id/freeze')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Freeze a membership' })
   async freeze(
     @Request() req: AuthenticatedRequest,
@@ -577,7 +577,7 @@ export class MembershipsController {
 
   @Post(':id/unfreeze')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Unfreeze a membership' })
   async unfreeze(
     @Request() req: AuthenticatedRequest,
@@ -588,7 +588,7 @@ export class MembershipsController {
 
   @Get(':id/freezes')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get freeze history for a membership' })
   async getFreezeHistory(
     @Request() req: AuthenticatedRequest,

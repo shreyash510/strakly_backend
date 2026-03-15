@@ -71,7 +71,7 @@ export class UploadController {
     const normalizedRole = userRole?.toLowerCase();
     const isSuperadmin = normalizedRole === 'superadmin';
     const isAdmin = normalizedRole === 'admin';
-    const isTenantUser = ['manager', 'trainer', 'branch_admin', 'client'].includes(normalizedRole);
+    const isTenantUser = ['manager', 'trainer', 'client'].includes(normalizedRole);
 
     // For tenant users (staff/client), gymId is required
     if (isTenantUser && !gymId) {

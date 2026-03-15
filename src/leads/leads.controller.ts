@@ -39,7 +39,7 @@ export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List leads with filters' })
   async findAll(
     @GymId() gymId: number,
@@ -50,14 +50,14 @@ export class LeadsController {
   }
 
   @Get('sources')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get lead sources lookup' })
   async getSources(@GymId() gymId: number) {
     return this.leadsService.getSources(gymId);
   }
 
   @Get('stats')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get lead pipeline stats' })
   async getStats(
     @GymId() gymId: number,
@@ -68,7 +68,7 @@ export class LeadsController {
   }
 
   @Get(':id/stage-history')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get stage change history for a lead' })
   async getStageHistory(
     @Param('id', ParseIntPipe) id: number,
@@ -78,7 +78,7 @@ export class LeadsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a lead by ID' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -88,7 +88,7 @@ export class LeadsController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a new lead' })
   async create(
     @Body() dto: CreateLeadDto,
@@ -100,7 +100,7 @@ export class LeadsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a lead' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -112,7 +112,7 @@ export class LeadsController {
   }
 
   @Patch(':id/stage')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update lead pipeline stage' })
   async updateStage(
     @Param('id', ParseIntPipe) id: number,
@@ -124,7 +124,7 @@ export class LeadsController {
   }
 
   @Patch(':id/convert')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Convert lead to user' })
   async convertToUser(
     @Param('id', ParseIntPipe) id: number,
@@ -136,7 +136,7 @@ export class LeadsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a lead' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
@@ -146,7 +146,7 @@ export class LeadsController {
   }
 
   @Post(':id/activities')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Add an activity to a lead' })
   async createActivity(
     @Param('id', ParseIntPipe) id: number,
@@ -158,7 +158,7 @@ export class LeadsController {
   }
 
   @Get(':id/activities')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get activities for a lead' })
   async getActivities(
     @Param('id', ParseIntPipe) id: number,

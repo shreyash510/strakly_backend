@@ -31,7 +31,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 @ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@Roles('superadmin', 'admin', 'branch_admin', 'manager')
+@Roles('superadmin', 'admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.PAYMENT_GATEWAY)
 export class PaymentsController {
   constructor(

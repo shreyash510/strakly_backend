@@ -53,7 +53,7 @@ export class ProductsController {
   // ─── Categories ───
 
   @Get('categories')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'List all product categories' })
   findAllCategories(
     @GymId() gymId: number,
@@ -63,7 +63,7 @@ export class ProductsController {
   }
 
   @Post('categories')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create product category' })
   createCategory(
     @GymId() gymId: number,
@@ -74,7 +74,7 @@ export class ProductsController {
   }
 
   @Patch('categories/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update product category' })
   @ApiParam({ name: 'id', type: Number })
   updateCategory(
@@ -86,7 +86,7 @@ export class ProductsController {
   }
 
   @Delete('categories/:id')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete product category' })
   @ApiParam({ name: 'id', type: Number })
   removeCategory(
@@ -99,7 +99,7 @@ export class ProductsController {
   // ─── Sales (before :id to avoid route conflicts) ───
 
   @Get('sales')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List all product sales' })
   findAllSales(
     @GymId() gymId: number,
@@ -110,7 +110,7 @@ export class ProductsController {
   }
 
   @Get('sales/stats')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get sales statistics' })
   getSalesStats(
     @GymId() gymId: number,
@@ -121,7 +121,7 @@ export class ProductsController {
   }
 
   @Get('sales/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get sale by ID' })
   @ApiParam({ name: 'id', type: Number })
   findOneSale(
@@ -132,7 +132,7 @@ export class ProductsController {
   }
 
   @Post('sales')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
@@ -145,7 +145,7 @@ export class ProductsController {
   }
 
   @Post('sales/batch')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
@@ -160,7 +160,7 @@ export class ProductsController {
   // ─── Products ───
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'List all products' })
   findAllProducts(
     @GymId() gymId: number,
@@ -171,7 +171,7 @@ export class ProductsController {
   }
 
   @Get('low-stock')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
     @GymId() gymId: number,
@@ -181,7 +181,7 @@ export class ProductsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get product by ID' })
   @ApiParam({ name: 'id', type: Number })
   findOneProduct(
@@ -192,7 +192,7 @@ export class ProductsController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Create a product' })
   createProduct(
@@ -204,7 +204,7 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Update a product' })
   @ApiParam({ name: 'id', type: Number })
@@ -217,7 +217,7 @@ export class ProductsController {
   }
 
   @Patch(':id/stock')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Adjust product stock' })
   @ApiParam({ name: 'id', type: Number })
@@ -231,7 +231,7 @@ export class ProductsController {
   }
 
   @Get(':id/stock-movements')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get stock movements for a product' })
   @ApiParam({ name: 'id', type: Number })
   getStockMovements(
@@ -244,7 +244,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ManagerPermission('products', 'delete')
   @ApiOperation({ summary: 'Delete a product' })
   @ApiParam({ name: 'id', type: Number })

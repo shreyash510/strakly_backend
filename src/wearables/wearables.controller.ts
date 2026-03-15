@@ -228,7 +228,7 @@ export class WearablesController {
 
   @Get('data/user/:userId')
   @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @PlanFeatures(PLAN_FEATURES.WEARABLE_INTEGRATION)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get wearable data for a specific user (admin view)' })

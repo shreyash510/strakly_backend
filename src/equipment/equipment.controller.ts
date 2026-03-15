@@ -43,7 +43,7 @@ export class EquipmentController {
   constructor(private readonly equipmentService: EquipmentService) {}
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List all equipment' })
   findAll(
     @GymId() gymId: number,
@@ -54,7 +54,7 @@ export class EquipmentController {
   }
 
   @Get('stats')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get equipment statistics' })
   getStats(
     @GymId() gymId: number,
@@ -64,7 +64,7 @@ export class EquipmentController {
   }
 
   @Get('maintenance/upcoming')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get upcoming maintenance across all equipment' })
   getUpcomingMaintenance(
     @GymId() gymId: number,
@@ -80,7 +80,7 @@ export class EquipmentController {
 
   // Maintenance sub-resource routes MUST be defined before :id routes
   @Get(':id/maintenance')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get maintenance records for equipment' })
   @ApiParam({ name: 'id', type: Number })
   getMaintenanceForEquipment(
@@ -96,7 +96,7 @@ export class EquipmentController {
   }
 
   @Post(':id/maintenance')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create maintenance record' })
   @ApiParam({ name: 'id', type: Number })
   createMaintenance(
@@ -114,7 +114,7 @@ export class EquipmentController {
   }
 
   @Patch('maintenance/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update maintenance record' })
   @ApiParam({ name: 'id', type: Number })
   updateMaintenance(
@@ -126,7 +126,7 @@ export class EquipmentController {
   }
 
   @Delete('maintenance/:id')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete maintenance record' })
   @ApiParam({ name: 'id', type: Number })
   removeMaintenance(
@@ -138,7 +138,7 @@ export class EquipmentController {
 
   // Equipment CRUD routes (generic :id routes come after specific routes)
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get equipment by ID' })
   @ApiParam({ name: 'id', type: Number })
   findOne(
@@ -149,7 +149,7 @@ export class EquipmentController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create equipment' })
   create(
     @GymId() gymId: number,
@@ -160,7 +160,7 @@ export class EquipmentController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update equipment' })
   @ApiParam({ name: 'id', type: Number })
   update(
@@ -172,7 +172,7 @@ export class EquipmentController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete equipment' })
   @ApiParam({ name: 'id', type: Number })
   remove(

@@ -532,7 +532,7 @@ export class MembershipsService {
       );
     }
 
-    // Notify admin, branch_admin and manager about new enrollment
+    // Notify admin and manager about new enrollment
     await this.notificationHelper.notifyStaff(
       gymId,
       membershipBranchId || null,

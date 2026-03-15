@@ -692,7 +692,7 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
-   * Create user_branch_xref table for multi-branch assignments (for branch_admin)
+   * Create user_branch_xref table for multi-branch assignments
    */
   private async createUserBranchXrefTable(
     client: PoolClient,
@@ -1832,7 +1832,7 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // User-Branch cross reference table (for branch_admin with multiple branches)
+    // User-Branch cross reference table (for users with multiple branches)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."user_branch_xref" (
         id SERIAL PRIMARY KEY,
@@ -2065,7 +2065,7 @@ export class TenantService implements OnModuleInit {
       `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_notifications_branch" ON "${schemaName}"."notifications"(branch_id)`,
     );
 
-    // User-Branch xref indexes (for branch_admin with multiple branches)
+    // User-Branch xref indexes (for users with multiple branches)
     await client.query(
       `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_branch_xref_user" ON "${schemaName}"."user_branch_xref"(user_id)`,
     );

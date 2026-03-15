@@ -93,7 +93,7 @@ export class FacilitiesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Create a new facility' })
   @ApiQuery({
     name: 'branchId',
@@ -114,7 +114,7 @@ export class FacilitiesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update a facility' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -128,7 +128,7 @@ export class FacilitiesController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Delete a facility (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.facilitiesService.delete(id, req.user.gymId!);

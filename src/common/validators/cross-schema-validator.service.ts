@@ -185,7 +185,7 @@ export class CrossSchemaValidatorService {
 
   /**
    * Validate staff user for operations like marking attendance, paying salary etc.
-   * Staff should be admin, manager, or branch_admin in public.users
+   * Staff should be admin, manager, or trainer in public.users
    */
   async validateStaffForOperation(
     staffId: number,
@@ -202,7 +202,7 @@ export class CrossSchemaValidatorService {
     }
 
     // Check if user has assignment to this gym with appropriate role
-    const validRoles = ['admin', 'manager', 'branch_admin', 'trainer'];
+    const validRoles = ['admin', 'manager', 'trainer'];
     const hasRole = await this.validatePublicUserRole(
       staffId,
       validRoles,

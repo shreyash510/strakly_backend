@@ -45,7 +45,7 @@ export class ReportsController {
   }
 
   @Get('download-pdf')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Download comprehensive PDF report' })
   @ApiQuery({
     name: 'year',
@@ -110,7 +110,7 @@ export class ReportsController {
   }
 
   @Get('income-expense')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiQuery({
     name: 'branchId',
     required: false,
@@ -128,7 +128,7 @@ export class ReportsController {
   }
 
   @Get('membership-sales')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiQuery({
     name: 'branchId',
     required: false,
@@ -150,7 +150,7 @@ export class ReportsController {
   }
 
   @Get('payment-dues')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiQuery({
     name: 'branchId',
     required: false,
@@ -167,7 +167,7 @@ export class ReportsController {
   }
 
   @Get('daily-sales')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get daily sales report (memberships + products + expenses)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date (YYYY-MM-DD), defaults to today' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
@@ -183,7 +183,7 @@ export class ReportsController {
   }
 
   @Get('deleted-transactions')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Get deleted transactions (memberships + product sales)' })
   @ApiQuery({ name: 'branchId', required: false, type: Number })
   async getDeletedTransactions(

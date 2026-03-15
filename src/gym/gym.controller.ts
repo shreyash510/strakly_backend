@@ -41,7 +41,7 @@ export class GymController {
   ) {}
 
   @Get('profile')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym profile with branch details' })
   @ApiQuery({
     name: 'branchId',
@@ -161,7 +161,7 @@ export class GymController {
   }
 
   @Get(':id')
-  @Roles('superadmin', 'admin', 'branch_admin', 'trainer', 'manager')
+  @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.gymService.findOne(id);

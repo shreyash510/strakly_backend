@@ -35,7 +35,7 @@ export class ProgressPhotosController {
   constructor(private readonly progressPhotosService: ProgressPhotosService) {}
 
   @Post('upload')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Upload a progress photo' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -65,7 +65,7 @@ export class ProgressPhotosController {
   }
 
   @Get('user/:userId')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get progress photos for a user' })
   async findByUser(
     @Param('userId', ParseIntPipe) userId: number,
@@ -99,7 +99,7 @@ export class ProgressPhotosController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update progress photo metadata' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -110,7 +110,7 @@ export class ProgressPhotosController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a progress photo' })
   async remove(
     @Param('id', ParseIntPipe) id: number,

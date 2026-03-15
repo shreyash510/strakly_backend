@@ -77,7 +77,7 @@ export class SalaryService {
       async (client) => {
         const result = await client.query(
           `SELECT id, name, role FROM users
-         WHERE id = $1 AND role IN ('branch_admin', 'manager', 'trainer')`,
+         WHERE id = $1 AND role IN ('manager', 'trainer')`,
           [createSalaryDto.staffId],
         );
         return result.rows[0];
@@ -498,7 +498,7 @@ export class SalaryService {
           ),
           client.query(
             `SELECT COUNT(*) as count FROM users u
-           WHERE u.status = 'active' AND u.role IN ('branch_admin', 'manager', 'trainer')${branchFilter}`,
+           WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')${branchFilter}`,
           ),
         ]);
 
@@ -522,7 +522,7 @@ export class SalaryService {
       let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.role, u.branch_id, b.name as branch_name
          FROM users u
          LEFT JOIN branches b ON b.id = u.branch_id
-         WHERE u.status = 'active' AND u.role IN ('branch_admin', 'manager', 'trainer')`;
+         WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')`;
       const values: SqlValue[] = [];
 
       // Branch filtering for non-admin users
@@ -536,7 +536,6 @@ export class SalaryService {
       const result = await client.query(query, values);
 
       const roleLabels: Record<string, string> = {
-        [ROLES.BRANCH_ADMIN]: 'Branch Admin',
         [ROLES.MANAGER]: 'Manager',
         [ROLES.TRAINER]: 'Trainer',
       };
@@ -623,7 +622,7 @@ export class SalaryService {
 
                 // Check if staff is still active
                 const staffResult = await client.query(
-                  `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('branch_admin', 'manager', 'trainer')`,
+                  `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('manager', 'trainer')`,
                   [salary.staff_id],
                 );
 

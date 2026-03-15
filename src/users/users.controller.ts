@@ -78,7 +78,7 @@ export class UsersController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({
     summary: 'Get all users with optional filters and pagination',
   })
@@ -197,7 +197,7 @@ export class UsersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiQuery({
     name: 'gymId',
@@ -247,7 +247,7 @@ export class UsersController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get single user by ID (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -276,7 +276,7 @@ export class UsersController {
 
   @Patch('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -341,7 +341,7 @@ export class UsersController {
 
   @Patch('user/status')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user status (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -374,7 +374,7 @@ export class UsersController {
 
   @Post('user/reset-password')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Reset user password (admin)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -408,7 +408,7 @@ export class UsersController {
 
   @Post('user/regenerate-attendance-code')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Regenerate attendance code for user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -437,7 +437,7 @@ export class UsersController {
 
   @Get('role/:role')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get users by role' })
   @ApiQuery({
     name: 'gymId',
@@ -469,7 +469,7 @@ export class UsersController {
 
   @Patch(':id/permissions')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update manager permissions for a user' })
   @ApiQuery({
     name: 'gymId',
@@ -501,7 +501,7 @@ export class UsersController {
 
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({
     summary: 'Approve a pending registration request with optional membership',
   })
@@ -521,7 +521,7 @@ export class UsersController {
 
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Reject a pending registration request' })
   async rejectRequest(
     @CurrentUser() user: AuthenticatedUser,
@@ -540,7 +540,7 @@ export class UsersController {
 
   @Get('trainer-clients/all')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get all trainer-client assignments' })
   getAllTrainerClientAssignments(@CurrentUser() user: AuthenticatedUser) {
     if (!user.gymId) {
@@ -551,7 +551,7 @@ export class UsersController {
 
   @Get('trainers/:trainerId/clients')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get clients assigned to a trainer' })
   getTrainerClients(
     @CurrentUser() user: AuthenticatedUser,
@@ -565,7 +565,7 @@ export class UsersController {
 
   @Post('trainers/:trainerId/clients')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Assign a client to a trainer' })
   assignClientToTrainer(
     @CurrentUser() user: AuthenticatedUser,
@@ -580,7 +580,7 @@ export class UsersController {
 
   @Delete('trainers/:trainerId/clients/:clientId')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Remove a client from a trainer' })
   removeClientFromTrainer(
     @CurrentUser() user: AuthenticatedUser,
@@ -615,7 +615,7 @@ export class UsersController {
 
   @Post('bulk/create')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Bulk create users (max 50)' })
   @ApiQuery({
     name: 'gymId',
@@ -655,7 +655,7 @@ export class UsersController {
 
   @Get('status-counts')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get user counts grouped by status' })
   @ApiQuery({
     name: 'role',
@@ -696,7 +696,7 @@ export class UsersController {
 
   @Patch('bulk/update')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Bulk update users (move to branch, update status)' })
   @ApiQuery({
     name: 'gymId',
@@ -727,7 +727,7 @@ export class UsersController {
 
   @Delete('bulk/delete')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Bulk delete users' })
   @ApiQuery({
     name: 'gymId',
@@ -760,7 +760,7 @@ export class UsersController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiQuery({
     name: 'gymId',
@@ -783,7 +783,7 @@ export class UsersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Update user by ID' })
   @ApiQuery({
     name: 'gymId',
@@ -816,7 +816,7 @@ export class UsersController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Delete user by ID' })
   @ApiQuery({
     name: 'gymId',

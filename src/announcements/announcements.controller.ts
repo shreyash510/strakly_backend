@@ -29,7 +29,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Controller('announcements')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@Roles('superadmin', 'admin', 'branch_admin', 'manager')
+@Roles('superadmin', 'admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ANNOUNCEMENTS)
 export class AnnouncementsController {
   constructor(

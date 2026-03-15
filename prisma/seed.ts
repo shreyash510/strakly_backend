@@ -26,10 +26,9 @@ const lookupValues: Record<string, Array<{ code: string; name: string; value?: s
   USER_ROLE: [
     { code: 'superadmin', name: 'Super Admin', value: 'superadmin', displayOrder: 1 },
     { code: 'admin', name: 'Admin', value: 'admin', displayOrder: 2 },
-    { code: 'branch_admin', name: 'Branch Admin', value: 'branch_admin', displayOrder: 3 },
-    { code: 'manager', name: 'Manager', value: 'manager', displayOrder: 4 },
-    { code: 'trainer', name: 'Trainer', value: 'trainer', displayOrder: 5 },
-    { code: 'client', name: 'Client', value: 'client', displayOrder: 6 },
+    { code: 'manager', name: 'Manager', value: 'manager', displayOrder: 3 },
+    { code: 'trainer', name: 'Trainer', value: 'trainer', displayOrder: 4 },
+    { code: 'client', name: 'Client', value: 'client', displayOrder: 5 },
   ],
   USER_STATUS: [
     { code: 'onboarding', name: 'Onboarding', value: 'onboarding', displayOrder: 1 },
@@ -239,46 +238,6 @@ const rolePermissions: Record<string, string[]> = {
     'salary.view',
     'salary.manage',
     // Programs/Diet
-    'programs.manage',
-    // Products (POS / Retail)
-    'products.view',
-    'products.manage',
-  ],
-
-  branch_admin: [
-    // Dashboard
-    'dashboard.view',
-    // Gym Profile (view only)
-    'view_gym_profile',
-    // Member Management (branch-specific)
-    'members.view',
-    'members.manage',
-    // Trainer Management (branch-specific)
-    'trainers.view',
-    'trainers.manage',
-    // Requests Management (branch-specific)
-    'requests.view',
-    'requests.manage',
-    // Reports & Analytics (branch-specific)
-    'reports.view',
-    'analytics.view',
-    // Subscriptions (branch-specific)
-    'subscription.manage',
-    // Attendance (branch-specific)
-    'attendance.manage',
-    // Settings (own profile only)
-    'settings.view',
-    // Profile
-    'profile.view',
-    // Support
-    'support.view',
-    'support.manage',
-    // Share App
-    'share_app.view',
-    // Salary (branch-specific)
-    'salary.view',
-    'salary.manage',
-    // Programs/Diet (branch-specific)
     'programs.manage',
     // Products (POS / Retail)
     'products.view',

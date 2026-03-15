@@ -49,7 +49,7 @@ export class AppointmentsController {
   // ─── Services ───
 
   @Get('services')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'List PT/appointment services' })
   async findAllServices(
     @GymId() gymId: number,
@@ -59,7 +59,7 @@ export class AppointmentsController {
   }
 
   @Post('services')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a service' })
   async createService(
     @Body() dto: CreateServiceDto,
@@ -72,7 +72,7 @@ export class AppointmentsController {
   }
 
   @Patch('services/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a service' })
   async updateService(
     @Param('id', ParseIntPipe) id: number,
@@ -85,7 +85,7 @@ export class AppointmentsController {
   }
 
   @Delete('services/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a service' })
   async deleteService(
     @Param('id', ParseIntPipe) id: number,
@@ -99,7 +99,7 @@ export class AppointmentsController {
   // ─── Trainer Availability ───
 
   @Get('availability/:trainerId')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get trainer availability' })
   async getAvailability(
     @Param('trainerId', ParseIntPipe) trainerId: number,
@@ -109,7 +109,7 @@ export class AppointmentsController {
   }
 
   @Put('availability')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Set/update trainer availability for a day' })
   async setAvailability(
     @Body() dto: SetAvailabilityDto,
@@ -124,7 +124,7 @@ export class AppointmentsController {
   // ─── Appointments ───
 
   @Get('available-slots')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get available time slots for a trainer on a date' })
   async getAvailableSlots(
     @GymId() gymId: number,
@@ -134,7 +134,7 @@ export class AppointmentsController {
   }
 
   @Get('my')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get current user\'s appointments' })
   async getMyAppointments(
     @GymId() gymId: number,
@@ -155,7 +155,7 @@ export class AppointmentsController {
   }
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'List appointments with filters' })
   async findAll(
     @GymId() gymId: number,
@@ -168,7 +168,7 @@ export class AppointmentsController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Book an appointment (checks trainer conflicts)' })
   async create(
     @Body() dto: CreateAppointmentDto,
@@ -183,7 +183,7 @@ export class AppointmentsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update an appointment' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -198,7 +198,7 @@ export class AppointmentsController {
   }
 
   @Patch(':id/status')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Update appointment status (confirm, complete, cancel, no_show)' })
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
@@ -215,7 +215,7 @@ export class AppointmentsController {
   // ─── Session Packages ───
 
   @Get('packages')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List session packages' })
   async findAllPackages(
     @GymId() gymId: number,
@@ -232,7 +232,7 @@ export class AppointmentsController {
   }
 
   @Post('packages')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a session package' })
   async createPackage(
     @Body() dto: CreateSessionPackageDto,
@@ -243,7 +243,7 @@ export class AppointmentsController {
   }
 
   @Get('packages/user/:userId')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get session packages for a user' })
   async getUserPackages(
     @Param('userId', ParseIntPipe) userId: number,
@@ -257,7 +257,7 @@ export class AppointmentsController {
   // ─── Single Appointment ───
 
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get a single appointment by ID' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
