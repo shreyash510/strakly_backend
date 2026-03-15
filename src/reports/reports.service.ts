@@ -588,10 +588,11 @@ export class ReportsService {
           m.payment_method,
           m.paid_at,
           m.deleted_at,
-          del.name as deleted_by_name
+          COALESCE(pub_del.name, del.name) as deleted_by_name
         FROM memberships m
         LEFT JOIN users u ON u.id = m.user_id
         LEFT JOIN plans p ON p.id = m.plan_id
+        LEFT JOIN public.users pub_del ON pub_del.id = m.deleted_by
         LEFT JOIN users del ON del.id = m.deleted_by
         WHERE m.is_deleted = TRUE${branchFilter}
         ORDER BY m.deleted_at DESC
@@ -609,10 +610,11 @@ export class ReportsService {
           ps.payment_method,
           ps.sold_at as paid_at,
           ps.deleted_at,
-          del.name as deleted_by_name
+          COALESCE(pub_del.name, del.name) as deleted_by_name
         FROM product_sales ps
         LEFT JOIN users u ON u.id = ps.user_id
         LEFT JOIN products pr ON pr.id = ps.product_id
+        LEFT JOIN public.users pub_del ON pub_del.id = COALESCE(ps.deleted_by, ps.sold_by)
         LEFT JOIN users del ON del.id = COALESCE(ps.deleted_by, ps.sold_by)
         WHERE ps.is_deleted = TRUE${productBranchFilter}
         ORDER BY ps.deleted_at DESC

@@ -558,7 +558,7 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
   ) {
-    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true', req.user.userId);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
     return result;
   }
