@@ -229,7 +229,7 @@ export class TenantService implements OnModuleInit {
     await this.seedProductCategories(client, schemaName);
 
 
-    // Phase 5: Custom Fields, Surveys, Engagement, Gamification, Loyalty, Wearables, Currencies
+    // Phase 5: Custom Fields, Surveys, Engagement, Gamification, Loyalty, Currencies
     try {
       await this.createPhase5Tables(client, schemaName);
     } catch (error) {
@@ -3180,7 +3180,7 @@ export class TenantService implements OnModuleInit {
 
   // ═══════════════════════════════════════════════════════════════════
   //  PHASE 5: Custom Fields, Surveys, Engagement, Gamification,
-  //           Loyalty, Wearables, Currencies
+  //           Loyalty, Currencies
   // ═══════════════════════════════════════════════════════════════════
 
   private async createPhase5Tables(
@@ -3367,45 +3367,6 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // ─── 6. Wearable Integration ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."wearable_connections" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        provider VARCHAR(30) NOT NULL,
-        access_token TEXT,
-        refresh_token TEXT,
-        token_expires_at TIMESTAMP,
-        provider_user_id VARCHAR(200),
-        scopes TEXT,
-        is_active BOOLEAN DEFAULT TRUE,
-        last_synced_at TIMESTAMP,
-        sync_error TEXT,
-        connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        disconnected_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, provider)
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."wearable_data" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        provider VARCHAR(30) NOT NULL,
-        data_type VARCHAR(30) NOT NULL,
-        value NUMERIC(10,2) NOT NULL,
-        unit VARCHAR(20),
-        recorded_at TIMESTAMP NOT NULL,
-        recorded_date DATE NOT NULL,
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, provider, data_type, recorded_date)
-      )
-    `);
-
     // ─── Phase 5 Indexes ───
     try {
       // Custom Fields
@@ -3434,15 +3395,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_rewards_active" ON "${schemaName}"."loyalty_rewards"(is_active) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_tiers_branch" ON "${schemaName}"."loyalty_tiers"(branch_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_tiers_points" ON "${schemaName}"."loyalty_tiers"(min_points)`);
-      // Wearables
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_conn_user" ON "${schemaName}"."wearable_connections"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_conn_provider" ON "${schemaName}"."wearable_connections"(provider, is_active)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_user" ON "${schemaName}"."wearable_data"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_type_date" ON "${schemaName}"."wearable_data"(user_id, data_type, recorded_date)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_provider" ON "${schemaName}"."wearable_data"(provider)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_date" ON "${schemaName}"."wearable_data"(recorded_date)`);
     } catch (err) {
-      this.logger.warn(`Failed to create wearable data indexes for schema ${schemaName}`, err);
+      this.logger.warn(`Failed to create Phase 5 indexes for schema ${schemaName}`, err);
     }
   }
 
