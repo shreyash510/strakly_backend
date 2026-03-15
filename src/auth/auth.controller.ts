@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AuthRegisterDto } from './dto/create-user.dto';
@@ -33,24 +34,28 @@ import { GymId, UserId, OptionalGymId } from './decorators';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.register(createUserDto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('register-admin')
   @ApiOperation({ summary: 'Register a new admin user' })
   registerAdmin(@Body() createUserDto: AuthRegisterDto) {
     return this.authService.registerAdmin(createUserDto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('register-admin-with-gym')
   @ApiOperation({ summary: 'Register a new admin user with gym' })
   registerAdminWithGym(@Body() dto: RegisterAdminWithGymDto) {
     return this.authService.registerAdminWithGym(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
   login(@Body() loginDto: LoginDto) {
@@ -143,18 +148,21 @@ export class AuthController {
     return this.authService.switchGym(userId, targetGymId);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset OTP' })
   requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
     return this.authService.requestPasswordReset(dto.email);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify password reset OTP' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto.email, dto.otp);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP verification' })
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -165,6 +173,7 @@ export class AuthController {
     );
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('resend-otp')
   @ApiOperation({ summary: 'Resend password reset OTP' })
   resendOtp(@Body() dto: RequestPasswordResetDto) {
@@ -183,12 +192,14 @@ export class AuthController {
     return this.authService.resendVerificationEmail(dto.email);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('send-signup-otp')
   @ApiOperation({ summary: 'Send OTP for signup email verification' })
   sendSignupOtp(@Body() dto: { email: string; name: string }) {
     return this.authService.sendSignupVerificationOtp(dto.email, dto.name);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('verify-signup-otp')
   @ApiOperation({ summary: 'Verify signup OTP' })
   verifySignupOtp(@Body() dto: VerifyOtpDto) {

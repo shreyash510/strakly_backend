@@ -106,11 +106,7 @@ export class AuthService {
     const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
 
-    // Debug: log masked credentials to verify env vars are loaded correctly
-    const maskedSecret = clientSecret
-      ? `${clientSecret.substring(0, 8)}...${clientSecret.substring(clientSecret.length - 4)}`
-      : 'NOT SET';
-    this.logger.log(`Google OAuth Config: clientId=${clientId}, secret=${maskedSecret}, redirectUri=${frontendUrl}/auth/google/callback`);
+    this.logger.log(`Google OAuth Config: clientId=${clientId ? 'SET' : 'NOT SET'}, secret=${clientSecret ? 'SET' : 'NOT SET'}, redirectUri=${frontendUrl}/auth/google/callback`);
 
     this.googleOAuth2Client = new OAuth2Client(clientId, clientSecret);
   }
@@ -285,31 +281,128 @@ export class AuthService {
     let gym: Record<string, any> | null = null;
     let createdUser: Record<string, any> | null = null;
 
+    // Wrap gym + branch + user creation in a Prisma transaction so that if
+    // any step fails, all changes are rolled back atomically instead of leaving
+    // orphaned records that need manual cleanup.
     try {
-      // Create gym and get gym ID first
-      gym = await this.prisma.gym.create({
-        data: {
-          name: dto.gym.name,
-          tenantSchemaName: 'pending', // Will update after getting ID
-          phone: dto.gym.phone,
-          email: dto.gym.email,
-          address: dto.gym.address,
-          city: dto.gym.city,
-          state: dto.gym.state,
-          zipCode: dto.gym.zipCode,
-          country: dto.gym.country || 'India',
-          isActive: true,
-        },
-      });
-      this.logger.log(`Gym created: ${gym.id}`);
+      const txResult = await this.prisma.$transaction(async (tx) => {
+        // Create gym
+        const txGym = await tx.gym.create({
+          data: {
+            name: dto.gym.name,
+            tenantSchemaName: 'pending', // Will update after getting ID
+            phone: dto.gym.phone,
+            email: dto.gym.email,
+            address: dto.gym.address,
+            city: dto.gym.city,
+            state: dto.gym.state,
+            zipCode: dto.gym.zipCode,
+            country: dto.gym.country || 'India',
+            isActive: true,
+          },
+        });
+        this.logger.log(`Gym created: ${txGym.id}`);
 
-      // Update tenant schema name with the gym ID
-      const tenantSchemaName = this.tenantService.getTenantSchemaName(gym.id);
-      await this.prisma.gym.update({
-        where: { id: gym.id },
-        data: { tenantSchemaName },
+        // Update tenant schema name with the gym ID
+        const tenantSchemaName = this.tenantService.getTenantSchemaName(txGym.id);
+        await tx.gym.update({
+          where: { id: txGym.id },
+          data: { tenantSchemaName },
+        });
+        this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
+
+        // Create default branch for the gym
+        await tx.branch.create({
+          data: {
+            gymId: txGym.id,
+            name: txGym.name,
+            code: 'MAIN',
+            phone: dto.gym.phone,
+            email: dto.gym.email,
+            address: dto.gym.address,
+            city: dto.gym.city,
+            state: dto.gym.state,
+            zipCode: dto.gym.zipCode,
+            isDefault: true,
+            isActive: true,
+          },
+        });
+        this.logger.log('Default branch created');
+
+        // Create admin user in PUBLIC.users (not tenant schema)
+        const txUser = await tx.user.create({
+          data: {
+            email: dto.user.email,
+            passwordHash,
+            name: dto.user.name,
+            phone: dto.user.phone,
+            status: USER_STATUS.ACTIVE,
+          },
+        });
+        this.logger.log(`User created: ${txUser.id}`);
+
+        // Create user-gym assignment with admin role
+        await tx.userGymXref.create({
+          data: {
+            userId: txUser.id,
+            gymId: txGym.id,
+            role: ROLES.ADMIN,
+            isPrimary: true,
+            isActive: true,
+          },
+        });
+
+        // Create free trial subscription
+        const freePlan = await tx.saasPlan.findFirst({
+          where: { code: 'free' },
+        });
+
+        if (freePlan) {
+          const now = new Date();
+          const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
+          const endDate = new Date(now);
+          endDate.setMonth(endDate.getMonth() + (freePlan.durationMonths || 3));
+
+          await tx.saasGymSubscription.create({
+            data: {
+              gymId: txGym.id,
+              planId: freePlan.id,
+              startDate: now,
+              endDate: endDate,
+              status: 'trial',
+              trialEndsAt: trialEnd,
+              amount: 0,
+              currency: 'INR',
+              paymentStatus: 'paid',
+              autoRenew: true,
+              isActive: true,
+            },
+          });
+        }
+
+        // Generate email verification OTP
+        const verificationOtp = this.generateOtp();
+        const verificationExpiry = new Date(
+          Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
+        );
+
+        await tx.emailVerification.create({
+          data: {
+            email: dto.user.email,
+            otp: verificationOtp,
+            expiresAt: verificationExpiry,
+            userType: 'admin',
+            userId: txUser.id,
+            gymId: null, // Admin users are in public schema
+          },
+        });
+
+        return { txGym, txUser, verificationOtp };
       });
-      this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
+
+      gym = txResult.txGym;
+      createdUser = txResult.txUser;
+      const verificationOtp = txResult.verificationOtp;
 
       // Create the tenant schema in background (non-blocking — schema is only needed
       // when admin starts adding clients/plans, not for login/dashboard)
@@ -317,104 +410,6 @@ export class AuthService {
       this.tenantService.createTenantSchema(gymIdForSchema)
         .then(() => this.logger.log(`Tenant schema created for gym ${gymIdForSchema}`))
         .catch((err) => this.logger.error(`Failed to create tenant schema for gym ${gymIdForSchema}:`, err));
-
-      // Create default branch for the gym
-      await this.branchService.createDefaultBranch(gym.id, gym);
-      this.logger.log('Default branch created');
-
-      // Create admin user in PUBLIC.users (not tenant schema)
-      createdUser = await this.prisma.user.create({
-        data: {
-          email: dto.user.email,
-          passwordHash,
-          name: dto.user.name,
-          phone: dto.user.phone,
-          status: USER_STATUS.ACTIVE,
-        },
-      });
-      this.logger.log(`User created: ${createdUser.id}`);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error('Registration error:', msg);
-      // Clean up gym if it was created but user creation failed
-      if (gym?.id && !createdUser) {
-        try {
-          await this.prisma.gym.delete({ where: { id: gym.id } });
-          this.logger.log(`Cleaned up orphaned gym: ${gym.id}`);
-        } catch (cleanupError) {
-          this.logger.error('Failed to clean up gym:', cleanupError);
-        }
-      }
-      throw error;
-    }
-
-    // Complete registration: create assignments, subscription, and build response
-    try {
-      // Create user-gym assignment with admin role
-      await this.prisma.userGymXref.create({
-        data: {
-          userId: createdUser.id,
-          gymId: gym.id,
-          role: ROLES.ADMIN,
-          isPrimary: true,
-          isActive: true,
-        },
-      });
-
-      // Create free trial subscription
-      const freePlan = await this.prisma.saasPlan.findFirst({
-        where: { code: 'free' },
-      });
-
-      if (freePlan) {
-        const now = new Date();
-        const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days trial
-        const endDate = new Date(now);
-        endDate.setMonth(endDate.getMonth() + (freePlan.durationMonths || 3));
-
-        await this.prisma.saasGymSubscription.create({
-          data: {
-            gymId: gym.id,
-            planId: freePlan.id,
-            startDate: now,
-            endDate: endDate,
-            status: 'trial',
-            trialEndsAt: trialEnd,
-            amount: 0,
-            currency: 'INR',
-            paymentStatus: 'paid',
-            autoRenew: true,
-            isActive: true,
-          },
-        });
-      }
-
-      const updatedGym = await this.prisma.gym.findUnique({
-        where: { id: gym.id },
-      });
-
-      if (!updatedGym) {
-        throw new BadRequestException(
-          'Failed to complete registration. Please try again.',
-        );
-      }
-
-      // Generate and send email verification OTP
-      const verificationOtp = this.generateOtp();
-      const verificationExpiry = new Date(
-        Date.now() + this.VERIFICATION_EXPIRY_MINUTES * 60 * 1000,
-      );
-
-      await this.prisma.emailVerification.create({
-        data: {
-          email: dto.user.email,
-          otp: verificationOtp,
-          expiresAt: verificationExpiry,
-          userType: 'admin',
-          userId: createdUser.id,
-          gymId: null, // Admin users are in public schema
-        },
-      });
 
       // Send verification email (non-blocking)
       this.emailService
@@ -438,6 +433,23 @@ export class AuthService {
         .catch((error) => {
           this.logger.error('Failed to send new gym notification:', error);
         });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Registration error:', msg);
+      throw error;
+    }
+
+    // Build response (reads only, no transaction needed)
+    try {
+      const updatedGym = await this.prisma.gym.findUnique({
+        where: { id: gym.id },
+      });
+
+      if (!updatedGym) {
+        throw new BadRequestException(
+          'Failed to complete registration. Please try again.',
+        );
+      }
 
       // Get the subscription we just created
       const subscription = await this.getGymSubscription(gym.id);
@@ -2165,12 +2177,6 @@ export class AuthService {
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
       const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
       const redirectUri = this.getGoogleRedirectUri();
-
-      // DEBUG: Log what we're sending to Google (masked)
-      const maskedSecret = clientSecret
-        ? `${clientSecret.substring(0, 8)}...${clientSecret.substring(clientSecret.length - 4)} (len=${clientSecret.length})`
-        : 'NOT SET';
-      this.logger.warn(`[DEBUG] Token exchange: clientId=${clientId}, secret=${maskedSecret}, redirectUri=${redirectUri}, code=${code.substring(0, 10)}...`);
 
       // Create a new OAuth2Client with proper redirect URI for token exchange
       const oAuth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);

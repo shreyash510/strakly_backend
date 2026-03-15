@@ -40,6 +40,7 @@ export class IncomeExpenseReportDto {
   period: string;
   income: {
     membershipPayments: number;
+    productSales: number;
     totalIncome: number;
   };
   expense: {

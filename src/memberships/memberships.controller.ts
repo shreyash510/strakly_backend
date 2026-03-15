@@ -32,7 +32,9 @@ import {
 import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('memberships')
@@ -466,8 +468,9 @@ export class MembershipsController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('subscriptions', 'create')
   @ApiOperation({ summary: 'Create a new membership' })
   @ApiQuery({
     name: 'branchId',
@@ -491,8 +494,9 @@ export class MembershipsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Update a membership' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -524,8 +528,9 @@ export class MembershipsController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Cancel a membership' })
   async cancel(
     @Request() req: AuthenticatedRequest,
@@ -538,8 +543,9 @@ export class MembershipsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin')
+  @ManagerPermission('subscriptions', 'delete')
   @ApiOperation({ summary: 'Delete a membership' })
   @ApiQuery({
     name: 'force',
@@ -552,7 +558,7 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
   ) {
-    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true');
+    const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true', req.user.userId);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
     return result;
   }

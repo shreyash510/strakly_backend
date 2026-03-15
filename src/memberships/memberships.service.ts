@@ -19,6 +19,7 @@ import {
   RecordPaymentDto,
 } from './dto/membership.dto';
 import { SqlValue } from '../common/types';
+import { sanitizePagination } from '../common/pagination.util';
 
 @Injectable()
 export class MembershipsService {
@@ -43,9 +44,7 @@ export class MembershipsService {
       limit?: number;
     },
   ) {
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 15;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = sanitizePagination(filters?.page, filters?.limit, 15);
 
     const { memberships, total } = await this.tenantService.executeInTenant(
       gymId,
@@ -239,9 +238,7 @@ export class MembershipsService {
     branchId: number | null = null,
     options?: { page?: number; limit?: number },
   ) {
-    const page = options?.page || 1;
-    const limit = options?.limit || 15;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 15);
 
     const { memberships, total } = await this.tenantService.executeInTenant(
       gymId,
@@ -423,11 +420,13 @@ export class MembershipsService {
       plan.duration_type,
     );
 
-    // Create membership with branch_id
-    const membership = await this.tenantService.executeInTenant(
+    // Create membership, increment offer usage, save facilities/amenities, and
+    // create payment record atomically to prevent partial state on failure.
+    const { membership, userName } = await this.tenantService.executeInTenantTransaction(
       gymId,
       async (client) => {
-        const result = await client.query(
+        // Create membership with branch_id
+        const membershipResult = await client.query(
           `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
           original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
@@ -448,33 +447,64 @@ export class MembershipsService {
             dto.autoRenew || false,
           ],
         );
-        return result.rows[0];
+        const txMembership = membershipResult.rows[0];
+
+        // Increment offer usage
+        if (offer) {
+          await client.query(
+            `UPDATE offers SET current_usage = current_usage + 1 WHERE id = $1`,
+            [offer.id],
+          );
+        }
+
+        // Save membership facilities
+        if (dto.facilityIds && dto.facilityIds.length > 0) {
+          for (const facilityId of dto.facilityIds) {
+            await client.query(
+              `INSERT INTO membership_facilities (membership_id, facility_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+              [txMembership.id, facilityId],
+            );
+          }
+        }
+
+        // Save membership amenities
+        if (dto.amenityIds && dto.amenityIds.length > 0) {
+          for (const amenityId of dto.amenityIds) {
+            await client.query(
+              `INSERT INTO membership_amenities (membership_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+              [txMembership.id, amenityId],
+            );
+          }
+        }
+
+        // Get user name for payment record
+        const userResult = await client.query(
+          `SELECT name FROM users WHERE id = $1`,
+          [dto.userId],
+        );
+        const txUserName = userResult.rows[0]?.name || 'Unknown';
+
+        // Create payment record for the membership
+        await this.paymentsService.createMembershipPaymentWithClient(
+          client,
+          txMembership.id,
+          membershipBranchId,
+          dto.userId,
+          txUserName,
+          originalAmount,
+          discountAmount,
+          finalAmount,
+          dto.paymentMethod || 'cash',
+          undefined, // paymentRef
+          undefined, // processedBy
+        );
+
+        return { membership: txMembership, userName: txUserName };
       },
     );
 
-    // Increment offer usage
-    if (offer) {
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(
-          `UPDATE offers SET current_usage = current_usage + 1 WHERE id = $1`,
-          [offer.id],
-        );
-      });
-    }
-
-    // Save membership facilities
-    if (dto.facilityIds && dto.facilityIds.length > 0) {
-      await this.saveMembershipFacilities(
-        membership.id,
-        dto.facilityIds,
-        gymId,
-      );
-    }
-
-    // Save membership amenities
-    if (dto.amenityIds && dto.amenityIds.length > 0) {
-      await this.saveMembershipAmenities(membership.id, dto.amenityIds, gymId);
-    }
+    // Non-critical side effects (notifications, activity logs) run after the
+    // transaction commits so they don't cause a rollback if they fail.
 
     // Send membership renewed notification
     await this.notificationsService.notifyMembershipRenewed(
@@ -486,33 +516,6 @@ export class MembershipsService {
         endDate: endDate,
         membershipId: membership.id,
       },
-    );
-
-    // Get user name for payment record
-    const userName = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT name FROM users WHERE id = $1`,
-          [dto.userId],
-        );
-        return result.rows[0]?.name || 'Unknown';
-      },
-    );
-
-    // Create payment record for the membership
-    await this.paymentsService.createMembershipPayment(
-      membership.id,
-      gymId,
-      membershipBranchId,
-      dto.userId,
-      userName,
-      originalAmount,
-      discountAmount,
-      finalAmount,
-      dto.paymentMethod || 'cash',
-      undefined, // paymentRef
-      undefined, // processedBy
     );
 
     // Log activity
@@ -733,39 +736,35 @@ export class MembershipsService {
       );
     }
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    // Update membership status and create payment record atomically
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), status = 'active', updated_at = NOW() WHERE id = $3`,
         [dto.paymentMethod, dto.paymentRef || null, id],
       );
+
+      // Get user name for payment record
+      const userResult = await client.query(
+        `SELECT name FROM users WHERE id = $1`,
+        [membership.userId],
+      );
+      const userName = userResult.rows[0]?.name || 'Unknown';
+
+      // Create payment record
+      await this.paymentsService.createMembershipPaymentWithClient(
+        client,
+        id,
+        membership.branchId,
+        membership.userId,
+        userName,
+        membership.originalAmount,
+        membership.discountAmount,
+        dto.amount || membership.finalAmount,
+        dto.paymentMethod,
+        dto.paymentRef,
+        processedBy,
+      );
     });
-
-    // Get user name for payment record
-    const userName = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT name FROM users WHERE id = $1`,
-          [membership.userId],
-        );
-        return result.rows[0]?.name || 'Unknown';
-      },
-    );
-
-    // Create payment record
-    await this.paymentsService.createMembershipPayment(
-      id,
-      gymId,
-      membership.branchId,
-      membership.userId,
-      userName,
-      membership.originalAmount,
-      membership.discountAmount,
-      dto.amount || membership.finalAmount,
-      dto.paymentMethod,
-      dto.paymentRef,
-      processedBy,
-    );
 
     return this.findOne(id, gymId);
   }
@@ -804,11 +803,17 @@ export class MembershipsService {
       );
     }
 
-    // Soft delete the membership
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    // Soft delete the membership and void associated payment atomically
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
         [id, deletedById || null],
+      );
+
+      // Void the associated payment record
+      await client.query(
+        `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE reference_table = 'memberships' AND reference_id = $1`,
+        [id],
       );
     });
 
@@ -1094,15 +1099,14 @@ export class MembershipsService {
       );
     }
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Create freeze record
+    // Create freeze record and update membership atomically
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `INSERT INTO membership_freezes (branch_id, membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())`,
         [membership.branchId, id, startDate, endDate, dto.reason || null, approvedBy],
       );
 
-      // Update membership
       await client.query(
         `UPDATE memberships SET freeze_start_date = $1, freeze_end_date = $2, freeze_reason = $3,
          total_freeze_days = total_freeze_days + $4, updated_at = NOW() WHERE id = $5`,
@@ -1124,15 +1128,14 @@ export class MembershipsService {
     const now = new Date();
     const actualFreezeDays = Math.ceil((now.getTime() - freezeStart.getTime()) / (1000 * 60 * 60 * 24));
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Mark active freeze as completed
+    // Complete freeze and extend membership atomically
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE membership_freezes SET status = 'completed', end_date = NOW(), updated_at = NOW()
          WHERE membership_id = $1 AND status = 'active'`,
         [id],
       );
 
-      // Extend membership end_date by freeze duration and clear freeze fields
       await client.query(
         `UPDATE memberships SET
          end_date = end_date + INTERVAL '1 day' * $1,

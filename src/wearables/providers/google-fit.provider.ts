@@ -1,4 +1,4 @@
-import { BadGatewayException } from '@nestjs/common';
+import { BadGatewayException, Logger } from '@nestjs/common';
 import {
   BaseWearableProvider,
   WearableDataPoint,
@@ -7,6 +7,7 @@ import {
 } from './base.provider';
 
 export class GoogleFitProvider extends BaseWearableProvider {
+  private readonly logger = new Logger(GoogleFitProvider.name);
   readonly providerName = 'google_fit';
 
   private readonly clientId: string;
@@ -90,8 +91,8 @@ export class GoogleFitProvider extends BaseWearableProvider {
         const profile = await profileRes.json();
         providerUserId = profile.id || 'unknown';
       }
-    } catch {
-      // Use fallback
+    } catch (err) {
+      this.logger.warn('Failed to fetch Google user profile, using fallback providerUserId', err);
     }
 
     return {

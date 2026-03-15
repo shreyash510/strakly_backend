@@ -1,23 +1,15 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
 @Injectable()
-export class UploadService {
+export class UploadService implements OnModuleInit {
   private readonly logger = new Logger(UploadService.name);
   private s3Client: S3Client;
   private bucket: string;
   private publicUrl: string;
 
   constructor() {
-    this.logger.log('=== S3 Configuration ===');
-    this.logger.log('Endpoint:', process.env.STORAGE_ENDPOINT);
-    this.logger.log('Region:', process.env.STORAGE_REGION);
-    this.logger.log('Bucket:', process.env.STORAGE_BUCKET);
-    this.logger.log('Public URL:', process.env.STORAGE_PUBLIC_URL);
-    this.logger.log('Access Key (first 8 chars):', process.env.STORAGE_ACCESS_KEY?.substring(0, 8));
-    this.logger.log('========================');
-
     this.s3Client = new S3Client({
       endpoint: process.env.STORAGE_ENDPOINT,
       region: process.env.STORAGE_REGION || 'ap-south-1',
@@ -29,6 +21,14 @@ export class UploadService {
     });
     this.bucket = process.env.STORAGE_BUCKET || 'strakly';
     this.publicUrl = process.env.STORAGE_PUBLIC_URL || '';
+  }
+
+  onModuleInit() {
+    const required = ['STORAGE_ENDPOINT', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY', 'STORAGE_BUCKET'];
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+      this.logger.warn(`Missing storage env vars: ${missing.join(', ')} - file uploads will be disabled`);
+    }
   }
 
   /**
@@ -144,8 +144,7 @@ export class UploadService {
 
     // Upload to S3 (Supabase Storage)
     try {
-      this.logger.log('Attempting S3 upload:', { bucket: this.bucket, key: filename, contentType: compressed.contentType });
-      const result = await this.s3Client.send(
+      await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: filename,
@@ -153,18 +152,10 @@ export class UploadService {
           ContentType: compressed.contentType,
         }),
       );
-      this.logger.log('S3 Upload Success:', result);
     } catch (error: unknown) {
       const err = error as Record<string, any>;
       const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error('=== S3 Upload Error ===');
-      this.logger.error('Error Name:', err.name);
-      this.logger.error('Error Message:', msg);
-      this.logger.error('Error Code:', err.Code || err.$metadata?.httpStatusCode);
-      this.logger.error('Bucket:', this.bucket);
-      this.logger.error('Key:', filename);
-      this.logger.error('Full Error:', JSON.stringify(error, null, 2));
-      this.logger.error('=======================');
+      this.logger.error(`S3 Upload Error: ${err.name || 'Unknown'} - ${msg} (code: ${err.Code || err.$metadata?.httpStatusCode || 'N/A'}, bucket: ${this.bucket}, key: ${filename})`);
       throw new BadRequestException(`Failed to upload image: ${msg || 'Unknown error'}`);
     }
 

@@ -204,7 +204,7 @@ export class TenantService implements OnModuleInit {
     await this.createPhase1Tables(client, schemaName);
     await this.seedCancellationReasons(client, schemaName);
 
-    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos, Member Goals
+    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos
     try {
       await this.createPhase2Tables(client, schemaName);
     } catch (error) {
@@ -2697,30 +2697,6 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Member Goals
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."member_goals" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        user_id INTEGER NOT NULL,
-        goal_type VARCHAR(30) NOT NULL DEFAULT 'general_fitness',
-        title VARCHAR(200) NOT NULL,
-        description TEXT,
-        target_value NUMERIC(10,2),
-        current_value NUMERIC(10,2) DEFAULT 0,
-        unit VARCHAR(20),
-        start_date DATE DEFAULT CURRENT_DATE,
-        target_date DATE,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        achieved_at TIMESTAMP,
-        assigned_by INTEGER,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     // Lead Stage History
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_stage_history" (
@@ -2730,24 +2706,6 @@ export class TenantService implements OnModuleInit {
         to_stage VARCHAR(30) NOT NULL,
         changed_by INTEGER,
         changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Goal Milestones
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."goal_milestones" (
-        id SERIAL PRIMARY KEY,
-        goal_id INTEGER NOT NULL REFERENCES "${schemaName}"."member_goals"(id) ON DELETE CASCADE,
-        title VARCHAR(200) NOT NULL,
-        target_value NUMERIC(10,2),
-        current_value NUMERIC(10,2) DEFAULT 0,
-        unit VARCHAR(20),
-        order_index INTEGER DEFAULT 0,
-        is_completed BOOLEAN DEFAULT FALSE,
-        completed_at TIMESTAMP,
-        target_date DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -2763,10 +2721,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referred" ON "${schemaName}"."referrals"(referred_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_signed_docs_user" ON "${schemaName}"."signed_documents"(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_progress_photos_user" ON "${schemaName}"."progress_photos"(user_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_member_goals_user" ON "${schemaName}"."member_goals"(user_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_goal_milestones_goal" ON "${schemaName}"."goal_milestones"(goal_id)`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create some indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -2797,8 +2753,8 @@ export class TenantService implements OnModuleInit {
             [source.code, source.name],
           );
         }
-      } catch {
-        // Table might not exist yet
+      } catch (err) {
+        this.logger.warn(`Failed to seed lead sources for schema ${schemaName}`, err);
       }
     }
   }
@@ -3014,8 +2970,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_date" ON "${schemaName}"."guest_visits"(visit_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_brought_by" ON "${schemaName}"."guest_visits"(brought_by) WHERE brought_by IS NOT NULL`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_checked_in" ON "${schemaName}"."guest_visits"(checked_in_by) WHERE checked_in_by IS NOT NULL`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create guest visits indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -3125,9 +3081,16 @@ export class TenantService implements OnModuleInit {
         notes TEXT,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add deleted_by column to product_sales if it doesn't exist (migration)
+    await client.query(`
+      ALTER TABLE "${schemaName}"."product_sales"
+      ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
 
     await client.query(`
@@ -3176,8 +3139,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_user" ON "${schemaName}"."product_sales"(user_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_sold_at" ON "${schemaName}"."product_sales"(sold_at) WHERE is_deleted = FALSE`);
 
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create product indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -3478,8 +3441,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_type_date" ON "${schemaName}"."wearable_data"(user_id, data_type, recorded_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_provider" ON "${schemaName}"."wearable_data"(provider)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_date" ON "${schemaName}"."wearable_data"(recorded_date)`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create wearable data indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -3558,6 +3521,40 @@ export class TenantService implements OnModuleInit {
       return await callback(client, schemaName);
     } finally {
       // Reset search path — wrapped in try/catch in case connection already dropped
+      try {
+        await client.query(`SET search_path TO public`);
+      } catch {
+        // Connection may already be dead; just release
+      }
+      client.release();
+    }
+  }
+
+  /**
+   * Execute a callback in a tenant schema wrapped in a database transaction.
+   * If the callback throws, the transaction is rolled back automatically.
+   */
+  async executeInTenantTransaction<T>(
+    gymId: number,
+    callback: (client: PoolClient, schemaName: string) => Promise<T>,
+  ): Promise<T> {
+    const schemaName = this.getTenantSchemaName(gymId);
+    const client = await this.pool.connect();
+
+    try {
+      await client.query(`SET search_path TO "${schemaName}", public`);
+      await client.query('BEGIN');
+      const result = await callback(client, schemaName);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Connection may already be dead
+      }
+      throw error;
+    } finally {
       try {
         await client.query(`SET search_path TO public`);
       } catch {

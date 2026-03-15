@@ -410,6 +410,9 @@ export class DashboardService {
         const attendanceBranchFilter =
           branchId !== null ? ` AND branch_id = ${branchId}` : '';
 
+        const productBranchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+
         const [
           totalMembersResult,
           activeMembersResult,
@@ -427,6 +430,9 @@ export class DashboardService {
           newClientsThisMonthResult,
           newEnquiriesThisMonthResult,
           expiringSoonResult,
+          productRevenueResult,
+          productLastMonthResult,
+          productThisMonthResult,
         ] = await Promise.all([
           client.query(
             `SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`,
@@ -441,17 +447,17 @@ export class DashboardService {
             `SELECT COUNT(*) as count FROM memberships WHERE status = 'active'${membershipBranchFilter}`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid'${membershipBranchFilter}`,
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter}`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND payment_method = 'cash'${membershipBranchFilter}`,
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND payment_method = 'cash'${membershipBranchFilter}`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
             [startOfLastMonth, endOfLastMonth],
           ),
           client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND paid_at >= $1${membershipBranchFilter}`,
+            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${membershipBranchFilter}`,
             [startOfMonth],
           ),
           client.query(
@@ -482,6 +488,18 @@ export class DashboardService {
             `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1::TIMESTAMP AND end_date <= $2::TIMESTAMP${membershipBranchFilter}`,
             [now, endOfWeek],
           ),
+          // Product sales revenue
+          client.query(
+            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter}`,
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1 AND sold_at <= $2${productBranchFilter}`,
+            [startOfLastMonth, endOfLastMonth],
+          ),
+          client.query(
+            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${productBranchFilter}`,
+            [startOfMonth],
+          ),
         ]);
 
         return {
@@ -492,10 +510,10 @@ export class DashboardService {
             activeMembershipsResult.rows[0].count,
             10,
           ),
-          totalRevenue: parseFloat(revenueResult.rows[0].sum),
+          totalRevenue: parseFloat(revenueResult.rows[0].sum) + parseFloat(productRevenueResult.rows[0].sum),
           totalCashRevenue: parseFloat(cashRevenueResult.rows[0].sum),
-          lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum),
-          monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum),
+          lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum) + parseFloat(productLastMonthResult.rows[0].sum),
+          monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum) + parseFloat(productThisMonthResult.rows[0].sum),
           presentToday: parseInt(presentTodayResult.rows[0].count, 10),
           expiredMemberships: parseInt(expiredMembershipsResult.rows[0].count, 10),
           pendingOnboardingCount: parseInt(
@@ -511,23 +529,35 @@ export class DashboardService {
       },
     );
 
-    // Get last 5 months revenue history
+    // Get last 5 months revenue history (memberships + product sales)
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
     const revenueHistory = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter =
+        const membershipBranchFilter =
+          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const productBranchFilter =
           branchId !== null ? ` AND branch_id = ${branchId}` : '';
         const result = await client.query(
-          `SELECT
-            TO_CHAR(DATE_TRUNC('month', paid_at), 'Mon') as month,
-            EXTRACT(MONTH FROM DATE_TRUNC('month', paid_at)) as month_num,
-            EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
-            COALESCE(SUM(final_amount), 0) as revenue
-          FROM memberships
-          WHERE payment_status = 'paid' AND paid_at >= $1${branchFilter}
-          GROUP BY DATE_TRUNC('month', paid_at)
-          ORDER BY DATE_TRUNC('month', paid_at) ASC`,
+          `SELECT month, month_num, year_num, SUM(revenue) as revenue FROM (
+            SELECT
+              TO_CHAR(DATE_TRUNC('month', paid_at), 'Mon') as month,
+              EXTRACT(MONTH FROM DATE_TRUNC('month', paid_at)) as month_num,
+              EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
+              final_amount as revenue
+            FROM memberships
+            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${membershipBranchFilter}
+            UNION ALL
+            SELECT
+              TO_CHAR(DATE_TRUNC('month', sold_at), 'Mon') as month,
+              EXTRACT(MONTH FROM DATE_TRUNC('month', sold_at)) as month_num,
+              EXTRACT(YEAR FROM DATE_TRUNC('month', sold_at)) as year_num,
+              total_amount as revenue
+            FROM product_sales
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${productBranchFilter}
+          ) combined
+          GROUP BY month, month_num, year_num
+          ORDER BY year_num ASC, month_num ASC`,
           [fiveMonthsAgo],
         );
         return result.rows;

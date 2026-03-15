@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { UpdateBodyMetricsDto, RecordMetricsDto } from './dto/body-metrics.dto';
 import { SqlValue } from '../common/types';
+import { sanitizePagination } from '../common/pagination.util';
 
 @Injectable()
 export class BodyMetricsService {
@@ -415,9 +416,7 @@ export class BodyMetricsService {
       branchId?: number | null;
     },
   ) {
-    const page = options?.page || 1;
-    const limit = options?.limit || 10;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 10);
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let whereClause = 'user_id = $1';

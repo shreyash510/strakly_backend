@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -23,6 +24,8 @@ import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class ClassesService {
+  private readonly logger = new Logger(ClassesService.name);
+
   constructor(
     private readonly tenantService: TenantService,
     private readonly notificationsService: NotificationsService,
@@ -352,7 +355,9 @@ export class ClassesService {
         message: `${schedule.classTypeName} scheduled on ${days[dto.dayOfWeek]}s at ${dto.startTime}.`,
         actionUrl: '/classes',
       });
-    } catch { /* notifications are non-critical */ }
+    } catch (err) {
+      this.logger.warn('Failed to send class schedule notification', err);
+    }
 
     return schedule;
   }
@@ -805,7 +810,9 @@ export class ClassesService {
               }, { excludeUserId: userId });
             }
           }
-        } catch { /* notifications are non-critical */ }
+        } catch (err) {
+          this.logger.warn('Failed to send class booking notification', err);
+        }
 
         return {
           booking: this.formatBooking(booking.rows[0]),
@@ -937,7 +944,9 @@ export class ClassesService {
               );
             }
           }
-        } catch { /* notifications are non-critical */ }
+        } catch (err) {
+          this.logger.warn('Failed to send class cancellation notification', err);
+        }
 
         return this.formatBooking(updated.rows[0]);
       } catch (error) {
