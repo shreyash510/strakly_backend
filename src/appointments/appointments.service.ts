@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -23,6 +24,8 @@ import { NotificationType } from '../notifications/notification-types';
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(
     private readonly tenantService: TenantService,
     private readonly notificationsService: NotificationsService,
@@ -516,7 +519,9 @@ export class AppointmentsService {
         message: `${appointment.userName || 'A client'} booked an appointment with ${appointment.trainerName || 'a trainer'}.`,
         actionUrl: '/appointments',
       }, { excludeUserId: createdBy });
-    } catch { /* notifications are non-critical */ }
+    } catch (err) {
+      this.logger.warn('Failed to send appointment booking notification', err);
+    }
 
     return appointment;
   }
@@ -721,7 +726,9 @@ export class AppointmentsService {
               },
             );
           }
-        } catch { /* notifications are non-critical */ }
+        } catch (err) {
+          this.logger.warn('Failed to send appointment status notification', err);
+        }
 
         const response: Record<string, any> = this.formatAppointment(full.rows[0]);
         if (sessionDeduction) {

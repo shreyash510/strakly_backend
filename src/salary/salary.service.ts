@@ -403,7 +403,8 @@ export class SalaryService {
       throw new ForbiddenException('Salary has already been paid');
     }
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    // Update salary status and create payment record atomically
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE staff_salaries SET payment_status = 'paid', payment_method = $1, payment_ref = $2, paid_at = NOW(), paid_by_id = $3, updated_at = NOW() WHERE id = $4`,
         [
@@ -413,20 +414,20 @@ export class SalaryService {
           salaryId,
         ],
       );
-    });
 
-    // Create payment record for the salary
-    await this.paymentsService.createSalaryPayment(
-      salaryId,
-      gymId,
-      salary.staff_branch_id,
-      salary.staff_id,
-      salary.staff_name,
-      Number(salary.net_amount),
-      paySalaryDto.paymentMethod,
-      paySalaryDto.paymentRef,
-      paidById,
-    );
+      // Create payment record for the salary
+      await this.paymentsService.createSalaryPaymentWithClient(
+        client,
+        salaryId,
+        salary.staff_branch_id,
+        salary.staff_id,
+        salary.staff_name,
+        Number(salary.net_amount),
+        paySalaryDto.paymentMethod,
+        paySalaryDto.paymentRef,
+        paidById,
+      );
+    });
 
     return this.findOne(salaryId, gymId);
   }

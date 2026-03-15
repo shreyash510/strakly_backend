@@ -37,7 +37,6 @@ import { PaymentsModule } from './payments/payments.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { MemberNotesModule } from './member-notes/member-notes.module';
-import { MemberGoalsModule } from './member-goals/member-goals.module';
 import { UploadModule } from './upload/upload.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { ConversationsModule } from './conversations/conversations.module';
@@ -50,6 +49,9 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
+
+// Health check
+import { HealthModule } from './health/health.module';
 
 // Phase 5: Advanced / Differentiators
 import { WearablesModule } from './wearables/wearables.module';
@@ -68,6 +70,7 @@ import { WearablesModule } from './wearables/wearables.module';
       ttl: 60000,
       limit: 100,
     }]),
+    HealthModule,
     DatabaseModule,
     TenantModule,
     RabbitMqModule,
@@ -99,7 +102,6 @@ import { WearablesModule } from './wearables/wearables.module';
     ActivityLogsModule,
     AnnouncementsModule,
     MemberNotesModule,
-    MemberGoalsModule,
     UploadModule,
     ConversationsModule,
     ProgressPhotosModule,

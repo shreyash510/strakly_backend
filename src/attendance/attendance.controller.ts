@@ -455,6 +455,7 @@ export class AttendanceController {
     const result = await this.attendanceService.deleteAttendance(
       attendanceId,
       gymId,
+      req.user.userId,
     );
     this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'deleted' });
     return { success: result };

@@ -9,6 +9,7 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { SqlValue } from '../common/types';
+import { sanitizePagination } from '../common/pagination.util';
 
 export interface AttendanceStats {
   totalPresent: number;
@@ -504,8 +505,7 @@ export class AttendanceService {
       hasPrev: boolean;
     };
   }> {
-    const page = options.page || 1;
-    const limit = options.limit || 10;
+    const { page, limit } = sanitizePagination(options.page, options.limit, 10);
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const { activeRecords, historyRecords, totalCount } =
@@ -664,8 +664,8 @@ export class AttendanceService {
   async getAllAttendance(
     gymId: number,
     branchId: number | null = null,
-    page: number = 1,
-    limit: number = 50,
+    rawPage: number = 1,
+    rawLimit: number = 50,
     startDate?: string,
     endDate?: string,
   ): Promise<{
@@ -674,6 +674,7 @@ export class AttendanceService {
     page: number;
     pages: number;
   }> {
+    const { page, limit } = sanitizePagination(rawPage, rawLimit, 50);
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const { records, total } = await this.tenantService.executeInTenant(
@@ -765,7 +766,8 @@ export class AttendanceService {
         },
       );
       return historyResult;
-    } catch {
+    } catch (err) {
+      this.logger.error(`Failed to soft-delete attendance #${attendanceId} for gym #${gymId}`, err);
       return false;
     }
   }

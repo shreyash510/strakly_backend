@@ -27,16 +27,19 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   // Enable CORS for frontend
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
+  const allowedOrigins: string[] = [
+    process.env.FRONTEND_URL,
+    process.env.NEXT_FRONTEND_URL,
     'https://strakly.com',
     'https://www.strakly.com',
     'https://app.strakly.com',
     'https://strakly-g9ovf.ondigitalocean.app',
     'https://shark-app-yak3y.ondigitalocean.app',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
+
+  if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.push('http://localhost:5173', 'http://localhost:3000');
+  }
 
   app.enableCors({
     origin: allowedOrigins,

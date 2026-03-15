@@ -14,6 +14,7 @@ import {
 } from './dto/payment.dto';
 import { SqlValue } from '../common/types';
 import { ROLES } from '../common/constants';
+import { sanitizePagination } from '../common/pagination.util';
 
 export interface PaymentRecord {
   id: number;
@@ -94,9 +95,7 @@ export class PaymentsService {
     branchId: number | null = null,
     filters: PaymentFiltersDto = {},
   ) {
-    const page = filters.page || 1;
-    const limit = filters.limit || 15;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 15);
 
     const { payments, total } = await this.tenantService.executeInTenant(
       gymId,
@@ -464,6 +463,43 @@ export class PaymentsService {
   }
 
   /**
+   * Create payment for membership using an existing DB client (for transactions)
+   */
+  async createMembershipPaymentWithClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: any,
+    membershipId: number,
+    branchId: number | null,
+    payerId: number,
+    payerName: string,
+    amount: number,
+    discountAmount: number,
+    netAmount: number,
+    paymentMethod: string,
+    paymentRef?: string,
+    processedBy?: number,
+  ): Promise<PaymentRecord> {
+    return this.createWithClient(
+      client,
+      {
+        branchId: branchId || undefined,
+        paymentType: PaymentType.MEMBERSHIP,
+        referenceId: membershipId,
+        referenceTable: 'memberships',
+        payerType: ROLES.CLIENT,
+        payerId,
+        payerName,
+        amount,
+        discountAmount,
+        netAmount,
+        paymentMethod,
+        paymentRef,
+      },
+      processedBy,
+    );
+  }
+
+  /**
    * Create payment for salary
    */
   async createSalaryPayment(
@@ -494,6 +530,42 @@ export class PaymentsService {
         paymentRef,
       },
       gymId,
+      processedBy,
+    );
+  }
+
+  /**
+   * Create payment for salary using an existing DB client (for transactions)
+   */
+  async createSalaryPaymentWithClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: any,
+    salaryId: number,
+    branchId: number | null,
+    staffId: number,
+    staffName: string,
+    amount: number,
+    paymentMethod: string,
+    paymentRef?: string,
+    processedBy?: number,
+  ): Promise<PaymentRecord> {
+    return this.createWithClient(
+      client,
+      {
+        branchId: branchId || undefined,
+        paymentType: PaymentType.SALARY,
+        referenceId: salaryId,
+        referenceTable: 'staff_salaries',
+        payerType: 'gym',
+        payerId: undefined,
+        payeeType: 'staff',
+        payeeId: staffId,
+        payeeName: staffName,
+        amount,
+        netAmount: amount,
+        paymentMethod,
+        paymentRef,
+      },
       processedBy,
     );
   }

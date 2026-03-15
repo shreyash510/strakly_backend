@@ -5,6 +5,7 @@ import {
   ActivityLogFiltersDto,
 } from './dto/activity-log.dto';
 import { SqlValue } from '../common/types';
+import { sanitizePagination } from '../common/pagination.util';
 
 export interface ActivityLogRecord {
   id: number;
@@ -62,9 +63,7 @@ export class ActivityLogsService {
     branchId: number | null = null,
     filters: ActivityLogFiltersDto = {},
   ) {
-    const page = filters.page || 1;
-    const limit = filters.limit || 20;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 20);
 
     const { logs, total } = await this.tenantService.executeInTenant(
       gymId,
