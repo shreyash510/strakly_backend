@@ -204,7 +204,7 @@ export class TenantService implements OnModuleInit {
     await this.createPhase1Tables(client, schemaName);
     await this.seedCancellationReasons(client, schemaName);
 
-    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos, Member Goals
+    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos
     try {
       await this.createPhase2Tables(client, schemaName);
     } catch (error) {
@@ -2697,30 +2697,6 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Member Goals
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."member_goals" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        user_id INTEGER NOT NULL,
-        goal_type VARCHAR(30) NOT NULL DEFAULT 'general_fitness',
-        title VARCHAR(200) NOT NULL,
-        description TEXT,
-        target_value NUMERIC(10,2),
-        current_value NUMERIC(10,2) DEFAULT 0,
-        unit VARCHAR(20),
-        start_date DATE DEFAULT CURRENT_DATE,
-        target_date DATE,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        achieved_at TIMESTAMP,
-        assigned_by INTEGER,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     // Lead Stage History
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_stage_history" (
@@ -2730,24 +2706,6 @@ export class TenantService implements OnModuleInit {
         to_stage VARCHAR(30) NOT NULL,
         changed_by INTEGER,
         changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Goal Milestones
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."goal_milestones" (
-        id SERIAL PRIMARY KEY,
-        goal_id INTEGER NOT NULL REFERENCES "${schemaName}"."member_goals"(id) ON DELETE CASCADE,
-        title VARCHAR(200) NOT NULL,
-        target_value NUMERIC(10,2),
-        current_value NUMERIC(10,2) DEFAULT 0,
-        unit VARCHAR(20),
-        order_index INTEGER DEFAULT 0,
-        is_completed BOOLEAN DEFAULT FALSE,
-        completed_at TIMESTAMP,
-        target_date DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -2763,8 +2721,6 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referred" ON "${schemaName}"."referrals"(referred_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_signed_docs_user" ON "${schemaName}"."signed_documents"(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_progress_photos_user" ON "${schemaName}"."progress_photos"(user_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_member_goals_user" ON "${schemaName}"."member_goals"(user_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_goal_milestones_goal" ON "${schemaName}"."goal_milestones"(goal_id)`);
     } catch (err) {
       this.logger.warn(`Failed to create some indexes for schema ${schemaName}`, err);
     }
