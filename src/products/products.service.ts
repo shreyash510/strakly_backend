@@ -594,9 +594,9 @@ export class ProductsService {
         ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
-      const payment = await this.paymentsService.createProductSalePayment(
+      const payment = await this.paymentsService.createProductSalePaymentWithClient(
+        client,
         saleRecord.id,
-        gymId,
         branchId,
         dto.userId || null,
         buyerName,
@@ -730,9 +730,9 @@ export class ProductsService {
         ).rows[0]?.name || 'Unknown'
         : 'Walk-in';
 
-      const payment = await this.paymentsService.createProductSalePayment(
+      const payment = await this.paymentsService.createProductSalePaymentWithClient(
+        client,
         sales[0].id,
-        gymId,
         branchId,
         dto.userId || null,
         buyerName,

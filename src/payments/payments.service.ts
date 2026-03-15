@@ -499,6 +499,55 @@ export class PaymentsService {
   }
 
   /**
+   * Create a payment record using an existing DB client (avoids nested executeInTenant)
+   */
+  async createWithClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: any,
+    dto: CreatePaymentDto,
+    processedBy?: number,
+  ): Promise<PaymentRecord> {
+    const result = await client.query(
+      `INSERT INTO payments (
+        branch_id, payment_type, reference_id, reference_table,
+        payer_type, payer_id, payer_name,
+        payee_type, payee_id, payee_name,
+        amount, currency, tax_amount, discount_amount, net_amount,
+        payment_method, payment_ref, payment_gateway, payment_gateway_ref,
+        status, processed_at, processed_by, notes, metadata, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
+      ) RETURNING *`,
+      [
+        dto.branchId || null,
+        dto.paymentType,
+        dto.referenceId,
+        dto.referenceTable,
+        dto.payerType,
+        dto.payerId || null,
+        dto.payerName || null,
+        dto.payeeType || null,
+        dto.payeeId || null,
+        dto.payeeName || null,
+        dto.amount,
+        dto.currency || 'INR',
+        dto.taxAmount || 0,
+        dto.discountAmount || 0,
+        dto.netAmount,
+        dto.paymentMethod,
+        dto.paymentRef || null,
+        dto.paymentGateway || null,
+        dto.paymentGatewayRef || null,
+        PaymentStatus.COMPLETED,
+        processedBy || null,
+        dto.notes || null,
+        dto.metadata ? JSON.stringify(dto.metadata) : null,
+      ],
+    );
+    return this.formatPayment(result.rows[0]);
+  }
+
+  /**
    * Create payment for product sale
    */
   async createProductSalePayment(
@@ -528,6 +577,41 @@ export class PaymentsService {
         paymentMethod,
       },
       gymId,
+      processedBy,
+    );
+  }
+
+  /**
+   * Create payment for product sale using an existing DB client
+   */
+  async createProductSalePaymentWithClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: any,
+    saleId: number,
+    branchId: number | null,
+    buyerId: number | null,
+    buyerName: string,
+    amount: number,
+    taxAmount: number,
+    netAmount: number,
+    paymentMethod: string,
+    processedBy?: number,
+  ): Promise<PaymentRecord> {
+    return this.createWithClient(
+      client,
+      {
+        branchId: branchId || undefined,
+        paymentType: PaymentType.PRODUCT_SALE,
+        referenceId: saleId,
+        referenceTable: 'product_sales',
+        payerType: buyerId ? ROLES.CLIENT : 'guest',
+        payerId: buyerId || undefined,
+        payerName: buyerName,
+        amount,
+        taxAmount,
+        netAmount,
+        paymentMethod,
+      },
       processedBy,
     );
   }
