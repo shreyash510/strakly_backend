@@ -3125,9 +3125,16 @@ export class TenantService implements OnModuleInit {
         notes TEXT,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add deleted_by column to product_sales if it doesn't exist (migration)
+    await client.query(`
+      ALTER TABLE "${schemaName}"."product_sales"
+      ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
 
     await client.query(`

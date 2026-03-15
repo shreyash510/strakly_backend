@@ -182,6 +182,19 @@ export class ReportsController {
     return this.reportsService.getDailySalesReport(gymId, date, branchId);
   }
 
+  @Get('deleted-transactions')
+  @Roles('admin', 'branch_admin')
+  @ApiOperation({ summary: 'Get deleted transactions (memberships + product sales)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
+  async getDeletedTransactions(
+    @Req() req: AuthenticatedRequest,
+    @Query('branchId') queryBranchId?: string,
+  ) {
+    const gymId = req.user.gymId!;
+    const branchId = this.resolveBranchId(req, queryBranchId);
+    return this.reportsService.getDeletedTransactions(gymId, branchId);
+  }
+
   // ============================================
   // TRAINER CLIENT REPORTS
   // ============================================
