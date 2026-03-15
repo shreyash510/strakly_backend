@@ -237,25 +237,6 @@ export class TenantService implements OnModuleInit {
     }
     await this.seedDefaultLoyaltyTiers(client, schemaName);
 
-    // Add created_by column to achievements if missing (for schemas created before fix)
-    try {
-      const createdByExists = await client.query(`
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = $1 AND table_name = 'achievements' AND column_name = 'created_by'
-      `, [schemaName]);
-      if (createdByExists.rows.length === 0) {
-        await client.query(`ALTER TABLE "${schemaName}"."achievements" ADD COLUMN created_by INTEGER`);
-        this.logger.log(`Added 'created_by' column to ${schemaName}.achievements`);
-      }
-    } catch (error) {
-      this.logger.error(
-        `Error adding created_by to ${schemaName}.achievements:`,
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-
-    await this.seedDefaultAchievements(client, schemaName);
-
     // Add unlocked_sidebar_items column to users table
     try {
       const colExists = await client.query(`
@@ -3339,102 +3320,7 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // ─── 3. Challenges & Gamification ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."challenges" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        title VARCHAR(200) NOT NULL,
-        description TEXT,
-        type VARCHAR(30) NOT NULL,
-        metric VARCHAR(50),
-        goal_value NUMERIC(10,2),
-        goal_direction VARCHAR(10) DEFAULT 'increase',
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        max_participants INTEGER,
-        points_reward INTEGER DEFAULT 0,
-        badge_name VARCHAR(100),
-        badge_icon VARCHAR(100),
-        status VARCHAR(20) NOT NULL DEFAULT 'draft',
-        rules JSONB,
-        created_by INTEGER NOT NULL,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."challenge_participants" (
-        id SERIAL PRIMARY KEY,
-        challenge_id INTEGER NOT NULL REFERENCES "${schemaName}"."challenges"(id) ON DELETE CASCADE,
-        user_id INTEGER NOT NULL,
-        start_value NUMERIC(10,2),
-        current_value NUMERIC(10,2),
-        progress_pct NUMERIC(5,2) DEFAULT 0,
-        rank INTEGER,
-        points_earned INTEGER DEFAULT 0,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        completed_at TIMESTAMP,
-        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(challenge_id, user_id)
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."achievements" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        name VARCHAR(100) NOT NULL,
-        description TEXT,
-        icon VARCHAR(100),
-        category VARCHAR(30) NOT NULL,
-        criteria JSONB NOT NULL,
-        points_value INTEGER DEFAULT 0,
-        is_active BOOLEAN DEFAULT TRUE,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_by INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."user_achievements" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        achievement_id INTEGER NOT NULL REFERENCES "${schemaName}"."achievements"(id) ON DELETE CASCADE,
-        earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        challenge_id INTEGER REFERENCES "${schemaName}"."challenges"(id) ON DELETE SET NULL,
-        points_earned INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, achievement_id)
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."streaks" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        streak_type VARCHAR(30) NOT NULL,
-        current_count INTEGER NOT NULL DEFAULT 0,
-        longest_count INTEGER NOT NULL DEFAULT 0,
-        last_activity_date DATE,
-        streak_start_date DATE,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, streak_type)
-      )
-    `);
-
-    // ─── 5. Loyalty / Rewards Program ───
+    // ─── 3. Loyalty / Rewards Program ───
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_config" (
@@ -3574,21 +3460,6 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_responses_user" ON "${schemaName}"."survey_responses"(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_response" ON "${schemaName}"."survey_answers"(response_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_question" ON "${schemaName}"."survey_answers"(question_id)`);
-      // Challenges
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_branch" ON "${schemaName}"."challenges"(branch_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_status" ON "${schemaName}"."challenges"(status) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenges_dates" ON "${schemaName}"."challenges"(start_date, end_date) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_challenge" ON "${schemaName}"."challenge_participants"(challenge_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_user" ON "${schemaName}"."challenge_participants"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_challenge_parts_rank" ON "${schemaName}"."challenge_participants"(challenge_id, rank) WHERE status = 'active'`);
-      // Achievements
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_achievements_branch" ON "${schemaName}"."achievements"(branch_id) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_achievements_category" ON "${schemaName}"."achievements"(category) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_achievements_user" ON "${schemaName}"."user_achievements"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_user_achievements_achievement" ON "${schemaName}"."user_achievements"(achievement_id)`);
-      // Streaks
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_streaks_user" ON "${schemaName}"."streaks"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_streaks_type" ON "${schemaName}"."streaks"(streak_type, is_active)`);
       // Loyalty
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_user" ON "${schemaName}"."loyalty_points"(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_tier" ON "${schemaName}"."loyalty_points"(tier_id)`);
@@ -3639,40 +3510,6 @@ export class TenantService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error seeding loyalty tiers for ${schemaName}:`,
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-
-  private async seedDefaultAchievements(
-    client: PoolClient,
-    schemaName: string,
-  ): Promise<void> {
-    try {
-      const existing = await client.query(
-        `SELECT COUNT(*) as count FROM "${schemaName}"."achievements" WHERE is_deleted = FALSE`,
-      );
-      if (parseInt(existing.rows[0].count) > 0) return;
-
-      const achievements = [
-        { name: 'First Step', description: 'Complete your first gym visit', icon: 'footprints', category: 'milestone', criteria: '{"type":"visit_count","threshold":1}', points_value: 10 },
-        { name: 'Week Warrior', description: 'Visit 7 days in a row', icon: 'flame', category: 'attendance', criteria: '{"type":"daily_streak","threshold":7}', points_value: 50 },
-        { name: 'Month Master', description: 'Visit 30 days in a row', icon: 'trophy', category: 'attendance', criteria: '{"type":"daily_streak","threshold":30}', points_value: 200 },
-        { name: 'Century Club', description: 'Complete 100 total visits', icon: 'star', category: 'milestone', criteria: '{"type":"visit_count","threshold":100}', points_value: 500 },
-        { name: 'Social Butterfly', description: 'Refer 3 friends who sign up', icon: 'users', category: 'social', criteria: '{"type":"referral_count","threshold":3}', points_value: 150 },
-        { name: 'Goal Getter', description: 'Achieve your first fitness goal', icon: 'target', category: 'milestone', criteria: '{"type":"goal_achieved","threshold":1}', points_value: 100 },
-      ];
-
-      for (const ach of achievements) {
-        await client.query(
-          `INSERT INTO "${schemaName}"."achievements" (name, description, icon, category, criteria, points_value, created_by) VALUES ($1, $2, $3, $4, $5, $6, 0)`,
-          [ach.name, ach.description, ach.icon, ach.category, ach.criteria, ach.points_value],
-        );
-      }
-      this.logger.log(`Seeded default achievements for ${schemaName}`);
-    } catch (error) {
-      this.logger.error(
-        `Error seeding achievements for ${schemaName}:`,
         error instanceof Error ? error.message : String(error),
       );
     }

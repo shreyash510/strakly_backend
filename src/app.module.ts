@@ -52,8 +52,6 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 
 // Phase 5: Advanced / Differentiators
-import { GamificationModule } from './gamification/gamification.module';
-import { LoyaltyModule } from './loyalty/loyalty.module';
 import { WearablesModule } from './wearables/wearables.module';
 
 @Module({
@@ -115,8 +113,6 @@ import { WearablesModule } from './wearables/wearables.module';
     ProductsModule,
 
     // Phase 5: Advanced / Differentiators
-    GamificationModule,
-    LoyaltyModule,
     WearablesModule,
   ],
   controllers: [AppController],

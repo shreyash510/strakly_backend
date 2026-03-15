@@ -442,7 +442,6 @@ const saasPlans = [
       'custom_fields',
       'multi_currency',
       'nps_surveys',
-      'gamification',
       'loyalty_program',
       'wearable_integration',
     ],

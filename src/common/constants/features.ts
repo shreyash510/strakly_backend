@@ -15,8 +15,6 @@ export const PLAN_FEATURES = {
 
   EQUIPMENT_TRACKING: 'equipment_tracking',
   // Phase 5: Advanced / Differentiators
-  GAMIFICATION: 'gamification',
-  LOYALTY_PROGRAM: 'loyalty_program',
   WEARABLE_INTEGRATION: 'wearable_integration',
   // Operations
   CLASS_SCHEDULING: 'class_scheduling',
