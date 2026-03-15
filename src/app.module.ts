@@ -50,10 +50,8 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
-import { CampaignsModule } from './campaigns/campaigns.module';
+
 // Phase 5: Advanced / Differentiators
-import { SurveysModule } from './surveys/surveys.module';
-import { EngagementModule } from './engagement/engagement.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { WearablesModule } from './wearables/wearables.module';
@@ -115,10 +113,8 @@ import { WearablesModule } from './wearables/wearables.module';
     GuestVisitsModule,
     EquipmentModule,
     ProductsModule,
-    CampaignsModule,
+
     // Phase 5: Advanced / Differentiators
-    SurveysModule,
-    EngagementModule,
     GamificationModule,
     LoyaltyModule,
     WearablesModule,
