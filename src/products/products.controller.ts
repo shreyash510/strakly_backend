@@ -33,8 +33,10 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
@@ -42,7 +44,7 @@ import { PLAN_FEATURES } from '../common/constants/features';
 
 @ApiTags('products')
 @Controller('products')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
 @PlanFeatures(PLAN_FEATURES.POS_RETAIL)
 @ApiBearerAuth()
 export class ProductsController {
@@ -131,6 +133,7 @@ export class ProductsController {
 
   @Post('sales')
   @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
     @GymId() gymId: number,
@@ -143,6 +146,7 @@ export class ProductsController {
 
   @Post('sales/batch')
   @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
     @GymId() gymId: number,
@@ -189,6 +193,7 @@ export class ProductsController {
 
   @Post()
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Create a product' })
   createProduct(
     @GymId() gymId: number,
@@ -200,6 +205,7 @@ export class ProductsController {
 
   @Patch(':id')
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Update a product' })
   @ApiParam({ name: 'id', type: Number })
   updateProduct(
@@ -212,6 +218,7 @@ export class ProductsController {
 
   @Patch(':id/stock')
   @Roles('admin', 'branch_admin', 'manager')
+  @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Adjust product stock' })
   @ApiParam({ name: 'id', type: Number })
   adjustStock(
@@ -238,6 +245,7 @@ export class ProductsController {
 
   @Delete(':id')
   @Roles('admin', 'branch_admin')
+  @ManagerPermission('products', 'delete')
   @ApiOperation({ summary: 'Delete a product' })
   @ApiParam({ name: 'id', type: Number })
   removeProduct(

@@ -804,11 +804,17 @@ export class MembershipsService {
       );
     }
 
-    // Soft delete the membership
+    // Soft delete the membership and void associated payment
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
         [id, deletedById || null],
+      );
+
+      // Void the associated payment record
+      await client.query(
+        `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE reference_table = 'memberships' AND reference_id = $1`,
+        [id],
       );
     });
 

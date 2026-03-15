@@ -3125,9 +3125,16 @@ export class TenantService implements OnModuleInit {
         notes TEXT,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
+        deleted_by INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add deleted_by column to product_sales if it doesn't exist (migration)
+    await client.query(`
+      ALTER TABLE "${schemaName}"."product_sales"
+      ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
 
     await client.query(`
@@ -3558,6 +3565,40 @@ export class TenantService implements OnModuleInit {
       return await callback(client, schemaName);
     } finally {
       // Reset search path — wrapped in try/catch in case connection already dropped
+      try {
+        await client.query(`SET search_path TO public`);
+      } catch {
+        // Connection may already be dead; just release
+      }
+      client.release();
+    }
+  }
+
+  /**
+   * Execute a callback in a tenant schema wrapped in a database transaction.
+   * If the callback throws, the transaction is rolled back automatically.
+   */
+  async executeInTenantTransaction<T>(
+    gymId: number,
+    callback: (client: PoolClient, schemaName: string) => Promise<T>,
+  ): Promise<T> {
+    const schemaName = this.getTenantSchemaName(gymId);
+    const client = await this.pool.connect();
+
+    try {
+      await client.query(`SET search_path TO "${schemaName}", public`);
+      await client.query('BEGIN');
+      const result = await callback(client, schemaName);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Connection may already be dead
+      }
+      throw error;
+    } finally {
       try {
         await client.query(`SET search_path TO public`);
       } catch {
