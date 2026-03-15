@@ -13,8 +13,6 @@ export const PLAN_FEATURES = {
   POS_RETAIL: 'pos_retail',
 
   EQUIPMENT_TRACKING: 'equipment_tracking',
-  // Phase 5: Advanced / Differentiators
-  WEARABLE_INTEGRATION: 'wearable_integration',
   // Operations
   CLASS_SCHEDULING: 'class_scheduling',
   APPOINTMENT_BOOKING: 'appointment_booking',

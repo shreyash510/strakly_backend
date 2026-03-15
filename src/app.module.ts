@@ -52,9 +52,6 @@ import { ProductsModule } from './products/products.module';
 // Health check
 import { HealthModule } from './health/health.module';
 
-// Phase 5: Advanced / Differentiators
-import { WearablesModule } from './wearables/wearables.module';
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -111,9 +108,6 @@ import { WearablesModule } from './wearables/wearables.module';
     GuestVisitsModule,
     EquipmentModule,
     ProductsModule,
-
-    // Phase 5: Advanced / Differentiators
-    WearablesModule,
   ],
   controllers: [AppController],
   providers: [
