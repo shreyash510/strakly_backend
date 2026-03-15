@@ -69,8 +69,9 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
-    return this.authService.getProfile(userId, gymId ?? undefined);
+  getProfile(@UserId() userId: number, @OptionalGymId() gymId: number | null, @Request() req: any) {
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    return this.authService.getProfile(userId, gymId ?? undefined, false, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -81,8 +82,10 @@ export class AuthController {
     @UserId() userId: number,
     @OptionalGymId() gymId: number | null,
     @Body() updateProfileDto: UpdateProfileDto,
+    @Request() req: any,
   ) {
-    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto);
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto, false, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)

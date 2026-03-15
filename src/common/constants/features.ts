@@ -4,7 +4,6 @@ export const PLAN_FEATURES = {
   DIET_PLANNING: 'diet_planning',
   BODY_METRICS: 'body_metrics',
   SALARY_MANAGEMENT: 'salary_management',
-  DATA_MIGRATION: 'data_migration',
   ACTIVITY_LOGS: 'activity_logs',
   ANNOUNCEMENTS: 'announcements',
   OFFERS: 'offers',
@@ -13,14 +12,9 @@ export const PLAN_FEATURES = {
   TRAINER_ASSIGNMENT: 'trainer_assignment',
   AMENITIES_MANAGEMENT: 'amenities_management',
   POS_RETAIL: 'pos_retail',
-  CAMPAIGNS: 'campaigns',
+
   EQUIPMENT_TRACKING: 'equipment_tracking',
   // Phase 5: Advanced / Differentiators
-  CUSTOM_FIELDS: 'custom_fields',
-  NPS_SURVEYS: 'nps_surveys',
-  ENGAGEMENT_SCORING: 'engagement_scoring',
-  GAMIFICATION: 'gamification',
-  LOYALTY_PROGRAM: 'loyalty_program',
   WEARABLE_INTEGRATION: 'wearable_integration',
   // Operations
   CLASS_SCHEDULING: 'class_scheduling',

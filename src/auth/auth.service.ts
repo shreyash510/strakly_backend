@@ -885,7 +885,31 @@ export class AuthService {
     userId: number,
     gymId?: number,
     isTenantUser: boolean = false,
+    isSuperAdmin: boolean = false,
   ): Promise<UserResponse> {
+    // Handle superadmin - stored in system_users table
+    if (isSuperAdmin) {
+      const systemUser = await this.prisma.systemUser.findUnique({
+        where: { id: userId },
+      });
+
+      if (!systemUser) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      return {
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        role: systemUser.role,
+        status: USER_STATUS.ACTIVE,
+        unlockedSidebarItems: systemUser.unlockedSidebarItems as string[] || undefined,
+        pinnedSidebarItems: systemUser.pinnedSidebarItems as string[] || undefined,
+        createdAt: systemUser.createdAt,
+        updatedAt: systemUser.updatedAt,
+      };
+    }
+
     if (isTenantUser && gymId) {
       // Tenant user profile (manager, trainer, or client) from tenant schema
       const gym = await this.prisma.gym.findUnique({
@@ -984,7 +1008,33 @@ export class AuthService {
     gymId: number | undefined,
     data: { name?: string; bio?: string; avatar?: string; phone?: string; unlockedSidebarItems?: string[]; pinnedSidebarItems?: string[] },
     isTenantUser: boolean = false,
+    isSuperAdmin: boolean = false,
   ): Promise<UserResponse> {
+    // Handle superadmin - stored in system_users table
+    if (isSuperAdmin) {
+      const updateData: Record<string, any> = {};
+      if (data.name) updateData.name = data.name;
+      if (data.unlockedSidebarItems !== undefined) updateData.unlockedSidebarItems = data.unlockedSidebarItems;
+      if (data.pinnedSidebarItems !== undefined) updateData.pinnedSidebarItems = data.pinnedSidebarItems;
+
+      const updatedSystemUser = await this.prisma.systemUser.update({
+        where: { id: userId },
+        data: updateData,
+      });
+
+      return {
+        id: updatedSystemUser.id,
+        name: updatedSystemUser.name,
+        email: updatedSystemUser.email,
+        role: updatedSystemUser.role,
+        status: USER_STATUS.ACTIVE,
+        unlockedSidebarItems: updatedSystemUser.unlockedSidebarItems as string[] || undefined,
+        pinnedSidebarItems: updatedSystemUser.pinnedSidebarItems as string[] || undefined,
+        createdAt: updatedSystemUser.createdAt,
+        updatedAt: updatedSystemUser.updatedAt,
+      };
+    }
+
     if (isTenantUser && gymId) {
       // Update tenant user (manager, trainer, or client) in tenant schema
       const gym = await this.prisma.gym.findUnique({
