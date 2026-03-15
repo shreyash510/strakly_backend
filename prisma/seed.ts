@@ -424,7 +424,6 @@ const saasPlans = [
       'diet_planning',
       'body_metrics',
       'salary_management',
-      'data_migration',
       'activity_logs',
       'announcements',
       'offers',

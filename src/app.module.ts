@@ -39,7 +39,6 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { MemberNotesModule } from './member-notes/member-notes.module';
 import { MemberGoalsModule } from './member-goals/member-goals.module';
 import { UploadModule } from './upload/upload.module';
-import { MigrationModule } from './migration/migration.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { ProgressPhotosModule } from './progress-photos/progress-photos.module';
@@ -53,7 +52,6 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 // Phase 5: Advanced / Differentiators
-import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { GamificationModule } from './gamification/gamification.module';
@@ -107,7 +105,6 @@ import { WearablesModule } from './wearables/wearables.module';
     MemberNotesModule,
     MemberGoalsModule,
     UploadModule,
-    MigrationModule,
     ConversationsModule,
     ProgressPhotosModule,
     LeadsModule,
@@ -120,7 +117,6 @@ import { WearablesModule } from './wearables/wearables.module';
     ProductsModule,
     CampaignsModule,
     // Phase 5: Advanced / Differentiators
-    CustomFieldsModule,
     SurveysModule,
     EngagementModule,
     GamificationModule,
