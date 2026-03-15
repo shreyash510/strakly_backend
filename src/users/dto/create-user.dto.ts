@@ -106,7 +106,7 @@ export class CreateUserDto {
   branchId?: number;
 
   @ApiPropertyOptional({
-    description: 'Branch IDs (for branch_admin with multiple branches)',
+    description: 'Branch IDs (for users with multiple branches)',
   })
   @IsOptional()
   @IsArray()
@@ -174,7 +174,7 @@ export class CreateUserDto {
   idNumber?: string;
 }
 
-// DTO for creating staff (admin, manager, trainer, branch_admin) - stored in public.users or tenant.users
+// DTO for creating staff (admin, manager, trainer) - stored in public.users or tenant.users
 export class CreateStaffDto {
   @ApiProperty({ description: 'Staff name' })
   @IsString()
@@ -193,11 +193,11 @@ export class CreateStaffDto {
 
   @ApiProperty({
     description: 'Staff role',
-    enum: ['admin', 'manager', 'trainer', 'branch_admin'],
+    enum: ['admin', 'manager', 'trainer'],
   })
-  @IsEnum(['admin', 'manager', 'trainer', 'branch_admin'])
+  @IsEnum(['admin', 'manager', 'trainer'])
   @IsNotEmpty()
-  role: 'admin' | 'manager' | 'trainer' | 'branch_admin';
+  role: 'admin' | 'manager' | 'trainer';
 
   @ApiPropertyOptional({ description: 'Staff phone' })
   @IsOptional()
@@ -255,7 +255,7 @@ export class CreateStaffDto {
   branchId?: number;
 
   @ApiPropertyOptional({
-    description: 'Branch IDs (for branch_admin with multiple branches)',
+    description: 'Branch IDs (for users with multiple branches)',
   })
   @IsOptional()
   @IsArray()

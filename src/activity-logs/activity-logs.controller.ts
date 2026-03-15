@@ -22,7 +22,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 @ApiBearerAuth()
 @Controller('activity-logs')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@Roles('superadmin', 'admin', 'branch_admin', 'manager')
+@Roles('superadmin', 'admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ACTIVITY_LOGS)
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}

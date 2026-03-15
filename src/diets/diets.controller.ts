@@ -61,7 +61,7 @@ export class DietsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all diet plans' })
   @ApiQuery({
     name: 'status',
@@ -130,7 +130,7 @@ export class DietsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get a diet plan by ID' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   findOne(
@@ -213,7 +213,7 @@ export class DietsController {
 
   @Get(':id/assignments')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all users assigned to a diet' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getDietAssignments(
@@ -237,7 +237,7 @@ export class DietsController {
 
   @Get('user/:userId/assignments')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all diets assigned to a user' })
   @ApiQuery({ name: 'gymId', required: false, type: Number })
   getUserDietAssignments(

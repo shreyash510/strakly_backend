@@ -32,7 +32,7 @@ export class GuestVisitsController {
   constructor(private readonly guestVisitsService: GuestVisitsService) {}
 
   @Get('stats')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
     @GymId() gymId: number,
@@ -42,7 +42,7 @@ export class GuestVisitsController {
   }
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List guest visits with filters' })
   async findAll(
     @GymId() gymId: number,
@@ -53,7 +53,7 @@ export class GuestVisitsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a guest visit by ID' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -64,7 +64,7 @@ export class GuestVisitsController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Record a guest visit' })
   async create(
     @Body() dto: CreateGuestVisitDto,
@@ -76,7 +76,7 @@ export class GuestVisitsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a guest visit' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -88,7 +88,7 @@ export class GuestVisitsController {
   }
 
   @Patch(':id/convert')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Mark guest as converted to member' })
   async markConverted(
     @Param('id', ParseIntPipe) id: number,
@@ -99,7 +99,7 @@ export class GuestVisitsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Delete a guest visit' })
   async remove(
     @Param('id', ParseIntPipe) id: number,

@@ -40,7 +40,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 @Controller('salary')
 @UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
 @PlanFeatures(PLAN_FEATURES.SALARY_MANAGEMENT)
-@Roles('superadmin', 'admin', 'branch_admin')
+@Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class SalaryController {
   constructor(

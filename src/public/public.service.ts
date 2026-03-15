@@ -163,7 +163,7 @@ export class PublicService {
       }
     }
 
-    /* Notify admin and branch_admin users about new registration */
+    /* Notify admin users about new registration */
     await this.notificationHelper.notifyStaff(
       dto.gymId,
       dto.branchId || null,

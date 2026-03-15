@@ -140,7 +140,7 @@ export class BodyMetricsController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get body metrics for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -159,7 +159,7 @@ export class BodyMetricsController {
 
   @Patch('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update body metrics for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -185,7 +185,7 @@ export class BodyMetricsController {
 
   @Post('user/record')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Record body metrics for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -211,7 +211,7 @@ export class BodyMetricsController {
 
   @Get('user/history')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get metrics history for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -255,7 +255,7 @@ export class BodyMetricsController {
 
   @Get('user/progress')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get progress for a specific user' })
   @ApiHeader({
     name: 'x-user-id',

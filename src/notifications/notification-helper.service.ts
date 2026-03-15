@@ -31,7 +31,7 @@ export class NotificationHelperService {
   ) {}
 
   /**
-   * Notify branch_admin/manager users in tenant schema AND admin (gym owner) users.
+   * Notify manager users in tenant schema AND admin (gym owner) users.
    * Admin users from public.users now have persistent notifications since the FK
    * constraint on notifications.user_id was removed.
    */
@@ -42,11 +42,11 @@ export class NotificationHelperService {
     options?: NotifyStaffOptions,
   ): Promise<void> {
     try {
-      /* 1. Notify branch_admin and manager users in tenant schema */
+      /* 1. Notify manager users in tenant schema */
       const staffIds = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
-          let query = `SELECT id FROM users WHERE role IN ('branch_admin', 'manager') AND status = 'active'`;
+          let query = `SELECT id FROM users WHERE role IN ('manager') AND status = 'active'`;
           const params: SqlValue[] = [];
 
           if (branchId) {

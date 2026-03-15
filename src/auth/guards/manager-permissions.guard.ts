@@ -38,12 +38,11 @@ export class ManagerPermissionsGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Superadmin, admin, and branch_admin bypass manager permission checks
+    // Superadmin and admin bypass manager permission checks
     if (
       user.isSuperAdmin ||
       user.role === ROLES.SUPERADMIN ||
-      user.role === ROLES.ADMIN ||
-      user.role === ROLES.BRANCH_ADMIN
+      user.role === ROLES.ADMIN
     ) {
       return true;
     }

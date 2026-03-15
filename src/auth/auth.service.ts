@@ -67,7 +67,7 @@ export interface UserResponse {
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
-  branchIds?: number[]; // For branch_admin with multiple branches
+  branchIds?: number[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -176,7 +176,7 @@ export class AuthService {
         }
         : undefined,
       gyms,
-      branchIds: user.branchIds, // For branch_admin with multiple branches
+      branchIds: user.branchIds,
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
     };
@@ -770,26 +770,10 @@ export class AuthService {
 
     const userRole = tenantUser.role || ROLES.CLIENT;
 
-    // For branch_admin, fetch their assigned branch IDs
-    let branchIds: number[] = [];
-    if (userRole === ROLES.BRANCH_ADMIN) {
-      const branchAssignments = await this.tenantService.executeInTenant(
-        gym.id,
-        async (client) => {
-          const result = await client.query(
-            `SELECT branch_id FROM user_branch_xref WHERE user_id = $1 AND is_active = TRUE ORDER BY is_primary DESC`,
-            [tenantUser.id],
-          );
-          return result.rows;
-        },
-      );
-      branchIds = branchAssignments.map((a: Record<string, any>) => a.branch_id);
-    }
-
     const subscription = await this.getGymSubscription(gym.id);
 
     const user = this.toUserResponse(
-      { ...tenantUser, role: userRole, branchIds },
+      { ...tenantUser, role: userRole },
       gym,
       undefined,
       subscription,
@@ -1298,14 +1282,14 @@ export class AuthService {
       orderBy: { name: 'asc' },
     });
 
-    // Search staff (branch_admin/manager/trainer) in tenant.users
+    // Search staff (manager/trainer) in tenant.users
     const tenantStaff = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
           `SELECT * FROM users
          WHERE id != $1
-         AND role IN ('branch_admin', 'manager', 'trainer')
+         AND role IN ('manager', 'trainer')
          AND (name ILIKE $2 OR email ILIKE $2)
          ORDER BY name ASC`,
           [currentUserId, searchPattern],

@@ -40,7 +40,7 @@ export class DocumentsController {
   // --- Template routes (must come before parameterized /:id) ---
 
   @Get('templates')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'List all document templates' })
   async findAllTemplates(
     @GymId() gymId: number,
@@ -51,7 +51,7 @@ export class DocumentsController {
   }
 
   @Get('templates/:id')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get a document template by ID' })
   async findTemplateById(
     @Param('id', ParseIntPipe) id: number,
@@ -61,7 +61,7 @@ export class DocumentsController {
   }
 
   @Post('templates')
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Create a document template' })
   async createTemplate(
     @Body() dto: CreateTemplateDto,
@@ -73,7 +73,7 @@ export class DocumentsController {
   }
 
   @Patch('templates/:id')
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update a document template' })
   async updateTemplate(
     @Param('id', ParseIntPipe) id: number,
@@ -111,7 +111,7 @@ export class DocumentsController {
   }
 
   @Post('signed/:id/generate-pdf')
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Generate PDF for a signed document' })
   async generatePdf(
     @Param('id', ParseIntPipe) id: number,
@@ -131,7 +131,7 @@ export class DocumentsController {
   }
 
   @Get('user/:userId')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get signed documents for a specific user' })
   async getSignedByUser(
     @Param('userId', ParseIntPipe) userId: number,

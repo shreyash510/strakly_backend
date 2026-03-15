@@ -139,7 +139,7 @@ export class OffersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Create a new offer' })
   @ApiQuery({
     name: 'branchId',
@@ -160,7 +160,7 @@ export class OffersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update an offer' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -174,7 +174,7 @@ export class OffersController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an offer (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.offersService.delete(id, req.user.gymId!);

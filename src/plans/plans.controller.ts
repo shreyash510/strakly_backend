@@ -142,7 +142,7 @@ export class PlansController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Create a new plan' })
   @ApiQuery({
     name: 'branchId',
@@ -163,7 +163,7 @@ export class PlansController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update a plan' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -177,7 +177,7 @@ export class PlansController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'branch_admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.plansService.delete(id, req.user.gymId!);

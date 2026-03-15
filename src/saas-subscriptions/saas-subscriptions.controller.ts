@@ -58,7 +58,7 @@ export class SaasSubscriptionsController {
   }
 
   @Get('plans/active')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get active SaaS plans (for viewing/renewal)' })
   findActivePlans() {
     return this.service.findAllPlans(false);
@@ -140,7 +140,7 @@ export class SaasSubscriptionsController {
   }
 
   @Get('me')
-  @Roles('superadmin', 'admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('superadmin', 'admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get current user gym subscription' })
   getMySubscription(@Request() req: AuthenticatedRequest) {
     const gymId = req.user.gymId;

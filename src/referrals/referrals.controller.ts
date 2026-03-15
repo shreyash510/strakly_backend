@@ -35,7 +35,7 @@ export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
   @Get()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'List all referrals' })
   async findAll(
     @GymId() gymId: number,
@@ -46,7 +46,7 @@ export class ReferralsController {
   }
 
   @Get('stats')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get referral statistics' })
   async getStats(
     @GymId() gymId: number,
@@ -56,7 +56,7 @@ export class ReferralsController {
   }
 
   @Get('user/:userId')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get referrals for a specific user' })
   async findByUser(
     @Param('userId', ParseIntPipe) userId: number,
@@ -66,7 +66,7 @@ export class ReferralsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a referral by ID' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -76,7 +76,7 @@ export class ReferralsController {
   }
 
   @Post()
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a referral' })
   async create(
     @Body() dto: CreateReferralDto,
@@ -87,7 +87,7 @@ export class ReferralsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a referral' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -98,7 +98,7 @@ export class ReferralsController {
   }
 
   @Patch(':id/reward')
-  @Roles('admin', 'branch_admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Mark a referral as rewarded' })
   async markRewarded(
     @Param('id', ParseIntPipe) id: number,

@@ -83,12 +83,11 @@ export class UsersService {
   /**
    * Role hierarchy for user management
    * Higher level can manage lower levels
-   * admin > branch_admin > manager > trainer > client
+   * admin > manager > trainer > client
    */
   private readonly ROLE_HIERARCHY: Record<string, string[]> = {
-    [ROLES.SUPERADMIN]: [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.BRANCH_ADMIN]: [ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.SUPERADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
     [ROLES.MANAGER]: [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
     [ROLES.TRAINER]: [ROLES.TRAINER, ROLES.CLIENT],
     [ROLES.CLIENT]: [ROLES.CLIENT],
@@ -315,7 +314,7 @@ export class UsersService {
       include: { gym: true },
     });
 
-    // Notify existing admins and branch_admins about new admin
+    // Notify existing admins about new admin
     await this.notificationHelper.notifyStaff(gymId, null, {
       type: NotificationType.NEW_STAFF_ADDED,
       title: 'New Admin Added',
@@ -573,9 +572,9 @@ export class UsersService {
       return this.createAdmin(dto, gymId);
     }
 
-    if (!([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(role)) {
+    if (!([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role)) {
       throw new BadRequestException(
-        'Invalid role. Staff role must be manager, trainer, or branch_admin.',
+        'Invalid role. Staff role must be manager or trainer.',
       );
     }
 
@@ -589,12 +588,12 @@ export class UsersService {
       const maxStaff = subscription.plan.maxStaff;
       // -1 means unlimited
       if (maxStaff !== -1) {
-        // Count current staff in the gym (managers, trainers, branch_admins)
+        // Count current staff in the gym (managers, trainers)
         const currentStaffCount = await this.tenantService.executeInTenant(
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer', 'branch_admin')`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer')`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -689,7 +688,7 @@ export class UsersService {
         // For staff with multiple branches, create user_branch_xref entries
         let branchAssignments: Record<string, any>[] = [];
         if (
-          ([ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role) &&
+          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role) &&
           branchIds.length > 0
         ) {
           for (let i = 0; i < branchIds.length; i++) {
@@ -733,7 +732,7 @@ export class UsersService {
       );
     }
 
-    // Notify admin and branch_admin about new staff
+    // Notify admin about new staff
     await this.notificationHelper.notifyStaff(gymId, primaryBranchId, {
       type: NotificationType.NEW_STAFF_ADDED,
       title: 'New Staff Added',
@@ -771,7 +770,7 @@ export class UsersService {
       gymId,
       async (client) => {
         const conditions: string[] = [
-          "u.role IN ('manager', 'trainer', 'branch_admin')",
+          "u.role IN ('manager', 'trainer')",
           '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
         ];
         const values: SqlValue[] = [];
@@ -794,7 +793,7 @@ export class UsersService {
         if (
           filters.role &&
           filters.role !== 'all' &&
-          ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(filters.role)
+          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(filters.role)
         ) {
           conditions.push(`u.role = $${paramIndex++}`);
           values.push(filters.role);
@@ -883,7 +882,7 @@ export class UsersService {
     const { staffData, branchAssignments } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
-          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'branch_admin') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [id],
         );
         const staff = result.rows[0];
@@ -892,7 +891,7 @@ export class UsersService {
         let assignments: Record<string, any>[] = [];
         if (
           staff &&
-          ([ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(staff.role)
+          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(staff.role)
         ) {
           const assignmentsResult = await client.query(
             `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
@@ -957,7 +956,7 @@ export class UsersService {
     }
     if (
       updateDto.role &&
-      ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(updateDto.role)
+      ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(updateDto.role)
     ) {
       updates.push(`role = $${paramIndex++}`);
       values.push(updateDto.role);
@@ -1015,7 +1014,7 @@ export class UsersService {
         const user = result.rows[0];
 
         // Handle branch assignments update for all roles that can have branch assignments
-        const rolesWithBranches = [ROLES.BRANCH_ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT];
+        const rolesWithBranches = [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT];
         let assignments: Record<string, any>[] = [];
         if (
           updateDto.branchIds &&
@@ -1134,7 +1133,7 @@ export class UsersService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'branch_admin') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [id],
         );
         return result.rows[0];
@@ -1147,13 +1146,11 @@ export class UsersService {
 
     // Soft delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Deactivate user_branch_xref entries for branch_admin
-      if (staffData.role === ROLES.BRANCH_ADMIN) {
-        await client.query(
-          `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
-          [id],
-        );
-      }
+      // Deactivate user_branch_xref entries
+      await client.query(
+        `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
+        [id],
+      );
       // Soft delete the user
       await client.query(
         `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
@@ -1874,7 +1871,7 @@ export class UsersService {
 
   /**
    * Create user - determines type based on role
-   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
+   * Validates role hierarchy: admin > manager > trainer > client
    */
   async create(
     createUserDto: CreateUserDto,
@@ -1905,7 +1902,7 @@ export class UsersService {
         actorInfo,
       );
     } else {
-      // manager, trainer, or branch_admin
+      // manager or trainer
       return this.createStaff(createUserDto as CreateStaffDto, gymId, actorInfo);
     }
   }
@@ -1947,8 +1944,8 @@ export class UsersService {
       return this.findAllClients(filters);
     }
 
-    // If role is manager/trainer/branch_admin, only get staff from tenant.users
-    if (role && ([ROLES.MANAGER, ROLES.TRAINER, ROLES.BRANCH_ADMIN] as string[]).includes(role)) {
+    // If role is manager/trainer, only get staff from tenant.users
+    if (role && ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role)) {
       return this.findAllStaff(filters);
     }
 
@@ -2184,7 +2181,7 @@ export class UsersService {
 
   /**
    * Update user - determines location based on where user exists
-   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
+   * Validates role hierarchy: admin > manager > trainer > client
    */
   async update(
     id: number,
@@ -2262,7 +2259,7 @@ export class UsersService {
 
   /**
    * Delete user - determines location based on where user exists
-   * Validates role hierarchy: admin > branch_admin > manager > trainer > client
+   * Validates role hierarchy: admin > manager > trainer > client
    */
   async remove(
     id: number,

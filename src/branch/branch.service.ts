@@ -112,7 +112,7 @@ export class BranchService {
               [branchId],
             ),
             client.query(
-              `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active'`,
+              `SELECT COUNT(*) as count FROM users WHERE branch_id = $1 AND role IN ('manager', 'trainer') AND status = 'active'`,
               [branchId],
             ),
             client.query(
@@ -191,7 +191,7 @@ export class BranchService {
       },
     });
 
-    // Notify admin and branch_admin about new branch
+    // Notify admin about new branch
     await this.notificationHelper.notifyStaff(gymId, null, {
       type: NotificationType.NEW_BRANCH_CREATED,
       title: 'New Branch Created',

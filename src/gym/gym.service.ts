@@ -719,7 +719,7 @@ export class GymService {
                 [branchIds],
               ),
               client.query(
-                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role IN ('branch_admin', 'manager', 'trainer') AND status = 'active' GROUP BY branch_id`,
+                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role IN ('manager', 'trainer') AND status = 'active' GROUP BY branch_id`,
                 [branchIds],
               ),
               client.query(

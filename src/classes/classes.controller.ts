@@ -44,7 +44,7 @@ export class ClassesController {
   // ─── Class Types ───
 
   @Get('types')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'List class types' })
   async findAllTypes(
     @GymId() gymId: number,
@@ -55,7 +55,7 @@ export class ClassesController {
   }
 
   @Get('types/:id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get a single class type' })
   async findOneType(
     @Param('id', ParseIntPipe) id: number,
@@ -65,7 +65,7 @@ export class ClassesController {
   }
 
   @Post('types')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a class type' })
   async createType(
     @Body() dto: CreateClassTypeDto,
@@ -76,7 +76,7 @@ export class ClassesController {
   }
 
   @Patch('types/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a class type' })
   async updateType(
     @Param('id', ParseIntPipe) id: number,
@@ -87,7 +87,7 @@ export class ClassesController {
   }
 
   @Delete('types/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a class type' })
   async deleteType(
     @Param('id', ParseIntPipe) id: number,
@@ -99,7 +99,7 @@ export class ClassesController {
   // ─── Schedules ───
 
   @Get('schedules')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'List class schedules' })
   async findAllSchedules(
     @GymId() gymId: number,
@@ -109,7 +109,7 @@ export class ClassesController {
   }
 
   @Post('schedules')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Create a class schedule' })
   async createSchedule(
     @Body() dto: CreateClassScheduleDto,
@@ -120,7 +120,7 @@ export class ClassesController {
   }
 
   @Patch('schedules/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update a class schedule' })
   async updateSchedule(
     @Param('id', ParseIntPipe) id: number,
@@ -131,7 +131,7 @@ export class ClassesController {
   }
 
   @Delete('schedules/:id')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a class schedule' })
   async deleteSchedule(
     @Param('id', ParseIntPipe) id: number,
@@ -143,7 +143,7 @@ export class ClassesController {
   // ─── Sessions ───
 
   @Get('sessions')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'List class sessions with filters' })
   async findAllSessions(
     @GymId() gymId: number,
@@ -154,7 +154,7 @@ export class ClassesController {
   }
 
   @Post('sessions/generate')
-  @Roles('admin', 'branch_admin', 'manager')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Generate sessions from schedules for a date range' })
   async generateSessions(
     @Body() dto: GenerateSessionsDto,
@@ -165,7 +165,7 @@ export class ClassesController {
   }
 
   @Get('sessions/:id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get a single session by ID' })
   async findOneSession(
     @Param('id', ParseIntPipe) id: number,
@@ -175,7 +175,7 @@ export class ClassesController {
   }
 
   @Patch('sessions/:id')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update session (cancel, complete, change instructor)' })
   async updateSession(
     @Param('id', ParseIntPipe) id: number,
@@ -188,7 +188,7 @@ export class ClassesController {
   // ─── Bookings ───
 
   @Get('sessions/:id/bookings')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get bookings for a session' })
   async getSessionBookings(
     @Param('id', ParseIntPipe) id: number,
@@ -198,7 +198,7 @@ export class ClassesController {
   }
 
   @Post('sessions/:id/book')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Book into a session (auto-waitlist if full)' })
   async bookSession(
     @Param('id', ParseIntPipe) id: number,
@@ -209,7 +209,7 @@ export class ClassesController {
   }
 
   @Patch('bookings/:id/status')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Update booking status (attend, no_show, cancel)' })
   async updateBookingStatus(
     @Param('id', ParseIntPipe) id: number,
@@ -222,7 +222,7 @@ export class ClassesController {
   }
 
   @Get('my-bookings')
-  @Roles('admin', 'branch_admin', 'manager', 'trainer', 'client')
+  @Roles('admin', 'manager', 'trainer', 'client')
   @ApiOperation({ summary: 'Get current user\'s class bookings' })
   async getMyBookings(
     @GymId() gymId: number,

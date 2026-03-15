@@ -91,7 +91,7 @@ export class ProgressPhotosService {
             conditions.push(`p.visibility IN ('all', 'trainer_only')`);
           }
         }
-        // admin, branch_admin, manager see everything
+        // admin, manager see everything
       }
 
       if (filters.category) {
