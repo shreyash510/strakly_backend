@@ -204,7 +204,7 @@ export class TenantService implements OnModuleInit {
     await this.createPhase1Tables(client, schemaName);
     await this.seedCancellationReasons(client, schemaName);
 
-    // Phase 2: Lead CRM, Referrals, Documents, Progress Photos
+    // Phase 2: Lead CRM, Referrals, Progress Photos
     try {
       await this.createPhase2Tables(client, schemaName);
     } catch (error) {
@@ -2417,7 +2417,7 @@ export class TenantService implements OnModuleInit {
 
   /**
    * Phase 2 Gaps: Add new columns to existing Phase 2 tables
-   * (leads.stage_entered_at, signed_documents.signature_data/pdf_url)
+   * (leads.stage_entered_at)
    */
   private async addPhase2GapColumns(
     client: PoolClient,
@@ -2426,9 +2426,6 @@ export class TenantService implements OnModuleInit {
     const columnMigrations = [
       // Leads — stage timing
       { table: 'leads', name: 'stage_entered_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
-      // Signed Documents — signature drawing + PDF
-      { table: 'signed_documents', name: 'signature_data', definition: 'TEXT' },
-      { table: 'signed_documents', name: 'pdf_url', definition: 'TEXT' },
       // Progress Photos — missing columns
       { table: 'progress_photos', name: 'file_size', definition: 'INTEGER' },
       { table: 'progress_photos', name: 'updated_at', definition: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
@@ -2566,7 +2563,7 @@ export class TenantService implements OnModuleInit {
   }
 
   /* ============================================================ */
-  /* Phase 2: Lead CRM, Referrals, Documents, Photos, Goals       */
+  /* Phase 2: Lead CRM, Referrals, Photos, Goals                   */
   /* ============================================================ */
 
   private async createPhase2Tables(
@@ -2641,41 +2638,6 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Document Templates
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."document_templates" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        name VARCHAR(200) NOT NULL,
-        type VARCHAR(30) NOT NULL DEFAULT 'waiver',
-        content TEXT NOT NULL,
-        version INTEGER NOT NULL DEFAULT 1,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_by INTEGER NOT NULL,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Signed Documents
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."signed_documents" (
-        id SERIAL PRIMARY KEY,
-        branch_id INTEGER,
-        template_id INTEGER NOT NULL REFERENCES "${schemaName}"."document_templates"(id),
-        user_id INTEGER NOT NULL,
-        signer_name VARCHAR(200) NOT NULL,
-        agreed BOOLEAN NOT NULL DEFAULT TRUE,
-        signed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        version_signed INTEGER NOT NULL DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     // Progress Photos
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."progress_photos" (
@@ -2719,7 +2681,6 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_lead_stage_history_lead" ON "${schemaName}"."lead_stage_history"(lead_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referrer" ON "${schemaName}"."referrals"(referrer_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_referrals_referred" ON "${schemaName}"."referrals"(referred_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_signed_docs_user" ON "${schemaName}"."signed_documents"(user_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_progress_photos_user" ON "${schemaName}"."progress_photos"(user_id) WHERE is_deleted = FALSE`);
     } catch (err) {
       this.logger.warn(`Failed to create some indexes for schema ${schemaName}`, err);

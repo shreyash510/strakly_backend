@@ -42,7 +42,6 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { ProgressPhotosModule } from './progress-photos/progress-photos.module';
 import { LeadsModule } from './leads/leads.module';
 import { ReferralsModule } from './referrals/referrals.module';
-import { DocumentsModule } from './documents/documents.module';
 import { ClassesModule } from './classes/classes.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { GuestVisitsModule } from './guest-visits/guest-visits.module';
@@ -102,7 +101,6 @@ import { HealthModule } from './health/health.module';
     ProgressPhotosModule,
     LeadsModule,
     ReferralsModule,
-    DocumentsModule,
     ClassesModule,
     AppointmentsModule,
     GuestVisitsModule,
