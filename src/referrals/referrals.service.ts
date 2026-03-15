@@ -1,6 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
-import { LoyaltyService } from '../loyalty/loyalty.service';
 import {
   CreateReferralDto,
   UpdateReferralDto,
@@ -14,7 +13,6 @@ export class ReferralsService {
 
   constructor(
     private readonly tenantService: TenantService,
-    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   private generateReferralCode(): string {
@@ -249,13 +247,6 @@ export class ReferralsService {
         [rewardType, rewardAmount, id],
       );
     });
-
-    // Award loyalty points to referrer (fire-and-forget)
-    if (referral.referrerId) {
-      this.loyaltyService
-        .awardPoints(gymId, referral.referrerId, 'referral', 'referral', id, 'Points for successful referral')
-        .catch((err) => this.logger.error('Failed to award loyalty points for referral', err));
-    }
 
     return this.findOne(id, gymId);
   }
