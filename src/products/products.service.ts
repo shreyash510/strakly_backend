@@ -523,7 +523,7 @@ export class ProductsService {
     dto: CreateProductSaleDto,
     soldBy: number,
   ) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Verify product and decrement stock atomically
       const product = await client.query(
         `UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP
@@ -626,7 +626,7 @@ export class ProductsService {
     dto: CreateBatchSaleDto,
     soldBy: number,
   ) {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Validate all products and stock upfront
       const productIds = dto.items.map((i) => i.productId);
       const products = await client.query(

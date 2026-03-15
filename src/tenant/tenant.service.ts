@@ -3568,6 +3568,40 @@ export class TenantService implements OnModuleInit {
   }
 
   /**
+   * Execute a callback in a tenant schema wrapped in a database transaction.
+   * If the callback throws, the transaction is rolled back automatically.
+   */
+  async executeInTenantTransaction<T>(
+    gymId: number,
+    callback: (client: PoolClient, schemaName: string) => Promise<T>,
+  ): Promise<T> {
+    const schemaName = this.getTenantSchemaName(gymId);
+    const client = await this.pool.connect();
+
+    try {
+      await client.query(`SET search_path TO "${schemaName}", public`);
+      await client.query('BEGIN');
+      const result = await callback(client, schemaName);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Connection may already be dead
+      }
+      throw error;
+    } finally {
+      try {
+        await client.query(`SET search_path TO public`);
+      } catch {
+        // Connection may already be dead; just release
+      }
+      client.release();
+    }
+  }
+
+  /**
    * Get a raw pool connection for advanced operations
    */
   getPool(): Pool {
