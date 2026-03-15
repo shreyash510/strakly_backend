@@ -63,6 +63,11 @@ export class SignDocumentDto {
   @IsOptional()
   @IsString()
   signatureData?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  userId?: number;
 }
 
 export class TemplateFiltersDto {

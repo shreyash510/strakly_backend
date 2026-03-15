@@ -106,7 +106,8 @@ export class DocumentsController {
   ) {
     const ipAddress = req.headers['x-forwarded-for'] || req.ip || '';
     const userAgent = req.headers['user-agent'] || '';
-    return this.documentsService.signDocument(gymId, branchId, dto, userId, ipAddress, userAgent);
+    const targetUserId = dto.userId || userId;
+    return this.documentsService.signDocument(gymId, branchId, dto, targetUserId, ipAddress, userAgent);
   }
 
   @Post('signed/:id/generate-pdf')
