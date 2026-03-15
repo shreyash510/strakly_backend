@@ -51,6 +51,9 @@ import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 
+// Health check
+import { HealthModule } from './health/health.module';
+
 // Phase 5: Advanced / Differentiators
 import { WearablesModule } from './wearables/wearables.module';
 
@@ -68,6 +71,7 @@ import { WearablesModule } from './wearables/wearables.module';
       ttl: 60000,
       limit: 100,
     }]),
+    HealthModule,
     DatabaseModule,
     TenantModule,
     RabbitMqModule,

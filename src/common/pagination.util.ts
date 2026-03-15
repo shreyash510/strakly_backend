@@ -54,6 +54,24 @@ export function createPaginationMeta(
   };
 }
 
+/**
+ * Sanitize raw pagination inputs to enforce safe bounds.
+ * Use this in services that don't go through getPaginationParams.
+ */
+export function sanitizePagination(
+  page?: number,
+  limit?: number,
+  defaultLimit = 10,
+): { page: number; limit: number; skip: number } {
+  const safePage = Math.max(1, page || 1);
+  const safeLimit = Math.min(Math.max(1, limit || defaultLimit), 100);
+  return {
+    page: safePage,
+    limit: safeLimit,
+    skip: (safePage - 1) * safeLimit,
+  };
+}
+
 export function setPaginationHeaders(
   res: Response,
   pagination: PaginationMeta,

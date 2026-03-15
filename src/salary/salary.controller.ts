@@ -289,7 +289,7 @@ export class SalaryController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const result = await this.salaryService.remove(id, gymId);
+    const result = await this.salaryService.remove(id, gymId, req.user.userId);
     this.notificationsGateway.emitSalaryChanged(gymId, { action: 'deleted' });
     return result;
   }

@@ -1,4 +1,4 @@
-import { BadGatewayException } from '@nestjs/common';
+import { BadGatewayException, Logger } from '@nestjs/common';
 import {
   BaseWearableProvider,
   WearableDataPoint,
@@ -7,6 +7,7 @@ import {
 } from './base.provider';
 
 export class FitbitProvider extends BaseWearableProvider {
+  private readonly logger = new Logger(FitbitProvider.name);
   readonly providerName = 'fitbit';
 
   private readonly clientId: string;
@@ -141,8 +142,8 @@ export class FitbitProvider extends BaseWearableProvider {
           }
         }
       }
-    } catch {
-      // Skip on error
+    } catch (err) {
+      this.logger.warn('Failed to fetch Fitbit steps data', err);
     }
 
     // Fetch heart rate
@@ -168,8 +169,8 @@ export class FitbitProvider extends BaseWearableProvider {
           }
         }
       }
-    } catch {
-      // Skip on error
+    } catch (err) {
+      this.logger.warn('Failed to fetch Fitbit heart rate data', err);
     }
 
     // Fetch calories burned
@@ -194,8 +195,8 @@ export class FitbitProvider extends BaseWearableProvider {
           }
         }
       }
-    } catch {
-      // Skip on error
+    } catch (err) {
+      this.logger.warn('Failed to fetch Fitbit calories data', err);
     }
 
     // Fetch sleep
@@ -228,8 +229,8 @@ export class FitbitProvider extends BaseWearableProvider {
           }
         }
       }
-    } catch {
-      // Skip on error
+    } catch (err) {
+      this.logger.warn('Failed to fetch Fitbit sleep data', err);
     }
 
     // Fetch active minutes (fairly active + very active)
@@ -282,8 +283,8 @@ export class FitbitProvider extends BaseWearableProvider {
           }
         }
       }
-    } catch {
-      // Skip on error
+    } catch (err) {
+      this.logger.warn('Failed to fetch Fitbit active minutes data', err);
     }
 
     return dataPoints;

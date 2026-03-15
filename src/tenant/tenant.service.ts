@@ -2765,8 +2765,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_progress_photos_user" ON "${schemaName}"."progress_photos"(user_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_member_goals_user" ON "${schemaName}"."member_goals"(user_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_goal_milestones_goal" ON "${schemaName}"."goal_milestones"(goal_id)`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create some indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -2797,8 +2797,8 @@ export class TenantService implements OnModuleInit {
             [source.code, source.name],
           );
         }
-      } catch {
-        // Table might not exist yet
+      } catch (err) {
+        this.logger.warn(`Failed to seed lead sources for schema ${schemaName}`, err);
       }
     }
   }
@@ -3014,8 +3014,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_date" ON "${schemaName}"."guest_visits"(visit_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_brought_by" ON "${schemaName}"."guest_visits"(brought_by) WHERE brought_by IS NOT NULL`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_checked_in" ON "${schemaName}"."guest_visits"(checked_in_by) WHERE checked_in_by IS NOT NULL`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create guest visits indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -3183,8 +3183,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_user" ON "${schemaName}"."product_sales"(user_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_sold_at" ON "${schemaName}"."product_sales"(sold_at) WHERE is_deleted = FALSE`);
 
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create product indexes for schema ${schemaName}`, err);
     }
   }
 
@@ -3485,8 +3485,8 @@ export class TenantService implements OnModuleInit {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_type_date" ON "${schemaName}"."wearable_data"(user_id, data_type, recorded_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_provider" ON "${schemaName}"."wearable_data"(provider)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_wearable_data_date" ON "${schemaName}"."wearable_data"(recorded_date)`);
-    } catch {
-      // Indexes may already exist
+    } catch (err) {
+      this.logger.warn(`Failed to create wearable data indexes for schema ${schemaName}`, err);
     }
   }
 

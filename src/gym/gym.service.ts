@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -28,6 +29,8 @@ export interface GymFilters extends PaginationParams {
 
 @Injectable()
 export class GymService {
+  private readonly logger = new Logger(GymService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
@@ -407,7 +410,9 @@ export class GymService {
               if (row.photo_url) urls.push(row.photo_url);
               if (row.thumbnail_url) urls.push(row.thumbnail_url);
             }
-          } catch { /* table may not exist */ }
+          } catch (err) {
+            this.logger.warn('Could not read progress_photos during gym deletion (table may not exist)', err);
+          }
 
           // Signed documents
           try {
@@ -417,7 +422,9 @@ export class GymService {
             for (const row of result.rows) {
               if (row.pdf_url) urls.push(row.pdf_url);
             }
-          } catch { /* table may not exist */ }
+          } catch (err) {
+            this.logger.warn('Could not read signed_documents during gym deletion (table may not exist)', err);
+          }
 
           // Client avatars in tenant schema
           try {
@@ -427,14 +434,16 @@ export class GymService {
             for (const row of result.rows) {
               if (row.avatar) urls.push(row.avatar);
             }
-          } catch { /* table may not exist */ }
+          } catch (err) {
+            this.logger.warn('Could not read user avatars during gym deletion (table may not exist)', err);
+          }
 
           return urls;
         });
         s3UrlsToDelete.push(...tenantUrls);
       }
-    } catch {
-      // If we fail to read tenant data, we'll still clean up by prefix later
+    } catch (err) {
+      this.logger.warn('Failed to read tenant data for S3 cleanup; will clean up by prefix', err);
     }
 
     // 3. Drop tenant schema
@@ -443,7 +452,8 @@ export class GymService {
         await this.tenantService.dropTenantSchema(id);
         details.tenantSchemaDropped = true;
       }
-    } catch {
+    } catch (err) {
+      this.logger.error('Failed to drop tenant schema during gym deletion', err);
       details.tenantSchemaDropped = false;
     }
 
