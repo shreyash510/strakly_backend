@@ -20,6 +20,7 @@ export enum SystemNotificationType {
   NEW_GYM = 'new_gym',
   GYM_SUBSCRIPTION_EXPIRY = 'gym_subscription_expiry',
   SUPPORT_TICKET = 'support_ticket',
+  SUPPORT_TICKET_ASSIGNED = 'support_ticket_assigned',
   SYSTEM_ALERT = 'system_alert',
   NEW_CONTACT_REQUEST = 'new_contact_request',
 }
@@ -851,6 +852,34 @@ export class NotificationsService {
       actionUrl: `/superadmin/support/${ticketData.ticketId}`,
       priority: ticketData.priority === 'high' ? 'high' : 'normal',
     });
+  }
+
+  /**
+   * Notify a superadmin when a support ticket is assigned to them
+   */
+  async notifySupportTicketAssigned(ticketData: {
+    assignedToUserId: number;
+    ticketId: number;
+    ticketNumber: string;
+    subject: string;
+    assignedByName: string;
+  }): Promise<void> {
+    try {
+      await this.createSystemNotification({
+        userId: ticketData.assignedToUserId,
+        type: SystemNotificationType.SUPPORT_TICKET_ASSIGNED,
+        title: 'Support Ticket Assigned',
+        message: `Ticket #${ticketData.ticketNumber} "${ticketData.subject}" has been assigned to you by ${ticketData.assignedByName}.`,
+        data: { ticketId: ticketData.ticketId },
+        actionUrl: `/superadmin/support/${ticketData.ticketId}`,
+        priority: 'high',
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to send ticket assigned notification: ${msg}`,
+      );
+    }
   }
 
   /**

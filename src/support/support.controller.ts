@@ -198,6 +198,7 @@ export class SupportController {
       req.user.userId,
       req.user.role,
       req.user.gymId ?? undefined,
+      req.user.name,
     );
     if (req.user.gymId) this.notificationsGateway.emitSupportChanged(req.user.gymId, { action: 'updated' });
     return result;
