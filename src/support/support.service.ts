@@ -298,6 +298,7 @@ export class SupportService {
     userId: number,
     userRole: string,
     userGymId?: number,
+    userName?: string,
   ) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id: ticketId },
@@ -351,6 +352,29 @@ export class SupportService {
       where: { id: ticketId },
       data: updateData,
     });
+
+    // Send notification when ticket is assigned or reassigned
+    if (
+      updateTicketDto.assignedToId !== undefined &&
+      updateTicketDto.assignedToId !== ticket.assignedToId
+    ) {
+      if (updateTicketDto.assignedToId !== null) {
+        this.notificationsService
+          .notifySupportTicketAssigned({
+            assignedToUserId: updateTicketDto.assignedToId,
+            ticketId: ticket.id,
+            ticketNumber: ticket.ticketNumber,
+            subject: ticket.subject,
+            assignedByName: userName || 'System',
+          })
+          .catch((error: unknown) => {
+            const msg = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+              `Failed to send ticket assigned notification: ${msg}`,
+            );
+          });
+      }
+    }
 
     // Send notification and email when ticket is resolved
     if (updateTicketDto.status === 'resolved' && ticket.status !== 'resolved') {
