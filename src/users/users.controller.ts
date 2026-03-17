@@ -40,6 +40,8 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import {
   setPaginationHeaders,
   resolveGymId,
@@ -196,8 +198,9 @@ export class UsersController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'create')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiQuery({
     name: 'gymId',
@@ -275,8 +278,9 @@ export class UsersController {
   }
 
   @Patch('user')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Update user (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -340,8 +344,9 @@ export class UsersController {
   }
 
   @Patch('user/status')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Update user status (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -373,8 +378,9 @@ export class UsersController {
   }
 
   @Post('user/reset-password')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Reset user password (admin)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -407,8 +413,9 @@ export class UsersController {
   }
 
   @Post('user/regenerate-attendance-code')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Regenerate attendance code for user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -500,8 +507,9 @@ export class UsersController {
   // ============ REQUEST APPROVAL ENDPOINTS ============
 
   @Patch(':id/approve')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({
     summary: 'Approve a pending registration request with optional membership',
   })
@@ -520,8 +528,9 @@ export class UsersController {
   }
 
   @Patch(':id/reject')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Reject a pending registration request' })
   async rejectRequest(
     @CurrentUser() user: AuthenticatedUser,
@@ -564,8 +573,9 @@ export class UsersController {
   }
 
   @Post('trainers/:trainerId/clients')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('clients', 'create')
   @ApiOperation({ summary: 'Assign a client to a trainer' })
   assignClientToTrainer(
     @CurrentUser() user: AuthenticatedUser,
@@ -579,8 +589,9 @@ export class UsersController {
   }
 
   @Delete('trainers/:trainerId/clients/:clientId')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('clients', 'delete')
   @ApiOperation({ summary: 'Remove a client from a trainer' })
   removeClientFromTrainer(
     @CurrentUser() user: AuthenticatedUser,
@@ -614,8 +625,9 @@ export class UsersController {
   // ============ BULK OPERATIONS ============
 
   @Post('bulk/create')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'create')
   @ApiOperation({ summary: 'Bulk create users (max 50)' })
   @ApiQuery({
     name: 'gymId',
@@ -695,8 +707,9 @@ export class UsersController {
   }
 
   @Patch('bulk/update')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Bulk update users (move to branch, update status)' })
   @ApiQuery({
     name: 'gymId',
@@ -726,8 +739,9 @@ export class UsersController {
   }
 
   @Delete('bulk/delete')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'delete')
   @ApiOperation({ summary: 'Bulk delete users' })
   @ApiQuery({
     name: 'gymId',
@@ -782,8 +796,9 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Update user by ID' })
   @ApiQuery({
     name: 'gymId',
@@ -815,8 +830,9 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('clients', 'delete')
   @ApiOperation({ summary: 'Delete user by ID' })
   @ApiQuery({
     name: 'gymId',

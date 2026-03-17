@@ -19,7 +19,9 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
@@ -28,7 +30,7 @@ import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Controller('announcements')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
 @Roles('superadmin', 'admin', 'manager')
 @PlanFeatures(PLAN_FEATURES.ANNOUNCEMENTS)
 export class AnnouncementsController {
@@ -69,6 +71,7 @@ export class AnnouncementsController {
   }
 
   @Post()
+  @ManagerPermission('announcements', 'create')
   async create(
     @Body() dto: CreateAnnouncementDto,
     @GymId() gymId: number,
@@ -80,6 +83,7 @@ export class AnnouncementsController {
   }
 
   @Patch(':id')
+  @ManagerPermission('announcements', 'update')
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAnnouncementDto,
@@ -91,6 +95,7 @@ export class AnnouncementsController {
   }
 
   @Patch(':id/toggle-pin')
+  @ManagerPermission('announcements', 'update')
   async togglePin(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
@@ -101,6 +106,7 @@ export class AnnouncementsController {
   }
 
   @Delete(':id')
+  @ManagerPermission('announcements', 'delete')
   async delete(@Param('id', ParseIntPipe) id: number, @GymId() gymId: number) {
     const result = await this.announcementsService.delete(id, gymId);
     this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'deleted' });

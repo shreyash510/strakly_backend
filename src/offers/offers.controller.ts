@@ -22,6 +22,8 @@ import { CreateOfferDto, UpdateOfferDto } from './dto/offer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
@@ -138,8 +140,9 @@ export class OffersController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('offers', 'create')
   @ApiOperation({ summary: 'Create a new offer' })
   @ApiQuery({
     name: 'branchId',
@@ -159,8 +162,9 @@ export class OffersController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('offers', 'update')
   @ApiOperation({ summary: 'Update an offer' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -173,8 +177,9 @@ export class OffersController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('offers', 'delete')
   @ApiOperation({ summary: 'Delete an offer (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.offersService.delete(id, req.user.gymId!);

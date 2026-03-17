@@ -32,10 +32,12 @@ import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('classes')
 @Controller('classes')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
 @PlanFeatures(PLAN_FEATURES.CLASS_SCHEDULING)
 @ApiBearerAuth()
 export class ClassesController {
@@ -66,6 +68,7 @@ export class ClassesController {
 
   @Post('types')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Create a class type' })
   async createType(
     @Body() dto: CreateClassTypeDto,
@@ -77,6 +80,7 @@ export class ClassesController {
 
   @Patch('types/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update a class type' })
   async updateType(
     @Param('id', ParseIntPipe) id: number,
@@ -88,6 +92,7 @@ export class ClassesController {
 
   @Delete('types/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'delete')
   @ApiOperation({ summary: 'Soft delete a class type' })
   async deleteType(
     @Param('id', ParseIntPipe) id: number,
@@ -110,6 +115,7 @@ export class ClassesController {
 
   @Post('schedules')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Create a class schedule' })
   async createSchedule(
     @Body() dto: CreateClassScheduleDto,
@@ -121,6 +127,7 @@ export class ClassesController {
 
   @Patch('schedules/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update a class schedule' })
   async updateSchedule(
     @Param('id', ParseIntPipe) id: number,
@@ -132,6 +139,7 @@ export class ClassesController {
 
   @Delete('schedules/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'delete')
   @ApiOperation({ summary: 'Soft delete a class schedule' })
   async deleteSchedule(
     @Param('id', ParseIntPipe) id: number,
@@ -155,6 +163,7 @@ export class ClassesController {
 
   @Post('sessions/generate')
   @Roles('admin', 'manager')
+  @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Generate sessions from schedules for a date range' })
   async generateSessions(
     @Body() dto: GenerateSessionsDto,
@@ -176,6 +185,7 @@ export class ClassesController {
 
   @Patch('sessions/:id')
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update session (cancel, complete, change instructor)' })
   async updateSession(
     @Param('id', ParseIntPipe) id: number,
@@ -199,6 +209,7 @@ export class ClassesController {
 
   @Post('sessions/:id/book')
   @Roles('admin', 'manager', 'trainer', 'client')
+  @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Book into a session (auto-waitlist if full)' })
   async bookSession(
     @Param('id', ParseIntPipe) id: number,
@@ -210,6 +221,7 @@ export class ClassesController {
 
   @Patch('bookings/:id/status')
   @Roles('admin', 'manager', 'trainer', 'client')
+  @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update booking status (attend, no_show, cancel)' })
   async updateBookingStatus(
     @Param('id', ParseIntPipe) id: number,

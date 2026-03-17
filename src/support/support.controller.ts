@@ -28,6 +28,8 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
@@ -224,8 +226,9 @@ export class SupportController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('support', 'delete')
   @ApiOperation({ summary: 'Delete a support ticket (admin only)' })
   async remove(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.supportService.remove(

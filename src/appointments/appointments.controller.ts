@@ -27,7 +27,9 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
@@ -60,6 +62,8 @@ export class AppointmentsController {
 
   @Post('services')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'create')
   @ApiOperation({ summary: 'Create a service' })
   async createService(
     @Body() dto: CreateServiceDto,
@@ -73,6 +77,8 @@ export class AppointmentsController {
 
   @Patch('services/:id')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update a service' })
   async updateService(
     @Param('id', ParseIntPipe) id: number,
@@ -86,6 +92,8 @@ export class AppointmentsController {
 
   @Delete('services/:id')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'delete')
   @ApiOperation({ summary: 'Soft delete a service' })
   async deleteService(
     @Param('id', ParseIntPipe) id: number,
@@ -110,6 +118,8 @@ export class AppointmentsController {
 
   @Put('availability')
   @Roles('admin', 'manager', 'trainer')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Set/update trainer availability for a day' })
   async setAvailability(
     @Body() dto: SetAvailabilityDto,
@@ -169,6 +179,8 @@ export class AppointmentsController {
 
   @Post()
   @Roles('admin', 'manager', 'trainer', 'client')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'create')
   @ApiOperation({ summary: 'Book an appointment (checks trainer conflicts)' })
   async create(
     @Body() dto: CreateAppointmentDto,
@@ -184,6 +196,8 @@ export class AppointmentsController {
 
   @Patch(':id')
   @Roles('admin', 'manager', 'trainer')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update an appointment' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -199,6 +213,8 @@ export class AppointmentsController {
 
   @Patch(':id/status')
   @Roles('admin', 'manager', 'trainer', 'client')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update appointment status (confirm, complete, cancel, no_show)' })
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
@@ -233,6 +249,8 @@ export class AppointmentsController {
 
   @Post('packages')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('appointments', 'create')
   @ApiOperation({ summary: 'Create a session package' })
   async createPackage(
     @Body() dto: CreateSessionPackageDto,
