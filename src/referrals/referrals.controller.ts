@@ -25,6 +25,8 @@ import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('referrals')
 @Controller('referrals')
@@ -77,6 +79,8 @@ export class ReferralsController {
 
   @Post()
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('referrals', 'create')
   @ApiOperation({ summary: 'Create a referral' })
   async create(
     @Body() dto: CreateReferralDto,
@@ -88,6 +92,8 @@ export class ReferralsController {
 
   @Patch(':id')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('referrals', 'update')
   @ApiOperation({ summary: 'Update a referral' })
   async update(
     @Param('id', ParseIntPipe) id: number,

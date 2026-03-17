@@ -27,7 +27,9 @@ import {
 } from './dto/branch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
@@ -184,7 +186,9 @@ export class BranchController {
   }
 
   @Post('transfer-member')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('branches', 'create')
   @ApiOperation({ summary: 'Transfer a member from one branch to another' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   async transferMember(

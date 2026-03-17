@@ -29,6 +29,8 @@ import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('leads')
 @Controller('leads')
@@ -89,6 +91,8 @@ export class LeadsController {
 
   @Post()
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Create a new lead' })
   async create(
     @Body() dto: CreateLeadDto,
@@ -101,6 +105,8 @@ export class LeadsController {
 
   @Patch(':id')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update a lead' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -113,6 +119,8 @@ export class LeadsController {
 
   @Patch(':id/stage')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update lead pipeline stage' })
   async updateStage(
     @Param('id', ParseIntPipe) id: number,
@@ -125,6 +133,8 @@ export class LeadsController {
 
   @Patch(':id/convert')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Convert lead to user' })
   async convertToUser(
     @Param('id', ParseIntPipe) id: number,
@@ -137,6 +147,8 @@ export class LeadsController {
 
   @Delete(':id')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'delete')
   @ApiOperation({ summary: 'Soft delete a lead' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
@@ -147,6 +159,8 @@ export class LeadsController {
 
   @Post(':id/activities')
   @Roles('admin', 'manager')
+  @UseGuards(ManagerPermissionsGuard)
+  @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Add an activity to a lead' })
   async createActivity(
     @Param('id', ParseIntPipe) id: number,

@@ -23,7 +23,9 @@ import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -92,8 +94,9 @@ export class FacilitiesController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('facilities', 'create')
   @ApiOperation({ summary: 'Create a new facility' })
   @ApiQuery({
     name: 'branchId',
@@ -113,8 +116,9 @@ export class FacilitiesController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('facilities', 'update')
   @ApiOperation({ summary: 'Update a facility' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -127,8 +131,9 @@ export class FacilitiesController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('facilities', 'delete')
   @ApiOperation({ summary: 'Delete a facility (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.facilitiesService.delete(id, req.user.gymId!);

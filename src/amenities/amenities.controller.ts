@@ -23,7 +23,9 @@ import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -92,8 +94,9 @@ export class AmenitiesController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('amenities', 'create')
   @ApiOperation({ summary: 'Create a new amenity' })
   @ApiQuery({
     name: 'branchId',
@@ -113,8 +116,9 @@ export class AmenitiesController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('amenities', 'update')
   @ApiOperation({ summary: 'Update an amenity' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -127,8 +131,9 @@ export class AmenitiesController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('amenities', 'delete')
   @ApiOperation({ summary: 'Delete an amenity (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.amenitiesService.delete(id, req.user.gymId!);

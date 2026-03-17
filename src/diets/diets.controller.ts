@@ -33,6 +33,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
@@ -153,8 +155,9 @@ export class DietsController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Create a new diet plan' })
   async create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
     // Use branchId from request body if provided, otherwise fallback to user's branchId
@@ -170,8 +173,9 @@ export class DietsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('programs', 'update')
   @ApiOperation({ summary: 'Update a diet plan' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -184,8 +188,9 @@ export class DietsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('programs', 'delete')
   @ApiOperation({ summary: 'Delete a diet plan' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.dietsService.delete(id, req.user.gymId!);
@@ -196,8 +201,9 @@ export class DietsController {
   // ============ ASSIGNMENT ENDPOINTS ============
 
   @Post('assign')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
   async assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
     const branchId = req.user.branchId ?? null;
@@ -260,8 +266,9 @@ export class DietsController {
   }
 
   @Patch('assignments/:id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('programs', 'update')
   @ApiOperation({ summary: 'Update a diet assignment' })
   async updateAssignment(
     @Request() req: AuthenticatedRequest,
@@ -274,8 +281,9 @@ export class DietsController {
   }
 
   @Delete('assignments/:id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
+  @ManagerPermission('programs', 'delete')
   @ApiOperation({ summary: 'Unassign (cancel) a diet assignment' })
   async unassignDiet(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.dietsService.unassignDiet(id, req.user.gymId!);
