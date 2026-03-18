@@ -68,6 +68,7 @@ export interface UserResponse {
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
   branchIds?: number[];
+  authType?: string; /* email | google */
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -177,6 +178,7 @@ export class AuthService {
         : undefined,
       gyms,
       branchIds: user.branchIds,
+      authType: user.authType || user.auth_type || 'email', /* default to email */
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
     };
@@ -337,6 +339,7 @@ export class AuthService {
             name: dto.user.name,
             phone: dto.user.phone,
             status: USER_STATUS.ACTIVE,
+            authType: 'email', /* registration via email/password */
           },
         });
         this.logger.log(`User created: ${txUser.id}`);
@@ -2468,6 +2471,7 @@ export class AuthService {
           googleId: dto.user.googleId,
           status: USER_STATUS.ACTIVE,
           emailVerified: true, // Google email is already verified
+          authType: 'google', /* registration via Google OAuth */
         },
       });
       this.logger.log(`User created: ${createdUser.id}`);

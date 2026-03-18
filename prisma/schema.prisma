@@ -83,6 +83,7 @@ model User {
   statusId      Int?      @map("status_id") // Reference to lookups.id for status
   emailVerified Boolean   @default(false) @map("email_verified")
   googleId      String?   @unique @map("google_id") // Google OAuth ID
+  authType      String    @default("email") @map("auth_type")
   lastLoginAt   DateTime? @map("last_login_at")
   unlockedSidebarItems Json? @map("unlocked_sidebar_items") // Array of unlocked sidebar item IDs
   pinnedSidebarItems   Json? @map("pinned_sidebar_items") // Array of pinned sidebar item IDs
