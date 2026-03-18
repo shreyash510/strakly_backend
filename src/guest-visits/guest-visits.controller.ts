@@ -22,6 +22,8 @@ import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('guest-visits')
 @Controller('guest-visits')
@@ -64,7 +66,9 @@ export class GuestVisitsController {
   }
 
   @Post()
+  @UseGuards(ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('guestVisits', 'create')
   @ApiOperation({ summary: 'Record a guest visit' })
   async create(
     @Body() dto: CreateGuestVisitDto,
@@ -76,7 +80,9 @@ export class GuestVisitsController {
   }
 
   @Patch(':id')
+  @UseGuards(ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Update a guest visit' })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -88,7 +94,9 @@ export class GuestVisitsController {
   }
 
   @Patch(':id/convert')
+  @UseGuards(ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Mark guest as converted to member' })
   async markConverted(
     @Param('id', ParseIntPipe) id: number,
@@ -99,7 +107,9 @@ export class GuestVisitsController {
   }
 
   @Delete(':id')
+  @UseGuards(ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('guestVisits', 'delete')
   @ApiOperation({ summary: 'Delete a guest visit' })
   async remove(
     @Param('id', ParseIntPipe) id: number,

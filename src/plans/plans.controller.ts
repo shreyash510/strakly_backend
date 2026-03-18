@@ -22,6 +22,8 @@ import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
@@ -141,8 +143,9 @@ export class PlansController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('plans', 'create')
   @ApiOperation({ summary: 'Create a new plan' })
   @ApiQuery({
     name: 'branchId',
@@ -162,8 +165,9 @@ export class PlansController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('plans', 'update')
   @ApiOperation({ summary: 'Update a plan' })
   async update(
     @Request() req: AuthenticatedRequest,
@@ -176,8 +180,9 @@ export class PlansController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('plans', 'delete')
   @ApiOperation({ summary: 'Delete a plan (soft delete)' })
   async delete(@Request() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
     const result = await this.plansService.delete(id, req.user.gymId!);

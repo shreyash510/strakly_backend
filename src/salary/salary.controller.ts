@@ -31,14 +31,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
 import { setPaginationHeaders } from '../common/pagination.util';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('salary')
 @Controller('salary')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
 @PlanFeatures(PLAN_FEATURES.SALARY_MANAGEMENT)
 @Roles('superadmin', 'admin')
 @ApiBearerAuth()
@@ -73,6 +75,8 @@ export class SalaryController {
   }
 
   @Post()
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('salary', 'create')
   @ApiOperation({ summary: 'Create a new salary record' })
   @ApiQuery({
     name: 'gymId',
@@ -231,6 +235,8 @@ export class SalaryController {
   }
 
   @Patch(':id')
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('salary', 'update')
   @ApiOperation({ summary: 'Update a salary record' })
   @ApiQuery({
     name: 'gymId',
@@ -251,6 +257,8 @@ export class SalaryController {
   }
 
   @Patch(':id/pay')
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('salary', 'update')
   @ApiOperation({ summary: 'Mark salary as paid' })
   @ApiQuery({
     name: 'gymId',
@@ -276,6 +284,8 @@ export class SalaryController {
   }
 
   @Delete(':id')
+  @Roles('superadmin', 'admin', 'manager')
+  @ManagerPermission('salary', 'delete')
   @ApiOperation({ summary: 'Delete a salary record' })
   @ApiQuery({
     name: 'gymId',

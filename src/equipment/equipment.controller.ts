@@ -28,8 +28,10 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { PLAN_FEATURES } from '../common/constants/features';
@@ -96,7 +98,9 @@ export class EquipmentController {
   }
 
   @Post(':id/maintenance')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'create')
   @ApiOperation({ summary: 'Create maintenance record' })
   @ApiParam({ name: 'id', type: Number })
   createMaintenance(
@@ -114,7 +118,9 @@ export class EquipmentController {
   }
 
   @Patch('maintenance/:id')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'update')
   @ApiOperation({ summary: 'Update maintenance record' })
   @ApiParam({ name: 'id', type: Number })
   updateMaintenance(
@@ -149,7 +155,9 @@ export class EquipmentController {
   }
 
   @Post()
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'create')
   @ApiOperation({ summary: 'Create equipment' })
   create(
     @GymId() gymId: number,
@@ -160,7 +168,9 @@ export class EquipmentController {
   }
 
   @Patch(':id')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'update')
   @ApiOperation({ summary: 'Update equipment' })
   @ApiParam({ name: 'id', type: Number })
   update(

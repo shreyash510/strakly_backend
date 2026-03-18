@@ -30,6 +30,8 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
+import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('attendance')
@@ -103,8 +105,9 @@ export class AttendanceController {
   }
 
   @Post('mark')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ManagerPermission('attendance', 'create')
   @ApiOperation({ summary: 'Mark attendance (check-in) for a user at a gym' })
   @ApiQuery({
     name: 'gymId',
@@ -157,8 +160,9 @@ export class AttendanceController {
   }
 
   @Patch('checkout/:id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ManagerPermission('attendance', 'update')
   @ApiOperation({ summary: 'Check out a user' })
   @ApiQuery({
     name: 'gymId',
