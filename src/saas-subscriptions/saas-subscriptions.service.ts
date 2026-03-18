@@ -162,13 +162,12 @@ export class SaasSubscriptionsService {
       );
     }
 
-    // Soft-delete: mark plan as inactive
-    await this.prisma.saasPlan.update({
+    // Hard-delete: permanently remove plan from database
+    await this.prisma.saasPlan.delete({
       where: { id },
-      data: { isActive: false },
     });
 
-    return { message: `Plan "${plan.name}" has been successfully deleted.` };
+    return { message: `Plan "${plan.name}" has been permanently deleted.` };
   }
 
   // ============================================
