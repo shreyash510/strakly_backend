@@ -15,7 +15,6 @@ export class AmenitiesService {
   private formatAmenity(a: Record<string, any>) {
     return {
       id: a.id,
-      branchId: a.branch_id,
       name: a.name,
       code: a.code,
       description: a.description,
@@ -47,12 +46,7 @@ export class AmenitiesService {
         conditions.push('is_active = true');
       }
 
-      // Branch filtering: null = admin (all branches), number = specific branch
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
-        values.push(branchId);
-        paramIndex++;
-      }
+      // Branch filtering removed — tenant-level isolation is sufficient
 
       const whereClause =
         conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -73,11 +67,6 @@ export class AmenitiesService {
       async (client) => {
         let query = `SELECT * FROM amenities WHERE id = $1`;
         const values: SqlValue[] = [id];
-
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -105,13 +94,6 @@ export class AmenitiesService {
       async (client) => {
         let query = `SELECT id FROM amenities WHERE code = $1`;
         const values: SqlValue[] = [dto.code];
-
-        if (branchId !== null) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
-        } else {
-          query += ` AND branch_id IS NULL`;
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];

@@ -44,7 +44,6 @@ export class SalaryService {
   private formatSalary(s: Record<string, any>, staff?: Record<string, any> | null, paidBy?: Record<string, any> | null) {
     return {
       id: s.id,
-      branchId: s.branch_id,
       staffId: s.staff_id,
       month: s.month,
       year: s.year,
@@ -155,12 +154,6 @@ export class SalaryService {
         let whereClause = `(s.is_deleted = FALSE OR s.is_deleted IS NULL)`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        /* Branch filtering via user_gym_xref */
-        if (filters.branchId !== undefined && filters.branchId !== null) {
-          whereClause += ` AND ugx.branch_id = $${paramIndex++}`;
-          values.push(filters.branchId);
-        }
 
         if (filters.staffId) {
           whereClause += ` AND s.staff_id = $${paramIndex++}`;
@@ -478,13 +471,8 @@ export class SalaryService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        /* Branch filter via user_gym_xref (public.users has no branch_id/role) */
-        const salaryBranchFilter =
-          branchId !== null
-            ? ` AND s.staff_id IN (SELECT ugx.user_id FROM public.user_gym_xref ugx WHERE ugx.gym_id = ${gymId} AND ugx.branch_id = ${branchId})`
-            : '';
-        const staffBranchFilter =
-          branchId !== null ? ` AND ugx.branch_id = ${branchId}` : '';
+        const salaryBranchFilter = '';
+        const staffBranchFilter = '';
 
         const [
           pendingResult,
@@ -535,12 +523,6 @@ export class SalaryService {
          LEFT JOIN public.branches b ON b.id = ugx.branch_id
          WHERE u.status = 'active' AND ugx.role IN ('manager', 'trainer')`;
       const values: SqlValue[] = [];
-
-      /* Branch filtering */
-      if (branchId !== null) {
-        query += ` AND ugx.branch_id = $1`;
-        values.push(branchId);
-      }
 
       query += ` ORDER BY u.name ASC`;
 

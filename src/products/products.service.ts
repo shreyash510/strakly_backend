@@ -39,7 +39,6 @@ export class ProductsService {
   private formatCategory(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       name: row.name,
       description: row.description,
       displayOrder: row.display_order,
@@ -51,7 +50,6 @@ export class ProductsService {
   private formatProduct(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       categoryId: row.category_id,
       categoryName: row.category_name,
       name: row.name,
@@ -72,7 +70,6 @@ export class ProductsService {
   private formatSale(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       productId: row.product_id,
       productName: row.product_name,
       userId: row.user_id,

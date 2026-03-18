@@ -9,7 +9,6 @@ import { SqlValue } from '../common/types';
 
 export interface AnnouncementRecord {
   id: number;
-  branchId: number | null;
   title: string;
   content: string;
   type: string;
@@ -35,7 +34,6 @@ export class AnnouncementsService {
   private formatAnnouncement(a: Record<string, any>): AnnouncementRecord {
     return {
       id: a.id,
-      branchId: a.branch_id,
       title: a.title,
       content: a.content,
       type: a.type,
@@ -75,13 +73,6 @@ export class AnnouncementsService {
         ];
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering
-        if (branchId !== null) {
-          conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
-          values.push(branchId);
-          paramIndex++;
-        }
 
         if (filters.type) {
           conditions.push(`type = $${paramIndex++}`);
@@ -159,12 +150,6 @@ export class AnnouncementsService {
       `;
         const values: SqlValue[] = [];
 
-        // Branch filtering
-        if (branchId !== null) {
-          query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
-
         query += ` ORDER BY is_pinned DESC, priority DESC, created_at DESC LIMIT 20`;
 
         const result = await client.query(query, values);
@@ -186,13 +171,8 @@ export class AnnouncementsService {
     const announcement = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM announcements WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM announcements WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
-
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];

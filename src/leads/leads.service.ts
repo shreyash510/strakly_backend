@@ -17,7 +17,6 @@ export class LeadsService {
   private formatLead(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       name: row.name,
       email: row.email,
       phone: row.phone,

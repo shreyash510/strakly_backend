@@ -27,7 +27,6 @@ export class ReferralsService {
   private formatReferral(r: Record<string, any>) {
     return {
       id: r.id,
-      branchId: r.branch_id,
       referrerId: r.referrer_id,
       referredId: r.referred_id,
       referralCode: r.referral_code,

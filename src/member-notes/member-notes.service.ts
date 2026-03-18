@@ -14,7 +14,6 @@ export class MemberNotesService {
   private formatNote(n: Record<string, any>) {
     return {
       id: n.id,
-      branchId: n.branch_id,
       userId: n.user_id,
       noteType: n.note_type,
       content: n.content,

@@ -288,12 +288,6 @@ export class DashboardService {
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
         const values: SqlValue[] = [];
 
-        if (branchId !== null) {
-          countQuery += ` AND branch_id = $1`;
-          dataQuery += ` AND branch_id = $1`;
-          values.push(branchId);
-        }
-
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
         const [countResult, dataResult] = await Promise.all([
@@ -347,12 +341,6 @@ export class DashboardService {
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
         const values: SqlValue[] = [];
 
-        if (branchId !== null) {
-          countQuery += ` AND branch_id = $1`;
-          dataQuery += ` AND branch_id = $1`;
-          values.push(branchId);
-        }
-
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
         const [countResult, dataResult] = await Promise.all([
@@ -404,16 +392,12 @@ export class DashboardService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Build branch filter clause
-        const userBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
-        const membershipBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
-        const attendanceBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        // Branch filtering removed — always return gym-wide results
+        const userBranchFilter = '';
+        const membershipBranchFilter = '';
+        const attendanceBranchFilter = '';
 
-        const productBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const productBranchFilter = '';
 
         const [
           totalMembersResult,
@@ -536,10 +520,8 @@ export class DashboardService {
     const revenueHistory = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
-        const productBranchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const membershipBranchFilter = '';
+        const productBranchFilter = '';
         const result = await client.query(
           `SELECT month, month_num, year_num, SUM(revenue) as revenue FROM (
             SELECT
@@ -635,11 +617,6 @@ export class DashboardService {
         let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
         const values: SqlValue[] = [];
 
-        if (branchId !== null) {
-          query += ` AND branch_id = $1`;
-          values.push(branchId);
-        }
-
         query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;
         values.push(limit);
 
@@ -673,11 +650,6 @@ export class DashboardService {
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          WHERE a.attendance_date = $1::DATE`;
-
-        if (branchId !== null) {
-          query += ` AND a.branch_id = $2`;
-          values.push(branchId);
-        }
 
         query += ` ORDER BY a.check_in_time DESC LIMIT $${values.length + 1}`;
         values.push(limit);
@@ -724,11 +696,6 @@ export class DashboardService {
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE m.status = 'active' AND m.end_date >= $1::TIMESTAMP AND m.end_date <= $2::TIMESTAMP`;
-
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $3`;
-          values.push(branchId);
-        }
 
         query += ` ORDER BY m.end_date ASC LIMIT $${values.length + 1}`;
         values.push(limit);
@@ -1129,12 +1096,6 @@ export class DashboardService {
         let query = `SELECT id, name, description, discount_type, discount_value, code, valid_to
          FROM offers
          WHERE is_active = true AND valid_from <= $1 AND valid_to >= $1`;
-
-        // Filter by branch: show offers for specific branch OR global offers (branch_id IS NULL)
-        if (branchId !== null) {
-          query += ` AND (branch_id = $${values.length + 1} OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         query += ` ORDER BY valid_to ASC LIMIT $${values.length + 1}`;
         values.push(limit);
