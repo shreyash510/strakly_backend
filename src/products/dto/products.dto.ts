@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsBoolean,
   IsArray,
+  IsIn,
   ValidateNested,
   Min,
 } from 'class-validator';
@@ -375,4 +376,153 @@ export class StockMovementFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+}
+
+/* ─── All Stock Movements (cross-product) DTO ─── */
+
+export class AllStockMovementsFiltersDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  productId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  movementType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  performedBy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  limit?: number;
+}
+
+/* ─── Batch Stock Adjustment DTOs ─── */
+
+export class BatchStockAdjustItemDto {
+  @ApiProperty()
+  @IsNumber()
+  @Type(() => Number)
+  productId: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(1)
+  @Type(() => Number)
+  quantity: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class BatchStockAdjustDto {
+  @ApiProperty({ type: [BatchStockAdjustItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BatchStockAdjustItemDto)
+  items: BatchStockAdjustItemDto[];
+
+  @ApiProperty({ enum: ['receive', 'damage', 'return', 'adjustment'] })
+  @IsString()
+  @IsIn(['receive', 'damage', 'return', 'adjustment'])
+  movementType: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+/* ─── Stock Take DTOs ─── */
+
+export class StockTakeFiltersDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class UpdateStockTakeItemDto {
+  @ApiProperty({ description: 'Physical count recorded during stock take' })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  countedQuantity: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class CompleteStockTakeDto {
+  @ApiPropertyOptional({ description: 'Whether to apply inventory adjustments based on counted quantities', default: false })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  applyAdjustments?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class StartStockTakeDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+/* ─── Sales Trend DTO ─── */
+
+export class SalesTrendFiltersDto {
+  @ApiProperty({ enum: ['daily', 'weekly', 'monthly'], description: 'Grouping period for the trend' })
+  @IsString()
+  @IsIn(['daily', 'weekly', 'monthly'])
+  period: string;
+
+  @ApiPropertyOptional({ description: 'Start date (ISO string). Defaults based on period.' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'End date (ISO string). Defaults to now.' })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }

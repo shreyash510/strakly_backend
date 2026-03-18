@@ -228,6 +228,12 @@ export class TenantService implements OnModuleInit {
     }
     await this.seedProductCategories(client, schemaName);
 
+    /* Stock Take (physical count) tables */
+    try {
+      await this.createStockTakeTables(client, schemaName);
+    } catch (error) {
+      this.logger.error(`Error creating stock take tables for ${schemaName}:`, error instanceof Error ? error.message : String(error));
+    }
 
     // Phase 5: Custom Fields, Surveys, Engagement, Gamification, Loyalty, Currencies
     try {
@@ -3138,6 +3144,50 @@ export class TenantService implements OnModuleInit {
     }
   }
 
+
+  /* ─── Stock Take (Physical Count) Tables ─── */
+
+  private async createStockTakeTables(
+    client: PoolClient,
+    schemaName: string,
+  ): Promise<void> {
+    /* stock_takes — header for each physical-count session */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."stock_takes" (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
+        status VARCHAR(20) DEFAULT 'in_progress',
+        started_by INTEGER NOT NULL,
+        completed_by INTEGER,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        notes TEXT,
+        total_products INTEGER DEFAULT 0,
+        total_discrepancies INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    /* stock_take_items — one row per product in a stock-take session */
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "${schemaName}"."stock_take_items" (
+        id SERIAL PRIMARY KEY,
+        stock_take_id INTEGER NOT NULL REFERENCES "${schemaName}"."stock_takes"(id),
+        product_id INTEGER NOT NULL,
+        product_name VARCHAR(255),
+        system_quantity INTEGER NOT NULL,
+        counted_quantity INTEGER,
+        discrepancy INTEGER,
+        adjustment_applied BOOLEAN DEFAULT FALSE,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    /* Indexes for fast lookups */
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_stock_take_items_stock_take" ON "${schemaName}"."stock_take_items"(stock_take_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_stock_take_items_product" ON "${schemaName}"."stock_take_items"(product_id)`);
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   //  PHASE 5: Custom Fields, Surveys, Engagement, Gamification,

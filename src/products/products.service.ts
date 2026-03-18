@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { TenantService } from '../tenant/tenant.service';
 import { PaymentsService } from '../payments/payments.service';
+import { PrismaService } from '../database/prisma.service';
 import {
   CreateProductCategoryDto,
   UpdateProductCategoryDto,
@@ -17,6 +18,13 @@ import {
   SalesFiltersDto,
   SalesStatsFiltersDto,
   StockMovementFiltersDto,
+  SalesTrendFiltersDto,
+  AllStockMovementsFiltersDto,
+  BatchStockAdjustDto,
+  StockTakeFiltersDto,
+  UpdateStockTakeItemDto,
+  CompleteStockTakeDto,
+  StartStockTakeDto,
 } from './dto/products.dto';
 import { SqlValue } from '../common/types';
 
@@ -25,6 +33,7 @@ export class ProductsService {
   constructor(
     private readonly tenantService: TenantService,
     private readonly paymentsService: PaymentsService,
+    private readonly prisma: PrismaService,
   ) { }
 
   private formatCategory(row: Record<string, any>) {
@@ -403,6 +412,96 @@ export class ProductsService {
       );
 
       return this.formatProduct(result.rows[0]);
+    });
+  }
+
+  /* ─── Batch Stock Adjustment ─── */
+
+  async batchStockAdjust(gymId: number, dto: BatchStockAdjustDto, userId: number) {
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      const results: Array<{
+        productId: number;
+        productName: string;
+        stockBefore: number;
+        stockAfter: number;
+        quantity: number;
+      }> = [];
+
+      for (const item of dto.items) {
+        /* Fetch current product and lock the row */
+        const current = await client.query(
+          `SELECT id, name, stock_quantity, branch_id
+           FROM products
+           WHERE id = $1 AND is_deleted = FALSE
+           FOR UPDATE`,
+          [item.productId],
+        );
+
+        if (current.rows.length === 0) {
+          throw new NotFoundException(`Product with ID ${item.productId} not found`);
+        }
+
+        const product = current.rows[0];
+        const stockBefore: number = parseInt(product.stock_quantity);
+        let stockAfter: number;
+
+        /* Determine direction based on movementType */
+        if (dto.movementType === 'receive' || dto.movementType === 'return') {
+          stockAfter = stockBefore + item.quantity;
+        } else if (dto.movementType === 'damage') {
+          if (stockBefore < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for "${product.name}" (ID: ${item.productId}). Current: ${stockBefore}, requested: ${item.quantity}`,
+            );
+          }
+          stockAfter = stockBefore - item.quantity;
+        } else {
+          /* 'adjustment' — treat quantity as additive; caller controls sign via movementType choice */
+          stockAfter = stockBefore + item.quantity;
+        }
+
+        /* Update stock */
+        await client.query(
+          `UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $2`,
+          [stockAfter, item.productId],
+        );
+
+        /* Determine signed quantity for the movement record */
+        const signedQuantity =
+          dto.movementType === 'damage' ? -item.quantity : item.quantity;
+
+        /* Record stock movement */
+        await client.query(
+          `INSERT INTO product_stock_movements
+             (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            item.productId,
+            product.branch_id,
+            dto.movementType,
+            signedQuantity,
+            stockBefore,
+            stockAfter,
+            item.reason || dto.notes || null,
+            userId,
+          ],
+        );
+
+        results.push({
+          productId: item.productId,
+          productName: product.name,
+          stockBefore,
+          stockAfter,
+          quantity: signedQuantity,
+        });
+      }
+
+      return {
+        adjusted: results.length,
+        movementType: dto.movementType,
+        items: results,
+      };
     });
   }
 
@@ -785,15 +884,18 @@ export class ProductsService {
 
       const whereClause = conditions.join(' AND ');
 
-      // Total revenue, items, average
+      /* Total revenue, items, average, and profit */
       const totals = await client.query(
         `SELECT
            COALESCE(SUM(s.total_amount), 0) as total_revenue,
            COALESCE(SUM(s.tax_amount), 0) as total_tax,
            COALESCE(SUM(s.quantity), 0) as total_items,
            COUNT(*) as total_transactions,
-           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(s.total_amount), 0) / COUNT(*) ELSE 0 END as avg_sale_value
-         FROM product_sales s WHERE ${whereClause}`,
+           CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(s.total_amount), 0) / COUNT(*) ELSE 0 END as avg_sale_value,
+           COALESCE(SUM((s.unit_price - COALESCE(p.cost_price, 0)) * s.quantity), 0) as total_profit
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE ${whereClause}`,
         values,
       );
 
@@ -816,13 +918,31 @@ export class ProductsService {
         values,
       );
 
+      /* Sales breakdown by staff */
+      const byStaff = await client.query(
+        `SELECT s.sold_by, staff.name as staff_name,
+           COUNT(*) as total_sales,
+           COALESCE(SUM(s.total_amount), 0) as total_revenue
+         FROM product_sales s
+         LEFT JOIN users staff ON staff.id = s.sold_by
+         WHERE ${whereClause}
+         GROUP BY s.sold_by, staff.name
+         ORDER BY total_revenue DESC`,
+        values,
+      );
+
       const stats = totals.rows[0];
+      const totalRevenue = parseFloat(stats.total_revenue);
+      const totalProfit = parseFloat(stats.total_profit);
+
       return {
-        totalRevenue: parseFloat(stats.total_revenue),
+        totalRevenue,
         totalTax: parseFloat(stats.total_tax),
         totalItems: parseInt(stats.total_items),
         totalSales: parseInt(stats.total_transactions),
         averageOrderValue: parseFloat(stats.avg_sale_value),
+        totalProfit,
+        profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
         topProducts: topProducts.rows.map((r) => ({
           productId: r.id,
           productName: r.name,
@@ -834,7 +954,421 @@ export class ProductsService {
           total: parseFloat(r.revenue),
           count: parseInt(r.count),
         })),
+        byStaff: byStaff.rows.map((r) => ({
+          staffId: r.sold_by,
+          staffName: r.staff_name,
+          totalSales: parseInt(r.total_sales),
+          totalRevenue: parseFloat(r.total_revenue),
+        })),
       };
+    });
+  }
+
+  /* ─── Sales Trend (TASK 1) ─── */
+
+  async getSalesStatsTrend(
+    gymId: number,
+    branchId: number | null,
+    filters: SalesTrendFiltersDto,
+  ) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      /* Determine date grouping expression and default range */
+      let dateExpr: string;
+      let defaultStart: string;
+
+      if (filters.period === 'daily') {
+        dateExpr = `DATE(s.sold_at)`;
+        defaultStart = `CURRENT_DATE - INTERVAL '30 days'`;
+      } else if (filters.period === 'weekly') {
+        dateExpr = `date_trunc('week', s.sold_at)`;
+        defaultStart = `CURRENT_DATE - INTERVAL '12 weeks'`;
+      } else {
+        /* monthly */
+        dateExpr = `date_trunc('month', s.sold_at)`;
+        defaultStart = `CURRENT_DATE - INTERVAL '12 months'`;
+      }
+
+      if (filters.startDate) {
+        conditions.push(`s.sold_at >= $${paramIndex++}`);
+        values.push(filters.startDate);
+      } else {
+        conditions.push(`s.sold_at >= ${defaultStart}`);
+      }
+
+      if (filters.endDate) {
+        conditions.push(`s.sold_at <= $${paramIndex++}`);
+        values.push(filters.endDate);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const result = await client.query(
+        `SELECT
+           ${dateExpr} as period_date,
+           COALESCE(SUM(s.total_amount), 0) as revenue,
+           COUNT(*) as sales_count,
+           COALESCE(SUM((s.unit_price - COALESCE(p.cost_price, 0)) * s.quantity), 0) as profit
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE ${whereClause}
+         GROUP BY period_date
+         ORDER BY period_date ASC`,
+        values,
+      );
+
+      return result.rows.map((r) => ({
+        date: r.period_date,
+        revenue: parseFloat(r.revenue),
+        salesCount: parseInt(r.sales_count),
+        profit: parseFloat(r.profit),
+      }));
+    });
+  }
+
+  /* ─── Inventory Stats ─── */
+
+  async getInventoryStats(gymId: number, branchId: number | null) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      /*
+       * Single query to compute aggregate inventory stats:
+       * - totalCostValue: SUM(stock_quantity * cost_price)
+       * - totalRetailValue: SUM(stock_quantity * price)
+       * - lowStockCount: products with stock_quantity > 0 AND stock_quantity <= low_stock_threshold
+       * - outOfStockCount: products with stock_quantity = 0
+       * - totalProducts: total active, non-deleted products
+       */
+      const statsResult = await client.query(
+        `SELECT
+           COALESCE(SUM(p.stock_quantity * COALESCE(p.cost_price, 0)), 0) as total_cost_value,
+           COALESCE(SUM(p.stock_quantity * p.price), 0) as total_retail_value,
+           COUNT(*) as total_products,
+           COUNT(*) FILTER (WHERE p.stock_quantity > 0 AND p.stock_quantity <= p.low_stock_threshold) as low_stock_count,
+           COUNT(*) FILTER (WHERE p.stock_quantity = 0) as out_of_stock_count
+         FROM products p
+         WHERE ${whereClause}`,
+        values,
+      );
+
+      /* Category breakdown: GROUP BY category with cost and retail totals */
+      const categoryResult = await client.query(
+        `SELECT
+           pc.id as category_id,
+           pc.name as category_name,
+           COUNT(p.id) as item_count,
+           COALESCE(SUM(p.stock_quantity * COALESCE(p.cost_price, 0)), 0) as cost_value,
+           COALESCE(SUM(p.stock_quantity * p.price), 0) as retail_value
+         FROM products p
+         LEFT JOIN product_categories pc ON pc.id = p.category_id AND pc.is_deleted = FALSE
+         WHERE ${whereClause}
+         GROUP BY pc.id, pc.name
+         ORDER BY pc.name ASC`,
+        values,
+      );
+
+      const stats = statsResult.rows[0];
+      const totalCostValue = parseFloat(stats.total_cost_value);
+      const totalRetailValue = parseFloat(stats.total_retail_value);
+
+      return {
+        totalCostValue,
+        totalRetailValue,
+        potentialProfit: totalRetailValue - totalCostValue,
+        lowStockCount: parseInt(stats.low_stock_count),
+        outOfStockCount: parseInt(stats.out_of_stock_count),
+        totalProducts: parseInt(stats.total_products),
+        categoryBreakdown: categoryResult.rows.map((r) => ({
+          categoryId: r.category_id,
+          categoryName: r.category_name,
+          itemCount: parseInt(r.item_count),
+          costValue: parseFloat(r.cost_value),
+          retailValue: parseFloat(r.retail_value),
+        })),
+      };
+    });
+  }
+
+  /* ─── Barcode Lookup (TASK 4) ─── */
+
+  async findByBarcode(gymId: number, branchId: number | null, barcode: string) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['p.is_deleted = FALSE', 'p.barcode = $1'];
+      const values: SqlValue[] = [barcode];
+
+      if (branchId !== null) {
+        conditions.push(`(p.branch_id = $2 OR p.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      const result = await client.query(
+        `SELECT p.*, pc.name as category_name
+         FROM products p
+         LEFT JOIN product_categories pc ON pc.id = p.category_id AND pc.is_deleted = FALSE
+         WHERE ${conditions.join(' AND ')}
+         LIMIT 1`,
+        values,
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Product with barcode "${barcode}" not found`);
+      }
+
+      return this.formatProduct(result.rows[0]);
+    });
+  }
+
+  /* ─── Sale Receipt (TASK 5) ─── */
+
+  async getSaleReceipt(id: number, gymId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      /* Fetch sale with product, buyer, and staff info */
+      const saleResult = await client.query(
+        `SELECT s.*, p.name as product_name, p.sku as product_sku, p.barcode as product_barcode,
+           u.name as buyer_name, u.email as buyer_email, u.phone as buyer_phone,
+           staff.name as sold_by_name
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         LEFT JOIN users staff ON staff.id = s.sold_by
+         WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
+        [id],
+      );
+
+      if (saleResult.rows.length === 0) {
+        throw new NotFoundException(`Sale with ID ${id} not found`);
+      }
+
+      const sale = saleResult.rows[0];
+
+      /* Fetch all items in the same batch (linked by payment_id) */
+      let items: Record<string, any>[] = [sale];
+      if (sale.payment_id) {
+        const batchResult = await client.query(
+          `SELECT s.*, p.name as product_name, p.sku as product_sku, p.barcode as product_barcode
+           FROM product_sales s
+           LEFT JOIN products p ON p.id = s.product_id
+           WHERE s.payment_id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+           ORDER BY s.id ASC`,
+          [sale.payment_id],
+        );
+        items = batchResult.rows;
+      }
+
+      /* Fetch gym info from public.gyms via Prisma */
+      const gym = await this.prisma.gym.findUnique({
+        where: { id: gymId },
+        select: { name: true, logo: true, address: true, phone: true, city: true, state: true, zipCode: true },
+      });
+
+      return {
+        sale: {
+          id: sale.id,
+          paymentId: sale.payment_id,
+          paymentMethod: sale.payment_method,
+          soldBy: sale.sold_by,
+          soldByName: sale.sold_by_name,
+          soldAt: sale.sold_at,
+          notes: sale.notes,
+        },
+        items: items.map((item) => ({
+          id: item.id,
+          productId: item.product_id,
+          productName: item.product_name,
+          productSku: item.product_sku,
+          productBarcode: item.product_barcode,
+          quantity: item.quantity,
+          unitPrice: item.unit_price ? parseFloat(item.unit_price) : 0,
+          taxAmount: item.tax_amount ? parseFloat(item.tax_amount) : 0,
+          totalAmount: item.total_amount ? parseFloat(item.total_amount) : 0,
+        })),
+        member: sale.user_id
+          ? {
+              id: sale.user_id,
+              name: sale.buyer_name,
+              email: sale.buyer_email,
+              phone: sale.buyer_phone,
+            }
+          : null,
+        gym: gym
+          ? {
+              name: gym.name,
+              logo: gym.logo,
+              address: gym.address,
+              city: gym.city,
+              state: gym.state,
+              zipCode: gym.zipCode,
+              phone: gym.phone,
+            }
+          : null,
+      };
+    });
+  }
+
+  /* ─── Reorder Suggestions ─── */
+
+  async getReorderSuggestions(gymId: number, branchId: number | null) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = [
+        'p.is_deleted = FALSE',
+        'p.is_active = TRUE',
+      ];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      /*
+       * For each active product, compute:
+       *   - sales_velocity: total quantity sold in last 30 days / 30
+       *   - days_of_stock_remaining: stock_quantity / velocity (999 if velocity = 0)
+       *   - suggested_reorder_qty: (30 * velocity) - stock_quantity (cover 30 days)
+       * Filter to products below low_stock_threshold OR with < 14 days remaining.
+       * Sort by days_remaining ASC (most urgent first).
+       */
+      const result = await client.query(
+        `SELECT
+           p.id,
+           p.name,
+           p.sku,
+           p.stock_quantity,
+           p.low_stock_threshold,
+           p.price,
+           pc.name as category_name,
+           COALESCE(SUM(s.quantity), 0)::numeric / 30 as sales_velocity,
+           CASE
+             WHEN COALESCE(SUM(s.quantity), 0) = 0 THEN 999
+             ELSE p.stock_quantity / (COALESCE(SUM(s.quantity), 0)::numeric / 30)
+           END as days_of_stock_remaining,
+           CASE
+             WHEN COALESCE(SUM(s.quantity), 0) = 0 THEN 0
+             ELSE GREATEST(CEIL(30 * (COALESCE(SUM(s.quantity), 0)::numeric / 30) - p.stock_quantity), 0)
+           END as suggested_reorder_qty
+         FROM products p
+         LEFT JOIN product_categories pc ON pc.id = p.category_id AND pc.is_deleted = FALSE
+         LEFT JOIN product_sales s
+           ON s.product_id = p.id
+           AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+           AND s.sold_at >= CURRENT_DATE - INTERVAL '30 days'
+         WHERE ${whereClause}
+         GROUP BY p.id, p.name, p.sku, p.stock_quantity, p.low_stock_threshold, p.price, pc.name
+         HAVING
+           p.stock_quantity <= p.low_stock_threshold
+           OR (
+             COALESCE(SUM(s.quantity), 0) > 0
+             AND p.stock_quantity / (COALESCE(SUM(s.quantity), 0)::numeric / 30) < 14
+           )
+         ORDER BY
+           CASE
+             WHEN COALESCE(SUM(s.quantity), 0) = 0 THEN 999
+             ELSE p.stock_quantity / (COALESCE(SUM(s.quantity), 0)::numeric / 30)
+           END ASC`,
+        values,
+      );
+
+      return result.rows.map((r) => ({
+        productId: r.id,
+        productName: r.name,
+        sku: r.sku,
+        categoryName: r.category_name,
+        currentStock: parseInt(r.stock_quantity),
+        threshold: parseInt(r.low_stock_threshold),
+        price: r.price ? parseFloat(r.price) : 0,
+        dailyVelocity: parseFloat(parseFloat(r.sales_velocity).toFixed(2)),
+        daysRemaining: parseFloat(parseFloat(r.days_of_stock_remaining).toFixed(1)),
+        suggestedReorderQty: parseInt(r.suggested_reorder_qty),
+      }));
+    });
+  }
+
+  /* ─── Dead Stock ─── */
+
+  async getDeadStock(gymId: number, branchId: number | null, days: number = 30) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = [
+        'p.is_deleted = FALSE',
+        'p.is_active = TRUE',
+        'p.stock_quantity > 0',
+      ];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      values.push(days);
+      const daysParam = paramIndex++;
+
+      const whereClause = conditions.join(' AND ');
+
+      /*
+       * Products with stock > 0, active, but no sales in last N days.
+       * LEFT JOIN product_sales, check MAX(sold_at).
+       * Returns product name, stock qty, last sold date, days since last sale.
+       */
+      const result = await client.query(
+        `SELECT
+           p.id,
+           p.name,
+           p.sku,
+           p.stock_quantity,
+           p.price,
+           pc.name as category_name,
+           MAX(s.sold_at) as last_sold_at,
+           CASE
+             WHEN MAX(s.sold_at) IS NULL THEN NULL
+             ELSE EXTRACT(DAY FROM CURRENT_TIMESTAMP - MAX(s.sold_at))::int
+           END as days_since_last_sale
+         FROM products p
+         LEFT JOIN product_categories pc ON pc.id = p.category_id AND pc.is_deleted = FALSE
+         LEFT JOIN product_sales s
+           ON s.product_id = p.id
+           AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+         WHERE ${whereClause}
+         GROUP BY p.id, p.name, p.sku, p.stock_quantity, p.price, pc.name
+         HAVING
+           MAX(s.sold_at) IS NULL
+           OR MAX(s.sold_at) < CURRENT_TIMESTAMP - MAKE_INTERVAL(days => $${daysParam})
+         ORDER BY
+           MAX(s.sold_at) ASC NULLS FIRST`,
+        values,
+      );
+
+      return result.rows.map((r) => ({
+        productId: r.id,
+        productName: r.name,
+        sku: r.sku,
+        categoryName: r.category_name,
+        currentStock: parseInt(r.stock_quantity),
+        price: r.price ? parseFloat(r.price) : 0,
+        lastSoldAt: r.last_sold_at || null,
+        daysSinceLastSale: r.days_since_last_sale !== null ? parseInt(r.days_since_last_sale) : null,
+      }));
     });
   }
 
@@ -926,6 +1460,416 @@ export class ProductsService {
         total,
         page,
         limit,
+      };
+    });
+  }
+
+  /* ─── Cross-product Stock Movements ─── */
+
+  async getAllStockMovements(
+    gymId: number,
+    branchId: number | null,
+    filters: AllStockMovementsFiltersDto = {},
+  ) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 15;
+    const offset = (page - 1) * limit;
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = [];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`sm.branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
+
+      if (filters.productId) {
+        conditions.push(`sm.product_id = $${paramIndex++}`);
+        values.push(filters.productId);
+      }
+
+      if (filters.movementType) {
+        conditions.push(`sm.movement_type = $${paramIndex++}`);
+        values.push(filters.movementType);
+      }
+
+      if (filters.startDate) {
+        conditions.push(`sm.created_at >= $${paramIndex++}`);
+        values.push(filters.startDate);
+      }
+
+      if (filters.endDate) {
+        conditions.push(`sm.created_at <= $${paramIndex++}`);
+        values.push(filters.endDate);
+      }
+
+      if (filters.performedBy) {
+        conditions.push(`sm.performed_by = $${paramIndex++}`);
+        values.push(filters.performedBy);
+      }
+
+      const whereClause = conditions.length > 0
+        ? 'WHERE ' + conditions.join(' AND ')
+        : '';
+
+      const countResult = await client.query(
+        `SELECT COUNT(*) as total FROM product_stock_movements sm ${whereClause}`,
+        values,
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      const result = await client.query(
+        `SELECT sm.*, p.name as product_name, staff.name as performed_by_name
+         FROM product_stock_movements sm
+         LEFT JOIN products p ON p.id = sm.product_id
+         LEFT JOIN users staff ON staff.id = sm.performed_by
+         ${whereClause}
+         ORDER BY sm.created_at DESC
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...values, limit, offset],
+      );
+
+      return {
+        data: result.rows.map((r) => this.formatStockMovement(r)),
+        total,
+        page,
+        limit,
+      };
+    });
+  }
+
+  /* ─── Stock Take (Physical Count) ─── */
+
+  private formatStockTake(row: Record<string, any>) {
+    return {
+      id: row.id,
+      branchId: row.branch_id,
+      status: row.status,
+      startedBy: row.started_by,
+      startedByName: row.started_by_name,
+      completedBy: row.completed_by,
+      completedByName: row.completed_by_name,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      notes: row.notes,
+      totalProducts: row.total_products,
+      totalDiscrepancies: row.total_discrepancies,
+      createdAt: row.created_at,
+    };
+  }
+
+  private formatStockTakeItem(row: Record<string, any>) {
+    return {
+      id: row.id,
+      stockTakeId: row.stock_take_id,
+      productId: row.product_id,
+      productName: row.product_name,
+      systemQuantity: row.system_quantity,
+      countedQuantity: row.counted_quantity,
+      discrepancy: row.discrepancy,
+      adjustmentApplied: row.adjustment_applied,
+      notes: row.notes,
+      createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * Start a new stock take session.
+   * Creates a stock_takes record and populates stock_take_items with
+   * current product quantities for the given branch.
+   */
+  async startStockTake(
+    gymId: number,
+    branchId: number | null,
+    userId: number,
+    dto: StartStockTakeDto = {},
+  ) {
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      /* Create the stock take header */
+      const stResult = await client.query(
+        `INSERT INTO stock_takes (branch_id, started_by, notes)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [branchId, userId, dto.notes || null],
+      );
+      const stockTake = stResult.rows[0];
+
+      /* Fetch all active, non-deleted products for this branch */
+      const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      const products = await client.query(
+        `SELECT p.id, p.name, p.stock_quantity
+         FROM products p
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY p.name ASC`,
+        values,
+      );
+
+      /* Insert one stock_take_item per product */
+      for (const p of products.rows) {
+        await client.query(
+          `INSERT INTO stock_take_items (stock_take_id, product_id, product_name, system_quantity)
+           VALUES ($1, $2, $3, $4)`,
+          [stockTake.id, p.id, p.name, p.stock_quantity],
+        );
+      }
+
+      /* Update totals on the header */
+      await client.query(
+        `UPDATE stock_takes SET total_products = $1 WHERE id = $2`,
+        [products.rows.length, stockTake.id],
+      );
+
+      return {
+        ...this.formatStockTake({ ...stockTake, total_products: products.rows.length }),
+        itemCount: products.rows.length,
+      };
+    });
+  }
+
+  /**
+   * List stock takes for a branch with pagination.
+   */
+  async getStockTakes(
+    gymId: number,
+    branchId: number | null,
+    filters: StockTakeFiltersDto = {},
+  ) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 15;
+    const offset = (page - 1) * limit;
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = [];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId !== null) {
+        conditions.push(`(st.branch_id = $${paramIndex++} OR st.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await client.query(
+        `SELECT COUNT(*) as total FROM stock_takes st ${whereClause}`,
+        values,
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      const result = await client.query(
+        `SELECT st.*,
+                starter.name as started_by_name,
+                completer.name as completed_by_name
+         FROM stock_takes st
+         LEFT JOIN users starter ON starter.id = st.started_by
+         LEFT JOIN users completer ON completer.id = st.completed_by
+         ${whereClause}
+         ORDER BY st.started_at DESC
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...values, limit, offset],
+      );
+
+      return {
+        data: result.rows.map((r) => this.formatStockTake(r)),
+        total,
+        page,
+        limit,
+      };
+    });
+  }
+
+  /**
+   * Get a single stock take with all its items.
+   */
+  async getStockTake(gymId: number, stockTakeId: number) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const stResult = await client.query(
+        `SELECT st.*,
+                starter.name as started_by_name,
+                completer.name as completed_by_name
+         FROM stock_takes st
+         LEFT JOIN users starter ON starter.id = st.started_by
+         LEFT JOIN users completer ON completer.id = st.completed_by
+         WHERE st.id = $1`,
+        [stockTakeId],
+      );
+
+      if (stResult.rows.length === 0) {
+        throw new NotFoundException(`Stock take with ID ${stockTakeId} not found`);
+      }
+
+      const itemsResult = await client.query(
+        `SELECT * FROM stock_take_items WHERE stock_take_id = $1 ORDER BY product_name ASC`,
+        [stockTakeId],
+      );
+
+      return {
+        ...this.formatStockTake(stResult.rows[0]),
+        items: itemsResult.rows.map((r) => this.formatStockTakeItem(r)),
+      };
+    });
+  }
+
+  /**
+   * Record the physical count for a single stock-take item.
+   * Automatically computes the discrepancy (counted - system).
+   */
+  async updateStockTakeItem(
+    gymId: number,
+    stockTakeId: number,
+    itemId: number,
+    dto: UpdateStockTakeItemDto,
+  ) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      /* Verify stock take exists and is still in progress */
+      const stCheck = await client.query(
+        `SELECT status FROM stock_takes WHERE id = $1`,
+        [stockTakeId],
+      );
+      if (stCheck.rows.length === 0) {
+        throw new NotFoundException(`Stock take with ID ${stockTakeId} not found`);
+      }
+      if (stCheck.rows[0].status !== 'in_progress') {
+        throw new BadRequestException('Cannot update items on a completed stock take');
+      }
+
+      /* Update the item */
+      const result = await client.query(
+        `UPDATE stock_take_items
+         SET counted_quantity = $1,
+             discrepancy = $1 - system_quantity,
+             notes = COALESCE($2, notes)
+         WHERE id = $3 AND stock_take_id = $4
+         RETURNING *`,
+        [dto.countedQuantity, dto.notes || null, itemId, stockTakeId],
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Stock take item with ID ${itemId} not found`);
+      }
+
+      return this.formatStockTakeItem(result.rows[0]);
+    });
+  }
+
+  /**
+   * Complete a stock take session.
+   * Optionally applies inventory adjustments to bring system stock
+   * in line with counted quantities.
+   */
+  async completeStockTake(
+    gymId: number,
+    stockTakeId: number,
+    userId: number,
+    dto: CompleteStockTakeDto = {},
+  ) {
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      /* Lock the stock take row */
+      const stResult = await client.query(
+        `SELECT * FROM stock_takes WHERE id = $1 FOR UPDATE`,
+        [stockTakeId],
+      );
+      if (stResult.rows.length === 0) {
+        throw new NotFoundException(`Stock take with ID ${stockTakeId} not found`);
+      }
+      if (stResult.rows[0].status !== 'in_progress') {
+        throw new BadRequestException('Stock take is already completed');
+      }
+
+      /* Fetch all items */
+      const items = await client.query(
+        `SELECT * FROM stock_take_items WHERE stock_take_id = $1`,
+        [stockTakeId],
+      );
+
+      /* Count discrepancies (items where counted_quantity differs from system_quantity) */
+      let totalDiscrepancies = 0;
+      for (const item of items.rows) {
+        if (item.counted_quantity !== null && item.counted_quantity !== item.system_quantity) {
+          totalDiscrepancies++;
+        }
+      }
+
+      /* Optionally apply adjustments */
+      if (dto.applyAdjustments) {
+        for (const item of items.rows) {
+          if (item.counted_quantity === null) continue;
+          const diff = item.counted_quantity - item.system_quantity;
+          if (diff === 0) continue;
+
+          /* Get current stock (may have changed since stock take started) */
+          const productResult = await client.query(
+            `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+            [item.product_id],
+          );
+          if (productResult.rows.length === 0) continue;
+
+          const stockBefore = productResult.rows[0].stock_quantity;
+          /* Apply the difference between counted and the original system_quantity */
+          const stockAfter = stockBefore + diff;
+
+          if (stockAfter < 0) continue; /* skip if adjustment would go negative */
+
+          await client.query(
+            `UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+            [stockAfter, item.product_id],
+          );
+
+          /* Record the stock movement */
+          await client.query(
+            `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              item.product_id,
+              productResult.rows[0].branch_id,
+              'stock_take',
+              diff,
+              stockBefore,
+              stockAfter,
+              `Stock take #${stockTakeId} adjustment`,
+              userId,
+            ],
+          );
+
+          /* Mark item as adjustment applied */
+          await client.query(
+            `UPDATE stock_take_items SET adjustment_applied = TRUE WHERE id = $1`,
+            [item.id],
+          );
+        }
+      }
+
+      /* Append notes if provided */
+      const finalNotes = dto.notes
+        ? (stResult.rows[0].notes ? stResult.rows[0].notes + '\n' + dto.notes : dto.notes)
+        : stResult.rows[0].notes;
+
+      /* Finalize the stock take */
+      const updated = await client.query(
+        `UPDATE stock_takes
+         SET status = 'completed',
+             completed_by = $1,
+             completed_at = CURRENT_TIMESTAMP,
+             total_discrepancies = $2,
+             notes = $3
+         WHERE id = $4
+         RETURNING *`,
+        [userId, totalDiscrepancies, finalNotes, stockTakeId],
+      );
+
+      return {
+        ...this.formatStockTake(updated.rows[0]),
+        adjustmentsApplied: dto.applyAdjustments || false,
       };
     });
   }
