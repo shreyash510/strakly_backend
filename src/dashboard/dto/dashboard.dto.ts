@@ -427,6 +427,46 @@ export class ClientAmenityDto {
   icon?: string;
 }
 
+export class UpcomingClassBookingDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  className: string;
+
+  @ApiProperty()
+  startTime: string;
+
+  @ApiProperty()
+  endTime: string;
+
+  @ApiProperty()
+  trainerName?: string;
+
+  @ApiProperty()
+  status: string;
+}
+
+export class UpcomingAppointmentDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  title: string;
+
+  @ApiProperty()
+  startTime: string;
+
+  @ApiProperty()
+  endTime: string;
+
+  @ApiProperty({ required: false })
+  trainerName?: string;
+
+  @ApiProperty()
+  status: string;
+}
+
 export class ClientDashboardDto {
   @ApiProperty()
   attendanceCode: string;
@@ -451,4 +491,10 @@ export class ClientDashboardDto {
 
   @ApiProperty({ type: [ClientAmenityDto], required: false })
   amenities?: ClientAmenityDto[];
+
+  @ApiProperty({ type: [UpcomingClassBookingDto], required: false })
+  upcomingClassBookings?: UpcomingClassBookingDto[];
+
+  @ApiProperty({ type: [UpcomingAppointmentDto], required: false })
+  upcomingAppointments?: UpcomingAppointmentDto[];
 }
