@@ -79,7 +79,7 @@ export function membershipExpiryTemplate(
   return baseTemplate({
     preheader: `Your membership expires on ${expiryDate}. ${daysRemaining} days remaining.`,
     content,
-    footerText: `You received this email because you're a member of ${gymName}.`,
+    footerText: `You received this email because you're a client of ${gymName}.`,
   });
 }
 

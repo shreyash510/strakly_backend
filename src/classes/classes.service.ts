@@ -805,7 +805,7 @@ export class ClassesService {
               await this.notificationHelper.notifyStaff(gymId, info.branch_id, {
                 type: NotificationType.CLASS_BOOKED,
                 title: 'New Class Booking',
-                message: `${booking.rows[0].user_name || 'A member'} booked ${info.class_type_name} on ${dateStr}.`,
+                message: `${booking.rows[0].user_name || 'A client'} booked ${info.class_type_name} on ${dateStr}.`,
                 actionUrl: '/classes',
               }, { excludeUserId: userId });
             }

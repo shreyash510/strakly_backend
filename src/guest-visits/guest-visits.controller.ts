@@ -97,7 +97,7 @@ export class GuestVisitsController {
   @UseGuards(ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'update')
-  @ApiOperation({ summary: 'Mark guest as converted to member' })
+  @ApiOperation({ summary: 'Mark guest as converted to client' })
   async markConverted(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
