@@ -189,7 +189,7 @@ export class BranchController {
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ManagerPermission('branches', 'create')
-  @ApiOperation({ summary: 'Transfer a member from one branch to another' })
+  @ApiOperation({ summary: 'Transfer a client from one branch to another' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   async transferMember(
     @Param('gymId', ParseIntPipe) gymId: number,
@@ -202,9 +202,9 @@ export class BranchController {
 
   @Get('member/:memberId/branch')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get the current branch of a member' })
+  @ApiOperation({ summary: 'Get the current branch of a client' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
-  @ApiParam({ name: 'memberId', description: 'Member ID' })
+  @ApiParam({ name: 'memberId', description: 'Client ID' })
   async getMemberBranch(
     @Param('gymId', ParseIntPipe) gymId: number,
     @Param('memberId', ParseIntPipe) memberId: number,

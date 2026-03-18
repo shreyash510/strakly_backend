@@ -18,7 +18,6 @@ export class EquipmentService {
   private formatEquipment(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       name: row.name,
       brand: row.brand,
       model: row.model,
@@ -39,7 +38,6 @@ export class EquipmentService {
       id: row.id,
       equipmentId: row.equipment_id,
       equipmentName: row.equipment_name,
-      branchId: row.branch_id,
       type: row.type,
       description: row.description,
       scheduledDate: row.scheduled_date,
@@ -69,11 +67,6 @@ export class EquipmentService {
       const conditions: string[] = ['e.is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`e.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       if (filters.status) {
         conditions.push(`e.status = $${paramIndex++}`);
@@ -229,8 +222,8 @@ export class EquipmentService {
 
   async getStats(gymId: number, branchId: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = branchId !== null ? `AND branch_id = $1` : '';
-      const branchValues = branchId !== null ? [branchId] : [];
+      const branchFilter = '';
+      const branchValues: SqlValue[] = [];
 
       const countByStatus = await client.query(
         `SELECT status, COUNT(*) as count FROM equipment WHERE is_deleted = FALSE ${branchFilter} GROUP BY status`,
@@ -485,11 +478,6 @@ export class EquipmentService {
       ];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`m.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.join(' AND ');
 

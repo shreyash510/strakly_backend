@@ -158,19 +158,8 @@ export class UsersService {
     };
   }
 
-  private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null, branchAssignments?: Record<string, any>[]) {
+  private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null, _branchAssignments?: Record<string, any>[]) {
     const role = user.role || ROLES.CLIENT;
-    const branchIds = branchAssignments?.map((a) => a.branch_id) || [];
-    const branchNames = branchAssignments?.map((a) => a.branch_name).filter(Boolean) || [];
-
-    // Fall back to user's branch_name if no assignments
-    const fallbackBranchName = user.branch_name || user.branchName || null;
-    const finalBranchNames = branchNames.length > 0
-      ? branchNames
-      : (fallbackBranchName ? [fallbackBranchName] : []);
-    const finalBranchIds = branchIds.length > 0
-      ? branchIds
-      : (user.branch_id ? [user.branch_id] : []);
 
     return {
       id: user.id,
@@ -209,8 +198,8 @@ export class UsersService {
       managerPermissions: user.manager_permissions || user.managerPermissions || null,
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
-      branchIds: finalBranchIds,
-      branchNames: finalBranchNames,
+      branchIds: [],
+      branchNames: [],
       gym: gym
         ? {
             id: gym.id,
@@ -776,20 +765,6 @@ export class UsersService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering: null = all branches, number = specific branch
-        // For all staff roles, also check user_branch_xref table (staff can have multiple branches)
-        if (branchId !== null && branchId !== undefined) {
-          conditions.push(`(
-          u.branch_id = $${paramIndex} OR
-          EXISTS (
-            SELECT 1 FROM user_branch_xref ubx
-            WHERE ubx.user_id = u.id AND ubx.branch_id = $${paramIndex} AND ubx.is_active = TRUE
-          )
-        )`);
-          values.push(branchId);
-          paramIndex++;
-        }
-
         if (
           filters.role &&
           filters.role !== 'all' &&
@@ -1340,11 +1315,6 @@ export class UsersService {
         const values: SqlValue[] = [role];
         let paramIndex = 2;
 
-        if (branchId !== null && branchId !== undefined) {
-          conditions.push(`u.branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
-
         const whereClause = conditions.join(' AND ');
         const result = await client.query(
           `SELECT u.status, COUNT(*)::int as count FROM users u
@@ -1386,12 +1356,6 @@ export class UsersService {
         ]; // Filter only clients, exclude soft-deleted
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering: null = all branches, number = specific branch
-        if (branchId !== null && branchId !== undefined) {
-          conditions.push(`u.branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
 
         if (filters.status && filters.status !== 'all') {
           conditions.push(`u.status = $${paramIndex++}`);

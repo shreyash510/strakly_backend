@@ -119,10 +119,10 @@ export class SuperadminDashboardDto {
 }
 
 export class AdminDashboardStatsDto {
-  @ApiProperty({ description: 'Total number of members in gym' })
+  @ApiProperty({ description: 'Total number of clients in gym' })
   totalMembers: number;
 
-  @ApiProperty({ description: 'Number of active members' })
+  @ApiProperty({ description: 'Number of active clients' })
   activeMembers: number;
 
   @ApiProperty({ description: 'Total number of trainers in gym' })
@@ -146,7 +146,7 @@ export class AdminDashboardStatsDto {
   @ApiProperty({ description: 'Monthly revenue growth percentage' })
   monthlyGrowth: number;
 
-  @ApiProperty({ description: 'Members present today' })
+  @ApiProperty({ description: 'Clients present today' })
   presentToday: number;
 
   @ApiProperty({ description: 'Open support tickets' })

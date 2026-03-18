@@ -197,7 +197,7 @@ export class CreateProductSaleDto {
   @Type(() => Number)
   productId: number;
 
-  @ApiPropertyOptional({ description: 'Member user_id. Null for walk-in sales.' })
+  @ApiPropertyOptional({ description: 'Client user_id. Null for walk-in sales.' })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
@@ -240,7 +240,7 @@ export class CreateBatchSaleDto {
   @Type(() => BatchSaleItemDto)
   items: BatchSaleItemDto[];
 
-  @ApiPropertyOptional({ description: 'Member user_id. Null for walk-in sales.' })
+  @ApiPropertyOptional({ description: 'Client user_id. Null for walk-in sales.' })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)

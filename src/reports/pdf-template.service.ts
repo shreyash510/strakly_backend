@@ -84,7 +84,7 @@ export class PdfTemplateService {
   <div class="section-title">Dashboard Summary</div>
   <div class="cards">
     <div class="card">
-      <div class="label">Active Members</div>
+      <div class="label">Active Clients</div>
       <div class="value">${dashboardSummary.activeMembers}</div>
     </div>
     <div class="card">
@@ -306,7 +306,7 @@ export class PdfTemplateService {
       <div class="value">${attendanceReport.summary.avgDailyCheckIns.toFixed(1)}</div>
     </div>
     <div class="card">
-      <div class="label">Unique Members</div>
+      <div class="label">Unique Clients</div>
       <div class="value">${attendanceReport.summary.uniqueMembers}</div>
     </div>
     <div class="card">
@@ -346,9 +346,9 @@ export class PdfTemplateService {
   </table>` : ''}
 
   ${attendanceReport.topMembers.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Top Members by Visits</h4>
+  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Top Clients by Visits</h4>
   <table>
-    <thead><tr><th>#</th><th>Member</th><th style="text-align:right;">Visits</th></tr></thead>
+    <thead><tr><th>#</th><th>Client</th><th style="text-align:right;">Visits</th></tr></thead>
     <tbody>
       ${attendanceReport.topMembers.slice(0, 10).map((member, index) => `
         <tr>

@@ -33,7 +33,6 @@ export interface AttendanceReportData {
 
 export interface AttendanceRecord {
   id: number;
-  branchId: number | null;
   userId: number;
   userName: string;
   userEmail: string;
@@ -99,21 +98,7 @@ export class AttendanceService {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // If branchId is specified, check both users.branch_id and user_branch_xref
-        if (branchId !== null) {
-          const query = `
-            SELECT DISTINCT u.id, u.name, u.email, u.phone, u.avatar, u.status,
-                   u.attendance_code, u.role, u.branch_id, u.created_at
-            FROM users u
-            LEFT JOIN user_branch_xref ubx ON ubx.user_id = u.id AND ubx.is_active = TRUE
-            WHERE u.attendance_code = $1
-              AND (u.branch_id = $2 OR ubx.branch_id = $2)
-          `;
-          const result = await client.query(query, [code, branchId]);
-          return result.rows[0];
-        }
-
-        // No branch filter - search all users
+        // Search all users gym-wide (no branch filter)
         const query = `
           SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
           FROM users
@@ -259,7 +244,6 @@ export class AttendanceService {
 
     return {
       id: attendance.id,
-      branchId: attendance.branch_id,
       userId: user.id,
       userName: user.name,
       userEmail: user.email,
@@ -358,7 +342,6 @@ export class AttendanceService {
 
     return {
       id: attendance.id,
-      branchId: attendance.branch_id,
       userId: attendance.user_id,
       userName: user?.name || '',
       userEmail: user?.email || '',
@@ -380,7 +363,6 @@ export class AttendanceService {
   private formatAttendanceRecord(record: Record<string, any>, gym: Record<string, any> | null): AttendanceRecord {
     return {
       id: record.id,
-      branchId: record.branch_id,
       userId: record.user_id,
       userName: record.user_name || '',
       userEmail: record.user_email || '',
@@ -416,12 +398,6 @@ export class AttendanceService {
          WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const values: SqlValue[] = [today];
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND a.branch_id = $2`;
-          values.push(branchId);
-        }
-
         query += ` ORDER BY a.check_in_time DESC`;
 
         const result = await client.query(query, values);
@@ -442,10 +418,8 @@ export class AttendanceService {
     const { activeRecords, historyRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Build filters with table aliases
-        const attendanceBranchFilter =
-          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
-        const historyBranchFilter =
-          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
+        const attendanceBranchFilter = '';
+        const historyBranchFilter = '';
         const attendanceSoftDeleteFilter = ` AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const historySoftDeleteFilter = ` AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)`;
 
@@ -590,9 +564,8 @@ export class AttendanceService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Build branch filter clause
-        const branchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        // Branch filter removed - gym-wide results
+        const branchFilter = '';
 
         const [
           todayResult,
@@ -647,14 +620,8 @@ export class AttendanceService {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`;
+      const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`;
       const values: SqlValue[] = [today];
-
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND branch_id = $2`;
-        values.push(branchId);
-      }
 
       const result = await client.query(query, values);
       return parseInt(result.rows[0].count, 10);
@@ -683,12 +650,6 @@ export class AttendanceService {
         let whereClause = '1=1';
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          whereClause += ` AND ah.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         if (startDate && endDate) {
           whereClause += ` AND ah.attendance_date >= $${paramIndex++}::DATE AND ah.attendance_date <= $${paramIndex++}::DATE`;
@@ -788,8 +749,7 @@ export class AttendanceService {
         return d.toLocaleDateString('en-CA');
       })();
 
-    const branchFilter =
-      branchId !== null ? ` AND branch_id = ${branchId}` : '';
+    const branchFilter = '';
     const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
     const reportData = await this.tenantService.executeInTenant(
@@ -923,10 +883,8 @@ export class AttendanceService {
         });
 
         // 5. Top members - combine both tables
-        const topMembersBranchFilter =
-          branchId !== null ? ` AND a.branch_id = ${branchId}` : '';
-        const topMembersHistoryBranchFilter =
-          branchId !== null ? ` AND ah.branch_id = ${branchId}` : '';
+        const topMembersBranchFilter = '';
+        const topMembersHistoryBranchFilter = '';
         const topMembersResult = await client.query(
           `
         SELECT

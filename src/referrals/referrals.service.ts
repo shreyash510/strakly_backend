@@ -27,7 +27,6 @@ export class ReferralsService {
   private formatReferral(r: Record<string, any>) {
     return {
       id: r.id,
-      branchId: r.branch_id,
       referrerId: r.referrer_id,
       referredId: r.referred_id,
       referralCode: r.referral_code,
@@ -164,7 +163,7 @@ export class ReferralsService {
   ) {
     // Prevent self-referral
     if (dto.referredId && dto.referrerId === dto.referredId) {
-      throw new BadRequestException('A member cannot refer themselves');
+      throw new BadRequestException('A client cannot refer themselves');
     }
 
     const referral = await this.tenantService.executeInTenant(gymId, async (client) => {

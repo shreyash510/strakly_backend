@@ -445,12 +445,12 @@ export class BranchService {
     );
 
     if (!member) {
-      throw new NotFoundException(`Member with ID ${dto.memberId} not found`);
+      throw new NotFoundException(`Client with ID ${dto.memberId} not found`);
     }
 
     if (member.branch_id && member.branch_id !== dto.fromBranchId) {
       throw new BadRequestException(
-        `Member is not in the specified source branch. Current branch: ${member.branch_id}`,
+        `Client is not in the specified source branch. Current branch: ${member.branch_id}`,
       );
     }
 
@@ -509,7 +509,7 @@ export class BranchService {
 
     return {
       success: true,
-      message: `Member ${member.name} transferred from ${fromBranch.name} to ${toBranch.name}`,
+      message: `Client ${member.name} transferred from ${fromBranch.name} to ${toBranch.name}`,
       memberId: dto.memberId,
       fromBranchId: dto.fromBranchId,
       toBranchId: dto.toBranchId,
@@ -534,7 +534,7 @@ export class BranchService {
     );
 
     if (!member) {
-      throw new NotFoundException(`Member with ID ${memberId} not found`);
+      throw new NotFoundException(`Client with ID ${memberId} not found`);
     }
 
     if (!member.branch_id) {

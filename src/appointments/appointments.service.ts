@@ -51,7 +51,6 @@ export class AppointmentsService {
   private formatService(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       name: row.name,
       description: row.description,
       durationMinutes: row.duration_minutes,
@@ -71,7 +70,6 @@ export class AppointmentsService {
       id: row.id,
       trainerId: row.trainer_id,
       trainerName: row.trainer_name,
-      branchId: row.branch_id,
       dayOfWeek: row.day_of_week,
       startTime: row.start_time,
       endTime: row.end_time,
@@ -91,7 +89,6 @@ export class AppointmentsService {
       trainerName: row.trainer_name,
       userId: row.user_id,
       userName: row.user_name,
-      branchId: row.branch_id,
       startTime: row.start_time,
       endTime: row.end_time,
       status: row.status,
@@ -112,7 +109,6 @@ export class AppointmentsService {
       userName: row.user_name,
       serviceId: row.service_id,
       serviceName: row.service_name,
-      branchId: row.branch_id,
       totalSessions: row.total_sessions,
       usedSessions: row.used_sessions,
       remainingSessions: row.remaining_sessions,
@@ -492,7 +488,7 @@ export class AppointmentsService {
 
     // Notifications (non-blocking, after successful creation)
     // Use the appointment's resolved branchId so notifications match the client's branch
-    const notifBranchId = appointment.branchId ?? branchId;
+    const notifBranchId = branchId;
     try {
       // Notify the client
       await this.notificationsService.notifyAppointmentBooked(

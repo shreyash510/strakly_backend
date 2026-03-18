@@ -60,14 +60,8 @@ export class BodyMetricsService {
     const metrics = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+        const query = `SELECT * FROM body_metrics WHERE user_id = $1`;
         const values: SqlValue[] = [userId];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -89,14 +83,8 @@ export class BodyMetricsService {
     let metrics = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM body_metrics WHERE user_id = $1`;
+        const query = `SELECT * FROM body_metrics WHERE user_id = $1`;
         const values: SqlValue[] = [userId];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -147,14 +135,8 @@ export class BodyMetricsService {
     const existing = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT id FROM body_metrics WHERE user_id = $1`;
+        const query = `SELECT id FROM body_metrics WHERE user_id = $1`;
         const values: SqlValue[] = [userId];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -423,12 +405,6 @@ export class BodyMetricsService {
       const values: SqlValue[] = [userId];
       let paramIndex = 2;
 
-      // Branch filtering
-      if (options?.branchId !== null && options?.branchId !== undefined) {
-        whereClause += ` AND branch_id = $${paramIndex++}`;
-        values.push(options.branchId);
-      }
-
       if (options?.startDate) {
         whereClause += ` AND measured_at >= $${paramIndex++}`;
         values.push(options.startDate);
@@ -512,14 +488,8 @@ export class BodyMetricsService {
 
     const { firstRecord, latestRecord, totalRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
-        let whereClause = 'user_id = $1';
+        const whereClause = 'user_id = $1';
         const values: SqlValue[] = [userId];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          whereClause += ` AND branch_id = $2`;
-          values.push(branchId);
-        }
 
         const [firstResult, latestResult, countResult] = await Promise.all([
           client.query(

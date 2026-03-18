@@ -16,7 +16,6 @@ export class GuestVisitsService {
   private formatVisit(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       guestName: row.guest_name,
       guestPhone: row.guest_phone,
       guestEmail: row.guest_email,
@@ -42,11 +41,6 @@ export class GuestVisitsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`gv.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       if (filters.fromDate) {
         conditions.push(`gv.visit_date >= $${paramIndex++}`);
@@ -110,11 +104,6 @@ export class GuestVisitsService {
     const visit = await this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['gv.id = $1'];
       const values: SqlValue[] = [id];
-
-      if (branchId !== null) {
-        conditions.push('gv.branch_id = $2');
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `SELECT gv.*, u.name as brought_by_name, staff.name as checked_in_by_name
@@ -200,11 +189,6 @@ export class GuestVisitsService {
       const conditions: string[] = [`id = $${paramIndex++}`];
       values.push(id);
 
-      if (branchId !== null) {
-        conditions.push(`branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
-
       const result = await client.query(
         `UPDATE guest_visits SET ${updates.join(', ')} WHERE ${conditions.join(' AND ')} RETURNING id`,
         values,
@@ -230,11 +214,6 @@ export class GuestVisitsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
-
-      if (branchId !== null) {
-        conditions.push('branch_id = $2');
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `UPDATE guest_visits SET converted_to_member = TRUE WHERE ${conditions.join(' AND ')} RETURNING id`,
@@ -262,11 +241,6 @@ export class GuestVisitsService {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
 
-      if (branchId !== null) {
-        conditions.push('branch_id = $2');
-        values.push(branchId);
-      }
-
       const result = await client.query(
         `DELETE FROM guest_visits WHERE ${conditions.join(' AND ')} RETURNING id`,
         values,
@@ -279,8 +253,8 @@ export class GuestVisitsService {
 
   async getStats(gymId: number, branchId: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchCondition = branchId !== null ? ' AND branch_id = $1' : '';
-      const branchValues: SqlValue[] = branchId !== null ? [branchId] : [];
+      const branchCondition = '';
+      const branchValues: SqlValue[] = [];
 
       const totalResult = await client.query(
         `SELECT COUNT(*) FROM guest_visits WHERE 1=1${branchCondition}`,

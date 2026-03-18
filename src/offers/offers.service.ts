@@ -19,7 +19,6 @@ export class OffersService {
   private formatOffer(o: Record<string, any>) {
     return {
       id: o.id,
-      branchId: o.branch_id,
       code: o.code,
       name: o.name,
       description: o.description,

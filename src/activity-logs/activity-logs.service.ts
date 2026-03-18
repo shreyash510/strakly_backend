@@ -9,7 +9,6 @@ import { sanitizePagination } from '../common/pagination.util';
 
 export interface ActivityLogRecord {
   id: number;
-  branchId: number | null;
   actorId: number;
   actorType: string;
   actorName: string | null;
@@ -35,7 +34,6 @@ export class ActivityLogsService {
   private formatActivityLog(log: Record<string, any>): ActivityLogRecord {
     return {
       id: log.id,
-      branchId: log.branch_id,
       actorId: log.actor_id,
       actorType: log.actor_type,
       actorName: log.actor_name,
@@ -157,15 +155,8 @@ export class ActivityLogsService {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2`;
+        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 ORDER BY created_at DESC LIMIT 100`;
         const values: SqlValue[] = [targetType, targetId];
-
-        if (branchId !== null) {
-          query += ` AND branch_id = $3`;
-          values.push(branchId);
-        }
-
-        query += ` ORDER BY created_at DESC LIMIT 100`;
 
         const result = await client.query(query, values);
         return result.rows;

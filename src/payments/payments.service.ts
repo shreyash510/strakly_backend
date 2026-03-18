@@ -18,7 +18,6 @@ import { sanitizePagination } from '../common/pagination.util';
 
 export interface PaymentRecord {
   id: number;
-  branchId: number | null;
   paymentType: string;
   referenceId: number;
   referenceTable: string;
@@ -57,7 +56,6 @@ export class PaymentsService {
   private formatPayment(p: Record<string, any>): PaymentRecord {
     return {
       id: p.id,
-      branchId: p.branch_id,
       paymentType: p.payment_type,
       referenceId: p.reference_id,
       referenceTable: p.reference_table,
@@ -103,12 +101,6 @@ export class PaymentsService {
         const conditions: string[] = [];
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering
-        if (branchId !== null) {
-          conditions.push(`branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
 
         if (filters.paymentType) {
           conditions.push(`payment_type = $${paramIndex++}`);
@@ -183,13 +175,8 @@ export class PaymentsService {
     const payment = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM payments WHERE id = $1`;
+        const query = `SELECT * FROM payments WHERE id = $1`;
         const values: SqlValue[] = [id];
-
-        if (branchId !== null) {
-          query += ` AND branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -364,8 +351,7 @@ export class PaymentsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const branchFilter = '';
 
         const [totalResult, byTypeResult, byMethodResult, byStatusResult] =
           await Promise.all([

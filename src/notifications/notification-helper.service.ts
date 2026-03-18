@@ -3,7 +3,6 @@ import { TenantService } from '../tenant/tenant.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationType, NotificationPriority } from './notification-types';
-import { SqlValue } from '../common/types';
 import { ROLES } from '../common/constants';
 
 export interface NotifyStaffPayload {
@@ -46,15 +45,9 @@ export class NotificationHelperService {
       const staffIds = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
-          let query = `SELECT id FROM users WHERE role IN ('manager') AND status = 'active'`;
-          const params: SqlValue[] = [];
+          const query = `SELECT id FROM users WHERE role IN ('manager') AND status = 'active'`;
 
-          if (branchId) {
-            params.push(branchId);
-            query += ` AND (branch_id = $1 OR id IN (SELECT user_id FROM user_branch_xref WHERE branch_id = $1 AND is_active = true))`;
-          }
-
-          const result = await client.query(query, params);
+          const result = await client.query(query);
           return result.rows.map((r: Record<string, any>) => r.id as number);
         },
       );

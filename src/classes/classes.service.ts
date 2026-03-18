@@ -50,7 +50,6 @@ export class ClassesService {
   private formatClassType(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       name: row.name,
       description: row.description,
       category: row.category,
@@ -71,7 +70,6 @@ export class ClassesService {
       classTypeName: row.class_type_name,
       color: row.color,
       icon: row.icon,
-      branchId: row.branch_id,
       instructorId: row.instructor_id,
       instructorName: row.instructor_name,
       room: row.room,
@@ -92,7 +90,6 @@ export class ClassesService {
     return {
       id: row.id,
       scheduleId: row.schedule_id,
-      branchId: row.branch_id,
       date: row.date,
       instructorId: row.instructor_id,
       instructorName: row.instructor_name,
@@ -805,7 +802,7 @@ export class ClassesService {
               await this.notificationHelper.notifyStaff(gymId, info.branch_id, {
                 type: NotificationType.CLASS_BOOKED,
                 title: 'New Class Booking',
-                message: `${booking.rows[0].user_name || 'A member'} booked ${info.class_type_name} on ${dateStr}.`,
+                message: `${booking.rows[0].user_name || 'A client'} booked ${info.class_type_name} on ${dateStr}.`,
                 actionUrl: '/classes',
               }, { excludeUserId: userId });
             }

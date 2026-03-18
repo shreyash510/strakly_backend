@@ -33,7 +33,7 @@ export class MemberNotesController {
 
   @Get()
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get member notes' })
+  @ApiOperation({ summary: 'Get client notes' })
   async findAll(
     @GymId() gymId: number,
     @OptionalBranchId() branchId: number | null,
@@ -44,7 +44,7 @@ export class MemberNotesController {
 
   @Get(':id')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get a member note by ID' })
+  @ApiOperation({ summary: 'Get a client note by ID' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
@@ -54,7 +54,7 @@ export class MemberNotesController {
 
   @Post()
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Create a member note' })
+  @ApiOperation({ summary: 'Create a client note' })
   async create(
     @Body() dto: CreateMemberNoteDto,
     @GymId() gymId: number,
@@ -66,7 +66,7 @@ export class MemberNotesController {
 
   @Patch(':id')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Update a member note' })
+  @ApiOperation({ summary: 'Update a client note' })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMemberNoteDto,
@@ -77,7 +77,7 @@ export class MemberNotesController {
 
   @Patch(':id/pin')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Toggle pin on a member note' })
+  @ApiOperation({ summary: 'Toggle pin on a client note' })
   async togglePin(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
@@ -87,7 +87,7 @@ export class MemberNotesController {
 
   @Delete(':id')
   @Roles('superadmin', 'admin', 'manager')
-  @ApiOperation({ summary: 'Delete a member note' })
+  @ApiOperation({ summary: 'Delete a client note' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,

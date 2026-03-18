@@ -173,7 +173,7 @@ export enum MembershipTransferAction {
 }
 
 export class TransferMemberDto {
-  @ApiProperty({ description: 'Member/Client ID to transfer' })
+  @ApiProperty({ description: 'Client ID to transfer' })
   @IsNumber()
   memberId: number;
 
@@ -207,7 +207,7 @@ export class TransferMemberResponseDto {
   @ApiProperty({ description: 'Transfer message' })
   message: string;
 
-  @ApiProperty({ description: 'Member ID that was transferred' })
+  @ApiProperty({ description: 'Client ID that was transferred' })
   memberId: number;
 
   @ApiProperty({ description: 'Old branch ID' })

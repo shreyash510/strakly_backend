@@ -865,9 +865,7 @@ export class MembershipsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Build branch filter clause
-        const branchFilter =
-          branchId !== null ? ` AND branch_id = ${branchId}` : '';
+        const branchFilter = '';
         const softDeleteFilter =
           ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
 
@@ -955,12 +953,6 @@ export class MembershipsService {
          FROM memberships
          WHERE status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
-
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND branch_id = $1`;
-        values.push(branchId);
-      }
 
       query += ` GROUP BY plan_id ORDER BY count DESC`;
 
