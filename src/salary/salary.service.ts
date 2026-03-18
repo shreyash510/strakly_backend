@@ -75,10 +75,11 @@ export class SalaryService {
     const staff = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        /* Staff live in public.users, not tenant users */
+        /* Staff info from public.users + role from user_gym_xref */
         const result = await client.query(
-          `SELECT id, name, role FROM public.users
-         WHERE id = $1 AND role IN ('manager', 'trainer')`,
+          `SELECT u.id, u.name, ugx.role FROM public.users u
+           JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gymId} AND ugx.is_active = true
+           WHERE u.id = $1 AND ugx.role IN ('manager', 'trainer', 'branch_admin', 'admin')`,
           [createSalaryDto.staffId],
         );
         return result.rows[0];
@@ -155,9 +156,9 @@ export class SalaryService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering for non-admin users (filter by staff's branch)
+        /* Branch filtering via user_gym_xref */
         if (filters.branchId !== undefined && filters.branchId !== null) {
-          whereClause += ` AND u.branch_id = $${paramIndex++}`;
+          whereClause += ` AND ugx.branch_id = $${paramIndex++}`;
           values.push(filters.branchId);
         }
 
@@ -184,10 +185,10 @@ export class SalaryService {
 
         const [salariesResult, countResult] = await Promise.all([
           client.query(
-            `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
+            `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, ugx.role as staff_role
            FROM staff_salaries s
-           /* Staff live in public.users, not tenant users */
            LEFT JOIN public.users u ON u.id = s.staff_id
+           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
            WHERE ${whereClause}
            ORDER BY s.year DESC, s.month DESC, s.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -195,8 +196,8 @@ export class SalaryService {
           ),
           client.query(
             `SELECT COUNT(*) as count FROM staff_salaries s
-           /* Staff live in public.users, not tenant users */
            LEFT JOIN public.users u ON u.id = s.staff_id
+           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
            WHERE ${whereClause}`,
             values,
           ),
@@ -249,10 +250,10 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
+          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, ugx.role as staff_role
          FROM staff_salaries s
-         /* Staff live in public.users, not tenant users */
          LEFT JOIN public.users u ON u.id = s.staff_id
+         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
          WHERE s.staff_id = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
          ORDER BY s.year DESC, s.month DESC`,
           [staffId, currentYear],
@@ -294,10 +295,10 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
+          `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, ugx.role as staff_role
          FROM staff_salaries s
-         /* Staff live in public.users, not tenant users */
          LEFT JOIN public.users u ON u.id = s.staff_id
+         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
          WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           [salaryId],
         );
@@ -390,10 +391,10 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT s.*, u.name as staff_name, u.branch_id as staff_branch_id
+          `SELECT s.*, u.name as staff_name, ugx.branch_id as staff_branch_id
            FROM staff_salaries s
-           /* Staff live in public.users, not tenant users */
            LEFT JOIN public.users u ON u.id = s.staff_id
+           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
            WHERE s.id = $1`,
           [salaryId],
         );
@@ -477,14 +478,13 @@ export class SalaryService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Build branch filter for staff
-        const branchFilter =
-          branchId !== null ? ` AND u.branch_id = ${branchId}` : '';
-        /* Staff live in public.users, not tenant users */
+        /* Branch filter via user_gym_xref (public.users has no branch_id/role) */
         const salaryBranchFilter =
           branchId !== null
-            ? ` AND s.staff_id IN (SELECT id FROM public.users WHERE branch_id = ${branchId})`
+            ? ` AND s.staff_id IN (SELECT ugx.user_id FROM public.user_gym_xref ugx WHERE ugx.gym_id = ${gymId} AND ugx.branch_id = ${branchId})`
             : '';
+        const staffBranchFilter =
+          branchId !== null ? ` AND ugx.branch_id = ${branchId}` : '';
 
         const [
           pendingResult,
@@ -503,10 +503,11 @@ export class SalaryService {
             `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2${salaryBranchFilter}`,
             [currentMonth, currentYear],
           ),
-          /* Staff live in public.users, not tenant users */
           client.query(
-            `SELECT COUNT(*) as count FROM public.users u
-           WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')${branchFilter}`,
+            `SELECT COUNT(*) as count FROM public.user_gym_xref ugx
+             JOIN public.users u ON u.id = ugx.user_id
+             WHERE ugx.gym_id = ${gymId} AND ugx.is_active = true AND u.status = 'active'
+             AND ugx.role IN ('manager', 'trainer')${staffBranchFilter}`,
           ),
         ]);
 
@@ -527,16 +528,17 @@ export class SalaryService {
 
   async getStaffList(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      /* Staff live in public.users, not tenant users */
-      let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.role, u.branch_id, b.name as branch_name
+      /* Staff live in public.users, role/branch in user_gym_xref */
+      let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, ugx.role, ugx.branch_id, b.name as branch_name
          FROM public.users u
-         LEFT JOIN branches b ON b.id = u.branch_id
-         WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')`;
+         JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gymId} AND ugx.is_active = true
+         LEFT JOIN public.branches b ON b.id = ugx.branch_id
+         WHERE u.status = 'active' AND ugx.role IN ('manager', 'trainer')`;
       const values: SqlValue[] = [];
 
-      // Branch filtering for non-admin users
+      /* Branch filtering */
       if (branchId !== null) {
-        query += ` AND u.branch_id = $1`;
+        query += ` AND ugx.branch_id = $1`;
         values.push(branchId);
       }
 
@@ -629,10 +631,11 @@ export class SalaryService {
                   continue;
                 }
 
-                // Check if staff is still active
-                /* Staff live in public.users, not tenant users */
+                /* Check if staff is still active (role is in user_gym_xref, not users) */
                 const staffResult = await client.query(
-                  `SELECT id FROM public.users WHERE id = $1 AND status = 'active' AND role IN ('manager', 'trainer')`,
+                  `SELECT u.id FROM public.users u
+                   JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gym.id} AND ugx.is_active = true
+                   WHERE u.id = $1 AND u.status = 'active' AND ugx.role IN ('manager', 'trainer')`,
                   [salary.staff_id],
                 );
 
