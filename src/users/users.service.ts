@@ -198,8 +198,6 @@ export class UsersService {
       managerPermissions: user.manager_permissions || user.managerPermissions || null,
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
-      branchIds: [],
-      branchNames: [],
       gym: gym
         ? {
             id: gym.id,
