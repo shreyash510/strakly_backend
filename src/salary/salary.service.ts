@@ -75,8 +75,9 @@ export class SalaryService {
     const staff = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        /* Staff live in public.users, not tenant users */
         const result = await client.query(
-          `SELECT id, name, role FROM users
+          `SELECT id, name, role FROM public.users
          WHERE id = $1 AND role IN ('manager', 'trainer')`,
           [createSalaryDto.staffId],
         );
@@ -185,7 +186,8 @@ export class SalaryService {
           client.query(
             `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
            FROM staff_salaries s
-           JOIN users u ON u.id = s.staff_id
+           /* Staff live in public.users, not tenant users */
+           LEFT JOIN public.users u ON u.id = s.staff_id
            WHERE ${whereClause}
            ORDER BY s.year DESC, s.month DESC, s.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -193,7 +195,8 @@ export class SalaryService {
           ),
           client.query(
             `SELECT COUNT(*) as count FROM staff_salaries s
-           JOIN users u ON u.id = s.staff_id
+           /* Staff live in public.users, not tenant users */
+           LEFT JOIN public.users u ON u.id = s.staff_id
            WHERE ${whereClause}`,
             values,
           ),
@@ -248,7 +251,8 @@ export class SalaryService {
         const result = await client.query(
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.role as staff_role
          FROM staff_salaries s
-         JOIN users u ON u.id = s.staff_id
+         /* Staff live in public.users, not tenant users */
+         LEFT JOIN public.users u ON u.id = s.staff_id
          WHERE s.staff_id = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
          ORDER BY s.year DESC, s.month DESC`,
           [staffId, currentYear],
@@ -292,7 +296,8 @@ export class SalaryService {
         const result = await client.query(
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, u.role as staff_role
          FROM staff_salaries s
-         JOIN users u ON u.id = s.staff_id
+         /* Staff live in public.users, not tenant users */
+         LEFT JOIN public.users u ON u.id = s.staff_id
          WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           [salaryId],
         );
@@ -387,7 +392,8 @@ export class SalaryService {
         const result = await client.query(
           `SELECT s.*, u.name as staff_name, u.branch_id as staff_branch_id
            FROM staff_salaries s
-           JOIN users u ON u.id = s.staff_id
+           /* Staff live in public.users, not tenant users */
+           LEFT JOIN public.users u ON u.id = s.staff_id
            WHERE s.id = $1`,
           [salaryId],
         );
@@ -474,9 +480,10 @@ export class SalaryService {
         // Build branch filter for staff
         const branchFilter =
           branchId !== null ? ` AND u.branch_id = ${branchId}` : '';
+        /* Staff live in public.users, not tenant users */
         const salaryBranchFilter =
           branchId !== null
-            ? ` AND s.staff_id IN (SELECT id FROM users WHERE branch_id = ${branchId})`
+            ? ` AND s.staff_id IN (SELECT id FROM public.users WHERE branch_id = ${branchId})`
             : '';
 
         const [
@@ -496,8 +503,9 @@ export class SalaryService {
             `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2${salaryBranchFilter}`,
             [currentMonth, currentYear],
           ),
+          /* Staff live in public.users, not tenant users */
           client.query(
-            `SELECT COUNT(*) as count FROM users u
+            `SELECT COUNT(*) as count FROM public.users u
            WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')${branchFilter}`,
           ),
         ]);
@@ -519,8 +527,9 @@ export class SalaryService {
 
   async getStaffList(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
+      /* Staff live in public.users, not tenant users */
       let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.role, u.branch_id, b.name as branch_name
-         FROM users u
+         FROM public.users u
          LEFT JOIN branches b ON b.id = u.branch_id
          WHERE u.status = 'active' AND u.role IN ('manager', 'trainer')`;
       const values: SqlValue[] = [];
@@ -621,8 +630,9 @@ export class SalaryService {
                 }
 
                 // Check if staff is still active
+                /* Staff live in public.users, not tenant users */
                 const staffResult = await client.query(
-                  `SELECT id FROM users WHERE id = $1 AND status = 'active' AND role IN ('manager', 'trainer')`,
+                  `SELECT id FROM public.users WHERE id = $1 AND status = 'active' AND role IN ('manager', 'trainer')`,
                   [salary.staff_id],
                 );
 

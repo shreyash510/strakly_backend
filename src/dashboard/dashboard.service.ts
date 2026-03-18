@@ -22,6 +22,8 @@ import {
   ActiveOfferDto,
   ClientFacilityDto,
   ClientAmenityDto,
+  UpcomingClassBookingDto,
+  UpcomingAppointmentDto,
 } from './dto/dashboard.dto';
 
 @Injectable()
@@ -789,12 +791,16 @@ export class DashboardService {
       attendanceStats,
       recentAttendance,
       activeOffers,
+      upcomingClassBookings,
+      upcomingAppointments,
     ] = await Promise.all([
       this.getClientUser(userId, gymId),
       this.getClientSubscription(userId, gymId),
       this.getClientAttendanceStats(userId, gymId),
       this.getClientRecentAttendance(userId, gymId),
       this.getClientActiveOffers(gymId, branchId),
+      this.getClientUpcomingClassBookings(userId, gymId),
+      this.getClientUpcomingAppointments(userId, gymId),
     ]);
 
     // Get gym info from public schema
@@ -844,6 +850,8 @@ export class DashboardService {
       activeOffers,
       facilities,
       amenities,
+      upcomingClassBookings,
+      upcomingAppointments,
     };
   }
 
@@ -1144,6 +1152,98 @@ export class DashboardService {
         offer.discount_type === 'percentage' ? Number(offer.discount_value) : 0,
       code: offer.code || undefined,
       endDate: new Date(offer.valid_to).toISOString().split('T')[0],
+    }));
+  }
+
+  private async getClientUpcomingClassBookings(
+    userId: number,
+    gymId: number,
+    limit = 5,
+  ): Promise<UpcomingClassBookingDto[]> {
+    const today = new Date().toISOString().split('T')[0];
+
+    const bookings = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT cb.id, ct.name as class_name, cs.start_time, cs.end_time,
+                  u.name as trainer_name, cb.status
+           FROM class_bookings cb
+           JOIN class_sessions cs ON cs.id = cb.class_session_id
+           JOIN class_types ct ON ct.id = cs.class_type_id
+           LEFT JOIN users u ON u.id = cs.trainer_id
+           WHERE cb.user_id = $1
+             AND cs.session_date = $2::DATE
+             AND cb.status = 'booked'
+           ORDER BY cs.start_time ASC
+           LIMIT $3`,
+          [userId, today, limit],
+        );
+        return result.rows;
+      },
+    );
+
+    return bookings.map((b: Record<string, any>) => ({
+      id: b.id,
+      className: b.class_name,
+      startTime: new Date(b.start_time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      endTime: new Date(b.end_time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      trainerName: b.trainer_name || undefined,
+      status: b.status,
+    }));
+  }
+
+  private async getClientUpcomingAppointments(
+    userId: number,
+    gymId: number,
+    limit = 5,
+  ): Promise<UpcomingAppointmentDto[]> {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    const appointments = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT a.id, a.title, a.start_time, a.end_time,
+                  u.name as trainer_name, a.status
+           FROM appointments a
+           LEFT JOIN users u ON u.id = a.trainer_id
+           WHERE a.user_id = $1
+             AND a.appointment_date = $2::DATE
+             AND a.start_time >= $3
+             AND a.status IN ('booked', 'confirmed')
+           ORDER BY a.start_time ASC
+           LIMIT $4`,
+          [userId, today, now, limit],
+        );
+        return result.rows;
+      },
+    );
+
+    return appointments.map((a: Record<string, any>) => ({
+      id: a.id,
+      title: a.title,
+      startTime: new Date(a.start_time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      endTime: new Date(a.end_time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      trainerName: a.trainer_name || undefined,
+      status: a.status,
     }));
   }
 }
