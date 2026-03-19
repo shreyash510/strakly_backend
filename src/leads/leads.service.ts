@@ -66,11 +66,6 @@ export class LeadsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`l.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
-
       if (filters.pipelineStage) {
         conditions.push(`l.pipeline_stage = $${paramIndex++}`);
         values.push(filters.pipelineStage);
@@ -388,10 +383,6 @@ export class LeadsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
       if (dateFilters.dateFrom) {
         conditions.push(`created_at >= $${paramIndex++}`);
         values.push(dateFilters.dateFrom);

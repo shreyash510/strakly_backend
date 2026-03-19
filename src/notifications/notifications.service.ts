@@ -208,13 +208,6 @@ export class NotificationsService {
       const params: SqlValue[] = [userId];
       let paramIndex = 2;
 
-      // Branch filter - if user has branch restriction
-      if (branchId !== null) {
-        conditions.push(`(branch_id IS NULL OR branch_id = $${paramIndex})`);
-        params.push(branchId);
-        paramIndex++;
-      }
-
       // Type filter
       if (query.type) {
         conditions.push(`type = $${paramIndex}`);
@@ -282,11 +275,6 @@ export class NotificationsService {
       `;
       const params: SqlValue[] = [userId];
 
-      if (branchId !== null) {
-        query += ` AND (branch_id IS NULL OR branch_id = $2)`;
-        params.push(branchId);
-      }
-
       const result = await client.query(query, params);
       return parseInt(result.rows[0].count, 10);
     });
@@ -334,11 +322,6 @@ export class NotificationsService {
         WHERE user_id = $1 AND is_read = FALSE
       `;
       const params: SqlValue[] = [userId];
-
-      if (branchId !== null) {
-        query += ` AND (branch_id IS NULL OR branch_id = $2)`;
-        params.push(branchId);
-      }
 
       const result = await client.query(query, params);
       return result.rowCount || 0;

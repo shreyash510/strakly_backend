@@ -126,12 +126,6 @@ export class AppointmentsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['s.is_deleted = FALSE'];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -346,11 +340,6 @@ export class AppointmentsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`a.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       // Trainers can only see their own appointments (as trainer or client)
       if (userRole === 'trainer' && userId) {
@@ -804,11 +793,6 @@ export class AppointmentsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`sp.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

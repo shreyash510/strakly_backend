@@ -54,12 +54,6 @@ export class MembershipsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering: null = admin (all branches), number = specific branch
-        if (branchId !== null) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
-
         if (filters?.status) {
           whereClause += ` AND m.status = $${paramIndex++}`;
           values.push(filters.status);
@@ -182,12 +176,6 @@ export class MembershipsService {
          WHERE m.id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $2`;
-          values.push(branchId);
-        }
-
         const result = await client.query(query, values);
         return result.rows[0];
       },
@@ -216,12 +204,6 @@ export class MembershipsService {
          WHERE m.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [userId];
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $2`;
-          values.push(branchId);
-        }
-
         query += ` ORDER BY m.created_at DESC`;
 
         const result = await client.query(query, values);
@@ -247,12 +229,6 @@ export class MembershipsService {
           'm.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)';
         const values: SqlValue[] = [userId];
         let paramIndex = 2;
-
-        // Branch filtering
-        if (branchId !== null) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         const [membershipsResult, countResult] = await Promise.all([
           client.query(
@@ -841,12 +817,6 @@ export class MembershipsService {
            AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [now, futureDate];
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $3`;
-          values.push(branchId);
-        }
-
         query += ` ORDER BY m.end_date ASC`;
 
         const result = await client.query(query, values);
@@ -927,12 +897,6 @@ export class MembershipsService {
       let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
       const values: SqlValue[] = [];
 
-      // Branch filtering: show branch-specific plans + global plans (branch_id IS NULL)
-      if (branchId !== null) {
-        query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
-        values.push(branchId);
-      }
-
       query += ` ORDER BY display_order ASC`;
 
       const result = await client.query(query, values);
@@ -980,12 +944,6 @@ export class MembershipsService {
          WHERE (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
         values.push(limit);

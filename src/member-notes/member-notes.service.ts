@@ -45,11 +45,6 @@ export class MemberNotesService {
         values.push(filters.userId);
       }
 
-      if (branchId !== null) {
-        conditions.push(`(n.branch_id = $${paramIndex++} OR n.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       if (filters.noteType) {
         conditions.push(`n.note_type = $${paramIndex++}`);
         values.push(filters.noteType);

@@ -138,11 +138,6 @@ export class ClassesService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(ct.branch_id = $${paramIndex++} OR ct.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       if (filters.category) {
         conditions.push(`ct.category = $${paramIndex++}`);
         values.push(filters.category);
@@ -267,11 +262,6 @@ export class ClassesService {
       const conditions: string[] = ['cs.is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(cs.branch_id = $${paramIndex++} OR cs.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -444,11 +434,6 @@ export class ClassesService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       if (filters.fromDate) {
         conditions.push(`s.date >= $${paramIndex++}`);
         values.push(filters.fromDate);
@@ -548,11 +533,6 @@ export class ClassesService {
         const conditions: string[] = ['cs.is_deleted = FALSE', 'cs.is_active = TRUE'];
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        if (branchId !== null) {
-          conditions.push(`cs.branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
 
         if (dto.scheduleId) {
           conditions.push(`cs.id = $${paramIndex++}`);
