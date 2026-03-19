@@ -536,12 +536,12 @@ export class ProductsService {
       }
 
       if (filters.startDate) {
-        conditions.push(`s.sold_at >= $${paramIndex++}`);
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
         values.push(filters.startDate);
       }
 
       if (filters.endDate) {
-        conditions.push(`s.sold_at <= $${paramIndex++}`);
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
         values.push(filters.endDate);
       }
 
@@ -844,12 +844,12 @@ export class ProductsService {
       let paramIndex = 1;
 
       if (filters.startDate) {
-        conditions.push(`s.sold_at >= $${paramIndex++}`);
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
         values.push(filters.startDate);
       }
 
       if (filters.endDate) {
-        conditions.push(`s.sold_at <= $${paramIndex++}`);
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
         values.push(filters.endDate);
       }
 
