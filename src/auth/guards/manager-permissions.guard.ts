@@ -70,23 +70,13 @@ export class ManagerPermissionsGuard implements CanActivate {
     );
 
     if (!managerPermissions) {
-      // No permissions set — deny by default for destructive actions, allow for read/create
-      if (permission.action === 'delete') {
-        throw new ForbiddenException(
-          `You do not have permission to ${permission.action} ${permission.module}`,
-        );
-      }
+      // No permissions set — allow all actions by default
       return true;
     }
 
     const modulePerms = managerPermissions[permission.module];
     if (!modulePerms) {
-      // Module not in permissions — use defaults (allow all except delete)
-      if (permission.action === 'delete') {
-        throw new ForbiddenException(
-          `You do not have permission to ${permission.action} ${permission.module}`,
-        );
-      }
+      // Module not in permissions — allow all actions by default
       return true;
     }
 
