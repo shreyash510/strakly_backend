@@ -574,6 +574,151 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Returns sales grouped by transaction (payment_id).
+   * Each transaction row includes nested items array.
+   * Single sales without payment_id are treated as their own transaction.
+   */
+  async findSalesTransactions(
+    gymId: number,
+    branchId: number | null,
+    filters: SalesFiltersDto = {},
+  ) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 15;
+    const offset = (page - 1) * limit;
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (filters.paymentMethod) {
+        conditions.push(`s.payment_method = $${paramIndex++}`);
+        values.push(filters.paymentMethod);
+      }
+
+      if (filters.startDate) {
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
+        values.push(filters.startDate);
+      }
+
+      if (filters.endDate) {
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
+        values.push(filters.endDate);
+      }
+
+      if (filters.search) {
+        conditions.push(`(p.name ILIKE $${paramIndex} OR u.name ILIKE $${paramIndex})`);
+        values.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Count distinct transactions (group key = COALESCE(payment_id, -id) to make single sales unique)
+      const countResult = await client.query(
+        `SELECT COUNT(DISTINCT COALESCE(s.payment_id::text, 'single_' || s.id::text)) as total
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE ${whereClause}`,
+        values,
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      // Get paginated transaction keys
+      const txKeysResult = await client.query(
+        `SELECT
+           COALESCE(s.payment_id::text, 'single_' || s.id::text) as tx_key,
+           MAX(s.sold_at) as last_sold_at
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE ${whereClause}
+         GROUP BY tx_key
+         ORDER BY last_sold_at DESC
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...values, limit, offset],
+      );
+
+      if (txKeysResult.rows.length === 0) {
+        return { data: [], total, page, limit };
+      }
+
+      // Extract payment_ids and single sale ids from transaction keys
+      const paymentIds: number[] = [];
+      const singleSaleIds: number[] = [];
+      for (const row of txKeysResult.rows) {
+        const key = row.tx_key as string;
+        if (key.startsWith('single_')) {
+          singleSaleIds.push(parseInt(key.replace('single_', '')));
+        } else {
+          paymentIds.push(parseInt(key));
+        }
+      }
+
+      // Build condition to fetch all sale rows for these transactions
+      const fetchConditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
+      const fetchValues: SqlValue[] = [];
+      let fetchParamIndex = 1;
+      const orParts: string[] = [];
+
+      if (paymentIds.length > 0) {
+        orParts.push(`s.payment_id = ANY($${fetchParamIndex++})`);
+        fetchValues.push(paymentIds);
+      }
+      if (singleSaleIds.length > 0) {
+        orParts.push(`(s.payment_id IS NULL AND s.id = ANY($${fetchParamIndex++}))`);
+        fetchValues.push(singleSaleIds);
+      }
+      fetchConditions.push(`(${orParts.join(' OR ')})`);
+
+      const salesResult = await client.query(
+        `SELECT s.*, p.name as product_name, u.name as buyer_name, staff.name as sold_by_name
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         LEFT JOIN users staff ON staff.id = s.sold_by
+         WHERE ${fetchConditions.join(' AND ')}
+         ORDER BY s.sold_at DESC`,
+        fetchValues,
+      );
+
+      // Group into transactions
+      const txMap = new Map<string, any[]>();
+      for (const row of salesResult.rows) {
+        const key = row.payment_id ? String(row.payment_id) : `single_${row.id}`;
+        if (!txMap.has(key)) txMap.set(key, []);
+        txMap.get(key)!.push(this.formatSale(row));
+      }
+
+      // Build response in same order as txKeysResult
+      const transactions = txKeysResult.rows.map((r) => {
+        const key = r.tx_key as string;
+        const items = txMap.get(key) || [];
+        const first = items[0];
+        return {
+          transactionKey: key,
+          paymentId: first?.paymentId || null,
+          receiptNumber: first?.paymentId
+            ? `INV-${String(first.paymentId).padStart(5, '0')}`
+            : `SALE-${String(first?.id || 0).padStart(5, '0')}`,
+          items,
+          itemCount: items.reduce((sum, i) => sum + i.quantity, 0),
+          totalAmount: items.reduce((sum, i) => sum + i.totalAmount, 0),
+          paymentMethod: first?.paymentMethod || 'cash',
+          soldAt: first?.soldAt,
+          buyerName: first?.buyerName || null,
+          soldByName: first?.soldByName || null,
+          notes: first?.notes || null,
+        };
+      });
+
+      return { data: transactions, total, page, limit };
+    });
+  }
+
   async findOneSale(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
@@ -1806,6 +1951,111 @@ export class ProductsService {
         ...this.formatStockTake(updated.rows[0]),
         adjustmentsApplied: dto.applyAdjustments || false,
       };
+    });
+  }
+
+  // ─── Void / Delete Sale ───
+
+  async voidSale(saleId: number, gymId: number, deletedById: number) {
+    // Verify sale exists and is not already deleted
+    const sale = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, p.stock_quantity as current_stock
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE s.id = $1`,
+        [saleId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Sale with ID ${saleId} not found`);
+      }
+      if (result.rows[0].is_deleted) {
+        throw new BadRequestException(`Sale with ID ${saleId} is already voided`);
+      }
+      return result.rows[0];
+    });
+
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // 1. Soft-delete the sale
+      await client.query(
+        `UPDATE product_sales SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1`,
+        [saleId, deletedById],
+      );
+
+      // 2. Restore stock
+      const stockResult = await client.query(
+        `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING stock_quantity`,
+        [sale.quantity, sale.product_id],
+      );
+
+      // 3. Create reversal stock movement
+      const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
+      const stockBefore = stockAfter - sale.quantity;
+      await client.query(
+        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [sale.product_id, sale.branch_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, saleId, deletedById],
+      );
+
+      // 4. Void the payment record
+      if (sale.payment_id) {
+        await client.query(
+          `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE id = $1`,
+          [sale.payment_id],
+        );
+      }
+
+      return { success: true, message: 'Sale voided successfully' };
+    });
+  }
+
+  async voidBatchSale(paymentId: number, gymId: number, deletedById: number) {
+    // Find all sales with this payment_id that are not already deleted
+    const sales = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, p.stock_quantity as current_stock
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE s.payment_id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
+        [paymentId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`No active sales found for payment ID ${paymentId}`);
+      }
+      return result.rows;
+    });
+
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      for (const sale of sales) {
+        // 1. Soft-delete the sale
+        await client.query(
+          `UPDATE product_sales SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1`,
+          [sale.id, deletedById],
+        );
+
+        // 2. Restore stock
+        const stockResult = await client.query(
+          `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING stock_quantity`,
+          [sale.quantity, sale.product_id],
+        );
+
+        // 3. Create reversal stock movement
+        const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
+        const stockBefore = stockAfter - sale.quantity;
+        await client.query(
+          `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [sale.product_id, sale.branch_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, sale.id, deletedById],
+        );
+      }
+
+      // 4. Void the payment record
+      await client.query(
+        `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE id = $1`,
+        [paymentId],
+      );
+
+      return { success: true, voided: sales.length, message: `${sales.length} sale(s) voided successfully` };
     });
   }
 }
