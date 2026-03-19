@@ -96,11 +96,6 @@ export class ProductsService {
       const conditions: string[] = ['(is_deleted = FALSE OR is_deleted IS NULL)'];
       const values: SqlValue[] = [];
 
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $1 OR branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       const result = await client.query(
         `SELECT * FROM product_categories WHERE ${conditions.join(' AND ')} ORDER BY display_order ASC, name ASC`,
         values,
@@ -200,12 +195,6 @@ export class ProductsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-        paramIndex++;
-      }
-
       if (filters.categoryId) {
         conditions.push(`p.category_id = $${paramIndex++}`);
         values.push(filters.categoryId);
@@ -275,11 +264,6 @@ export class ProductsService {
         'p.stock_quantity <= p.low_stock_threshold',
       ];
       const values: SqlValue[] = [];
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $1 OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `SELECT p.*, pc.name as category_name
@@ -530,11 +514,6 @@ export class ProductsService {
       const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       if (filters.productId) {
         conditions.push(`s.product_id = $${paramIndex++}`);
@@ -864,11 +843,6 @@ export class ProductsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       if (filters.startDate) {
         conditions.push(`s.sold_at >= $${paramIndex++}`);
         values.push(filters.startDate);
@@ -973,11 +947,6 @@ export class ProductsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       /* Determine date grouping expression and default range */
       let dateExpr: string;
       let defaultStart: string;
@@ -1037,12 +1006,6 @@ export class ProductsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1110,11 +1073,6 @@ export class ProductsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.barcode = $1'];
       const values: SqlValue[] = [barcode];
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $2 OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `SELECT p.*, pc.name as category_name
@@ -1229,12 +1187,6 @@ export class ProductsService {
         'p.is_active = TRUE',
       ];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1312,11 +1264,6 @@ export class ProductsService {
       ];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       values.push(days);
       const daysParam = paramIndex++;
@@ -1413,11 +1360,6 @@ export class ProductsService {
       const values: SqlValue[] = [productId];
       let paramIndex = 2;
 
-      if (branchId !== null) {
-        conditions.push(`sm.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
-
       if (filters.movementType) {
         conditions.push(`sm.movement_type = $${paramIndex++}`);
         values.push(filters.movementType);
@@ -1476,11 +1418,6 @@ export class ProductsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`sm.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       if (filters.productId) {
         conditions.push(`sm.product_id = $${paramIndex++}`);
@@ -1596,12 +1533,6 @@ export class ProductsService {
       /* Fetch all active, non-deleted products for this branch */
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const products = await client.query(
         `SELECT p.id, p.name, p.stock_quantity
@@ -1649,11 +1580,6 @@ export class ProductsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(st.branch_id = $${paramIndex++} OR st.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
