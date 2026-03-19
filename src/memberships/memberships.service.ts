@@ -339,15 +339,17 @@ export class MembershipsService {
     // Use user's branch if branchId not provided
     const membershipBranchId = branchId ?? user.branch_id;
 
-    // If user already has an active membership, cancel it (renewal flow)
+    // If user already has an active membership, queue the new one after it ends (renewal)
+    // Old membership stays active and will expire naturally via the scheduler
     const activeMembership = await this.getActiveMembership(dto.userId, gymId);
+    let isRenewal = false;
     if (activeMembership) {
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        await client.query(
-          `UPDATE memberships SET status = 'expired', updated_at = NOW() WHERE id = $1`,
-          [activeMembership.id],
-        );
-      });
+      const oldEndDate = new Date(activeMembership.endDate);
+      // New membership starts from old membership's end date (not today)
+      if (oldEndDate > new Date()) {
+        dto.startDate = oldEndDate.toISOString();
+        isRenewal = true;
+      }
     }
 
     // Get plan details
@@ -410,7 +412,7 @@ export class MembershipsService {
         const membershipResult = await client.query(
           `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
           original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $14, $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
          RETURNING *`,
           [
             membershipBranchId,
@@ -426,6 +428,7 @@ export class MembershipsService {
             dto.paymentMethod || 'cash',
             dto.notes || null,
             dto.autoRenew || false,
+            isRenewal ? 'pending' : 'active',
           ],
         );
         const txMembership = membershipResult.rows[0];

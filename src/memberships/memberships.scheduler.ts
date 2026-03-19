@@ -50,7 +50,33 @@ export class MembershipsScheduler {
               );
               const expiredCount = expiredResult.rowCount || 0;
 
-              // 2. Update client status to 'expired' if they have NO active membership
+              // 2. Activate pending memberships whose start date has arrived
+              await client.query(
+                `UPDATE memberships
+                 SET status = 'active', updated_at = NOW()
+                 WHERE status = 'pending'
+                 AND start_date <= NOW()
+                 AND end_date >= NOW()
+                 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+              );
+
+              // 3. Update client status — reactivate clients with newly active memberships
+              await client.query(
+                `UPDATE users
+                 SET status = 'active', updated_at = NOW()
+                 WHERE role = 'client'
+                 AND status = 'expired'
+                 AND (is_deleted = FALSE OR is_deleted IS NULL)
+                 AND id IN (
+                   SELECT DISTINCT user_id FROM memberships
+                   WHERE status = 'active'
+                   AND start_date <= NOW()
+                   AND end_date >= NOW()
+                   AND (is_deleted = FALSE OR is_deleted IS NULL)
+                 )`,
+              );
+
+              // 4. Update client status to 'expired' if they have NO active or pending membership
               const usersResult = await client.query(
                 `UPDATE users
                  SET status = 'expired', updated_at = NOW()
@@ -59,7 +85,7 @@ export class MembershipsScheduler {
                  AND (is_deleted = FALSE OR is_deleted IS NULL)
                  AND id NOT IN (
                    SELECT DISTINCT user_id FROM memberships
-                   WHERE status = 'active'
+                   WHERE status IN ('active', 'pending')
                    AND end_date >= NOW()
                    AND (is_deleted = FALSE OR is_deleted IS NULL)
                  )`,
