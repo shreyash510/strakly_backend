@@ -47,6 +47,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
+import { MigrationModule } from './migration/migration.module';
 
 // Health check
 import { HealthModule } from './health/health.module';
@@ -106,6 +107,7 @@ import { HealthModule } from './health/health.module';
     GuestVisitsModule,
     EquipmentModule,
     ProductsModule,
+    MigrationModule,
   ],
   controllers: [AppController],
   providers: [
