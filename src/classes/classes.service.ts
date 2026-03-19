@@ -298,6 +298,13 @@ export class ClassesService {
   }
 
   async createSchedule(gymId: number, branchId: number | null, dto: CreateClassScheduleDto) {
+    if (dto.startTime >= dto.endTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+    if (dto.startDate && dto.endDate && dto.endDate < dto.startDate) {
+      throw new BadRequestException('End date must be on or after start date');
+    }
+
     const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
 
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {

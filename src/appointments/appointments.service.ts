@@ -415,6 +415,10 @@ export class AppointmentsService {
   }
 
   async createAppointment(gymId: number, branchId: number | null, dto: CreateAppointmentDto, createdBy: number, userRole: string) {
+    if (new Date(dto.startTime) >= new Date(dto.endTime)) {
+      throw new BadRequestException('End time must be after start time');
+    }
+
     // Security: clients can only book for themselves
     if (userRole === 'client' && dto.userId !== createdBy) {
       throw new ForbiddenException('You can only book appointments for yourself');
