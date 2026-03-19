@@ -1795,32 +1795,33 @@ export class UsersService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check for active memberships (exclude soft-deleted memberships)
-    const activeMemberships = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT COUNT(*) as count FROM memberships
-         WHERE user_id = $1 AND status IN ('active', 'pending')
-         AND (is_deleted = FALSE OR is_deleted IS NULL)`,
-          [id],
-        );
-        return parseInt(result.rows[0].count, 10);
-      },
-    );
-
-    if (activeMemberships > 0) {
-      throw new BadRequestException(
-        'Cannot delete client. Client has active or pending memberships. Please cancel the memberships first.',
-      );
-    }
-
-    // Soft delete client from tenant schema
+    // Cancel any active memberships before deleting
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-        [id, deletedById || null],
+        `UPDATE memberships SET status = 'cancelled', updated_at = NOW()
+         WHERE user_id = $1 AND status IN ('active', 'pending')
+         AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+        [id],
       );
+    });
+
+    // Hard delete client and all related records from tenant schema
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Delete all related records (order matters — FK dependencies)
+      await client.query(`DELETE FROM payments WHERE payer_id = $1`, [id]);
+      await client.query(`DELETE FROM memberships WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM attendance WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM member_notes WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM class_bookings WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM appointments WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM product_sales WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM diet_assignments WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM body_metrics WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM body_metrics_history WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM notifications WHERE user_id = $1`, [id]);
+      // Delete the user last
+      await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
     return { success: true };
