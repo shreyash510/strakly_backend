@@ -339,10 +339,15 @@ export class MembershipsService {
     // Use user's branch if branchId not provided
     const membershipBranchId = branchId ?? user.branch_id;
 
-    // Check for active membership
+    // If user already has an active membership, cancel it (renewal flow)
     const activeMembership = await this.getActiveMembership(dto.userId, gymId);
     if (activeMembership) {
-      throw new ConflictException('User already has an active membership');
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        await client.query(
+          `UPDATE memberships SET status = 'expired', updated_at = NOW() WHERE id = $1`,
+          [activeMembership.id],
+        );
+      });
     }
 
     // Get plan details
