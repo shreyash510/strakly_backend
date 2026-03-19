@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsInt,
   IsBoolean,
   IsArray,
   IsIn,
@@ -102,12 +103,16 @@ export class CreateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   stockQuantity?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   lowStockThreshold?: number;
 
@@ -168,6 +173,8 @@ export class UpdateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   lowStockThreshold?: number;
 
@@ -205,6 +212,7 @@ export class CreateProductSaleDto {
 
   @ApiProperty()
   @IsNumber()
+  @IsInt()
   @Min(1)
   @Type(() => Number)
   quantity: number;
