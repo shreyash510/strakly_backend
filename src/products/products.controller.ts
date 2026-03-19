@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   UseGuards,
   Res,
+  Request,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -119,6 +120,17 @@ export class ProductsController {
     return this.productsService.findAllSales(gymId, branchId, filters);
   }
 
+  @Get('sales/transactions')
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'List sales grouped by transaction (paymentId)' })
+  findSalesTransactions(
+    @GymId() gymId: number,
+    @OptionalBranchId() branchId: number | null,
+    @Query() filters: SalesFiltersDto,
+  ) {
+    return this.productsService.findSalesTransactions(gymId, branchId, filters);
+  }
+
   @Get('sales/stats')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get sales statistics' })
@@ -187,6 +199,30 @@ export class ProductsController {
     @Body() dto: CreateBatchSaleDto,
   ) {
     return this.productsService.createBatchSale(gymId, branchId, dto, userId);
+  }
+
+  @Delete('sales/batch/:paymentId')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Void all sales in a batch (admin only)' })
+  @ApiParam({ name: 'paymentId', type: Number })
+  voidBatchSale(
+    @Param('paymentId', ParseIntPipe) paymentId: number,
+    @GymId() gymId: number,
+    @Request() req,
+  ) {
+    return this.productsService.voidBatchSale(paymentId, gymId, req.user.userId);
+  }
+
+  @Delete('sales/:id')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Void a product sale (admin only)' })
+  @ApiParam({ name: 'id', type: Number })
+  voidSale(
+    @Param('id', ParseIntPipe) id: number,
+    @GymId() gymId: number,
+    @Request() req,
+  ) {
+    return this.productsService.voidSale(id, gymId, req.user.userId);
   }
 
   /* ─── Cross-product Stock Movements ─── */

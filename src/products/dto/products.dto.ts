@@ -345,6 +345,11 @@ export class SalesFiltersDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
   page?: number;
