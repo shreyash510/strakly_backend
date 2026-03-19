@@ -45,17 +45,9 @@ export class OffersService {
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
 
       if (!includeInactive) {
         conditions.push('is_active = true');
-      }
-
-      // Branch filtering: null = admin (all branches), number = specific branch + global offers
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
-        values.push(branchId);
-        paramIndex++;
       }
 
       const whereClause =
@@ -70,18 +62,9 @@ export class OffersService {
 
   async findActive(gymId: number, branchId: number | null = null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-      const values: SqlValue[] = [];
+      const query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL) ORDER BY valid_to ASC`;
 
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
-        values.push(branchId);
-      }
-
-      query += ` ORDER BY valid_to ASC`;
-
-      const result = await client.query(query, values);
+      const result = await client.query(query);
       return result.rows.map((o: Record<string, any>) => this.formatOffer(o));
     });
   }
@@ -90,14 +73,8 @@ export class OffersService {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -119,14 +96,8 @@ export class OffersService {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [code];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -148,14 +119,8 @@ export class OffersService {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [code];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];

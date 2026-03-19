@@ -125,12 +125,6 @@ export class DietsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering
-        if (filters?.branchId !== undefined && filters.branchId !== null) {
-          whereClause += ` AND d.branch_id = $${paramIndex++}`;
-          values.push(filters.branchId);
-        }
-
         if (filters?.status && filters.status !== 'all') {
           whereClause += ` AND d.status = $${paramIndex++}`;
           values.push(filters.status);
@@ -186,14 +180,8 @@ export class DietsService {
     const diet = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT d.* FROM diets d WHERE d.id = $1`;
+        const query = `SELECT d.* FROM diets d WHERE d.id = $1`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          query += ` AND d.branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -399,15 +387,8 @@ export class DietsService {
     const assignments = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
+        const whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
         const values: SqlValue[] = [dietId];
-        let paramIndex = 2;
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          whereClause += ` AND da.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         const result = await client.query(
           `SELECT da.*, d.title as diet_title, d.type as diet_type, d.category as diet_category,

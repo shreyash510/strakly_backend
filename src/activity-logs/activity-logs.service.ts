@@ -70,12 +70,6 @@ export class ActivityLogsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering
-        if (branchId !== null) {
-          conditions.push(`branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
-
         if (filters.actorId) {
           conditions.push(`actor_id = $${paramIndex++}`);
           values.push(filters.actorId);

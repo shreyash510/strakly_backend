@@ -56,11 +56,6 @@ export class ReferralsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`r.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
-
       if (filters.status) {
         conditions.push(`r.status = $${paramIndex++}`);
         values.push(filters.status);
@@ -255,11 +250,6 @@ export class ReferralsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
