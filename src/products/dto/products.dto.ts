@@ -263,6 +263,17 @@ export class CreateBatchSaleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Discount type: percentage or flat' })
+  @IsOptional()
+  @IsString()
+  discountType?: 'percentage' | 'flat';
+
+  @ApiPropertyOptional({ description: 'Discount value (percentage 0-100 or flat amount)' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountValue?: number;
 }
 
 // ─── Filter DTOs ───

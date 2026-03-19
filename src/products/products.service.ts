@@ -796,6 +796,18 @@ export class ProductsService {
         sales.push({ ...sale.rows[0], product_name: p.name });
       }
 
+      // Calculate discount
+      let discountAmount = 0;
+      if (dto.discountType && dto.discountValue && dto.discountValue > 0) {
+        if (dto.discountType === 'percentage') {
+          discountAmount = batchTotal * (dto.discountValue / 100);
+        } else {
+          discountAmount = dto.discountValue;
+        }
+        discountAmount = Math.min(discountAmount, batchTotal); // Can't exceed total
+      }
+      const finalTotal = batchTotal - discountAmount;
+
       // Create single payment for the batch
       const buyerName = dto.userId
         ? (
@@ -813,7 +825,7 @@ export class ProductsService {
         buyerName,
         batchTotal,
         batchTax,
-        batchTotal,
+        finalTotal,
         dto.paymentMethod,
         soldBy,
       );
@@ -828,7 +840,7 @@ export class ProductsService {
 
       return {
         sales: sales.map((s) => this.formatSale(s)),
-        payment: { id: payment.id, totalAmount: batchTotal },
+        payment: { id: payment.id, totalAmount: batchTotal, discountAmount, finalTotal },
       };
     });
   }
