@@ -21,6 +21,7 @@ import {
   ApiHeader,
 } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
+import { MembershipsScheduler } from './memberships.scheduler';
 import {
   CreateMembershipDto,
   UpdateMembershipDto,
@@ -44,6 +45,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 export class MembershipsController {
   constructor(
     private readonly membershipsService: MembershipsService,
+    private readonly membershipsScheduler: MembershipsScheduler,
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
@@ -595,6 +597,14 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
+  }
+
+  @Post('run-expiry-check')
+  @Roles('superadmin', 'admin')
+  @ApiOperation({ summary: 'Manually trigger membership expiry check' })
+  async runExpiryCheck() {
+    await this.membershipsScheduler.handleExpiredMemberships();
+    return { message: 'Membership expiry check completed' };
   }
 
 }
