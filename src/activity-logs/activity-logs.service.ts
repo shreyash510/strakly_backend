@@ -338,6 +338,54 @@ export class ActivityLogsService {
     );
   }
 
+  /**
+   * Get activity stats (counts by action, most active staff)
+   */
+  async getStats(
+    gymId: number,
+    branchId: number | null = null,
+  ) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const [actionCountsResult, activeStaffResult, totalResult, todayResult] =
+        await Promise.all([
+          client.query(
+            `SELECT action_category, COUNT(*) as count
+             FROM activity_logs
+             GROUP BY action_category
+             ORDER BY count DESC
+             LIMIT 20`,
+          ),
+          client.query(
+            `SELECT actor_id, actor_name, actor_type, COUNT(*) as count
+             FROM activity_logs
+             WHERE actor_type IN ('admin', 'manager', 'trainer')
+             GROUP BY actor_id, actor_name, actor_type
+             ORDER BY count DESC
+             LIMIT 10`,
+          ),
+          client.query(`SELECT COUNT(*) as count FROM activity_logs`),
+          client.query(
+            `SELECT COUNT(*) as count FROM activity_logs WHERE created_at >= CURRENT_DATE`,
+          ),
+        ]);
+
+      return {
+        totalLogs: parseInt(totalResult.rows[0]?.count || '0', 10),
+        todayLogs: parseInt(todayResult.rows[0]?.count || '0', 10),
+        actionCounts: actionCountsResult.rows.map((r: Record<string, any>) => ({
+          category: r.action_category,
+          count: parseInt(r.count, 10),
+        })),
+        activeStaff: activeStaffResult.rows.map((r: Record<string, any>) => ({
+          actorId: r.actor_id,
+          actorName: r.actor_name,
+          actorType: r.actor_type,
+          count: parseInt(r.count, 10),
+        })),
+      };
+    });
+  }
+
   async logPaymentReceived(
     gymId: number,
     branchId: number | null,
