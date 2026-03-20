@@ -70,6 +70,9 @@ export class ActivityLogsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
+        // Only show manager and trainer activity logs
+        conditions.push(`actor_type IN ('manager', 'trainer')`);
+
         if (filters.actorId) {
           conditions.push(`actor_id = $${paramIndex++}`);
           values.push(filters.actorId);
@@ -149,7 +152,7 @@ export class ActivityLogsService {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 ORDER BY created_at DESC LIMIT 100`;
+        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 AND actor_type IN ('manager', 'trainer') ORDER BY created_at DESC LIMIT 100`;
         const values: SqlValue[] = [targetType, targetId];
 
         const result = await client.query(query, values);
@@ -346,11 +349,14 @@ export class ActivityLogsService {
     branchId: number | null = null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
+      const staffFilter = `actor_type IN ('manager', 'trainer')`;
+
       const [actionCountsResult, activeStaffResult, totalResult, todayResult] =
         await Promise.all([
           client.query(
             `SELECT action_category, COUNT(*) as count
              FROM activity_logs
+             WHERE ${staffFilter}
              GROUP BY action_category
              ORDER BY count DESC
              LIMIT 20`,
@@ -358,14 +364,14 @@ export class ActivityLogsService {
           client.query(
             `SELECT actor_id, actor_name, actor_type, COUNT(*) as count
              FROM activity_logs
-             WHERE actor_type IN ('admin', 'manager', 'trainer')
+             WHERE ${staffFilter}
              GROUP BY actor_id, actor_name, actor_type
              ORDER BY count DESC
              LIMIT 10`,
           ),
-          client.query(`SELECT COUNT(*) as count FROM activity_logs`),
+          client.query(`SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}`),
           client.query(
-            `SELECT COUNT(*) as count FROM activity_logs WHERE created_at >= CURRENT_DATE`,
+            `SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter} AND created_at >= CURRENT_DATE`,
           ),
         ]);
 

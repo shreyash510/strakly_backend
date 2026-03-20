@@ -81,6 +81,50 @@ export class UsersService {
   }
 
   /**
+   * Check if email already exists in any tenant schema across all gyms.
+   * Returns gym name and role if found, null otherwise.
+   */
+  private async emailExistsInAnyTenant(
+    email: string,
+    excludeGymId?: number,
+  ): Promise<{ gymName: string; role: string } | null> {
+    const gyms = await this.prisma.gym.findMany({
+      where: { isActive: true, tenantSchemaName: { not: null } },
+      select: { id: true, name: true },
+    });
+
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < gyms.length; i += BATCH_SIZE) {
+      const batch = gyms.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (gym) => {
+          if (excludeGymId && gym.id === excludeGymId) return null;
+
+          const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!schemaExists) return null;
+
+          const user = await this.tenantService.executeInTenant(gym.id, async (client) => {
+            const result = await client.query(
+              `SELECT role FROM users WHERE email = $1 AND (is_deleted = FALSE OR is_deleted IS NULL) LIMIT 1`,
+              [email],
+            );
+            return result.rows[0];
+          });
+
+          return user ? { gymName: gym.name, role: user.role } : null;
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          return result.value;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Role hierarchy for user management
    * Higher level can manage lower levels
    * admin > manager > trainer > client
@@ -249,20 +293,12 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    // Check if email exists in tenant schema
-    const existingTenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (existingTenantUser) {
-      throw new ConflictException('Email already exists in this gym');
+    // Check if email already exists in any tenant schema across all gyms
+    const emailExistsInTenant = await this.emailExistsInAnyTenant(dto.email);
+    if (emailExistsInTenant) {
+      throw new ConflictException(
+        `This email is already registered as a ${emailExistsInTenant.role} in "${emailExistsInTenant.gymName}". Please delete the user from that gym first.`,
+      );
     }
 
     const passwordHash = await hashPassword(dto.password);
@@ -612,21 +648,11 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    // Check if email already exists in this tenant
-    const existingTenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (existingTenantUser) {
+    // Check if email already exists in any other gym's tenant schema
+    const existingInTenant = await this.emailExistsInAnyTenant(dto.email);
+    if (existingInTenant) {
       throw new ConflictException(
-        'User with this email already exists in this gym',
+        `This email is already registered as a ${existingInTenant.role} in "${existingInTenant.gymName}". Please delete the user from that gym first.`,
       );
     }
 
@@ -1095,7 +1121,7 @@ export class UsersService {
   }
 
   /**
-   * Delete a staff member from tenant schema
+   * Delete a staff member (manager/trainer) from tenant schema — hard delete
    */
   async removeStaff(
     id: number,
@@ -1117,17 +1143,22 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${id} not found`);
     }
 
-    // Soft delete staff from tenant schema
+    // Hard delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Deactivate user_branch_xref entries
+      // Delete user_branch_xref entries
       await client.query(
-        `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
+        `DELETE FROM user_branch_xref WHERE user_id = $1`,
         [id],
       );
-      // Soft delete the user
+      // Delete trainer-client assignments if trainer
       await client.query(
-        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-        [id, deletedById || null],
+        `DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`,
+        [id],
+      );
+      // Hard delete the user
+      await client.query(
+        `DELETE FROM users WHERE id = $1`,
+        [id],
       );
     });
 
@@ -1179,39 +1210,25 @@ export class UsersService {
       }
     }
 
-    // Check if email already exists in this tenant
-    const existingClient = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
+    // Check if email already exists in public.users (admin) or system_users (superadmin)
+    const [existingAdmin, existingSystemUser] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email: dto.email } }),
+      this.prisma.systemUser.findUnique({ where: { email: dto.email } }),
+    ]);
 
-    if (existingClient) {
-      throw new ConflictException(
-        'Client with this email already exists in this gym',
-      );
+    if (existingAdmin) {
+      throw new ConflictException('User with this email already exists');
     }
-
-    // Also check public.users and system_users
-    const existingStaff = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    if (existingStaff) {
-      throw new ConflictException('Email already exists as a staff member');
-    }
-
-    const existingSystemUser = await this.prisma.systemUser.findUnique({
-      where: { email: dto.email },
-    });
-
     if (existingSystemUser) {
-      throw new ConflictException('Email already exists as a system user');
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Check if email already exists in any tenant schema across all gyms
+    const emailExists = await this.emailExistsInAnyTenant(dto.email);
+    if (emailExists) {
+      throw new ConflictException(
+        `This email is already registered as a ${emailExists.role} in "${emailExists.gymName}". Please delete the user from that gym first.`,
+      );
     }
 
     const status = dto.status || USER_STATUS.ACTIVE;
@@ -3146,13 +3163,21 @@ export class UsersService {
           }
         }
 
-        // Soft delete the user
-        await this.tenantService.executeInTenant(gymId, async (client) => {
-          await client.query(
-            `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-            [userId, deletedById || null],
-          );
-        });
+        // Hard delete for manager/trainer, soft delete for clients
+        if (user.role === ROLES.MANAGER || user.role === ROLES.TRAINER) {
+          await this.tenantService.executeInTenant(gymId, async (client) => {
+            await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [userId]);
+            await client.query(`DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`, [userId]);
+            await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+          });
+        } else {
+          await this.tenantService.executeInTenant(gymId, async (client) => {
+            await client.query(
+              `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
+              [userId, deletedById || null],
+            );
+          });
+        }
 
         results.success++;
       } catch (error: unknown) {

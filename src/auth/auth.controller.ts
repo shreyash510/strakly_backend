@@ -76,7 +76,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@UserId() userId: number, @OptionalGymId() gymId: number | null, @Request() req: any) {
     const isSuperAdmin = req.user?.isSuperAdmin === true;
-    return this.authService.getProfile(userId, gymId ?? undefined, false, isSuperAdmin);
+    const isAdmin = req.user?.role === 'admin';
+    // Tenant users are manager, trainer, client — they live in tenant schema, not public.users
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.getProfile(userId, gymId ?? undefined, isTenantUser, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -90,7 +93,9 @@ export class AuthController {
     @Request() req: any,
   ) {
     const isSuperAdmin = req.user?.isSuperAdmin === true;
-    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto, false, isSuperAdmin);
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto, isTenantUser, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)
