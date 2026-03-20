@@ -26,15 +26,11 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('body-metrics')
 @Controller('body-metrics')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.BODY_METRICS)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class BodyMetricsController {
   constructor(

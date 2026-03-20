@@ -18,10 +18,7 @@ import {
 } from './dto/referral.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -30,8 +27,7 @@ import { ManagerPermission } from '../auth/decorators/manager-permission.decorat
 
 @ApiTags('referrals')
 @Controller('referrals')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.REFERRAL_TRACKING)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}

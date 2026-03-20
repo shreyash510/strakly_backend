@@ -27,19 +27,15 @@ import {
 } from './dto/equipment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 
 @ApiTags('equipment')
 @Controller('equipment')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.EQUIPMENT_TRACKING)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class EquipmentController {
   constructor(private readonly equipmentService: EquipmentService) {}

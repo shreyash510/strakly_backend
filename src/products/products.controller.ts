@@ -42,21 +42,17 @@ import {
 } from './dto/products.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-/* PlanFeaturesGuard removed – products/POS must work for ALL plans */
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-/* PlanFeatures decorator removed – no longer needed here */
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
-/* PLAN_FEATURES import removed – no longer needed here */
 import { setPaginationHeaders } from '../common/pagination.util';
 
 @ApiTags('products')
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
-/* @PlanFeatures(PLAN_FEATURES.POS_RETAIL) removed – products available for all plans */
 @ApiBearerAuth()
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
