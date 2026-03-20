@@ -40,6 +40,8 @@ export interface GymInfo {
   logo?: string;
   city?: string;
   state?: string;
+  country?: string;
+  currency: string;
   tenantSchemaName: string;
   subscription?: GymSubscriptionInfo;
 }
@@ -166,6 +168,8 @@ export class AuthService {
           logo: gym.logo || undefined,
           city: gym.city || undefined,
           state: gym.state || undefined,
+          country: gym.country || undefined,
+          currency: gym.currency || 'USD',
           tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
           subscription: subscription
             ? {
@@ -468,6 +472,8 @@ export class AuthService {
           logo: updatedGym.logo || undefined,
           city: updatedGym.city || undefined,
           state: updatedGym.state || undefined,
+          country: updatedGym.country || undefined,
+          currency: updatedGym.currency || 'USD',
           tenantSchemaName: updatedGym.tenantSchemaName!,
         },
       };
@@ -642,6 +648,8 @@ export class AuthService {
             logo: assignment.gym.logo || undefined,
             city: assignment.gym.city || undefined,
             state: assignment.gym.state || undefined,
+            country: assignment.gym.country || undefined,
+            currency: assignment.gym.currency || 'USD',
             tenantSchemaName: assignment.gym.tenantSchemaName!,
           },
         }),
@@ -792,6 +800,8 @@ export class AuthService {
         logo: gym.logo || undefined,
         city: gym.city || undefined,
         state: gym.state || undefined,
+        country: gym.country || undefined,
+        currency: gym.currency || 'USD',
         tenantSchemaName: gym.tenantSchemaName!,
       },
     });
@@ -844,6 +854,8 @@ export class AuthService {
           logo: assignment.gym.logo || undefined,
           city: assignment.gym.city || undefined,
           state: assignment.gym.state || undefined,
+          country: assignment.gym.country || undefined,
+          currency: assignment.gym.currency || 'USD',
           tenantSchemaName: assignment.gym.tenantSchemaName!,
         },
       }),
@@ -975,6 +987,8 @@ export class AuthService {
           logo: assignment.gym.logo || undefined,
           city: assignment.gym.city || undefined,
           state: assignment.gym.state || undefined,
+          country: assignment.gym.country || undefined,
+          currency: assignment.gym.currency || 'USD',
           tenantSchemaName: assignment.gym.tenantSchemaName!,
         },
       }),
@@ -1128,6 +1142,8 @@ export class AuthService {
           logo: assignment.gym.logo || undefined,
           city: assignment.gym.city || undefined,
           state: assignment.gym.state || undefined,
+          country: assignment.gym.country || undefined,
+          currency: assignment.gym.currency || 'USD',
           tenantSchemaName: assignment.gym.tenantSchemaName!,
         },
       }),
@@ -2124,6 +2140,8 @@ export class AuthService {
         logo: gym.logo || undefined,
         city: gym.city || undefined,
         state: gym.state || undefined,
+        country: gym.country || undefined,
+        currency: gym.currency || 'USD',
         tenantSchemaName: gym.tenantSchemaName!,
         subscription: subscription
           ? {
@@ -2316,6 +2334,8 @@ export class AuthService {
           logo: assignment.gym.logo || undefined,
           city: assignment.gym.city || undefined,
           state: assignment.gym.state || undefined,
+          country: assignment.gym.country || undefined,
+          currency: assignment.gym.currency || 'USD',
           tenantSchemaName: assignment.gym.tenantSchemaName!,
         },
       }),
@@ -2555,6 +2575,8 @@ export class AuthService {
         logo: updatedGym!.logo || undefined,
         city: updatedGym!.city || undefined,
         state: updatedGym!.state || undefined,
+        country: updatedGym!.country || undefined,
+        currency: updatedGym!.currency || 'USD',
         tenantSchemaName: updatedGym!.tenantSchemaName!,
       },
     };

@@ -1384,12 +1384,12 @@ export class ReportsService {
     month?: number,
   ): Promise<DashboardSummary> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Active members
+      // Active clients
       const activeMembersResult = await client.query(
         `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`,
       );
 
-      // New members this month
+      // New clients this month
       const firstOfMonth = new Date(year, (month || new Date().getMonth() + 1) - 1, 1)
         .toISOString()
         .split('T')[0];
@@ -1482,6 +1482,7 @@ export class ReportsService {
         address: true,
         city: true,
         state: true,
+        currency: true,
       },
     });
 
@@ -1494,6 +1495,7 @@ export class ReportsService {
       address: gym?.address || null,
       city: gym?.city || null,
       state: gym?.state || null,
+      currency: gym?.currency || 'USD',
     };
   }
 

@@ -1792,7 +1792,7 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // Member notes table
+    // Client notes table (member_notes)
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."member_notes" (
         id SERIAL PRIMARY KEY,
@@ -3236,7 +3236,7 @@ export class TenantService implements OnModuleInit {
       )
     `);
 
-    // ─── 2. NPS & Member Surveys ───
+    // ─── 2. NPS & Client Surveys ───
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."surveys" (

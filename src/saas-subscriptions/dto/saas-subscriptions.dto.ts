@@ -299,6 +299,11 @@ export class InitiateManualPaymentDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'URL of the uploaded payment proof screenshot/PDF' })
+  @IsString()
+  @IsOptional()
+  proofUrl?: string;
 }
 
 // ============================================

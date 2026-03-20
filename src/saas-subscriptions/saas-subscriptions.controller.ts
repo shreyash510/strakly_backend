@@ -256,6 +256,18 @@ export class SaasSubscriptionsController {
     return result;
   }
 
+  @Post('payments/:id/reject')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Reject a pending payment with reason' })
+  async rejectPayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('reason') reason: string,
+  ) {
+    const result = await this.service.rejectPayment(id, reason || 'Payment rejected');
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_rejected' });
+    return result;
+  }
+
   @Patch('payments/:id')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Update a payment record' })

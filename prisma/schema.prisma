@@ -158,6 +158,7 @@ model Gym {
   state             String?
   zipCode           String?   @map("zip_code")
   country           String?   @default("India")
+  currency          String    @default("USD")
 
   // Operating hours (stored as HH:MM format)
   openingTime       String?   @map("opening_time")
@@ -573,4 +574,18 @@ model ContactRequest {
   @@index([email])
   @@index([createdAt])
   @@map("contact_requests")
+}
+
+// ============================================
+// PLATFORM SETTINGS (key-value config store)
+// ============================================
+
+model PlatformSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
 }

@@ -21,8 +21,8 @@ interface ColumnMapping {
   [templateField: string]: string; // templateField -> uploaded column name
 }
 
-const MEMBERS_COLUMNS = ['name', 'email', 'phone', 'gender', 'dateOfBirth', 'status'];
-const MEMBERS_REQUIRED = ['name', 'email', 'phone'];
+const CLIENTS_COLUMNS = ['name', 'email', 'phone', 'gender', 'dateOfBirth', 'status'];
+const CLIENTS_REQUIRED = ['name', 'email', 'phone'];
 
 const PRODUCTS_COLUMNS = [
   'name', 'price', 'costPrice', 'sku', 'barcode',
@@ -68,7 +68,7 @@ export class MigrationService {
     const sheet = workbook.addWorksheet('Members');
 
     // Header row
-    sheet.columns = MEMBERS_COLUMNS.map((col) => ({
+    sheet.columns = CLIENTS_COLUMNS.map((col) => ({
       header: col,
       key: col,
       width: col === 'email' ? 30 : col === 'name' ? 25 : 18,
@@ -332,7 +332,7 @@ export class MigrationService {
       const rowNum = i + 2; // +2 because row 1 is header, data starts at row 2
 
       // Check required fields
-      for (const field of MEMBERS_REQUIRED) {
+      for (const field of CLIENTS_REQUIRED) {
         const sourceCol = columnMapping[field];
         const value = sourceCol ? row[sourceCol] : undefined;
         if (!value || value.trim() === '') {

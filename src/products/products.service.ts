@@ -1312,7 +1312,7 @@ export class ProductsService {
           taxAmount: item.tax_amount ? parseFloat(item.tax_amount) : 0,
           totalAmount: item.total_amount ? parseFloat(item.total_amount) : 0,
         })),
-        member: sale.user_id
+        client: sale.user_id
           ? {
               id: sale.user_id,
               name: sale.buyer_name,

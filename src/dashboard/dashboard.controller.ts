@@ -25,18 +25,6 @@ import {
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Get('superadmin')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Get superadmin dashboard data' })
@@ -81,23 +69,14 @@ export class DashboardController {
     description: 'Admin dashboard data retrieved successfully',
     type: AdminDashboardDto,
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async getAdminDashboard(
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ): Promise<AdminDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.dashboardService.getAdminDashboard(
       Number(userId),
       Number(gymId),
-      branchId,
     );
   }
 
@@ -109,23 +88,14 @@ export class DashboardController {
     description: 'Client dashboard data retrieved successfully',
     type: ClientDashboardDto,
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async getClientDashboard(
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ): Promise<ClientDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.dashboardService.getClientDashboard(
       Number(userId),
       Number(gymId),
-      branchId,
     );
   }
 
@@ -149,25 +119,16 @@ export class DashboardController {
     type: Number,
     description: 'Items per page (default: 5)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   async getNewClients(
     @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('branchId') queryBranchId?: string,
   ): Promise<PaginatedClientsDto> {
     const gymId = req.user?.gymId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
     return this.dashboardService.getNewClients(
       Number(gymId),
-      branchId,
       pageNum,
       limitNum,
     );
@@ -195,25 +156,16 @@ export class DashboardController {
     type: Number,
     description: 'Items per page (default: 5)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   async getNewInquiries(
     @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('branchId') queryBranchId?: string,
   ): Promise<PaginatedClientsDto> {
     const gymId = req.user?.gymId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
     return this.dashboardService.getNewInquiries(
       Number(gymId),
-      branchId,
       pageNum,
       limitNum,
     );

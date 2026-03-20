@@ -13,26 +13,23 @@ export class DashboardScheduler {
   ) {}
 
   /**
-   * Every 5 minutes, refresh all currently cached gym dashboards.
+   * Every 10 minutes, refresh all currently cached gym dashboards.
    * Safety net: if RabbitMQ messages are lost, cached data stays fresh.
    */
   @Cron('*/10 * * * *')
   async refreshActiveCaches(): Promise<void> {
-    const keys = this.dashboardCacheService.getAllKeys();
-    if (keys.length === 0) return;
+    const gymIds = this.dashboardCacheService.getAllGymIds();
+    if (gymIds.length === 0) return;
 
-    this.logger.debug(`Refreshing ${keys.length} cached dashboards`);
+    this.logger.debug(`Refreshing ${gymIds.length} cached dashboards`);
 
-    for (const { gymId, branchId } of keys) {
+    for (const gymId of gymIds) {
       try {
-        const stats = await this.dashboardService.computeAdminDashboard(
-          gymId,
-          branchId,
-        );
-        this.dashboardCacheService.set(gymId, branchId, stats);
+        const stats = await this.dashboardService.computeAdminDashboard(gymId);
+        this.dashboardCacheService.set(gymId, stats);
       } catch (error) {
         this.logger.error(
-          `Failed to refresh cache for gym ${gymId}, branch ${branchId}: ${error.message}`,
+          `Failed to refresh cache for gym ${gymId}: ${error.message}`,
         );
       }
     }

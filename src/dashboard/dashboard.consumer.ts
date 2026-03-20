@@ -38,15 +38,10 @@ export class DashboardConsumer implements OnModuleInit {
     this.logger.debug(`Recalculating dashboard for gym ${gymId}`);
 
     try {
-      // Invalidate all branch cache entries for this gym
       this.dashboardCacheService.invalidate(gymId);
 
-      // Recompute for branchId=null (all branches view)
-      const stats = await this.dashboardService.computeAdminDashboard(
-        gymId,
-        null,
-      );
-      this.dashboardCacheService.set(gymId, null, stats);
+      const stats = await this.dashboardService.computeAdminDashboard(gymId);
+      this.dashboardCacheService.set(gymId, stats);
 
       this.logger.debug(`Dashboard cache updated for gym ${gymId}`);
     } catch (error) {

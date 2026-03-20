@@ -48,6 +48,7 @@ import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 import { MigrationModule } from './migration/migration.module';
+import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 
 // Health check
 import { HealthModule } from './health/health.module';
@@ -108,6 +109,7 @@ import { HealthModule } from './health/health.module';
     EquipmentModule,
     ProductsModule,
     MigrationModule,
+    PlatformSettingsModule,
   ],
   controllers: [AppController],
   providers: [

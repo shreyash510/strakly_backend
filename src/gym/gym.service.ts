@@ -20,6 +20,7 @@ import {
 } from '../common/pagination.util';
 import { hashPassword } from '../common/utils';
 import { ROLES, USER_STATUS, GYM_STATUS } from '../common/constants';
+import { getCurrencyFromCountry } from '../common/constants/currencies';
 
 export interface GymFilters extends PaginationParams {
   status?: string;
@@ -109,6 +110,7 @@ export class GymService {
         state: gym.state,
         zipCode: gym.zipCode,
         country: gym.country,
+        currency: gym.currency,
         openingTime: gym.openingTime,
         closingTime: gym.closingTime,
         capacity: gym.capacity,
@@ -166,6 +168,7 @@ export class GymService {
       state: gym.state,
       zipCode: gym.zipCode,
       country: gym.country,
+      currency: gym.currency,
       openingTime: gym.openingTime,
       closingTime: gym.closingTime,
       capacity: gym.capacity,
@@ -200,6 +203,10 @@ export class GymService {
     // Hash password
     const passwordHash = await hashPassword(dto.admin.password);
 
+    // Determine currency from country
+    const country = dto.country || 'India';
+    const currency = getCurrencyFromCountry(country).code;
+
     // Create gym first with a temporary schema name
     const gym = await this.prisma.gym.create({
       data: {
@@ -214,7 +221,8 @@ export class GymService {
         city: dto.city,
         state: dto.state,
         zipCode: dto.zipCode,
-        country: dto.country || 'India',
+        country,
+        currency,
         openingTime: dto.openingTime,
         closingTime: dto.closingTime,
         capacity: dto.capacity,
@@ -282,7 +290,7 @@ export class GymService {
           status: 'trial',
           trialEndsAt: trialEnd,
           amount: 0,
-          currency: 'INR',
+          currency,
           paymentStatus: 'paid',
           autoRenew: true,
           isActive: true,
@@ -296,9 +304,16 @@ export class GymService {
   async update(id: number, dto: UpdateGymDto) {
     await this.findOne(id);
 
+    const data: Record<string, any> = { ...dto };
+
+    // Auto-set currency when country changes
+    if (dto.country) {
+      data.currency = getCurrencyFromCountry(dto.country).code;
+    }
+
     return this.prisma.gym.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 
@@ -765,6 +780,7 @@ export class GymService {
       state: gym.state,
       zipCode: gym.zipCode,
       country: gym.country,
+      currency: gym.currency,
       openingTime: gym.openingTime,
       closingTime: gym.closingTime,
       capacity: gym.capacity,
