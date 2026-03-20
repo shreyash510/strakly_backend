@@ -106,12 +106,17 @@ export class AuthController {
     @UserId() userId: number,
     @OptionalGymId() gymId: number | null,
     @Body() dto: ChangePasswordDto,
+    @Request() req: any,
   ) {
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
     return this.authService.changePassword(
       userId,
       gymId ?? undefined,
       dto.currentPassword,
       dto.newPassword,
+      isTenantUser,
     );
   }
 
@@ -119,8 +124,11 @@ export class AuthController {
   @Post('refresh')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
-  refreshToken(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
-    return this.authService.refreshToken(userId, gymId ?? undefined);
+  refreshToken(@UserId() userId: number, @OptionalGymId() gymId: number | null, @Request() req: any) {
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.refreshToken(userId, gymId ?? undefined, isTenantUser);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -215,8 +223,11 @@ export class AuthController {
   @Get('email-verification-status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check email verification status' })
-  checkEmailVerification(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
-    return this.authService.checkEmailVerification(userId, false, gymId ?? undefined);
+  checkEmailVerification(@UserId() userId: number, @OptionalGymId() gymId: number | null, @Request() req: any) {
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.checkEmailVerification(userId, isTenantUser, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
