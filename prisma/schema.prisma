@@ -574,3 +574,17 @@ model ContactRequest {
   @@index([createdAt])
   @@map("contact_requests")
 }
+
+// ============================================
+// PLATFORM SETTINGS (key-value config store)
+// ============================================
+
+model PlatformSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}

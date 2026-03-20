@@ -899,6 +899,9 @@ export class SaasSubscriptionsService {
       dto.paymentRef ||
       `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
+    // Store proofUrl in gatewayResponse JSON field if provided
+    const gatewayResponse = dto.proofUrl ? { proofUrl: dto.proofUrl } : undefined;
+
     const payment = await this.prisma.saasPaymentHistory.create({
       data: {
         subscriptionId: subscription.id,
@@ -910,6 +913,7 @@ export class SaasSubscriptionsService {
         paymentMethod: dto.paymentMethod,
         paymentRef,
         gateway: 'manual',
+        gatewayResponse,
         billingPeriodStart: startDate,
         billingPeriodEnd: endDate,
         invoiceNumber,
