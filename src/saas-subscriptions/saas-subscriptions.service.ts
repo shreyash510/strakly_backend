@@ -977,6 +977,44 @@ export class SaasSubscriptionsService {
     return updatedPayment;
   }
 
+  async rejectPayment(paymentId: number, reason: string) {
+    const payment = await this.getPaymentById(paymentId);
+
+    if (payment.status === 'completed') {
+      throw new BadRequestException('Payment is already completed');
+    }
+
+    if (payment.status === 'failed') {
+      throw new BadRequestException('Payment is already rejected');
+    }
+
+    // Update payment to failed with rejection reason
+    const updatedPayment = await this.prisma.saasPaymentHistory.update({
+      where: { id: paymentId },
+      data: {
+        status: 'failed',
+        failureReason: reason,
+        processedAt: new Date(),
+      },
+      include: {
+        subscription: true,
+        gym: { select: { id: true, name: true, email: true } },
+        plan: { select: { id: true, name: true } },
+      },
+    });
+
+    // Revert subscription to expired so gym owner can retry
+    await this.prisma.saasGymSubscription.update({
+      where: { id: payment.subscriptionId },
+      data: {
+        paymentStatus: 'failed',
+        status: 'expired',
+      },
+    });
+
+    return updatedPayment;
+  }
+
   private async sendPaymentReceiptEmail(subscriptionId: number) {
     try {
       const subscription = await this.prisma.saasGymSubscription.findUnique({
