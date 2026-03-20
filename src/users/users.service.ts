@@ -1145,21 +1145,11 @@ export class UsersService {
 
     // Hard delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Delete user_branch_xref entries
-      await client.query(
-        `DELETE FROM user_branch_xref WHERE user_id = $1`,
-        [id],
-      );
-      // Delete trainer-client assignments if trainer
-      await client.query(
-        `DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`,
-        [id],
-      );
-      // Hard delete the user
-      await client.query(
-        `DELETE FROM users WHERE id = $1`,
-        [id],
-      );
+      await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`, [id]);
+      await client.query(`DELETE FROM trainer_availability WHERE trainer_id = $1`, [id]);
+      await client.query(`DELETE FROM appointments WHERE trainer_id = $1`, [id]);
+      await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
     return { success: true };
@@ -3168,6 +3158,8 @@ export class UsersService {
           await this.tenantService.executeInTenant(gymId, async (client) => {
             await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [userId]);
             await client.query(`DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`, [userId]);
+            await client.query(`DELETE FROM trainer_availability WHERE trainer_id = $1`, [userId]);
+            await client.query(`DELETE FROM appointments WHERE trainer_id = $1`, [userId]);
             await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
           });
         } else {
