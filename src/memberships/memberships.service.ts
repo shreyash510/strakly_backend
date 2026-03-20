@@ -225,8 +225,7 @@ export class MembershipsService {
     const { memberships, total } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause =
-          'm.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)';
+        let whereClause = 'm.user_id = $1';
         const values: SqlValue[] = [userId];
         let paramIndex = 2;
 
