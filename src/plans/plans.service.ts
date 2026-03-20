@@ -161,6 +161,12 @@ export class PlansService {
       throw new ConflictException(`Plan with code ${dto.code} already exists`);
     }
 
+    // Use gym's currency as fallback instead of hardcoded 'INR'
+    if (!dto.currency) {
+      const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { currency: true } });
+      dto.currency = gym?.currency || 'USD';
+    }
+
     const plan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -176,7 +182,7 @@ export class PlansService {
             dto.durationValue,
             dto.durationType,
             dto.price,
-            dto.currency || 'INR',
+            dto.currency || 'USD',
             JSON.stringify(dto.features || []),
             dto.displayOrder || 0,
             dto.isFeatured || false,

@@ -158,6 +158,7 @@ model Gym {
   state             String?
   zipCode           String?   @map("zip_code")
   country           String?   @default("India")
+  currency          String    @default("USD")
 
   // Operating hours (stored as HH:MM format)
   openingTime       String?   @map("opening_time")

@@ -220,6 +220,12 @@ export class PaymentsService {
     gymId: number,
     processedBy?: number,
   ): Promise<PaymentRecord> {
+    // Use gym's currency as fallback instead of hardcoded 'INR'
+    if (!dto.currency) {
+      const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { currency: true } });
+      dto.currency = gym?.currency || 'USD';
+    }
+
     const payment = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -246,7 +252,7 @@ export class PaymentsService {
             dto.payeeId || null,
             dto.payeeName || null,
             dto.amount,
-            dto.currency || 'INR',
+            dto.currency || 'USD',
             dto.taxAmount || 0,
             dto.discountAmount || 0,
             dto.netAmount,
@@ -559,6 +565,10 @@ export class PaymentsService {
   /**
    * Create a payment record using an existing DB client (avoids nested executeInTenant)
    */
+  /**
+   * Create a payment record using an existing DB client (avoids nested executeInTenant).
+   * NOTE: Callers should set dto.currency to the gym's currency before calling this method.
+   */
   async createWithClient(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
@@ -588,7 +598,7 @@ export class PaymentsService {
         dto.payeeId || null,
         dto.payeeName || null,
         dto.amount,
-        dto.currency || 'INR',
+        dto.currency || 'USD',
         dto.taxAmount || 0,
         dto.discountAmount || 0,
         dto.netAmount,

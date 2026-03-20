@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { FullReportData } from './dto/pdf-report.dto';
+import { getCurrencySymbol } from '../common/constants/currencies';
 
 @Injectable()
 export class PdfTemplateService {
   buildFullReportHtml(data: FullReportData): string {
     const { gymInfo, period, dashboardSummary, incomeExpense, membershipSales, paymentDues, attendanceReport, trainerStaffReport, generatedAt, branchName } = data;
+    const currency = gymInfo.currency || 'USD';
 
     const periodLabel = period.month
       ? `${this.getMonthName(period.month)} ${period.year}`
@@ -97,11 +99,11 @@ export class PdfTemplateService {
     </div>
     <div class="card">
       <div class="label">Monthly Revenue</div>
-      <div class="value text-green">${this.formatCurrency(dashboardSummary.monthlyRevenue)}</div>
+      <div class="value text-green">${this.formatCurrency(dashboardSummary.monthlyRevenue, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Pending Dues</div>
-      <div class="value text-red">${this.formatCurrency(dashboardSummary.pendingDues)}</div>
+      <div class="value text-red">${this.formatCurrency(dashboardSummary.pendingDues, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Present Today</div>
@@ -116,15 +118,15 @@ export class PdfTemplateService {
   <div class="cards">
     <div class="card">
       <div class="label">Total Income</div>
-      <div class="value text-green">${this.formatCurrency(incomeExpense.income.totalIncome)}</div>
+      <div class="value text-green">${this.formatCurrency(incomeExpense.income.totalIncome, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Total Expense</div>
-      <div class="value text-red">${this.formatCurrency(incomeExpense.expense.totalExpense)}</div>
+      <div class="value text-red">${this.formatCurrency(incomeExpense.expense.totalExpense, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Net ${incomeExpense.netProfit >= 0 ? 'Profit' : 'Loss'}</div>
-      <div class="value ${incomeExpense.netProfit >= 0 ? 'text-green' : 'text-red'}">${this.formatCurrency(Math.abs(incomeExpense.netProfit))}</div>
+      <div class="value ${incomeExpense.netProfit >= 0 ? 'text-green' : 'text-red'}">${this.formatCurrency(Math.abs(incomeExpense.netProfit), currency)}</div>
     </div>
   </div>
 
@@ -136,7 +138,7 @@ export class PdfTemplateService {
         <thead><tr><th>Month</th><th style="text-align:right;">Amount</th></tr></thead>
         <tbody>
           ${incomeExpense.breakdown.incomeByMonth.map(item => `
-            <tr><td>${item.month}</td><td style="text-align:right;" class="text-green">${this.formatCurrency(item.amount)}</td></tr>
+            <tr><td>${item.month}</td><td style="text-align:right;" class="text-green">${this.formatCurrency(item.amount, currency)}</td></tr>
           `).join('')}
         </tbody>
       </table>
@@ -148,7 +150,7 @@ export class PdfTemplateService {
         <tbody>
           ${incomeExpense.breakdown.expenseByMonth.length > 0
             ? incomeExpense.breakdown.expenseByMonth.map(item => `
-              <tr><td>${item.month}</td><td style="text-align:right;" class="text-red">${this.formatCurrency(item.amount)}</td></tr>
+              <tr><td>${item.month}</td><td style="text-align:right;" class="text-red">${this.formatCurrency(item.amount, currency)}</td></tr>
             `).join('')
             : '<tr><td colspan="2" class="text-muted">No expense data</td></tr>'
           }
@@ -165,7 +167,7 @@ export class PdfTemplateService {
       ${incomeExpense.breakdown.incomeByPaymentMethod.map(item => `
         <tr>
           <td><span class="badge badge-blue">${this.escapeHtml(item.method)}</span></td>
-          <td style="text-align:right;">${this.formatCurrency(item.amount)}</td>
+          <td style="text-align:right;">${this.formatCurrency(item.amount, currency)}</td>
           <td style="text-align:right;">${item.count}</td>
         </tr>
       `).join('')}
@@ -184,11 +186,11 @@ export class PdfTemplateService {
     </div>
     <div class="card">
       <div class="label">Total Revenue</div>
-      <div class="value text-green">${this.formatCurrency(membershipSales.summary.totalRevenue)}</div>
+      <div class="value text-green">${this.formatCurrency(membershipSales.summary.totalRevenue, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Avg Order Value</div>
-      <div class="value">${this.formatCurrency(membershipSales.summary.averageOrderValue)}</div>
+      <div class="value">${this.formatCurrency(membershipSales.summary.averageOrderValue, currency)}</div>
     </div>
     <div class="card">
       <div class="label">New Memberships</div>
@@ -200,7 +202,7 @@ export class PdfTemplateService {
   <div class="highlight-box">
     <div style="font-size:11px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">&#127942; Top Performing Plan</div>
     <div style="font-size:16px;font-weight:700;">${this.escapeHtml(membershipSales.topPerformingPlan.planName)}</div>
-    <div class="text-muted">${this.formatCurrency(membershipSales.topPerformingPlan.revenue)} revenue &bull; ${membershipSales.topPerformingPlan.count} sales</div>
+    <div class="text-muted">${this.formatCurrency(membershipSales.topPerformingPlan.revenue, currency)} revenue &bull; ${membershipSales.topPerformingPlan.count} sales</div>
   </div>` : ''}
 
   ${membershipSales.salesByPlan.length > 0 ? `
@@ -212,7 +214,7 @@ export class PdfTemplateService {
         <tr>
           <td><strong>${this.escapeHtml(plan.planName)}</strong> <span class="badge badge-purple">${this.escapeHtml(plan.planCode)}</span></td>
           <td style="text-align:right;">${plan.count}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(plan.revenue)}</td>
+          <td style="text-align:right;" class="text-green">${this.formatCurrency(plan.revenue, currency)}</td>
           <td style="text-align:right;">${plan.percentage}%</td>
         </tr>
       `).join('')}
@@ -228,7 +230,7 @@ export class PdfTemplateService {
         <tr>
           <td>${item.month}</td>
           <td style="text-align:right;">${item.count}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(item.revenue)}</td>
+          <td style="text-align:right;" class="text-green">${this.formatCurrency(item.revenue, currency)}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -242,15 +244,15 @@ export class PdfTemplateService {
   <div class="cards">
     <div class="card">
       <div class="label">Total Due</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.totalDueAmount)}</div>
+      <div class="value text-red">${this.formatCurrency(paymentDues.summary.totalDueAmount, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Membership Dues</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.membershipDues)}</div>
+      <div class="value text-red">${this.formatCurrency(paymentDues.summary.membershipDues, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Salary Dues</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.salaryDues)}</div>
+      <div class="value text-red">${this.formatCurrency(paymentDues.summary.salaryDues, currency)}</div>
     </div>
     <div class="card">
       <div class="label">Overdue</div>
@@ -267,7 +269,7 @@ export class PdfTemplateService {
         <tr>
           <td><strong>${this.escapeHtml(due.clientName)}</strong><br><span class="text-muted">${this.escapeHtml(due.clientEmail)}</span></td>
           <td><span class="badge badge-purple">${this.escapeHtml(due.planName)}</span></td>
-          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount)}</td>
+          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount, currency)}</td>
           <td>${due.dueDate}</td>
           <td>${due.daysOverdue > 0 ? `<span class="badge badge-red">${due.daysOverdue}d overdue</span>` : '<span class="badge badge-orange">Pending</span>'}</td>
         </tr>
@@ -285,7 +287,7 @@ export class PdfTemplateService {
           <td><strong>${this.escapeHtml(due.staffName)}</strong><br><span class="text-muted">${this.escapeHtml(due.staffEmail)}</span></td>
           <td><span class="badge badge-blue">${this.escapeHtml(due.staffRole)}</span></td>
           <td>${this.escapeHtml(due.period)}</td>
-          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount)}</td>
+          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount, currency)}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -374,7 +376,7 @@ ${trainerStaffReport.length > 0 ? `
           <td><strong>${this.escapeHtml(staff.name)}</strong><br><span class="text-muted">${this.escapeHtml(staff.email)}</span></td>
           <td><span class="badge badge-blue">${this.escapeHtml(staff.role)}</span></td>
           <td style="text-align:right;">${staff.clientCount}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(staff.totalSalaryPaid)}</td>
+          <td style="text-align:right;" class="text-green">${this.formatCurrency(staff.totalSalaryPaid, currency)}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -390,13 +392,12 @@ ${trainerStaffReport.length > 0 ? `
 </html>`;
   }
 
-  private formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+  private formatCurrency(amount: number, currency: string = 'USD'): string {
+    const symbol = getCurrencySymbol(currency);
+    return `${symbol} ${new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount)}`;
   }
 
   private escapeHtml(text: string): string {

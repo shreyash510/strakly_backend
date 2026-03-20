@@ -1482,6 +1482,7 @@ export class ReportsService {
         address: true,
         city: true,
         state: true,
+        currency: true,
       },
     });
 
@@ -1494,6 +1495,7 @@ export class ReportsService {
       address: gym?.address || null,
       city: gym?.city || null,
       state: gym?.state || null,
+      currency: gym?.currency || 'USD',
     };
   }
 
