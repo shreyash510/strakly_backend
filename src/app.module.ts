@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -49,6 +49,8 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 import { MigrationModule } from './migration/migration.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
+import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
+import { ActivityLogsService } from './activity-logs/activity-logs.service';
 
 // Health check
 import { HealthModule } from './health/health.module';
@@ -65,7 +67,7 @@ import { HealthModule } from './health/health.module';
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000,
-      limit: 100,
+      limit: 300,
     }]),
     HealthModule,
     DatabaseModule,
@@ -117,6 +119,10 @@ import { HealthModule } from './health/health.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ActivityLogInterceptor,
     },
   ],
 })

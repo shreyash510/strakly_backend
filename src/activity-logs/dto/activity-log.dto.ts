@@ -5,6 +5,7 @@ import {
   IsString,
   IsDateString,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateActivityLogDto {
   @IsOptional()
@@ -72,6 +73,7 @@ export class CreateActivityLogDto {
 export class ActivityLogFiltersDto {
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   actorId?: number;
 
   @IsOptional()
@@ -92,6 +94,7 @@ export class ActivityLogFiltersDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   targetId?: number;
 
   @IsOptional()
@@ -104,9 +107,11 @@ export class ActivityLogFiltersDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   page?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   limit?: number;
 }

@@ -36,6 +36,14 @@ export class ActivityLogsController {
     return this.activityLogsService.findAll(gymId, branchId, filters);
   }
 
+  @Get('stats')
+  async getStats(
+    @GymId() gymId: number,
+    @OptionalBranchId() branchId: number | null,
+  ) {
+    return this.activityLogsService.getStats(gymId, branchId);
+  }
+
   @Get('target/:type/:id')
   async findByTarget(
     @Param('type') targetType: string,
