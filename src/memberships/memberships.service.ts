@@ -809,6 +809,12 @@ export class MembershipsService {
     await this.findOne(id, gymId);
 
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Hard delete attendance records linked to this membership
+      await client.query(
+        `DELETE FROM attendance WHERE membership_id = $1`,
+        [id],
+      );
+
       // Hard delete payments linked to this membership
       await client.query(
         `DELETE FROM payments WHERE reference_table = 'memberships' AND reference_id = $1`,
