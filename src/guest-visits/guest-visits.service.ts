@@ -7,7 +7,7 @@ import { TenantService } from '../tenant/tenant.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
 import { SqlValue } from '../common/types';
 
-const MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH = 5;
+const MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH = 5;
 
 @Injectable()
 export class GuestVisitsService {
@@ -122,16 +122,16 @@ export class GuestVisitsService {
 
   async create(gymId: number, branchId: number | null, dto: CreateGuestVisitDto, checkedInBy: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Enforce guest visit limit per member per month
+      // Enforce guest visit limit per client per month
       if (dto.broughtBy) {
         const monthCount = await client.query(
           `SELECT COUNT(*) FROM guest_visits
            WHERE brought_by = $1 AND visit_date >= date_trunc('month', CURRENT_DATE)`,
           [dto.broughtBy],
         );
-        if (parseInt(monthCount.rows[0].count) >= MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH) {
+        if (parseInt(monthCount.rows[0].count) >= MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH) {
           throw new BadRequestException(
-            `Member has reached the maximum of ${MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH} guest visits this month`,
+            `Client has reached the maximum of ${MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH} guest visits this month`,
           );
         }
       }

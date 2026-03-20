@@ -38,29 +38,12 @@ export class DashboardConsumer implements OnModuleInit {
     this.logger.debug(`Recalculating dashboard for gym ${gymId}`);
 
     try {
-      // Capture which branch variants are currently cached before invalidation
-      const cachedEntries = this.dashboardCacheService
-        .getAllKeys()
-        .filter((entry) => entry.gymId === gymId);
-
-      // Invalidate ALL branch cache entries for this gym
       this.dashboardCacheService.invalidate(gymId);
 
-      // Determine which branchIds to recompute (always include null for all-branches view)
-      const branchIds = new Set<number | null>([null]);
-      for (const entry of cachedEntries) {
-        branchIds.add(entry.branchId);
-      }
+      const stats = await this.dashboardService.computeAdminDashboard(gymId);
+      this.dashboardCacheService.set(gymId, stats);
 
-      // Recompute and re-cache all branch variants
-      for (const branchId of branchIds) {
-        const stats = await this.dashboardService.computeAdminDashboard(gymId);
-        this.dashboardCacheService.set(gymId, branchId, stats);
-      }
-
-      this.logger.debug(
-        `Dashboard cache updated for gym ${gymId} (${branchIds.size} variant(s))`,
-      );
+      this.logger.debug(`Dashboard cache updated for gym ${gymId}`);
     } catch (error) {
       this.logger.error(
         `Failed to recalculate dashboard for gym ${gymId}: ${error.message}`,

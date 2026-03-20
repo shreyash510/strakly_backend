@@ -396,7 +396,7 @@ export class BranchService {
   }
 
   /**
-   * Transfer a member from one branch to another
+   * Transfer a client from one branch to another
    */
   async transferMember(
     gymId: number,
@@ -432,7 +432,7 @@ export class BranchService {
       );
     }
 
-    // Verify member exists in source branch
+    // Verify client exists in source branch
     const member = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -461,7 +461,7 @@ export class BranchService {
 
     // Perform the transfer in a transaction-like manner
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      // 1. Update member's branch_id
+      // 1. Update client's branch_id
       await client.query(
         `UPDATE users SET branch_id = $1, updated_at = NOW() WHERE id = $2`,
         [dto.toBranchId, dto.memberId],
@@ -519,7 +519,7 @@ export class BranchService {
   }
 
   /**
-   * Get member's current branch
+   * Get client's current branch
    */
   async getMemberBranch(gymId: number, memberId: number): Promise<Record<string, any> | null> {
     const member = await this.tenantService.executeInTenant(

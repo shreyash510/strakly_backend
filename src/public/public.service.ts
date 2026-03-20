@@ -169,7 +169,7 @@ export class PublicService {
       dto.branchId || null,
       {
         type: NotificationType.NEW_MEMBER_REGISTRATION,
-        title: 'New Member Registration',
+        title: 'New Client Registration',
         message: `${dto.name} has registered and is awaiting approval.`,
         actionUrl: `/clients/${user.id}`,
         data: {

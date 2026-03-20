@@ -263,7 +263,7 @@ export class CreateStaffDto {
   branchIds?: number[];
 }
 
-// DTO for creating client (member) - stored in tenant.users
+// DTO for creating client - stored in tenant.users
 export class CreateClientDto {
   @ApiProperty({ description: 'Client name' })
   @IsString()

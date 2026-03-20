@@ -196,7 +196,7 @@ export class BranchController {
     @Body() dto: TransferMemberDto,
   ) {
     const result = await this.branchService.transferMember(gymId, dto);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'member_transferred' });
+    this.notificationsGateway.emitBranchChanged(gymId, { action: 'client_transferred' });
     return result;
   }
 

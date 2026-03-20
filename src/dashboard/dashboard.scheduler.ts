@@ -18,18 +18,18 @@ export class DashboardScheduler {
    */
   @Cron('*/10 * * * *')
   async refreshActiveCaches(): Promise<void> {
-    const keys = this.dashboardCacheService.getAllKeys();
-    if (keys.length === 0) return;
+    const gymIds = this.dashboardCacheService.getAllGymIds();
+    if (gymIds.length === 0) return;
 
-    this.logger.debug(`Refreshing ${keys.length} cached dashboards`);
+    this.logger.debug(`Refreshing ${gymIds.length} cached dashboards`);
 
-    for (const { gymId, branchId } of keys) {
+    for (const gymId of gymIds) {
       try {
         const stats = await this.dashboardService.computeAdminDashboard(gymId);
-        this.dashboardCacheService.set(gymId, branchId, stats);
+        this.dashboardCacheService.set(gymId, stats);
       } catch (error) {
         this.logger.error(
-          `Failed to refresh cache for gym ${gymId} branch ${branchId ?? 'all'}: ${error.message}`,
+          `Failed to refresh cache for gym ${gymId}: ${error.message}`,
         );
       }
     }

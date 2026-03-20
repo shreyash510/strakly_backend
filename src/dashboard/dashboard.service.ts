@@ -235,15 +235,14 @@ export class DashboardService {
     userId: number,
     gymId: number,
   ): Promise<AdminDashboardDto> {
-    // Check cache first (branchId=null means all branches)
-    const cached = this.dashboardCacheService.get(gymId, null);
+    const cached = this.dashboardCacheService.get(gymId);
     if (cached) {
       return cached;
     }
 
     // Cache miss — compute and store
     const result = await this.computeAdminDashboard(gymId);
-    this.dashboardCacheService.set(gymId, null, result);
+    this.dashboardCacheService.set(gymId, result);
     return result;
   }
 
@@ -387,13 +386,6 @@ export class DashboardService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Branch filtering removed — always return gym-wide results
-        const userBranchFilter = '';
-        const membershipBranchFilter = '';
-        const attendanceBranchFilter = '';
-
-        const productBranchFilter = '';
-
         // Consolidated: 4 queries instead of 19
         const [
           userStatsResult,
@@ -430,7 +422,7 @@ export class DashboardService {
           ),
           // 3) Attendance: present today
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${attendanceBranchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`,
             [today],
           ),
           // 4) All product sales revenue in ONE query
@@ -480,8 +472,6 @@ export class DashboardService {
     const revenueHistory = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipBranchFilter = '';
-        const productBranchFilter = '';
         const result = await client.query(
           `SELECT month, month_num, year_num, SUM(revenue) as revenue FROM (
             SELECT
@@ -490,7 +480,7 @@ export class DashboardService {
               EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
               final_amount as revenue
             FROM memberships
-            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${membershipBranchFilter}
+            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1
             UNION ALL
             SELECT
               TO_CHAR(DATE_TRUNC('month', sold_at), 'Mon') as month,
@@ -498,7 +488,7 @@ export class DashboardService {
               EXTRACT(YEAR FROM DATE_TRUNC('month', sold_at)) as year_num,
               total_amount as revenue
             FROM product_sales
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${productBranchFilter}
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1
           ) combined
           GROUP BY month, month_num, year_num
           ORDER BY year_num ASC, month_num ASC`,

@@ -17,7 +17,7 @@ export class PublicController {
 
   @Post('register')
   @ApiOperation({
-    summary: 'Register as a new member (public - no auth required)',
+    summary: 'Register as a new client (public - no auth required)',
   })
   registerMember(@Body() dto: MemberRegistrationDto) {
     return this.publicService.registerMember(dto);

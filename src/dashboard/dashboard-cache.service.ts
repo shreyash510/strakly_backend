@@ -9,60 +9,36 @@ interface CacheEntry {
 @Injectable()
 export class DashboardCacheService {
   private readonly logger = new Logger(DashboardCacheService.name);
-  private readonly cache = new Map<string, CacheEntry>();
+  private readonly cache = new Map<number, CacheEntry>();
   private readonly TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-  private makeKey(gymId: number, branchId: number | null = null): string {
-    return `${gymId}:${branchId ?? 'all'}`;
-  }
-
-  get(gymId: number, branchId: number | null = null): AdminDashboardDto | null {
-    const key = this.makeKey(gymId, branchId);
-    const entry = this.cache.get(key);
+  get(gymId: number): AdminDashboardDto | null {
+    const entry = this.cache.get(gymId);
     if (!entry) return null;
 
     const age = Date.now() - entry.updatedAt.getTime();
     if (age > this.TTL_MS) {
-      this.cache.delete(key);
+      this.cache.delete(gymId);
       return null;
     }
 
-    this.logger.debug(`Cache hit for ${key} (age: ${Math.round(age / 1000)}s)`);
+    this.logger.debug(`Cache hit for gym ${gymId} (age: ${Math.round(age / 1000)}s)`);
     return entry.stats;
   }
 
-  set(gymId: number, branchId: number | null, stats: AdminDashboardDto): void {
-    const key = this.makeKey(gymId, branchId);
-    this.cache.set(key, { stats, updatedAt: new Date() });
-    this.logger.debug(`Cache set for ${key}`);
+  set(gymId: number, stats: AdminDashboardDto): void {
+    this.cache.set(gymId, { stats, updatedAt: new Date() });
+    this.logger.debug(`Cache set for gym ${gymId}`);
   }
 
-  /** Invalidate ALL cache entries for a given gym (all branch variants). */
+  /** Invalidate cache entry for a given gym. */
   invalidate(gymId: number): void {
-    const prefix = `${gymId}:`;
-    let count = 0;
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) {
-        this.cache.delete(key);
-        count++;
-      }
-    }
-    if (count > 0) {
-      this.logger.debug(
-        `Invalidated ${count} cache entries for gym ${gymId}`,
-      );
+    if (this.cache.delete(gymId)) {
+      this.logger.debug(`Invalidated cache entry for gym ${gymId}`);
     }
   }
 
-  getAllKeys(): Array<{ gymId: number; branchId: number | null }> {
-    const keys: Array<{ gymId: number; branchId: number | null }> = [];
-    for (const key of this.cache.keys()) {
-      const [gymIdStr, branchIdStr] = key.split(':');
-      keys.push({
-        gymId: parseInt(gymIdStr, 10),
-        branchId: branchIdStr === 'all' ? null : parseInt(branchIdStr, 10),
-      });
-    }
-    return keys;
+  getAllGymIds(): number[] {
+    return Array.from(this.cache.keys());
   }
 }
