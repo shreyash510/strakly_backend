@@ -170,7 +170,6 @@ A comprehensive, multi-tenant gym management platform designed to streamline ope
 - Stage history tracking
 - Convert leads to members
 - Lead source tracking and statistics
-- Plan feature gated: `lead_crm`
 
 ### 18. Referral Program
 - Generate referral codes for members

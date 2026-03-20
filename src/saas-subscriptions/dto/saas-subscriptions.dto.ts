@@ -38,11 +38,6 @@ export class CreateSaasPlanDto {
   @IsOptional()
   currency?: string;
 
-  @ApiPropertyOptional({ example: 'monthly', enum: ['monthly', 'yearly'] })
-  @IsString()
-  @IsOptional()
-  billingPeriod?: string;
-
   @ApiPropertyOptional({ example: 3, description: 'Duration in months (e.g., 3, 6, 12, 24)' })
   @IsNumber()
   @IsOptional()
@@ -62,6 +57,11 @@ export class CreateSaasPlanDto {
   @IsNumber()
   @IsOptional()
   maxBranches?: number;
+
+  @ApiPropertyOptional({ example: 100, description: '-1 for unlimited' })
+  @IsNumber()
+  @IsOptional()
+  maxProducts?: number;
 
   @ApiPropertyOptional({ example: ['QR check-in', 'Custom branding'] })
   @IsArray()
@@ -125,6 +125,11 @@ export class UpdateSaasPlanDto {
   @IsNumber()
   @IsOptional()
   maxBranches?: number;
+
+  @ApiPropertyOptional({ example: 100, description: '-1 for unlimited' })
+  @IsNumber()
+  @IsOptional()
+  maxProducts?: number;
 
   @ApiPropertyOptional({ example: ['QR check-in', 'Custom branding'] })
   @IsArray()

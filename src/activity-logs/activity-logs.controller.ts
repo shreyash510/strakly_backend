@@ -10,10 +10,7 @@ import { ActivityLogsService } from './activity-logs.service';
 import { ActivityLogFiltersDto } from './dto/activity-log.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -21,9 +18,8 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 @ApiTags('activity-logs')
 @ApiBearerAuth()
 @Controller('activity-logs')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('superadmin', 'admin', 'manager')
-@PlanFeatures(PLAN_FEATURES.ACTIVITY_LOGS)
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
 
