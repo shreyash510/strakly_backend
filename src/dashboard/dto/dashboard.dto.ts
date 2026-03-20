@@ -173,8 +173,37 @@ export class AdminDashboardStatsDto {
   @ApiProperty({ description: 'Memberships expiring within 7 days' })
   expiringSoon: number;
 
-  @ApiProperty({ description: 'Monthly revenue for last 5 months', type: [Object] })
+  @ApiProperty({ description: 'Total products in inventory' })
+  totalProducts: number;
+
+  @ApiProperty({ description: 'Product sales revenue this month' })
+  thisMonthProductSales: number;
+
+  @ApiProperty({ description: 'Monthly membership revenue for last 5 months', type: [Object] })
   monthlyRevenueHistory: { month: string; revenue: number }[];
+
+  @ApiProperty({ description: 'Monthly product sales for last 5 months', type: [Object] })
+  monthlyProductSalesHistory: { month: string; revenue: number }[];
+
+  @ApiProperty({ description: 'Week-over-week comparison data' })
+  weekComparison: {
+    newClients: { thisWeek: number; lastWeek: number };
+    attendance: { thisWeek: number; lastWeek: number };
+    enquiries: { thisWeek: number; lastWeek: number };
+    revenue: { thisWeek: number; lastWeek: number };
+    expiringSoon: { thisWeek: number; lastWeek: number };
+    expired: { thisWeek: number; lastWeek: number };
+  };
+
+  @ApiProperty({ description: 'Daily sparkline data for last 7 days' })
+  sparklines: {
+    clients: number[];
+    attendance: number[];
+    enquiries: number[];
+    revenue: number[];
+    expiringSoon: number[];
+    expired: number[];
+  };
 }
 
 export class RecentClientDto {

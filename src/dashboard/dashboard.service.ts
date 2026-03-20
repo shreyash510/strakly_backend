@@ -425,14 +425,15 @@ export class DashboardService {
             `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`,
             [today],
           ),
-          // 4) All product sales revenue in ONE query
+          // 4) All product sales revenue + product count in ONE query
           client.query(
             `SELECT
-              COALESCE(SUM(total_amount), 0) as total_revenue,
-              COALESCE(SUM(total_amount) FILTER (WHERE sold_at >= $1 AND sold_at <= $2), 0) as last_month_revenue,
-              COALESCE(SUM(total_amount) FILTER (WHERE sold_at >= $3), 0) as this_month_revenue
-            FROM product_sales
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
+              COALESCE(SUM(s.total_amount), 0) as total_revenue,
+              COALESCE(SUM(s.total_amount) FILTER (WHERE s.sold_at >= $1 AND s.sold_at <= $2), 0) as last_month_revenue,
+              COALESCE(SUM(s.total_amount) FILTER (WHERE s.sold_at >= $3), 0) as this_month_revenue,
+              (SELECT COUNT(*) FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL) as total_products
+            FROM product_sales s
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
             [startOfLastMonth, endOfLastMonth, startOfMonth],
           ),
         ]);
@@ -463,56 +464,63 @@ export class DashboardService {
           newClientsThisMonth: parseInt(u.new_clients_this_month, 10),
           newEnquiriesThisMonth: parseInt(u.new_enquiries_this_month, 10),
           expiringSoon: parseInt(m.expiring_soon, 10),
+          totalProducts: parseInt(p.total_products, 10),
+          thisMonthProductSales: parseFloat(p.this_month_revenue),
         };
       },
     );
 
-    // Get last 5 months revenue history (memberships + product sales)
+    // Get last 5 months revenue history (membership + product sales separately)
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
-    const revenueHistory = await this.tenantService.executeInTenant(
+    const [membershipRevenueRows, productSalesRows] = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(
-          `SELECT month, month_num, year_num, SUM(revenue) as revenue FROM (
-            SELECT
+        const [mResult, pResult] = await Promise.all([
+          client.query(
+            `SELECT
               TO_CHAR(DATE_TRUNC('month', paid_at), 'Mon') as month,
               EXTRACT(MONTH FROM DATE_TRUNC('month', paid_at)) as month_num,
               EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
-              final_amount as revenue
+              COALESCE(SUM(final_amount), 0) as revenue
             FROM memberships
             WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1
-            UNION ALL
-            SELECT
+            GROUP BY month, month_num, year_num
+            ORDER BY year_num ASC, month_num ASC`,
+            [fiveMonthsAgo],
+          ),
+          client.query(
+            `SELECT
               TO_CHAR(DATE_TRUNC('month', sold_at), 'Mon') as month,
               EXTRACT(MONTH FROM DATE_TRUNC('month', sold_at)) as month_num,
               EXTRACT(YEAR FROM DATE_TRUNC('month', sold_at)) as year_num,
-              total_amount as revenue
+              COALESCE(SUM(total_amount), 0) as revenue
             FROM product_sales
             WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1
-          ) combined
-          GROUP BY month, month_num, year_num
-          ORDER BY year_num ASC, month_num ASC`,
-          [fiveMonthsAgo],
-        );
-        return result.rows;
+            GROUP BY month, month_num, year_num
+            ORDER BY year_num ASC, month_num ASC`,
+            [fiveMonthsAgo],
+          ),
+        ]);
+        return [mResult.rows, pResult.rows];
       },
     );
 
-    // Build full 5-month array (fill missing months with 0)
-    const monthlyRevenueHistory: { month: string; revenue: number }[] = [];
-    for (let i = 4; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
-      const found = revenueHistory.find(
-        (r: Record<string, any>) =>
-          parseInt(r.month_num) === d.getMonth() + 1 &&
-          parseInt(r.year_num) === d.getFullYear(),
-      );
-      monthlyRevenueHistory.push({
-        month: monthLabel,
-        revenue: found ? parseFloat(found.revenue) : 0,
-      });
-    }
+    // Build full 5-month arrays (fill missing months with 0)
+    const buildMonthlyHistory = (rows: Record<string, any>[]) => {
+      const history: { month: string; revenue: number }[] = [];
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+        const found = rows.find(
+          (r) => parseInt(r.month_num) === d.getMonth() + 1 && parseInt(r.year_num) === d.getFullYear(),
+        );
+        history.push({ month: monthLabel, revenue: found ? parseFloat(found.revenue) : 0 });
+      }
+      return history;
+    };
+
+    const monthlyRevenueHistory = buildMonthlyHistory(membershipRevenueRows);
+    const monthlyProductSalesHistory = buildMonthlyHistory(productSalesRows);
 
     // Get open tickets count from public schema
     const openTickets = await this.prisma.supportTicket.count({
@@ -533,6 +541,167 @@ export class DashboardService {
       monthlyGrowth = 100;
     }
 
+    // Week-over-week comparison + daily sparklines (last 7 days)
+    const startOfThisWeek = new Date(now);
+    startOfThisWeek.setDate(now.getDate() - now.getDay()); // Sunday
+    startOfThisWeek.setHours(0, 0, 0, 0);
+
+    const startOfLastWeek = new Date(startOfThisWeek);
+    startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const { weekComparison, sparklines } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        const [weekCompResult, sparkResult] = await Promise.all([
+          // Week-over-week counts
+          client.query(
+            `SELECT
+              -- New clients
+              COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $1) as this_week_clients,
+              COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $2 AND created_at < $1) as last_week_clients,
+              -- Enquiries
+              COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1) as this_week_enquiries,
+              COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $2 AND created_at < $1) as last_week_enquiries
+            FROM users`,
+            [startOfThisWeek, startOfLastWeek],
+          ),
+          // Daily sparkline data for last 7 days
+          client.query(
+            `WITH days AS (
+              SELECT generate_series($1::date, CURRENT_DATE, '1 day'::interval)::date AS day
+            )
+            SELECT
+              d.day,
+              COALESCE(c.cnt, 0) as new_clients,
+              COALESCE(a.cnt, 0) as attendance,
+              COALESCE(e.cnt, 0) as enquiries,
+              COALESCE(r.rev, 0) as revenue,
+              COALESCE(ex.cnt, 0) as expired
+            FROM days d
+            LEFT JOIN (
+              SELECT created_at::date AS day, COUNT(*) AS cnt
+              FROM users WHERE role='client' AND status='active' AND created_at >= $1
+              GROUP BY created_at::date
+            ) c ON c.day = d.day
+            LEFT JOIN (
+              SELECT attendance_date AS day, COUNT(*) AS cnt
+              FROM attendance WHERE status='present' AND attendance_date >= $1
+              GROUP BY attendance_date
+            ) a ON a.day = d.day
+            LEFT JOIN (
+              SELECT created_at::date AS day, COUNT(*) AS cnt
+              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1
+              GROUP BY created_at::date
+            ) e ON e.day = d.day
+            LEFT JOIN (
+              SELECT paid_at::date AS day, COALESCE(SUM(final_amount),0) AS rev
+              FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL) AND paid_at >= $1
+              GROUP BY paid_at::date
+            ) r ON r.day = d.day
+            LEFT JOIN (
+              SELECT end_date::date AS day, COUNT(*) AS cnt
+              FROM memberships WHERE status='expired' AND end_date >= $1
+              GROUP BY end_date::date
+            ) ex ON ex.day = d.day
+            ORDER BY d.day ASC`,
+            [sevenDaysAgo],
+          ),
+        ]);
+
+        // Week attendance + revenue + expired
+        const weekAttendanceResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE attendance_date >= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE attendance_date >= $2::date AND attendance_date < $1::date) as last_week
+          FROM attendance WHERE status='present'`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        const weekRevenueResult = await client.query(
+          `SELECT
+            COALESCE(SUM(final_amount) FILTER (WHERE paid_at >= $1), 0) as this_week,
+            COALESCE(SUM(final_amount) FILTER (WHERE paid_at >= $2 AND paid_at < $1), 0) as last_week
+          FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        const weekExpiredResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE end_date >= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date < $1::date) as last_week
+          FROM memberships WHERE status='expired'`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        // Expiring soon comparison (memberships expiring in next 7 days vs same window last week)
+        const endOfWeekDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const lastWeekEnd = new Date(startOfThisWeek);
+        const lastWeekEndPlus7 = new Date(
+          startOfThisWeek.getTime() + 7 * 24 * 60 * 60 * 1000,
+        );
+        const weekExpiringSoonResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE status='active' AND end_date >= CURRENT_DATE AND end_date <= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date <= $3::date) as last_week
+          FROM memberships`,
+          [endOfWeekDate, lastWeekEnd, lastWeekEndPlus7],
+        );
+
+        const wc = weekCompResult.rows[0];
+        const wa = weekAttendanceResult.rows[0];
+        const wr = weekRevenueResult.rows[0];
+        const we = weekExpiredResult.rows[0];
+        const wes = weekExpiringSoonResult.rows[0];
+
+        return {
+          weekComparison: {
+            newClients: {
+              thisWeek: parseInt(wc.this_week_clients, 10),
+              lastWeek: parseInt(wc.last_week_clients, 10),
+            },
+            attendance: {
+              thisWeek: parseInt(wa.this_week, 10),
+              lastWeek: parseInt(wa.last_week, 10),
+            },
+            enquiries: {
+              thisWeek: parseInt(wc.this_week_enquiries, 10),
+              lastWeek: parseInt(wc.last_week_enquiries, 10),
+            },
+            revenue: {
+              thisWeek: parseFloat(wr.this_week),
+              lastWeek: parseFloat(wr.last_week),
+            },
+            expiringSoon: {
+              thisWeek: parseInt(wes.this_week, 10),
+              lastWeek: parseInt(wes.last_week, 10),
+            },
+            expired: {
+              thisWeek: parseInt(we.this_week, 10),
+              lastWeek: parseInt(we.last_week, 10),
+            },
+          },
+          sparklines: {
+            clients: sparkResult.rows.map((r: any) =>
+              parseInt(r.new_clients, 10),
+            ),
+            attendance: sparkResult.rows.map((r: any) =>
+              parseInt(r.attendance, 10),
+            ),
+            enquiries: sparkResult.rows.map((r: any) =>
+              parseInt(r.enquiries, 10),
+            ),
+            revenue: sparkResult.rows.map((r: any) => parseFloat(r.revenue)),
+            expiringSoon: sparkResult.rows.map(() => 0), // No daily breakdown for "expiring soon"
+            expired: sparkResult.rows.map((r: any) =>
+              parseInt(r.expired, 10),
+            ),
+          },
+        };
+      });
+
     return {
       totalMembers: stats.totalMembers,
       activeMembers: stats.activeMembers,
@@ -552,7 +721,12 @@ export class DashboardService {
       newClientsThisMonth: stats.newClientsThisMonth,
       newEnquiriesThisMonth: stats.newEnquiriesThisMonth,
       expiringSoon: stats.expiringSoon,
+      totalProducts: stats.totalProducts,
+      thisMonthProductSales: stats.thisMonthProductSales,
       monthlyRevenueHistory,
+      monthlyProductSalesHistory,
+      weekComparison,
+      sparklines,
     };
   }
 
