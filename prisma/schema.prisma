@@ -330,13 +330,13 @@ model SaasPlan {
   // Pricing
   price           Decimal   @db.Decimal(10, 2)
   currency        String    @default("USD")
-  billingPeriod   String    @default("monthly") @map("billing_period")
   durationMonths  Int       @default(1) @map("duration_months")
 
   // Limits
   maxClients      Int       @default(-1) @map("max_members")
   maxStaff        Int       @default(-1) @map("max_staff")
   maxBranches     Int       @default(1) @map("max_branches")
+  maxProducts     Int       @default(-1) @map("max_products")
 
   // Features
   features        Json?

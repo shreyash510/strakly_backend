@@ -283,6 +283,35 @@ export class ProductsService {
     branchId: number | null,
     dto: CreateProductDto,
   ) {
+    // Check subscription limit for maxProducts
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+      include: { plan: true },
+    });
+
+    if (subscription?.plan) {
+      const maxProducts = subscription.plan.maxProducts;
+      // -1 means unlimited
+      if (maxProducts !== -1) {
+        // Count current products in the gym
+        const currentProductCount = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*)::int as count FROM products WHERE is_deleted = FALSE`,
+            );
+            return result.rows[0]?.count || 0;
+          },
+        );
+
+        if (currentProductCount >= maxProducts) {
+          throw new BadRequestException(
+            `You have reached the maximum limit of ${maxProducts} products for your subscription plan. Please upgrade your plan to add more products.`,
+          );
+        }
+      }
+    }
+
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO products (branch_id, category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
