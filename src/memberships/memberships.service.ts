@@ -20,6 +20,7 @@ import {
 } from './dto/membership.dto';
 import { SqlValue } from '../common/types';
 import { sanitizePagination } from '../common/pagination.util';
+import { PoolClient } from 'pg';
 
 @Injectable()
 export class MembershipsService {
@@ -105,6 +106,56 @@ export class MembershipsService {
       data: memberships.map((m: Record<string, any>) => this.formatMembership(m)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * Log a snapshot of the membership into the membership_history table.
+   */
+  private async logToHistory(
+    client: PoolClient,
+    membership: Record<string, any>,
+    archiveReason: string,
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO membership_history (
+        branch_id, original_id, user_id, plan_id, offer_id,
+        start_date, end_date, status,
+        original_amount, discount_amount, final_amount, currency,
+        payment_status, payment_method, payment_ref, paid_at,
+        cancelled_at, cancel_reason, notes,
+        archive_reason, original_created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8,
+        $9, $10, $11, $12,
+        $13, $14, $15, $16,
+        $17, $18, $19,
+        $20, $21
+      )`,
+      [
+        membership.branch_id ?? null,
+        membership.id,
+        membership.user_id,
+        membership.plan_id,
+        membership.offer_id ?? null,
+        membership.start_date,
+        membership.end_date,
+        membership.status,
+        membership.original_amount ?? null,
+        membership.discount_amount ?? null,
+        membership.final_amount ?? null,
+        membership.currency ?? null,
+        membership.payment_status ?? null,
+        membership.payment_method ?? null,
+        membership.payment_ref ?? null,
+        membership.paid_at ?? null,
+        membership.cancelled_at ?? null,
+        membership.cancel_reason ?? null,
+        membership.notes ?? null,
+        archiveReason,
+        membership.created_at ?? null,
+      ],
+    );
   }
 
   private formatMembership(m: Record<string, any>) {
@@ -482,6 +533,9 @@ export class MembershipsService {
           undefined, // processedBy
         );
 
+        // Log membership creation to history
+        await this.logToHistory(client, txMembership, 'created');
+
         return { membership: txMembership, userName: txUserName };
       },
     );
@@ -747,6 +801,12 @@ export class MembershipsService {
         dto.paymentRef,
         processedBy,
       );
+
+      // Log after recording payment to capture the updated state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'payment_recorded');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -759,7 +819,13 @@ export class MembershipsService {
       throw new BadRequestException('Membership is already cancelled');
     }
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Log before cancelling so we capture the pre-cancellation state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'cancelled');
+      }
+
       await client.query(
         `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, cancellation_reason_code = $2, updated_at = NOW() WHERE id = $3`,
         [dto.reason || null, dto.cancellationReasonCode || null, id],
@@ -788,6 +854,12 @@ export class MembershipsService {
 
     // Soft delete the membership and void associated payment atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Log before soft deleting so we capture the pre-deletion state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'deleted');
+      }
+
       await client.query(
         `UPDATE memberships SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
         [id, deletedById || null],
@@ -808,6 +880,12 @@ export class MembershipsService {
     await this.findOne(id, gymId);
 
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Log BEFORE hard deleting so we capture the membership state while it still exists
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'void_deleted');
+      }
+
       // Hard delete attendance records linked to this membership
       await client.query(
         `DELETE FROM attendance WHERE membership_id = $1`,
@@ -1029,7 +1107,7 @@ export class MembershipsService {
       startDate = new Date();
     }
 
-    return this.create(
+    const result = await this.create(
       {
         userId,
         planId,
@@ -1041,6 +1119,18 @@ export class MembershipsService {
       gymId,
       branchId,
     );
+
+    // Log the renewed membership to history
+    if (result?.id) {
+      await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+        const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [result.id]);
+        if (snapshot.rows[0]) {
+          await this.logToHistory(client, snapshot.rows[0], 'renewed');
+        }
+      });
+    }
+
+    return result;
   }
 
   private calculateEndDate(
@@ -1114,6 +1204,12 @@ export class MembershipsService {
          total_freeze_days = total_freeze_days + $4, updated_at = NOW() WHERE id = $5`,
         [startDate, endDate, dto.reason || null, freezeDays, id],
       );
+
+      // Log after freezing to capture the frozen state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'frozen');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -1145,6 +1241,12 @@ export class MembershipsService {
          updated_at = NOW() WHERE id = $2`,
         [actualFreezeDays, id],
       );
+
+      // Log after unfreezing to capture the unfrozen state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'unfrozen');
+      }
     });
 
     return this.findOne(id, gymId);
