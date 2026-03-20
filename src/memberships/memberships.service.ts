@@ -804,6 +804,45 @@ export class MembershipsService {
     return { id, deleted: true };
   }
 
+  async voidDelete(id: number, gymId: number) {
+    // Verify membership exists
+    await this.findOne(id, gymId);
+
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Hard delete payments linked to this membership
+      await client.query(
+        `DELETE FROM payments WHERE reference_table = 'memberships' AND reference_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership freezes
+      await client.query(
+        `DELETE FROM membership_freezes WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership facilities
+      await client.query(
+        `DELETE FROM membership_facilities WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership amenities
+      await client.query(
+        `DELETE FROM membership_amenities WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete the membership itself
+      await client.query(
+        `DELETE FROM memberships WHERE id = $1`,
+        [id],
+      );
+    });
+
+    return { id, voided: true, message: 'Membership permanently deleted' };
+  }
+
   async getExpiringSoon(
     gymId: number,
     branchId: number | null = null,

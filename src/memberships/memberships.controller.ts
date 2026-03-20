@@ -544,6 +544,19 @@ export class MembershipsController {
     return result;
   }
 
+  @Delete(':id/void')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'Permanently delete a membership and its related data' })
+  async voidDelete(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const result = await this.membershipsService.voidDelete(id, req.user.gymId!);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'voided' });
+    return result;
+  }
+
   @Delete(':id')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin')
