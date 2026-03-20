@@ -839,8 +839,6 @@ export class SaasSubscriptionsService {
 
     const isFree = plan.price.toNumber() === 0;
     const amount = plan.price.toNumber();
-    const status = isFree ? 'active' : 'trial';
-    const paymentStatus = isFree ? 'paid' : 'pending';
 
     // Check for existing subscription (renewal vs new)
     const existing = await this.prisma.saasGymSubscription.findUnique({
@@ -861,41 +859,89 @@ export class SaasSubscriptionsService {
 
     let subscription;
 
-    if (existing) {
-      // Renewal: update existing subscription with new plan
+    // For paid plans with an existing active subscription: DON'T overwrite the subscription yet.
+    // Only update it on payment approval. This prevents losing the current plan if payment is rejected.
+    const hasActiveExisting = existing && ['active', 'trial'].includes(existing.status);
+
+    if (isFree && existing) {
+      // Free plan: activate immediately
       subscription = await this.prisma.saasGymSubscription.update({
         where: { gymId },
         data: {
           planId: dto.planId,
           startDate,
           endDate,
-          status,
-          paymentStatus,
+          status: 'active',
+          paymentStatus: 'paid',
           amount,
           paymentMethod: dto.paymentMethod,
           paymentRef: dto.paymentRef,
           notes: dto.notes,
-          trialEndsAt: status === 'trial' ? endDate : null,
+          trialEndsAt: null,
           cancelledAt: null,
           cancelReason: null,
         },
         include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
       });
-    } else {
-      // New subscription
+    } else if (isFree && !existing) {
+      // Free plan, new subscription: create and activate immediately
       subscription = await this.prisma.saasGymSubscription.create({
         data: {
           gymId,
           planId: dto.planId,
           startDate,
           endDate,
-          status,
-          paymentStatus,
+          status: 'active',
+          paymentStatus: 'paid',
           amount,
           paymentMethod: dto.paymentMethod,
           paymentRef: dto.paymentRef,
           notes: dto.notes,
-          trialEndsAt: status === 'trial' ? endDate : null,
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    } else if (hasActiveExisting) {
+      // Paid plan with active subscription: keep current subscription unchanged
+      // Payment record will store the new plan details; subscription updates on approval
+      subscription = await this.prisma.saasGymSubscription.findUnique({
+        where: { gymId },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    } else if (existing) {
+      // Paid plan, existing but expired/cancelled: update to pending
+      subscription = await this.prisma.saasGymSubscription.update({
+        where: { gymId },
+        data: {
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status: 'trial',
+          paymentStatus: 'pending',
+          amount,
+          paymentMethod: dto.paymentMethod,
+          paymentRef: dto.paymentRef,
+          notes: dto.notes,
+          trialEndsAt: endDate,
+          cancelledAt: null,
+          cancelReason: null,
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    } else {
+      // Paid plan, no existing subscription: create new with pending status
+      subscription = await this.prisma.saasGymSubscription.create({
+        data: {
+          gymId,
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status: 'trial',
+          paymentStatus: 'pending',
+          amount,
+          paymentMethod: dto.paymentMethod,
+          paymentRef: dto.paymentRef,
+          notes: dto.notes,
+          trialEndsAt: endDate,
         },
         include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
       });
@@ -907,8 +953,17 @@ export class SaasSubscriptionsService {
       dto.paymentRef ||
       `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
-    // Store proofUrl in gatewayResponse JSON field if provided
-    const gatewayResponse = dto.proofUrl ? { proofUrl: dto.proofUrl } : undefined;
+    // Store proofUrl and previous subscription snapshot in gatewayResponse for reference
+    const gatewayResponseData: Record<string, any> = {};
+    if (dto.proofUrl) gatewayResponseData.proofUrl = dto.proofUrl;
+    if (hasActiveExisting && existing) {
+      // Save previous plan info so approval knows what to update
+      gatewayResponseData.previousPlanId = existing.planId;
+      gatewayResponseData.previousStartDate = existing.startDate;
+      gatewayResponseData.previousEndDate = existing.endDate;
+      gatewayResponseData.previousAmount = Number(existing.amount);
+    }
+    const gatewayResponse = Object.keys(gatewayResponseData).length > 0 ? gatewayResponseData : undefined;
 
     const payment = await this.prisma.saasPaymentHistory.create({
       data: {
@@ -959,15 +1014,20 @@ export class SaasSubscriptionsService {
       },
     });
 
-    // Activate the subscription
+    // Activate the subscription and update to the new plan from payment
     await this.prisma.saasGymSubscription.update({
       where: { id: payment.subscriptionId },
       data: {
+        planId: payment.planId,
+        startDate: payment.billingPeriodStart,
+        endDate: payment.billingPeriodEnd,
+        amount: payment.amount,
         paymentStatus: 'paid',
         status: 'active',
         lastPaymentAt: new Date(),
         paymentRef: payment.paymentRef,
         paymentMethod: payment.paymentMethod,
+        trialEndsAt: null,
       },
     });
 
@@ -1003,14 +1063,22 @@ export class SaasSubscriptionsService {
       },
     });
 
-    // Revert subscription to expired so gym owner can retry
-    await this.prisma.saasGymSubscription.update({
+    // Check if subscription was already active on a different plan (wasn't overwritten)
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
       where: { id: payment.subscriptionId },
-      data: {
-        paymentStatus: 'failed',
-        status: 'expired',
-      },
     });
+
+    // Only suspend if the subscription was actually updated for this payment
+    // (i.e., it's on trial/pending status). If it's still active on the original plan, leave it alone.
+    if (subscription && !['active'].includes(subscription.status)) {
+      await this.prisma.saasGymSubscription.update({
+        where: { id: payment.subscriptionId },
+        data: {
+          paymentStatus: 'failed',
+          status: 'suspended',
+        },
+      });
+    }
 
     return updatedPayment;
   }
