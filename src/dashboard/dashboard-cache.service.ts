@@ -12,11 +12,11 @@ export class DashboardCacheService {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-  private makeKey(gymId: number, branchId: number | null): string {
+  private makeKey(gymId: number, branchId: number | null = null): string {
     return `${gymId}:${branchId ?? 'all'}`;
   }
 
-  get(gymId: number, branchId: number | null): AdminDashboardDto | null {
+  get(gymId: number, branchId: number | null = null): AdminDashboardDto | null {
     const key = this.makeKey(gymId, branchId);
     const entry = this.cache.get(key);
     if (!entry) return null;
@@ -37,6 +37,7 @@ export class DashboardCacheService {
     this.logger.debug(`Cache set for ${key}`);
   }
 
+  /** Invalidate ALL cache entries for a given gym (all branch variants). */
   invalidate(gymId: number): void {
     const prefix = `${gymId}:`;
     let count = 0;

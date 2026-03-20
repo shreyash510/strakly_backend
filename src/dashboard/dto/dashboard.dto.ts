@@ -325,9 +325,6 @@ export class ClientAttendanceStatsDto {
 
   @ApiProperty({ description: 'Total attendance all time' })
   total: number;
-
-  @ApiProperty({ description: 'Current streak in days' })
-  currentStreak: number;
 }
 
 export class ClientRecentAttendanceDto {
