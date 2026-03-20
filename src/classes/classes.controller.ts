@@ -24,10 +24,7 @@ import {
 } from './dto/class.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
@@ -37,8 +34,7 @@ import { ManagerPermission } from '../auth/decorators/manager-permission.decorat
 
 @ApiTags('classes')
 @Controller('classes')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
-@PlanFeatures(PLAN_FEATURES.CLASS_SCHEDULING)
+@UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
 @ApiBearerAuth()
 export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}

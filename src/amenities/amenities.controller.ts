@@ -22,19 +22,15 @@ import { CreateAmenityDto } from './dto/create-amenity.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('amenities')
 @Controller('amenities')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.AMENITIES_MANAGEMENT)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AmenitiesController {
   constructor(

@@ -31,17 +31,13 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('diets')
 @Controller('diets')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.DIET_PLANNING)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class DietsController {
   constructor(
