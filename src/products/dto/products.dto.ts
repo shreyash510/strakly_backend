@@ -176,6 +176,14 @@ export class UpdateProductDto {
   @IsInt()
   @Min(0)
   @Type(() => Number)
+  stockQuantity?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
   lowStockThreshold?: number;
 
   @ApiPropertyOptional()
