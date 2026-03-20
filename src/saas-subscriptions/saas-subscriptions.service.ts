@@ -838,10 +838,6 @@ export class SaasSubscriptionsService {
     }
 
     const isFree = plan.price.toNumber() === 0;
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + (plan.durationMonths || 1));
-
     const amount = plan.price.toNumber();
     const status = isFree ? 'active' : 'trial';
     const paymentStatus = isFree ? 'paid' : 'pending';
@@ -850,6 +846,18 @@ export class SaasSubscriptionsService {
     const existing = await this.prisma.saasGymSubscription.findUnique({
       where: { gymId },
     });
+
+    // For renewals: new subscription starts from existing end date (if still active/future)
+    // For new subscriptions or expired ones: start from today
+    const now = new Date();
+    let startDate: Date;
+    if (existing && new Date(existing.endDate) > now && ['active', 'trial'].includes(existing.status)) {
+      startDate = new Date(existing.endDate);
+    } else {
+      startDate = now;
+    }
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + (plan.durationMonths || 1));
 
     let subscription;
 
