@@ -158,6 +158,44 @@ export class MembershipsService {
     );
   }
 
+  async getAuditLog(userId: number, gymId: number, limit: number = 50) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT mh.*, p.name as plan_name, p.code as plan_code
+         FROM membership_history mh
+         LEFT JOIN plans p ON p.id = mh.plan_id
+         WHERE mh.user_id = $1
+         ORDER BY mh.created_at DESC
+         LIMIT $2`,
+        [userId, limit],
+      );
+      return result.rows.map((r: Record<string, any>) => ({
+        id: r.id,
+        originalId: r.original_id,
+        userId: r.user_id,
+        planId: r.plan_id,
+        planName: r.plan_name,
+        planCode: r.plan_code,
+        status: r.status,
+        originalAmount: parseFloat(r.original_amount || '0'),
+        discountAmount: parseFloat(r.discount_amount || '0'),
+        finalAmount: parseFloat(r.final_amount || '0'),
+        currency: r.currency,
+        paymentStatus: r.payment_status,
+        paymentMethod: r.payment_method,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        cancelledAt: r.cancelled_at,
+        cancelReason: r.cancel_reason,
+        notes: r.notes,
+        archiveReason: r.archive_reason,
+        archivedAt: r.archived_at,
+        originalCreatedAt: r.original_created_at,
+        createdAt: r.created_at,
+      }));
+    });
+  }
+
   private formatMembership(m: Record<string, any>) {
     return {
       id: m.id,

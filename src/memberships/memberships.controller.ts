@@ -243,6 +243,27 @@ export class MembershipsController {
     );
   }
 
+  @Get('audit-log')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get membership audit log from membership_history table' })
+  @ApiQuery({ name: 'clientId', required: true, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getAuditLog(
+    @Request() req: AuthenticatedRequest,
+    @Query('clientId') clientId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!clientId) {
+      throw new BadRequestException('clientId query parameter is required');
+    }
+    return this.membershipsService.getAuditLog(
+      parseInt(clientId),
+      req.user.gymId!,
+      limit ? parseInt(limit) : 50,
+    );
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
