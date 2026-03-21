@@ -14,7 +14,6 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 interface SocketData {
   userId: number;
   gymId: number | null;
-  branchId: number | null;
   role: string;
   isSuperAdmin: boolean;
 }
@@ -77,7 +76,6 @@ export class NotificationsGateway
       const userId =
         typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
       const gymId = payload.gymId;
-      const branchId = payload.branchId;
       const role = payload.role || 'client';
       const isSuperAdmin = payload.isSuperAdmin === true;
 
@@ -85,7 +83,6 @@ export class NotificationsGateway
       const data: SocketData = {
         userId,
         gymId,
-        branchId,
         role,
         isSuperAdmin,
       };
@@ -107,9 +104,6 @@ export class NotificationsGateway
       } else if (gymId) {
         client.join(`gym:${gymId}`);
         client.join(`user:${gymId}:${userId}`);
-        if (branchId) {
-          client.join(`branch:${gymId}:${branchId}`);
-        }
       }
 
       this.logger.log(

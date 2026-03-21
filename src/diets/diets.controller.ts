@@ -45,18 +45,6 @@ export class DietsController {
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  /**
-   * Resolve branchId from request: null = all branches, number = specific branch
-   */
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    if (req.user.role === 'superadmin') {
-      return queryBranchId ? parseInt(queryBranchId) : null;
-    }
-    return queryBranchId
-      ? parseInt(queryBranchId)
-      : (req.user.branchId ?? null);
-  }
-
   @Get()
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -85,12 +73,6 @@ export class DietsController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('status') status?: string,
@@ -100,7 +82,6 @@ export class DietsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId =
       req.user.role === 'superadmin'
@@ -113,8 +94,6 @@ export class DietsController {
       throw new BadRequestException('gymId is required');
     }
 
-    const branchId = this.resolveBranchId(req, queryBranchId);
-
     return this.dietsService.findAll(gymId, {
       status,
       type,
@@ -122,7 +101,6 @@ export class DietsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
-      branchId,
     });
   }
 
@@ -156,13 +134,10 @@ export class DietsController {
   @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Create a new diet plan' })
   async create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
-    // Use branchId from request body if provided, otherwise fallback to user's branchId
-    const branchId = dto.branchId ?? req.user.branchId ?? null;
     const result = await this.dietsService.create(
       dto,
       req.user.gymId!,
       req.user.userId,
-      branchId,
     );
     this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'created' });
     return result;
@@ -202,12 +177,10 @@ export class DietsController {
   @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
   async assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
-    const branchId = req.user.branchId ?? null;
     const result = await this.dietsService.assignDiet(
       dto,
       req.user.gymId!,
       req.user.userId,
-      branchId,
     );
     this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'assigned' });
     return result;

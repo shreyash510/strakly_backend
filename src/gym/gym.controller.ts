@@ -43,19 +43,12 @@ export class GymController {
   @Get('profile')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym profile with branch details' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Filter by specific branch',
-  })
-  async getProfile(@Request() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
+  async getProfile(@Request() req: AuthenticatedRequest) {
     const gymId = req.user?.gymId;
     if (!gymId) {
       throw new BadRequestException('No gym associated with this user');
     }
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
-    return this.gymService.getProfile(gymId, parsedBranchId);
+    return this.gymService.getProfile(gymId, null);
   }
 
   @Get()

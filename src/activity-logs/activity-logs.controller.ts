@@ -12,7 +12,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('activity-logs')
@@ -26,18 +25,16 @@ export class ActivityLogsController {
   @Get()
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ActivityLogFiltersDto,
   ) {
-    return this.activityLogsService.findAll(gymId, branchId, filters);
+    return this.activityLogsService.findAll(gymId, filters);
   }
 
   @Get('stats')
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.activityLogsService.getStats(gymId, branchId);
+    return this.activityLogsService.getStats(gymId);
   }
 
   @Get('target/:type/:id')
@@ -45,13 +42,11 @@ export class ActivityLogsController {
     @Param('type') targetType: string,
     @Param('id', ParseIntPipe) targetId: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
     return this.activityLogsService.findByTarget(
       targetType,
       targetId,
       gymId,
-      branchId,
     );
   }
 

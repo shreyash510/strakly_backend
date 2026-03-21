@@ -36,7 +36,6 @@ export class OffersService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -60,7 +59,7 @@ export class OffersService {
     });
   }
 
-  async findActive(gymId: number, branchId: number | null = null) {
+  async findActive(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL) ORDER BY valid_to ASC`;
 
@@ -69,7 +68,7 @@ export class OffersService {
     });
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -91,7 +90,6 @@ export class OffersService {
   async findByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
@@ -114,7 +112,6 @@ export class OffersService {
   async validateOfferCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
@@ -154,7 +151,6 @@ export class OffersService {
   async create(
     dto: CreateOfferDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const existing = await this.tenantService.executeInTenant(
       gymId,
@@ -186,7 +182,7 @@ export class OffersService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, true, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
+            null,
             dto.code,
             dto.name,
             dto.description || null,

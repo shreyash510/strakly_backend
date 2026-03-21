@@ -109,7 +109,6 @@ export class DietsService {
       search?: string;
       page?: number;
       limit?: number;
-      branchId?: number | null;
     },
   ) {
     await this.ensureTablesExist(gymId);
@@ -174,7 +173,7 @@ export class DietsService {
   /**
    * Find a single diet by ID
    */
-  async findOne(id: number, gymId: number, branchId?: number | null) {
+  async findOne(id: number, gymId: number) {
     await this.ensureTablesExist(gymId);
 
     const diet = await this.tenantService.executeInTenant(
@@ -202,7 +201,6 @@ export class DietsService {
     dto: CreateDietDto,
     gymId: number,
     userId: number,
-    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
 
@@ -214,7 +212,7 @@ export class DietsService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
           [
-            branchId ?? null,
+            null,
             dto.title,
             dto.type,
             dto.description || null,
@@ -303,7 +301,6 @@ export class DietsService {
     dto: AssignDietDto,
     gymId: number,
     assignedBy: number,
-    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
 
@@ -335,7 +332,7 @@ export class DietsService {
          VALUES ($1, $2, $3, $4, NOW(), 'active', $5, NOW(), NOW())
          RETURNING *`,
           [
-            branchId ?? null,
+            null,
             dto.dietId,
             dto.userId,
             assignedBy,
@@ -379,7 +376,6 @@ export class DietsService {
   async getDietAssignments(
     dietId: number,
     gymId: number,
-    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
     await this.findOne(dietId, gymId); // Verify diet exists
@@ -639,7 +635,6 @@ export class DietsService {
   private formatDiet(d: Record<string, any>) {
     return {
       id: d.id,
-      branchId: d.branch_id,
       title: d.title,
       type: d.type,
       description: d.description,
@@ -660,7 +655,6 @@ export class DietsService {
   ) {
     return {
       id: assignment.id,
-      branchId: assignment.branch_id,
       dietId: diet.id,
       dietTitle: diet.title,
       dietType: diet.type,

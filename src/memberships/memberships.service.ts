@@ -35,7 +35,6 @@ export class MembershipsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters?: {
       status?: string;
       userId?: number;
@@ -597,7 +596,6 @@ export class MembershipsService {
     if (actorInfo) {
       await this.activityLogsService.logMembershipCreated(
         gymId,
-        membershipBranchId,
         actorInfo.id,
         actorInfo.role,
         actorInfo.name,
@@ -610,7 +608,6 @@ export class MembershipsService {
     // Notify admin and manager about new enrollment
     await this.notificationHelper.notifyStaff(
       gymId,
-      membershipBranchId || null,
       {
         type: NotificationType.NEW_ENROLLMENT,
         title: 'New Membership Enrollment',

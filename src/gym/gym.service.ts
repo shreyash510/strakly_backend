@@ -4,12 +4,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
-import { BranchService } from '../branch/branch.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
@@ -35,8 +32,6 @@ export class GymService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
-    @Inject(forwardRef(() => BranchService))
-    private readonly branchService: BranchService,
     private readonly uploadService: UploadService,
   ) {}
 
@@ -241,12 +236,6 @@ export class GymService {
     // Create the tenant schema with all tables (for clients)
     await this.tenantService.createTenantSchema(gym.id);
 
-    // Create default branch for this gym
-    const defaultBranch = await this.branchService.createDefaultBranch(
-      gym.id,
-      gym,
-    );
-
     // Create admin user in PUBLIC.users
     const createdUser = await this.prisma.user.create({
       data: {
@@ -258,12 +247,11 @@ export class GymService {
       },
     });
 
-    // Create user-gym assignment with admin role (null branchId = all branches)
+    // Create user-gym assignment with admin role
     await this.prisma.userGymXref.create({
       data: {
         userId: createdUser.id,
         gymId: gym.id,
-        branchId: null, // Admin has access to all branches
         role: ROLES.ADMIN,
         isPrimary: true,
         isActive: true,
@@ -700,8 +688,10 @@ export class GymService {
     // Get branches with stats
     let branches: Record<string, any>[];
     if (branchId) {
-      // Get single branch with stats
-      const branch = await this.branchService.findOne(gymId, branchId);
+      // Get single branch
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, gymId },
+      });
       branches = branch ? [branch] : [];
     } else {
       // Get all branches with stats

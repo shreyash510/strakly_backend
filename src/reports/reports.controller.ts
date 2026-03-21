@@ -32,18 +32,6 @@ export class ReportsController {
     private readonly pdfTemplateService: PdfTemplateService,
   ) {}
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Get('download-pdf')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Download comprehensive PDF report' })
@@ -58,12 +46,6 @@ export class ReportsController {
     required: false,
     type: Number,
     description: 'Filter by month (1-12)',
-  })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
   })
   @ApiQuery({
     name: 'startDate',
@@ -81,15 +63,12 @@ export class ReportsController {
     @Query() filters: PdfReportFilterDto,
     @Req() req: AuthenticatedRequest,
     @Res() res: Response,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
 
     const fullData = await this.reportsService.getFullReportData(
       gymId,
       filters,
-      branchId,
     );
 
     const html = this.pdfTemplateService.buildFullReportHtml(fullData);
@@ -111,88 +90,57 @@ export class ReportsController {
 
   @Get('income-expense')
   @Roles('admin', 'manager')
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async getIncomeExpenseReport(
     @Query() filters: ReportFilterDto,
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getIncomeExpenseReport(gymId, filters, branchId);
+    return this.reportsService.getIncomeExpenseReport(gymId, filters);
   }
 
   @Get('membership-sales')
   @Roles('admin', 'manager')
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async getMembershipSalesReport(
     @Query() filters: ReportFilterDto,
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getMembershipSalesReport(
       gymId,
       filters,
-      branchId,
     );
   }
 
   @Get('payment-dues')
   @Roles('admin', 'manager')
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async getPaymentDuesReport(
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getPaymentDuesReport(gymId, branchId);
+    return this.reportsService.getPaymentDuesReport(gymId);
   }
 
   @Get('daily-sales')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get daily sales report (memberships + products + expenses)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date (YYYY-MM-DD), defaults to today' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID for filtering' })
   async getDailySalesReport(
     @Query() filters: DailySalesFilterDto,
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     const date = filters.date || new Date().toISOString().slice(0, 10);
-    return this.reportsService.getDailySalesReport(gymId, date, branchId);
+    return this.reportsService.getDailySalesReport(gymId, date);
   }
 
   @Get('deleted-transactions')
   @Roles('admin')
   @ApiOperation({ summary: 'Get deleted transactions (memberships + product sales)' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number })
   async getDeletedTransactions(
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.reportsService.getDeletedTransactions(gymId, branchId);
+    return this.reportsService.getDeletedTransactions(gymId);
   }
 
   // ============================================
@@ -202,23 +150,14 @@ export class ReportsController {
   @Get('trainer/clients/summary')
   @Roles('trainer', 'admin', 'manager')
   @ApiOperation({ summary: "Get summary of all trainer's clients" })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   async getTrainerClientsSummary(
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
     const trainerId = req.user.userId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getTrainerClientsSummary(
       trainerId,
       gymId,
-      branchId,
     );
   }
 
@@ -238,27 +177,18 @@ export class ReportsController {
     type: String,
     description: 'End date (YYYY-MM-DD)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   async getClientProgressReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
     const trainerId = req.user.userId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getClientProgressReport(
       trainerId,
       clientId,
       gymId,
       filters,
-      branchId,
     );
   }
 
@@ -278,27 +208,18 @@ export class ReportsController {
     type: String,
     description: 'End date (YYYY-MM-DD)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   async getClientAttendanceReport(
     @Param('clientId', ParseIntPipe) clientId: number,
     @Query() filters: ClientReportFilterDto,
     @Req() req: AuthenticatedRequest,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = req.user.gymId!;
     const trainerId = req.user.userId;
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.reportsService.getClientAttendanceReport(
       trainerId,
       clientId,
       gymId,
       filters,
-      branchId,
     );
   }
 }

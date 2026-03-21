@@ -34,7 +34,6 @@ export class AmenitiesService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -61,7 +60,7 @@ export class AmenitiesService {
   /**
    * Get a single amenity by ID
    */
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const amenity = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -86,7 +85,6 @@ export class AmenitiesService {
   async create(
     dto: CreateAmenityDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
     // Check for duplicate code within the same branch
     const existing = await this.tenantService.executeInTenant(
@@ -114,7 +112,7 @@ export class AmenitiesService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
+            null,
             dto.name,
             dto.code,
             dto.description || null,

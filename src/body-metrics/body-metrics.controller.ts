@@ -43,23 +43,19 @@ export class BodyMetricsController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user body metrics' })
   getMyMetrics(@Request() req: AuthenticatedRequest) {
-    const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.getOrCreateMetrics(
       req.user.userId,
       req.user.gymId!,
-      branchId,
     );
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update current user body metrics' })
   async updateMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: UpdateBodyMetricsDto) {
-    const branchId = req.user.branchId ?? null;
     const result = await this.bodyMetricsService.updateMetrics(
       req.user.userId,
       req.user.gymId!,
       dto,
-      branchId,
     );
     this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'updated' });
     return result;
@@ -68,12 +64,10 @@ export class BodyMetricsController {
   @Post('me/record')
   @ApiOperation({ summary: 'Record body metrics and save to history' })
   async recordMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: RecordMetricsDto) {
-    const branchId = req.user.branchId ?? null;
     const result = await this.bodyMetricsService.recordMetrics(
       req.user.userId,
       req.user.gymId!,
       dto,
-      branchId,
     );
     this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'recorded' });
     return result;
@@ -145,11 +139,9 @@ export class BodyMetricsController {
   })
   getUserMetrics(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const branchId = req.user.branchId ?? null;
     return this.bodyMetricsService.getOrCreateMetrics(
       parseInt(userId),
       req.user.gymId!,
-      branchId,
     );
   }
 
@@ -168,12 +160,10 @@ export class BodyMetricsController {
     @Body() dto: UpdateBodyMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const branchId = req.user.branchId ?? null;
     const result = await this.bodyMetricsService.updateMetrics(
       parseInt(userId),
       req.user.gymId!,
       dto,
-      branchId,
     );
     this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'updated' });
     return result;
@@ -194,12 +184,10 @@ export class BodyMetricsController {
     @Body() dto: RecordMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const branchId = req.user.branchId ?? null;
     const result = await this.bodyMetricsService.recordMetrics(
       parseInt(userId),
       req.user.gymId!,
       dto,
-      branchId,
     );
     this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'recorded' });
     return result;

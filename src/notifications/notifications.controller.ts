@@ -47,12 +47,9 @@ export class NotificationsController {
     if (!user.gymId) {
       throw new ForbiddenException('Gym context required');
     }
-    // Use query branchId if provided, otherwise fall back to user's branchId
-    const branchId = query.branchId ?? user.branchId;
     return this.notificationsService.findAll(
       user.userId,
       user.gymId,
-      branchId,
       query,
     );
   }
@@ -75,7 +72,6 @@ export class NotificationsController {
     const count = await this.notificationsService.getUnreadCount(
       user.userId,
       user.gymId,
-      user.branchId,
     );
     return { count };
   }
@@ -139,7 +135,6 @@ export class NotificationsController {
     const count = await this.notificationsService.markAllAsRead(
       user.userId,
       user.gymId,
-      user.branchId,
     );
     return { count };
   }

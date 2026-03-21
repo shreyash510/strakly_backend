@@ -32,7 +32,7 @@ export class GuestVisitsService {
     };
   }
 
-  async findAll(gymId: number, branchId: number | null, filters: GuestVisitFiltersDto = {}) {
+  async findAll(gymId: number, filters: GuestVisitFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 20;
     const skip = (page - 1) * limit;
@@ -100,7 +100,7 @@ export class GuestVisitsService {
     });
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const visit = await this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['gv.id = $1'];
       const values: SqlValue[] = [id];
@@ -120,7 +120,7 @@ export class GuestVisitsService {
     return this.formatVisit(visit);
   }
 
-  async create(gymId: number, branchId: number | null, dto: CreateGuestVisitDto, checkedInBy: number) {
+  async create(gymId: number, dto: CreateGuestVisitDto, checkedInBy: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Enforce guest visit limit per client per month
       if (dto.broughtBy) {
@@ -141,7 +141,7 @@ export class GuestVisitsService {
          VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10, NOW())
          RETURNING *`,
         [
-          branchId,
+          null,
           dto.guestName,
           dto.guestPhone ?? null,
           dto.guestEmail ?? null,
@@ -168,7 +168,7 @@ export class GuestVisitsService {
     });
   }
 
-  async update(id: number, gymId: number, branchId: number | null, dto: UpdateGuestVisitDto) {
+  async update(id: number, gymId: number, dto: UpdateGuestVisitDto) {
     const updates: string[] = [];
     const values: SqlValue[] = [];
     let paramIndex = 1;
@@ -182,7 +182,7 @@ export class GuestVisitsService {
     if (dto.paymentMethod !== undefined) { updates.push(`payment_method = $${paramIndex++}`); values.push(dto.paymentMethod); }
     if (dto.notes !== undefined) { updates.push(`notes = $${paramIndex++}`); values.push(dto.notes); }
 
-    if (updates.length === 0) return this.findOne(id, gymId, branchId);
+    if (updates.length === 0) return this.findOne(id, gymId);
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Build WHERE with branch scoping
@@ -210,7 +210,7 @@ export class GuestVisitsService {
     });
   }
 
-  async markConverted(id: number, gymId: number, branchId: number | null) {
+  async markConverted(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
@@ -236,7 +236,7 @@ export class GuestVisitsService {
     });
   }
 
-  async remove(id: number, gymId: number, branchId: number | null) {
+  async remove(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
@@ -251,7 +251,7 @@ export class GuestVisitsService {
     });
   }
 
-  async getStats(gymId: number, branchId: number | null) {
+  async getStats(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const branchCondition = '';
       const branchValues: SqlValue[] = [];

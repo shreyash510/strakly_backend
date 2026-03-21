@@ -16,7 +16,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
@@ -34,9 +33,8 @@ export class GuestVisitsController {
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.getStats(gymId, branchId);
+    return this.guestVisitsService.getStats(gymId);
   }
 
   @Get()
@@ -44,10 +42,9 @@ export class GuestVisitsController {
   @ApiOperation({ summary: 'List guest visits with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: GuestVisitFiltersDto,
   ) {
-    return this.guestVisitsService.findAll(gymId, branchId, filters);
+    return this.guestVisitsService.findAll(gymId, filters);
   }
 
   @Get(':id')
@@ -56,9 +53,8 @@ export class GuestVisitsController {
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.findOne(id, gymId, branchId);
+    return this.guestVisitsService.findOne(id, gymId);
   }
 
   @Post()
@@ -69,10 +65,9 @@ export class GuestVisitsController {
   async create(
     @Body() dto: CreateGuestVisitDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
   ) {
-    return this.guestVisitsService.create(gymId, branchId, dto, userId);
+    return this.guestVisitsService.create(gymId, dto, userId);
   }
 
   @Patch(':id')
@@ -84,9 +79,8 @@ export class GuestVisitsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateGuestVisitDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.update(id, gymId, branchId, dto);
+    return this.guestVisitsService.update(id, gymId, dto);
   }
 
   @Patch(':id/convert')
@@ -97,9 +91,8 @@ export class GuestVisitsController {
   async markConverted(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.markConverted(id, gymId, branchId);
+    return this.guestVisitsService.markConverted(id, gymId);
   }
 
   @Delete(':id')
@@ -110,8 +103,7 @@ export class GuestVisitsController {
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.remove(id, gymId, branchId);
+    return this.guestVisitsService.remove(id, gymId);
   }
 }

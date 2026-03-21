@@ -90,7 +90,6 @@ export class PaymentsService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: PaymentFiltersDto = {},
   ) {
     const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 15);
@@ -170,7 +169,6 @@ export class PaymentsService {
   async findOne(
     id: number,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<PaymentRecord> {
     const payment = await this.tenantService.executeInTenant(
       gymId,
@@ -241,7 +239,7 @@ export class PaymentsService {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
         ) RETURNING *`,
           [
-            dto.branchId || null,
+            null,
             dto.paymentType,
             dto.referenceId,
             dto.referenceTable,
@@ -346,7 +344,6 @@ export class PaymentsService {
    */
   async getStats(
     gymId: number,
-    branchId: number | null = null,
     startDate?: Date,
     endDate?: Date,
   ) {
@@ -436,7 +433,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.MEMBERSHIP,
         referenceId: membershipId,
         referenceTable: 'memberships',
@@ -474,7 +470,6 @@ export class PaymentsService {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.MEMBERSHIP,
         referenceId: membershipId,
         referenceTable: 'memberships',
@@ -507,7 +502,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.SALARY,
         referenceId: salaryId,
         referenceTable: 'staff_salaries',
@@ -544,7 +538,6 @@ export class PaymentsService {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.SALARY,
         referenceId: salaryId,
         referenceTable: 'staff_salaries',
@@ -587,7 +580,7 @@ export class PaymentsService {
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
       ) RETURNING *`,
       [
-        dto.branchId || null,
+        null,
         dto.paymentType,
         dto.referenceId,
         dto.referenceTable,
@@ -632,7 +625,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.PRODUCT_SALE,
         referenceId: saleId,
         referenceTable: 'product_sales',
@@ -668,7 +660,6 @@ export class PaymentsService {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.PRODUCT_SALE,
         referenceId: saleId,
         referenceTable: 'product_sales',

@@ -39,7 +39,6 @@ export class ReportsService {
   async getIncomeExpenseReport(
     gymId: number,
     filters: ReportFilterDto,
-    branchId: number | null = null,
   ): Promise<IncomeExpenseReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -254,7 +253,6 @@ export class ReportsService {
   async getMembershipSalesReport(
     gymId: number,
     filters: ReportFilterDto,
-    branchId: number | null = null,
   ): Promise<MembershipSalesReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -392,7 +390,6 @@ export class ReportsService {
 
   async getPaymentDuesReport(
     gymId: number,
-    branchId: number | null = null,
   ): Promise<PaymentDuesReportDto> {
     // Get membership dues (pending payments)
     const membershipDues = await this.tenantService.executeInTenant(
@@ -495,7 +492,6 @@ export class ReportsService {
 
   async getDeletedTransactions(
     gymId: number,
-    branchId: number | null = null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const branchFilter = '';
@@ -589,7 +585,6 @@ export class ReportsService {
   async getDailySalesReport(
     gymId: number,
     date: string,
-    branchId: number | null = null,
   ) {
     const dayStart = `${date} 00:00:00`;
     const dayEnd = `${date} 23:59:59.999`;
@@ -790,7 +785,6 @@ export class ReportsService {
     clientId: number,
     gymId: number,
     filters?: ClientReportFilterDto,
-    branchId?: number | null,
   ): Promise<ClientProgressReportDto> {
     // Verify trainer has access to this client
     const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
@@ -931,7 +925,6 @@ export class ReportsService {
     clientId: number,
     gymId: number,
     filters?: ClientReportFilterDto,
-    branchId?: number | null,
   ): Promise<ClientAttendanceReportDto> {
     // Verify trainer has access to this client
     const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
@@ -1100,7 +1093,6 @@ export class ReportsService {
   async getTrainerClientsSummary(
     trainerId: number,
     gymId: number,
-    branchId?: number | null,
   ): Promise<TrainerClientsSummaryDto> {
     const summary = await this.tenantService.executeInTenant(
       gymId,
@@ -1327,7 +1319,6 @@ export class ReportsService {
   async getFullReportData(
     gymId: number,
     filters: PdfReportFilterDto,
-    branchId: number | null = null,
   ): Promise<FullReportData> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -1353,14 +1344,14 @@ export class ReportsService {
       gymInfo,
       branchName,
     ] = await Promise.all([
-      this.getIncomeExpenseReport(gymId, reportFilters, branchId),
-      this.getMembershipSalesReport(gymId, reportFilters, branchId),
-      this.getPaymentDuesReport(gymId, branchId),
-      this.attendanceService.getReports(gymId, branchId, startDate, endDate),
-      this.getDashboardSummary(gymId, branchId, year, month),
-      this.getTrainerStaffReport(gymId, year, branchId),
+      this.getIncomeExpenseReport(gymId, reportFilters),
+      this.getMembershipSalesReport(gymId, reportFilters),
+      this.getPaymentDuesReport(gymId),
+      this.attendanceService.getReports(gymId, startDate, endDate),
+      this.getDashboardSummary(gymId, year, month),
+      this.getTrainerStaffReport(gymId, year),
       this.getGymInfo(gymId),
-      this.getBranchName(gymId, branchId),
+      this.getBranchName(gymId),
     ]);
 
     return {
@@ -1379,7 +1370,6 @@ export class ReportsService {
 
   private async getDashboardSummary(
     gymId: number,
-    branchId: number | null,
     year: number,
     month?: number,
   ): Promise<DashboardSummary> {
@@ -1442,7 +1432,6 @@ export class ReportsService {
   private async getTrainerStaffReport(
     gymId: number,
     year: number,
-    branchId: number | null,
   ): Promise<TrainerStaffReportItem[]> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const whereClause = `u.role IN ('trainer', 'manager')`;
@@ -1501,16 +1490,8 @@ export class ReportsService {
 
   private async getBranchName(
     gymId: number,
-    branchId: number | null,
   ): Promise<string | null> {
-    if (branchId === null) return null;
-
-    const branch = await this.prisma.branch.findFirst({
-      where: { id: branchId, gymId },
-      select: { name: true },
-    });
-
-    return branch?.name || null;
+    return null;
   }
 
   private getMonthName(month: number): string {

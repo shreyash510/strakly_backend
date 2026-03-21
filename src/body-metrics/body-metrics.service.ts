@@ -22,7 +22,6 @@ export class BodyMetricsService {
     return {
       id: m.id,
       userId: m.user_id,
-      branchId: m.branch_id,
       height: m.height,
       weight: m.weight,
       bmi: m.bmi,
@@ -56,7 +55,7 @@ export class BodyMetricsService {
     };
   }
 
-  async getMetrics(userId: number, gymId: number, branchId?: number | null) {
+  async getMetrics(userId: number, gymId: number) {
     const metrics = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -78,7 +77,6 @@ export class BodyMetricsService {
   async getOrCreateMetrics(
     userId: number,
     gymId: number,
-    branchId?: number | null,
   ) {
     let metrics = await this.tenantService.executeInTenant(
       gymId,
@@ -97,7 +95,7 @@ export class BodyMetricsService {
         async (client) => {
           const result = await client.query(
             `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
-            [userId, branchId ?? null],
+            [userId, null],
           );
           return result.rows[0];
         },
@@ -111,7 +109,6 @@ export class BodyMetricsService {
     userId: number,
     gymId: number,
     dto: UpdateBodyMetricsDto,
-    branchId?: number | null,
   ) {
     // Verify user exists
     const user = await this.tenantService.executeInTenant(
@@ -262,7 +259,7 @@ export class BodyMetricsService {
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
             [
               userId,
-              branchId ?? null,
+              null,
               dto.height,
               dto.weight,
               bmi,
@@ -287,10 +284,9 @@ export class BodyMetricsService {
     userId: number,
     gymId: number,
     dto: RecordMetricsDto,
-    branchId?: number | null,
   ) {
     // Update current metrics
-    await this.updateMetrics(userId, gymId, dto, branchId);
+    await this.updateMetrics(userId, gymId, dto);
 
     const currentMetrics = await this.getMetrics(userId, gymId);
     const height = dto.height || currentMetrics?.height;
@@ -307,7 +303,7 @@ export class BodyMetricsService {
          RETURNING *`,
           [
             userId,
-            branchId ?? null,
+            null,
             measuredAt,
             dto.height || null,
             dto.weight || null,
@@ -350,7 +346,6 @@ export class BodyMetricsService {
     return {
       id: historyRecord.id,
       userId: historyRecord.user_id,
-      branchId: historyRecord.branch_id,
       measuredAt: historyRecord.measured_at,
       height: historyRecord.height,
       weight: historyRecord.weight,
@@ -395,7 +390,6 @@ export class BodyMetricsService {
       endDate?: Date;
       page?: number;
       limit?: number;
-      branchId?: number | null;
     },
   ) {
     const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 10);
@@ -479,8 +473,8 @@ export class BodyMetricsService {
     });
   }
 
-  async getProgress(userId: number, gymId: number, branchId?: number | null) {
-    const current = await this.getMetrics(userId, gymId, branchId);
+  async getProgress(userId: number, gymId: number) {
+    const current = await this.getMetrics(userId, gymId);
 
     if (!current) {
       return null;

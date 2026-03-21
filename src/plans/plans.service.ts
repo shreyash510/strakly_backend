@@ -24,7 +24,6 @@ export class PlansService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -53,7 +52,7 @@ export class PlansService {
    * @param gymId - Gym ID
    * @param branchId - Branch ID (null = all branches for admin)
    */
-  async findFeatured(gymId: number, branchId: number | null = null) {
+  async findFeatured(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
@@ -73,7 +72,6 @@ export class PlansService {
   private formatPlan(p: Record<string, any>) {
     return {
       id: p.id,
-      branchId: p.branch_id,
       code: p.code,
       name: p.name,
       description: p.description,
@@ -93,7 +91,7 @@ export class PlansService {
     };
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const plan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -115,7 +113,6 @@ export class PlansService {
   async findByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const plan = await this.tenantService.executeInTenant(
       gymId,
@@ -144,7 +141,6 @@ export class PlansService {
   async create(
     dto: CreatePlanDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const existing = await this.tenantService.executeInTenant(
       gymId,
@@ -175,7 +171,7 @@ export class PlansService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
+            null,
             dto.code,
             dto.name,
             dto.description || null,
@@ -312,10 +308,9 @@ export class PlansService {
   async calculatePriceWithOffer(
     planId: number,
     gymId: number,
-    branchId: number | null = null,
     offerCode?: string,
   ) {
-    const plan = await this.findOne(planId, gymId, branchId);
+    const plan = await this.findOne(planId, gymId);
 
     let discount = 0;
     let validOffer: Record<string, any> | null = null;

@@ -58,7 +58,6 @@ export class AnnouncementsService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: AnnouncementFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -129,7 +128,6 @@ export class AnnouncementsService {
    */
   async getActive(
     gymId: number,
-    branchId: number | null = null,
     platform: 'dashboard' | 'mobile' = 'dashboard',
   ): Promise<AnnouncementRecord[]> {
     const announcements = await this.tenantService.executeInTenant(
@@ -166,7 +164,6 @@ export class AnnouncementsService {
   async findOne(
     id: number,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<AnnouncementRecord> {
     const announcement = await this.tenantService.executeInTenant(
       gymId,
@@ -207,7 +204,7 @@ export class AnnouncementsService {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW()
         ) RETURNING *`,
           [
-            dto.branchId || null,
+            null,
             dto.title,
             dto.content,
             dto.type || 'general',

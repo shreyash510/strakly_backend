@@ -46,7 +46,6 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
 
@@ -64,9 +63,8 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all product categories' })
   findAllCategories(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.findAllCategories(gymId, branchId);
+    return this.productsService.findAllCategories(gymId, null);
   }
 
   @Post('categories')
@@ -74,10 +72,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create product category' })
   createCategory(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductCategoryDto,
   ) {
-    return this.productsService.createCategory(gymId, branchId, dto);
+    return this.productsService.createCategory(gymId, null, dto);
   }
 
   @Patch('categories/:id')
@@ -110,10 +107,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all product sales' })
   findAllSales(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesFiltersDto,
   ) {
-    return this.productsService.findAllSales(gymId, branchId, filters);
+    return this.productsService.findAllSales(gymId, null, filters);
   }
 
   @Get('sales/transactions')
@@ -121,10 +117,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'List sales grouped by transaction (paymentId)' })
   findSalesTransactions(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesFiltersDto,
   ) {
-    return this.productsService.findSalesTransactions(gymId, branchId, filters);
+    return this.productsService.findSalesTransactions(gymId, null, filters);
   }
 
   @Get('sales/stats')
@@ -132,10 +127,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get sales statistics' })
   getSalesStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesStatsFiltersDto,
   ) {
-    return this.productsService.getSalesStats(gymId, branchId, filters);
+    return this.productsService.getSalesStats(gymId, null, filters);
   }
 
   @Get('sales/stats/trend')
@@ -143,10 +137,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get sales trend data grouped by period' })
   getSalesStatsTrend(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesTrendFiltersDto,
   ) {
-    return this.productsService.getSalesStatsTrend(gymId, branchId, filters);
+    return this.productsService.getSalesStatsTrend(gymId, null, filters);
   }
 
   @Get('sales/:id')
@@ -177,11 +170,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @Body() dto: CreateProductSaleDto,
   ) {
-    return this.productsService.createSale(gymId, branchId, dto, userId);
+    return this.productsService.createSale(gymId, null, dto, userId);
   }
 
   @Post('sales/batch')
@@ -190,11 +182,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @Body() dto: CreateBatchSaleDto,
   ) {
-    return this.productsService.createBatchSale(gymId, branchId, dto, userId);
+    return this.productsService.createBatchSale(gymId, null, dto, userId);
   }
 
   @Delete('sales/batch/:paymentId')
@@ -228,11 +219,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'List stock movements across all products' })
   async getAllStockMovements(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: AllStockMovementsFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.getAllStockMovements(gymId, branchId, filters);
+    const result = await this.productsService.getAllStockMovements(gymId, null, filters);
     const total = result.total;
     const page = result.page;
     const limit = result.limit;
@@ -252,11 +242,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all products' })
   async findAllProducts(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ProductFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.findAllProducts(gymId, branchId, filters);
+    const result = await this.productsService.findAllProducts(gymId, null, filters);
     /* Set standard pagination headers */
     const total = result.total;
     const page = result.page;
@@ -275,9 +264,8 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.findLowStockProducts(gymId, branchId);
+    return this.productsService.findLowStockProducts(gymId, null);
   }
 
   @Get('barcode/:barcode')
@@ -287,9 +275,8 @@ export class ProductsController {
   findByBarcode(
     @Param('barcode') barcode: string,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.findByBarcode(gymId, branchId, barcode);
+    return this.productsService.findByBarcode(gymId, null, barcode);
   }
 
   @Get('inventory/stats')
@@ -297,9 +284,8 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get inventory valuation and stock stats' })
   getInventoryStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.getInventoryStats(gymId, branchId);
+    return this.productsService.getInventoryStats(gymId, null);
   }
 
   /* ─── Batch Stock Adjustment ─── */
@@ -323,9 +309,8 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get reorder suggestions based on sales velocity' })
   getReorderSuggestions(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.getReorderSuggestions(gymId, branchId);
+    return this.productsService.getReorderSuggestions(gymId, null);
   }
 
   /* ─── Dead Stock ─── */
@@ -335,10 +320,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get dead stock products with no recent sales' })
   getDeadStock(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query('days') days?: string,
   ) {
-    return this.productsService.getDeadStock(gymId, branchId, days ? parseInt(days) : 30);
+    return this.productsService.getDeadStock(gymId, null, days ? parseInt(days) : 30);
   }
 
   /* ─── Stock Take (Physical Count) ─── */
@@ -349,11 +333,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Start a new stock take session' })
   startStockTake(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @Body() dto: StartStockTakeDto,
   ) {
-    return this.productsService.startStockTake(gymId, branchId, userId, dto);
+    return this.productsService.startStockTake(gymId, null, userId, dto);
   }
 
   @Get('inventory/stock-takes')
@@ -361,10 +344,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'List stock take sessions' })
   getStockTakes(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: StockTakeFiltersDto,
   ) {
-    return this.productsService.getStockTakes(gymId, branchId, filters);
+    return this.productsService.getStockTakes(gymId, null, filters);
   }
 
   @Get('inventory/stock-takes/:id')
@@ -424,10 +406,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a product' })
   createProduct(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductDto,
   ) {
-    return this.productsService.createProduct(gymId, branchId, dto);
+    return this.productsService.createProduct(gymId, null, dto);
   }
 
   @Patch(':id')
@@ -464,10 +445,9 @@ export class ProductsController {
   getStockMovements(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: StockMovementFiltersDto,
   ) {
-    return this.productsService.getStockMovements(gymId, id, branchId, filters);
+    return this.productsService.getStockMovements(gymId, id, null, filters);
   }
 
   @Delete(':id')

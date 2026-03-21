@@ -196,7 +196,6 @@ export class NotificationsService {
   async findAll(
     userId: number,
     gymId: number,
-    branchId: number | null,
     query: NotificationQueryDto,
   ): Promise<{ data: Notification[]; pagination: Record<string, number> }> {
     return this.executeWithTable(gymId, async (client) => {
@@ -265,7 +264,6 @@ export class NotificationsService {
   async getUnreadCount(
     userId: number,
     gymId: number,
-    branchId: number | null,
   ): Promise<number> {
     return this.executeWithTable(gymId, async (client) => {
       let query = `
@@ -313,7 +311,6 @@ export class NotificationsService {
   async markAllAsRead(
     userId: number,
     gymId: number,
-    branchId: number | null,
   ): Promise<number> {
     return this.executeWithTable(gymId, async (client) => {
       let query = `

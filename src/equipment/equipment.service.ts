@@ -56,7 +56,6 @@ export class EquipmentService {
 
   async findAll(
     gymId: number,
-    branchId: number | null,
     filters: EquipmentFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -128,7 +127,6 @@ export class EquipmentService {
 
   async create(
     gymId: number,
-    branchId: number | null,
     dto: CreateEquipmentDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -137,7 +135,7 @@ export class EquipmentService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
-          branchId,
+          null,
           dto.name,
           dto.brand || null,
           dto.model || null,
@@ -220,7 +218,7 @@ export class EquipmentService {
     });
   }
 
-  async getStats(gymId: number, branchId: number | null) {
+  async getStats(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const branchFilter = '';
       const branchValues: SqlValue[] = [];
@@ -335,7 +333,6 @@ export class EquipmentService {
   async createMaintenance(
     equipmentId: number,
     gymId: number,
-    branchId: number | null,
     dto: CreateMaintenanceDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -355,7 +352,7 @@ export class EquipmentService {
          RETURNING *`,
         [
           equipmentId,
-          branchId || equip.rows[0].branch_id,
+          equip.rows[0].branch_id,
           dto.type,
           dto.description,
           dto.scheduledDate,
@@ -463,7 +460,6 @@ export class EquipmentService {
 
   async getUpcomingMaintenance(
     gymId: number,
-    branchId: number | null,
     filters: MaintenanceFiltersDto = {},
   ) {
     const page = filters.page || 1;

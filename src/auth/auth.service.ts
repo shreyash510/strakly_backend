@@ -11,7 +11,6 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
-import { BranchService } from '../branch/branch.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -48,7 +47,6 @@ export interface GymInfo {
 
 export interface GymAssignment {
   gymId: number;
-  branchId: number | null; // null = all branches access
   role: string;
   isPrimary: boolean;
   gym: GymInfo;
@@ -69,7 +67,6 @@ export interface UserResponse {
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
-  branchIds?: number[];
   authType?: string; /* email | google */
   createdAt?: Date;
   updatedAt?: Date;
@@ -100,7 +97,6 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly tenantService: TenantService,
     private readonly emailService: EmailService,
-    private readonly branchService: BranchService,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
   ) {
@@ -136,7 +132,6 @@ export class AuthService {
         gymAssignment?.gym?.tenantSchemaName ||
         user.gym?.tenantSchemaName ||
         null,
-      branchId: gymAssignment?.branchId ?? null, // null = all branches access
       isAdmin, // Admin users are in public.users, not tenant.users
     };
     return this.jwtService.sign(payload);
@@ -181,7 +176,6 @@ export class AuthService {
         }
         : undefined,
       gyms,
-      branchIds: user.branchIds,
       authType: user.authType || user.auth_type || 'email', /* default to email */
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
@@ -463,7 +457,6 @@ export class AuthService {
 
       const gymAssignment: GymAssignment = {
         gymId: gym.id,
-        branchId: null, // Admin has access to all branches
         role: ROLES.ADMIN,
         isPrimary: true,
         gym: {
@@ -639,7 +632,6 @@ export class AuthService {
       const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
         (assignment) => ({
           gymId: assignment.gymId,
-          branchId: assignment.branchId, // null = all branches access
           role: assignment.role,
           isPrimary: assignment.isPrimary,
           gym: {
@@ -791,7 +783,6 @@ export class AuthService {
     );
     const accessToken = this.generateToken(user, {
       gymId: gym.id,
-      branchId: tenantUser.branch_id ?? null,
       role: userRole,
       isPrimary: true,
       gym: {
@@ -845,7 +836,6 @@ export class AuthService {
     const gymAssignments: GymAssignment[] = user.gymAssignments.map(
       (assignment) => ({
         gymId: assignment.gymId,
-        branchId: assignment.branchId, // null = all branches access
         role: assignment.role,
         isPrimary: assignment.isPrimary,
         gym: {
@@ -978,7 +968,6 @@ export class AuthService {
     const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
       (assignment) => ({
         gymId: assignment.gymId,
-        branchId: assignment.branchId, // null = all branches access
         role: assignment.role,
         isPrimary: assignment.isPrimary,
         gym: {
@@ -1133,7 +1122,6 @@ export class AuthService {
     const gymAssignments: GymAssignment[] = updatedUser.gymAssignments.map(
       (assignment) => ({
         gymId: assignment.gymId,
-        branchId: assignment.branchId, // null = all branches access
         role: assignment.role,
         isPrimary: assignment.isPrimary,
         gym: {
@@ -2124,7 +2112,6 @@ export class AuthService {
       role: ROLES.ADMIN, // Act as admin within the gym
       gymId: gym.id,
       tenantSchemaName: gym.tenantSchemaName,
-      branchId: null, // Access to all branches
       isImpersonating: true,
       originalRole: ROLES.SUPERADMIN,
       impersonatedGymId: gym.id,
@@ -2328,7 +2315,6 @@ export class AuthService {
     const gymAssignments: GymAssignment[] = user.gymAssignments.map(
       (assignment) => ({
         gymId: assignment.gymId,
-        branchId: assignment.branchId,
         role: assignment.role,
         isPrimary: assignment.isPrimary,
         gym: {
@@ -2480,10 +2466,6 @@ export class AuthService {
         .then(() => this.logger.log(`Tenant schema created for gym ${gymIdForSchema}`))
         .catch((err) => this.logger.error(`Failed to create tenant schema for gym ${gymIdForSchema}:`, err));
 
-      // Create default branch for the gym
-      await this.branchService.createDefaultBranch(gym.id, gym);
-      this.logger.log('Default branch created');
-
       // Create admin user in PUBLIC.users with googleId
       createdUser = await this.prisma.user.create({
         data: {
@@ -2569,7 +2551,6 @@ export class AuthService {
 
     const gymAssignment: GymAssignment = {
       gymId: gym.id,
-      branchId: null, // Admin has access to all branches
       role: ROLES.ADMIN,
       isPrimary: true,
       gym: {
