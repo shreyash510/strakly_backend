@@ -8,7 +8,7 @@ Multi-tenant gym & fitness studio management SaaS API built with NestJS, Prisma,
 - **Database:** PostgreSQL with Prisma 7 ORM
 - **Auth:** JWT + Google OAuth + Passport
 - **Real-time:** WebSocket notifications via Socket.io
-- **Email:** ZeptoMail transactional email
+- **Email:** Brevo transactional email
 - **Storage:** AWS S3 for file uploads
 - **Queue:** RabbitMQ (CloudAMQP) for async tasks
 - **AI:** OpenAI integration for chat conversations
@@ -55,10 +55,9 @@ JWT_SECRET=your-secret-key
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-# Email (ZeptoMail)
-ZEPTOMAIL_API_KEY=your-key
-ZEPTOMAIL_API_URL=https://api.zeptomail.com
-ZEPTOMAIL_FROM_EMAIL=noreply@strakly.com
+# Email (Brevo)
+BREVO_API_KEY=your-key
+BREVO_FROM_EMAIL=noreply@strakly.com
 
 # Storage (AWS S3)
 AWS_ACCESS_KEY_ID=your-key
