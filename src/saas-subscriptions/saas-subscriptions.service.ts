@@ -1149,8 +1149,8 @@ export class SaasSubscriptionsService {
       throw new BadRequestException('Plan is not available');
     }
 
-    const amount = plan.price.toNumber() * 100; // Convert to paise
-    const currency = 'INR'; // Razorpay India requires INR
+    const amount = plan.price.toNumber() * 100; // Convert to smallest currency unit (paise/cents)
+    const currency = plan.currency || 'USD';
     const receipt = `rcpt_gym${gymId}_plan${planId}_${Date.now()}`;
 
     const order = await this.razorpayService.createOrder(amount, currency, receipt, {
