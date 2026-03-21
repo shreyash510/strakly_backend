@@ -18,7 +18,9 @@ import {
   UpdatePaymentHistoryDto,
   PaymentHistoryFiltersDto,
   InitiateManualPaymentDto,
+  VerifyRazorpayPaymentDto,
 } from './dto/saas-subscriptions.dto';
+import { RazorpayService } from '../razorpay/razorpay.service';
 import { EmailService } from '../email/email.service';
 import {
   PaginationParams,
@@ -41,6 +43,7 @@ export class SaasSubscriptionsService {
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly emailService: EmailService,
+    private readonly razorpayService: RazorpayService,
   ) {}
 
   // ============================================
@@ -1110,7 +1113,7 @@ export class SaasSubscriptionsService {
         recipientName,
         subscription.gym.name,
         subscription.amount.toNumber(),
-        subscription.plan?.currency || 'INR',
+        subscription.plan?.currency || 'USD',
         subscription.plan?.name || 'Subscription',
         new Date(),
         undefined,
@@ -1119,6 +1122,281 @@ export class SaasSubscriptionsService {
     } catch (error) {
       this.logger.error('Failed to send payment receipt email', error);
     }
+  }
+
+  // ============================================
+  // Razorpay Payment Flow
+  // ============================================
+
+  async createRazorpayOrder(gymId: number, planId: number) {
+    // Validate gym exists
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!gym) {
+      throw new NotFoundException('Gym not found');
+    }
+
+    // Validate plan exists and is active
+    const plan = await this.prisma.saasPlan.findUnique({
+      where: { id: planId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found');
+    }
+    if (!plan.isActive) {
+      throw new BadRequestException('Plan is not available');
+    }
+
+    const amount = plan.price.toNumber() * 100; // Convert to smallest currency unit (paise/cents)
+    const currency = plan.currency || 'USD';
+    const receipt = `rcpt_gym${gymId}_plan${planId}_${Date.now()}`;
+
+    const order = await this.razorpayService.createOrder(amount, currency, receipt, {
+      gymId: String(gymId),
+      planId: String(planId),
+      gymName: gym.name,
+    });
+
+    return {
+      orderId: order.id,
+      amount,
+      currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      gymName: gym.name,
+      gymEmail: gym.email,
+    };
+  }
+
+  async verifyRazorpayPayment(gymId: number, dto: VerifyRazorpayPaymentDto) {
+    // Verify signature
+    const isValid = this.razorpayService.verifyPaymentSignature(
+      dto.razorpay_order_id,
+      dto.razorpay_payment_id,
+      dto.razorpay_signature,
+    );
+
+    if (!isValid) {
+      throw new BadRequestException('Invalid payment signature');
+    }
+
+    // Fetch plan
+    const plan = await this.prisma.saasPlan.findUnique({
+      where: { id: dto.planId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found');
+    }
+
+    const amount = plan.price.toNumber();
+
+    // Calculate dates (reuse logic from initiateManualPayment)
+    const existing = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+    });
+
+    const now = new Date();
+    let startDate: Date;
+    if (existing && new Date(existing.endDate) > now && ['active', 'trial'].includes(existing.status)) {
+      startDate = new Date(existing.endDate);
+    } else {
+      startDate = now;
+    }
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + (plan.durationMonths || 1));
+
+    // Create or update subscription
+    let subscription;
+    if (existing) {
+      subscription = await this.prisma.saasGymSubscription.update({
+        where: { gymId },
+        data: {
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status: 'active',
+          paymentStatus: 'paid',
+          amount,
+          paymentMethod: 'razorpay',
+          paymentRef: dto.razorpay_payment_id,
+          lastPaymentAt: new Date(),
+          trialEndsAt: null,
+          cancelledAt: null,
+          cancelReason: null,
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    } else {
+      subscription = await this.prisma.saasGymSubscription.create({
+        data: {
+          gymId,
+          planId: dto.planId,
+          startDate,
+          endDate,
+          status: 'active',
+          paymentStatus: 'paid',
+          amount,
+          paymentMethod: 'razorpay',
+          paymentRef: dto.razorpay_payment_id,
+          lastPaymentAt: new Date(),
+        },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+    }
+
+    // Create payment history record
+    const invoiceNumber = await this.generateInvoiceNumber();
+
+    const payment = await this.prisma.saasPaymentHistory.create({
+      data: {
+        subscriptionId: subscription.id,
+        gymId,
+        planId: dto.planId,
+        amount,
+        currency: plan.currency || 'USD',
+        status: 'completed',
+        paymentMethod: 'razorpay',
+        paymentRef: dto.razorpay_payment_id,
+        gateway: 'razorpay',
+        gatewayRef: dto.razorpay_payment_id,
+        gatewayResponse: {
+          orderId: dto.razorpay_order_id,
+          paymentId: dto.razorpay_payment_id,
+        },
+        billingPeriodStart: startDate,
+        billingPeriodEnd: endDate,
+        invoiceNumber,
+        processedAt: new Date(),
+      },
+    });
+
+    // Send receipt email
+    await this.sendPaymentReceiptEmail(subscription.id);
+
+    return { subscription, payment };
+  }
+
+  async handleRazorpayWebhook(body: string, signature: string) {
+    // Verify webhook signature
+    const isValid = this.razorpayService.verifyWebhookSignature(body, signature);
+    if (!isValid) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+
+    const event = JSON.parse(body);
+    this.logger.log(`Razorpay webhook event: ${event.event}`);
+
+    if (event.event === 'payment.captured') {
+      const paymentEntity = event.payload?.payment?.entity;
+      if (!paymentEntity) return { status: 'ignored' };
+
+      const paymentId = paymentEntity.id;
+      const orderId = paymentEntity.order_id;
+      const notes = paymentEntity.notes || {};
+      const gymId = notes.gymId ? parseInt(notes.gymId, 10) : null;
+      const planId = notes.planId ? parseInt(notes.planId, 10) : null;
+
+      // Check if payment already exists (already processed via verify endpoint)
+      const existingPayment = await this.prisma.saasPaymentHistory.findFirst({
+        where: { gatewayRef: paymentId },
+      });
+
+      if (existingPayment) {
+        this.logger.log(`Payment ${paymentId} already processed, skipping webhook`);
+        return { status: 'already_processed' };
+      }
+
+      // Backup path: create payment and activate subscription if not already done
+      if (gymId && planId) {
+        const plan = await this.prisma.saasPlan.findUnique({ where: { id: planId } });
+        if (!plan) {
+          this.logger.warn(`Webhook: Plan ${planId} not found`);
+          return { status: 'plan_not_found' };
+        }
+
+        const amount = plan.price.toNumber();
+        const now = new Date();
+        const existing = await this.prisma.saasGymSubscription.findUnique({ where: { gymId } });
+
+        let startDate: Date;
+        if (existing && new Date(existing.endDate) > now && ['active', 'trial'].includes(existing.status)) {
+          startDate = new Date(existing.endDate);
+        } else {
+          startDate = now;
+        }
+        const endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + (plan.durationMonths || 1));
+
+        let subscription;
+        if (existing) {
+          subscription = await this.prisma.saasGymSubscription.update({
+            where: { gymId },
+            data: {
+              planId,
+              startDate,
+              endDate,
+              status: 'active',
+              paymentStatus: 'paid',
+              amount,
+              paymentMethod: 'razorpay',
+              paymentRef: paymentId,
+              lastPaymentAt: new Date(),
+              trialEndsAt: null,
+              cancelledAt: null,
+              cancelReason: null,
+            },
+          });
+        } else {
+          subscription = await this.prisma.saasGymSubscription.create({
+            data: {
+              gymId,
+              planId,
+              startDate,
+              endDate,
+              status: 'active',
+              paymentStatus: 'paid',
+              amount,
+              paymentMethod: 'razorpay',
+              paymentRef: paymentId,
+              lastPaymentAt: new Date(),
+            },
+          });
+        }
+
+        const invoiceNumber = await this.generateInvoiceNumber();
+
+        await this.prisma.saasPaymentHistory.create({
+          data: {
+            subscriptionId: subscription.id,
+            gymId,
+            planId,
+            amount,
+            currency: plan.currency || 'USD',
+            status: 'completed',
+            paymentMethod: 'razorpay',
+            paymentRef: paymentId,
+            gateway: 'razorpay',
+            gatewayRef: paymentId,
+            gatewayResponse: { orderId, paymentId, webhook: true },
+            billingPeriodStart: startDate,
+            billingPeriodEnd: endDate,
+            invoiceNumber,
+            processedAt: new Date(),
+          },
+        });
+
+        await this.sendPaymentReceiptEmail(subscription.id);
+
+        this.logger.log(`Webhook: Activated subscription for gym ${gymId}`);
+        return { status: 'processed' };
+      }
+
+      this.logger.warn(`Webhook: Missing gymId/planId in payment notes`);
+      return { status: 'missing_notes' };
+    }
+
+    return { status: 'event_ignored' };
   }
 
   // ============================================

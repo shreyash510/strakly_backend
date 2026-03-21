@@ -28,6 +28,8 @@ import {
   CreatePaymentHistoryDto,
   UpdatePaymentHistoryDto,
   InitiateManualPaymentDto,
+  CreateRazorpayOrderDto,
+  VerifyRazorpayPaymentDto,
 } from './dto/saas-subscriptions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -192,6 +194,40 @@ export class SaasSubscriptionsController {
     }
     const result = await this.service.initiateManualPayment(gymId, dto);
     this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_initiated' });
+    return result;
+  }
+
+  // ============================================
+  // Razorpay Payment Endpoints
+  // ============================================
+
+  @Post('me/create-order')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Create a Razorpay order for subscription payment' })
+  async createRazorpayOrder(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateRazorpayOrderDto,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    return this.service.createRazorpayOrder(gymId, dto.planId);
+  }
+
+  @Post('me/verify-payment')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Verify Razorpay payment and activate subscription' })
+  async verifyRazorpayPayment(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: VerifyRazorpayPaymentDto,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    const result = await this.service.verifyRazorpayPayment(gymId, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'razorpay_payment_verified' });
     return result;
   }
 

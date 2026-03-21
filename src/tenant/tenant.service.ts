@@ -1,8 +1,8 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 
 @Injectable()
-export class TenantService implements OnModuleInit {
+export class TenantService {
   private readonly logger = new Logger(TenantService.name);
   private pool: Pool;
 
@@ -26,14 +26,10 @@ export class TenantService implements OnModuleInit {
     });
   }
 
-  async onModuleInit() {
-    this.logger.log('TenantService initialized');
-    // Run migrations to ensure all tenant schemas have required columns
-    await this.migrateAllTenantSchemas();
-  }
-
   /**
-   * Run migrations on all tenant schemas to add missing columns
+   * Run migrations on all tenant schemas to add missing columns.
+   * NOTE: Migrations are now run via CLI (`npm run db:migrate`), not on app startup.
+   * This method is kept for backward compatibility / manual use.
    */
   async migrateAllTenantSchemas(): Promise<void> {
     const client = await this.pool.connect();

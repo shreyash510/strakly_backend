@@ -465,3 +465,31 @@ export class PaymentHistoryFiltersDto {
   @IsOptional()
   limit?: number;
 }
+
+// ============================================
+// Razorpay DTOs
+// ============================================
+
+export class CreateRazorpayOrderDto {
+  @ApiProperty({ example: 1, description: 'Plan ID to subscribe to' })
+  @IsNumber()
+  planId: number;
+}
+
+export class VerifyRazorpayPaymentDto {
+  @ApiProperty({ example: 'order_ABC123' })
+  @IsString()
+  razorpay_order_id: string;
+
+  @ApiProperty({ example: 'pay_ABC123' })
+  @IsString()
+  razorpay_payment_id: string;
+
+  @ApiProperty({ example: 'signature_hash' })
+  @IsString()
+  razorpay_signature: string;
+
+  @ApiProperty({ example: 1, description: 'Plan ID to subscribe to' })
+  @IsNumber()
+  planId: number;
+}
