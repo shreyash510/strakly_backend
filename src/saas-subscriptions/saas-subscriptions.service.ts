@@ -1245,6 +1245,12 @@ export class SaasSubscriptionsService {
       });
     }
 
+    // Re-activate gym if it was deactivated due to expired subscription
+    await this.prisma.gym.update({
+      where: { id: gymId },
+      data: { isActive: true },
+    });
+
     // Create payment history record
     const invoiceNumber = await this.generateInvoiceNumber();
 
@@ -1422,6 +1428,28 @@ export class SaasSubscriptionsService {
 
       if (result.count > 0) {
         this.logger.log(`Expired ${result.count} subscription(s)`);
+
+        // Deactivate gyms with expired subscriptions
+        const expiredSubs = await this.prisma.saasGymSubscription.findMany({
+          where: {
+            status: 'expired',
+            gym: { isActive: true },
+          },
+          select: { gymId: true },
+        });
+
+        if (expiredSubs.length > 0) {
+          const gymIds = expiredSubs.map((s) => s.gymId);
+          const deactivated = await this.prisma.gym.updateMany({
+            where: { id: { in: gymIds }, isActive: true },
+            data: { isActive: false },
+          });
+          if (deactivated.count > 0) {
+            this.logger.log(
+              `Deactivated ${deactivated.count} gym(s) with expired subscriptions`,
+            );
+          }
+        }
       } else {
         this.logger.log('No subscriptions to expire');
       }
