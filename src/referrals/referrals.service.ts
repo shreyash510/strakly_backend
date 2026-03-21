@@ -44,7 +44,6 @@ export class ReferralsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: ReferralFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -153,7 +152,6 @@ export class ReferralsService {
 
   async create(
     gymId: number,
-    branchId: number | null,
     dto: CreateReferralDto,
   ) {
     // Prevent self-referral
@@ -170,7 +168,7 @@ export class ReferralsService {
          VALUES ($1, $2, $3, $4, 'pending', $5)
          RETURNING *`,
         [
-          branchId,
+          null,
           dto.referrerId,
           dto.referredId || null,
           referralCode,
@@ -245,7 +243,7 @@ export class ReferralsService {
     return this.findOne(id, gymId);
   }
 
-  async getStats(gymId: number, branchId: number | null = null) {
+  async getStats(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
       const values: SqlValue[] = [];

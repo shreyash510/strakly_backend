@@ -28,7 +28,6 @@ export interface SalaryFilters extends PaginationParams {
   month?: number;
   year?: number;
   paymentStatus?: string;
-  branchId?: number | null;
 }
 
 @Injectable()
@@ -463,7 +462,7 @@ export class SalaryService {
     return { success: true, message: 'Salary record deleted successfully' };
   }
 
-  async getStats(gymId: number, branchId: number | null = null) {
+  async getStats(gymId: number) {
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
@@ -514,7 +513,7 @@ export class SalaryService {
     return stats;
   }
 
-  async getStaffList(gymId: number, branchId: number | null = null) {
+  async getStaffList(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       /* Staff live in public.users, role/branch in user_gym_xref */
       let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, ugx.role, ugx.branch_id, b.name as branch_name

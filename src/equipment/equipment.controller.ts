@@ -31,7 +31,6 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 
 @ApiTags('equipment')
 @Controller('equipment')
@@ -45,10 +44,9 @@ export class EquipmentController {
   @ApiOperation({ summary: 'List all equipment' })
   findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: EquipmentFiltersDto,
   ) {
-    return this.equipmentService.findAll(gymId, branchId, filters);
+    return this.equipmentService.findAll(gymId, filters);
   }
 
   @Get('stats')
@@ -56,9 +54,8 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Get equipment statistics' })
   getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.equipmentService.getStats(gymId, branchId);
+    return this.equipmentService.getStats(gymId);
   }
 
   @Get('maintenance/upcoming')
@@ -66,12 +63,10 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Get upcoming maintenance across all equipment' })
   getUpcomingMaintenance(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: MaintenanceFiltersDto,
   ) {
     return this.equipmentService.getUpcomingMaintenance(
       gymId,
-      branchId,
       filters,
     );
   }
@@ -102,13 +97,11 @@ export class EquipmentController {
   createMaintenance(
     @Param('id', ParseIntPipe) equipmentId: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateMaintenanceDto,
   ) {
     return this.equipmentService.createMaintenance(
       equipmentId,
       gymId,
-      branchId,
       dto,
     );
   }
@@ -157,10 +150,9 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Create equipment' })
   create(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateEquipmentDto,
   ) {
-    return this.equipmentService.create(gymId, branchId, dto);
+    return this.equipmentService.create(gymId, dto);
   }
 
   @Patch(':id')

@@ -30,7 +30,6 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
@@ -51,9 +50,8 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'List PT/appointment services' })
   async findAllServices(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.appointmentsService.findAllServices(gymId, branchId);
+    return this.appointmentsService.findAllServices(gymId);
   }
 
   @Post('services')
@@ -64,9 +62,8 @@ export class AppointmentsController {
   async createService(
     @Body() dto: CreateServiceDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    const result = await this.appointmentsService.createService(gymId, branchId, dto);
+    const result = await this.appointmentsService.createService(gymId, dto);
     this.notificationsGateway.emitServiceChanged(gymId, { action: 'created' });
     return result;
   }
@@ -120,11 +117,10 @@ export class AppointmentsController {
   async setAvailability(
     @Body() dto: SetAvailabilityDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.setAvailability(gymId, branchId, dto, userId, userRole);
+    return this.appointmentsService.setAvailability(gymId, dto, userId, userRole);
   }
 
   // ─── Appointments ───
@@ -165,12 +161,11 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'List appointments with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: AppointmentFiltersDto,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.findAllAppointments(gymId, branchId, filters, userId, userRole);
+    return this.appointmentsService.findAllAppointments(gymId, filters, userId, userRole);
   }
 
   @Post()
@@ -181,11 +176,10 @@ export class AppointmentsController {
   async create(
     @Body() dto: CreateAppointmentDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    const result = await this.appointmentsService.createAppointment(gymId, branchId, dto, userId, userRole);
+    const result = await this.appointmentsService.createAppointment(gymId, dto, userId, userRole);
     this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'created' });
     return result;
   }
@@ -231,13 +225,11 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'List session packages' })
   async findAllPackages(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.appointmentsService.findAllPackages(
       gymId,
-      branchId,
       page ? (parseInt(page, 10) || 1) : 1,
       limit ? (parseInt(limit, 10) || 20) : 20,
     );
@@ -251,9 +243,8 @@ export class AppointmentsController {
   async createPackage(
     @Body() dto: CreateSessionPackageDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.appointmentsService.createPackage(gymId, branchId, dto);
+    return this.appointmentsService.createPackage(gymId, dto);
   }
 
   @Get('packages/user/:userId')

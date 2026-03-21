@@ -19,7 +19,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -38,22 +37,19 @@ export class PaymentsController {
   @Get()
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: PaymentFiltersDto,
   ) {
-    return this.paymentsService.findAll(gymId, branchId, filters);
+    return this.paymentsService.findAll(gymId, filters);
   }
 
   @Get('stats')
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.paymentsService.getStats(
       gymId,
-      branchId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
     );
@@ -63,9 +59,8 @@ export class PaymentsController {
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.paymentsService.findOne(id, gymId, branchId);
+    return this.paymentsService.findOne(id, gymId);
   }
 
   @Get('reference/:table/:id')

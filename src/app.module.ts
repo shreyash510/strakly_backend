@@ -20,7 +20,6 @@ import { OffersModule } from './offers/offers.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { BodyMetricsModule } from './body-metrics/body-metrics.module';
 import { GymModule } from './gym/gym.module';
-import { BranchModule } from './branch/branch.module';
 import { SupportModule } from './support/support.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PublicModule } from './public/public.module';
@@ -84,7 +83,6 @@ import { HealthModule } from './health/health.module';
     MembershipsModule,
     BodyMetricsModule,
     GymModule,
-    BranchModule,
     SupportModule,
     DashboardModule,
     PublicModule,

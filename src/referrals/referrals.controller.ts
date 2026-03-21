@@ -20,7 +20,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
@@ -37,10 +36,9 @@ export class ReferralsController {
   @ApiOperation({ summary: 'List all referrals' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ReferralFiltersDto,
   ) {
-    return this.referralsService.findAll(gymId, branchId, filters);
+    return this.referralsService.findAll(gymId, filters);
   }
 
   @Get('stats')
@@ -48,9 +46,8 @@ export class ReferralsController {
   @ApiOperation({ summary: 'Get referral statistics' })
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.referralsService.getStats(gymId, branchId);
+    return this.referralsService.getStats(gymId);
   }
 
   @Get('user/:userId')
@@ -81,9 +78,8 @@ export class ReferralsController {
   async create(
     @Body() dto: CreateReferralDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.referralsService.create(gymId, branchId, dto);
+    return this.referralsService.create(gymId, dto);
   }
 
   @Patch(':id')

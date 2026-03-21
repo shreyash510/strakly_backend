@@ -32,19 +32,6 @@ export class ClassesService {
     private readonly notificationHelper: NotificationHelperService,
   ) {}
 
-  /**
-   * Resolve the default branchId for a gym when admin has all-branch access (branchId = null).
-   */
-  private async resolveDefaultBranchId(gymId: number): Promise<number | null> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id FROM public.branches WHERE gym_id = $1 AND is_active = TRUE ORDER BY is_default DESC, id ASC LIMIT 1`,
-        [gymId],
-      );
-      return result.rows[0]?.id ?? null;
-    });
-  }
-
   // ─── Formatters ───
 
   private formatClassType(row: Record<string, any>) {
@@ -128,7 +115,7 @@ export class ClassesService {
 
   // ─── Class Types ───
 
-  async findAllTypes(gymId: number, branchId: number | null, filters: ClassFiltersDto = {}) {
+  async findAllTypes(gymId: number, filters: ClassFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 50;
     const skip = (page - 1) * limit;
@@ -187,16 +174,14 @@ export class ClassesService {
     return this.formatClassType(type);
   }
 
-  async createType(gymId: number, branchId: number | null, dto: CreateClassTypeDto) {
-    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
-
+  async createType(gymId: number, dto: CreateClassTypeDto) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO class_types (branch_id, name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
-          resolvedBranchId,
+          null,
           dto.name,
           dto.description ?? null,
           dto.category ?? null,
@@ -257,7 +242,7 @@ export class ClassesService {
 
   // ─── Schedules ───
 
-  async findAllSchedules(gymId: number, branchId: number | null) {
+  async findAllSchedules(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['cs.is_deleted = FALSE'];
       const values: SqlValue[] = [];
@@ -287,15 +272,13 @@ export class ClassesService {
     });
   }
 
-  async createSchedule(gymId: number, branchId: number | null, dto: CreateClassScheduleDto) {
+  async createSchedule(gymId: number, dto: CreateClassScheduleDto) {
     if (dto.startTime >= dto.endTime) {
       throw new BadRequestException('End time must be after start time');
     }
     if (dto.startDate && dto.endDate && dto.endDate < dto.startDate) {
       throw new BadRequestException('End date must be on or after start date');
     }
-
-    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
 
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
@@ -304,7 +287,7 @@ export class ClassesService {
          RETURNING *`,
         [
           dto.classTypeId,
-          resolvedBranchId,
+          null,
           dto.instructorId ?? null,
           dto.room ?? null,
           dto.dayOfWeek,
@@ -334,7 +317,7 @@ export class ClassesService {
     try {
       if (dto.instructorId) {
         await this.notificationsService.notifyClassScheduleAssigned(
-          dto.instructorId, gymId, resolvedBranchId, {
+          dto.instructorId, gymId, null, {
             scheduleId: schedule.id,
             className: schedule.classTypeName,
             dayOfWeek: dto.dayOfWeek,
@@ -343,7 +326,7 @@ export class ClassesService {
         );
       }
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      await this.notificationHelper.notifyStaff(gymId, resolvedBranchId, {
+      await this.notificationHelper.notifyStaff(gymId, {
         type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
         title: 'New Class Schedule',
         message: `${schedule.classTypeName} scheduled on ${days[dto.dayOfWeek]}s at ${dto.startTime}.`,
@@ -424,7 +407,7 @@ export class ClassesService {
 
   // ─── Sessions ───
 
-  async findAllSessions(gymId: number, branchId: number | null, filters: SessionFiltersDto = {}) {
+  async findAllSessions(gymId: number, filters: SessionFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 50;
     const skip = (page - 1) * limit;
@@ -513,7 +496,7 @@ export class ClassesService {
     return this.formatSession(session);
   }
 
-  async generateSessions(gymId: number, branchId: number | null, dto: GenerateSessionsDto) {
+  async generateSessions(gymId: number, dto: GenerateSessionsDto) {
     const fromDate = new Date(dto.fromDate);
     const toDate = new Date(dto.toDate);
 
@@ -786,7 +769,7 @@ export class ClassesService {
             );
             // Notify the instructor
             if (info.instructor_id) {
-              await this.notificationHelper.notifyStaff(gymId, info.branch_id, {
+              await this.notificationHelper.notifyStaff(gymId, {
                 type: NotificationType.CLASS_BOOKED,
                 title: 'New Class Booking',
                 message: `${booking.rows[0].user_name || 'A client'} booked ${info.class_type_name} on ${dateStr}.`,

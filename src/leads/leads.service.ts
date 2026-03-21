@@ -54,7 +54,6 @@ export class LeadsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: LeadFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -135,7 +134,7 @@ export class LeadsService {
     return this.formatLead(lead);
   }
 
-  async create(gymId: number, branchId: number | null, dto: CreateLeadDto, createdBy?: number) {
+  async create(gymId: number, dto: CreateLeadDto, createdBy?: number) {
     const lead = await this.tenantService.executeInTenant(gymId, async (client) => {
       const initialStage = dto.pipelineStage || 'new';
       const result = await client.query(
@@ -148,7 +147,7 @@ export class LeadsService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
+          null,
           dto.name,
           dto.email || null,
           dto.phone || null,
@@ -307,7 +306,6 @@ export class LeadsService {
   async convertToUser(
     id: number,
     gymId: number,
-    branchId: number | null,
     convertedByUserId: number,
   ) {
     const lead = await this.findOne(id, gymId);
@@ -327,7 +325,7 @@ export class LeadsService {
           lead.email || null,
           lead.phone || null,
           lead.leadSource || null,
-          branchId,
+          null,
         ],
       );
       const user = userResult.rows[0];
@@ -375,7 +373,6 @@ export class LeadsService {
 
   async getStats(
     gymId: number,
-    branchId: number | null = null,
     dateFilters: LeadStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {

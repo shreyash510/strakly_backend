@@ -100,19 +100,6 @@ export class CreateUserDto {
   @IsInt()
   trainerId?: number;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
-  @ApiPropertyOptional({
-    description: 'Branch IDs (for users with multiple branches)',
-  })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
-
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -249,18 +236,6 @@ export class CreateStaffDto {
   @IsString()
   zipCode?: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
-  @ApiPropertyOptional({
-    description: 'Branch IDs (for users with multiple branches)',
-  })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
 }
 
 // DTO for creating client - stored in tenant.users
@@ -395,11 +370,6 @@ export class CreateClientDto {
   @IsString()
   idNumber?: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -481,17 +451,6 @@ export class UpdateUserDto {
   @IsOptional()
   @IsInt()
   trainerId?: number;
-
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
-  @ApiPropertyOptional({ description: 'Branch IDs (for users with multiple branches)' })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
 
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
@@ -618,12 +577,6 @@ export class BulkUpdateUserDto {
   @IsNotEmpty()
   userIds: number[];
 
-  @ApiPropertyOptional({ description: 'Branch IDs to assign' })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
-
   @ApiPropertyOptional({ description: 'Status to set', enum: USER_STATUSES_ARRAY })
   @IsOptional()
   @IsEnum(USER_STATUSES_ARRAY)
@@ -649,9 +602,4 @@ export class BulkCreateUserDto {
   @ValidateNested({ each: true })
   @Type(() => CreateUserDto)
   users: CreateUserDto[];
-
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
 }

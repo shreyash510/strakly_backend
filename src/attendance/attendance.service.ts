@@ -93,7 +93,6 @@ export class AttendanceService {
   async searchUserByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<SearchUserResult | null> {
     const userData = await this.tenantService.executeInTenant(
       gymId,
@@ -136,7 +135,6 @@ export class AttendanceService {
     },
     staffId: number,
     gymId: number,
-    branchId: number | null = null,
     checkInMethod: string = 'code',
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
@@ -189,8 +187,8 @@ export class AttendanceService {
           return { error: 'no_active_membership' };
         }
 
-        // Use user's branch if branchId not provided
-        const attendanceBranchId = branchId ?? userBranchId;
+        // Use user's branch
+        const attendanceBranchId = userBranchId;
 
         // Insert attendance record
         const insertResult = await client.query(
@@ -233,7 +231,6 @@ export class AttendanceService {
     this.activityLogsService
       .logAttendanceMarked(
         gymId,
-        attendanceBranchId,
         staffId,
         'staff',
         staffName || 'Staff',
@@ -383,7 +380,6 @@ export class AttendanceService {
 
   async getTodayAttendance(
     gymId: number,
-    branchId: number | null = null,
   ): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
@@ -411,7 +407,6 @@ export class AttendanceService {
   async getAttendanceByDate(
     date: string,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<AttendanceRecord[]> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
@@ -555,7 +550,6 @@ export class AttendanceService {
 
   async getAttendanceStats(
     gymId: number,
-    branchId: number | null = null,
   ): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
@@ -615,7 +609,6 @@ export class AttendanceService {
 
   async getCurrentlyPresentCount(
     gymId: number,
-    branchId: number | null = null,
   ): Promise<number> {
     const today = this.getTodayDate();
 
@@ -630,7 +623,6 @@ export class AttendanceService {
 
   async getAllAttendance(
     gymId: number,
-    branchId: number | null = null,
     rawPage: number = 1,
     rawLimit: number = 50,
     startDate?: string,
@@ -735,7 +727,6 @@ export class AttendanceService {
 
   async getReports(
     gymId: number,
-    branchId: number | null = null,
     startDate?: string,
     endDate?: string,
   ): Promise<AttendanceReportData> {

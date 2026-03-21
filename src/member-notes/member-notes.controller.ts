@@ -20,7 +20,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
@@ -36,10 +35,9 @@ export class MemberNotesController {
   @ApiOperation({ summary: 'Get client notes' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: MemberNoteFiltersDto,
   ) {
-    return this.memberNotesService.findAll(gymId, branchId, filters);
+    return this.memberNotesService.findAll(gymId, filters);
   }
 
   @Get(':id')
@@ -58,10 +56,9 @@ export class MemberNotesController {
   async create(
     @Body() dto: CreateMemberNoteDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
   ) {
-    return this.memberNotesService.create(dto, gymId, branchId, userId);
+    return this.memberNotesService.create(dto, gymId, userId);
   }
 
   @Patch(':id')

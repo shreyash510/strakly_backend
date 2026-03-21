@@ -24,7 +24,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('migration')
@@ -146,7 +145,6 @@ export class MigrationController {
       columnMapping: Record<string, string>;
     },
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Request() req: AuthenticatedRequest,
   ) {
     if (!body.fileId || !body.dataType || !body.columnMapping) {
@@ -167,7 +165,7 @@ export class MigrationController {
       body.columnMapping,
       gymId,
       actorInfo,
-      branchId,
+      null,
     );
   }
 }

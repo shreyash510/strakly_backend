@@ -58,7 +58,6 @@ export class ActivityLogsService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: ActivityLogFiltersDto = {},
   ) {
     const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 20);
@@ -147,7 +146,6 @@ export class ActivityLogsService {
     targetType: string,
     targetId: number,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<ActivityLogRecord[]> {
     const logs = await this.tenantService.executeInTenant(
       gymId,
@@ -236,7 +234,6 @@ export class ActivityLogsService {
    */
   async logUserCreated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -245,7 +242,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -262,7 +258,6 @@ export class ActivityLogsService {
 
   async logUserUpdated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -272,7 +267,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -290,7 +284,6 @@ export class ActivityLogsService {
 
   async logMembershipCreated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -300,7 +293,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -317,7 +309,6 @@ export class ActivityLogsService {
 
   async logAttendanceMarked(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -326,7 +317,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -346,7 +336,6 @@ export class ActivityLogsService {
    */
   async getStats(
     gymId: number,
-    branchId: number | null = null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const staffFilter = `actor_type IN ('manager', 'trainer')`;
@@ -394,7 +383,6 @@ export class ActivityLogsService {
 
   async logPaymentReceived(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -404,7 +392,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,

@@ -28,7 +28,6 @@ export class MemberNotesService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: MemberNoteFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -99,7 +98,6 @@ export class MemberNotesService {
   async create(
     dto: CreateMemberNoteDto,
     gymId: number,
-    branchId: number | null,
     createdBy: number,
   ) {
     const note = await this.tenantService.executeInTenant(gymId, async (client) => {
@@ -108,7 +106,7 @@ export class MemberNotesService {
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
+          null,
           dto.userId,
           dto.noteType || 'general',
           dto.content,

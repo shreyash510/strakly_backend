@@ -27,10 +27,6 @@ export enum PaymentStatus {
 }
 
 export class CreatePaymentDto {
-  @IsOptional()
-  @IsNumber()
-  branchId?: number;
-
   @IsNotEmpty()
   @IsEnum(PaymentType)
   paymentType: PaymentType;

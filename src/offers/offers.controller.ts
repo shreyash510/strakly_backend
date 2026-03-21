@@ -37,102 +37,50 @@ export class OffersController {
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Get()
   @ApiOperation({ summary: 'Get all offers' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findAll(
       req.user.gymId!,
-      branchId,
       includeInactive === 'true',
     );
   }
 
   @Get('active')
   @ApiOperation({ summary: 'Get currently active offers' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  findActive(@Request() req: AuthenticatedRequest, @Query('branchId') queryBranchId?: string) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findActive(req.user.gymId!, branchId);
+  findActive(@Request() req: AuthenticatedRequest) {
+    return this.offersService.findActive(req.user.gymId!);
   }
 
   @Get('validate/:code')
   @ApiOperation({ summary: 'Validate an offer code' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   validateCode(
     @Request() req: AuthenticatedRequest,
     @Param('code') code: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.validateOfferCode(code, req.user.gymId!, branchId);
+    return this.offersService.validateOfferCode(code, req.user.gymId!);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get offer by ID' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findOne(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findOne(id, req.user.gymId!, branchId);
+    return this.offersService.findOne(id, req.user.gymId!);
   }
 
   @Get('code/:code')
   @ApiOperation({ summary: 'Get offer by code' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findByCode(
     @Request() req: AuthenticatedRequest,
     @Param('code') code: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findByCode(code, req.user.gymId!, branchId);
+    return this.offersService.findByCode(code, req.user.gymId!);
   }
 
   @Post()
@@ -140,19 +88,11 @@ export class OffersController {
   @Roles('superadmin', 'admin', 'manager')
   @ManagerPermission('offers', 'create')
   @ApiOperation({ summary: 'Create a new offer' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for the offer (admin only)',
-  })
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateOfferDto,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    const result = await this.offersService.create(dto, req.user.gymId!, branchId);
+    const result = await this.offersService.create(dto, req.user.gymId!);
     this.notificationsGateway.emitOfferChanged(req.user.gymId!, { action: 'created' });
     return result;
   }

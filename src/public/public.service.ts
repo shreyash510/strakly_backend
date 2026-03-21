@@ -84,31 +84,13 @@ export class PublicService {
       this.tenantService,
     );
 
-    /* Validate branch if provided */
-    if (dto.branchId) {
-      const branchExists = await this.tenantService.executeInTenant(
-        dto.gymId,
-        async (client) => {
-          const result = await client.query(
-            `SELECT id FROM branches WHERE id = $1 AND is_active = true`,
-            [dto.branchId],
-          );
-          return result.rows[0];
-        },
-      );
-
-      if (!branchExists) {
-        throw new BadRequestException('Invalid branch selected');
-      }
-    }
-
     /* Create the user in tenant schema as an onboarding client */
     const user = await this.tenantService.executeInTenant(
       dto.gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
+          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
           [
             dto.name,
@@ -118,7 +100,6 @@ export class PublicService {
             dto.gender,
             dto.joinDate || null,
             attendanceCode,
-            dto.branchId || null,
           ],
         );
         return result.rows[0];
@@ -166,7 +147,6 @@ export class PublicService {
     /* Notify admin users about new registration */
     await this.notificationHelper.notifyStaff(
       dto.gymId,
-      dto.branchId || null,
       {
         type: NotificationType.NEW_MEMBER_REGISTRATION,
         title: 'New Client Registration',

@@ -10,7 +10,6 @@ import {
   Headers,
   UseGuards,
   Res,
-  Request,
   BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -36,7 +35,6 @@ import {
   UpdateManagerPermissionsDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
-import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId, CurrentUser } from '../auth/decorators';
@@ -59,24 +57,6 @@ export class UsersController {
     private readonly notificationsGateway: NotificationsGateway,
     private readonly rabbitMqService: RabbitMqService,
   ) {}
-
-  /**
-   * Resolve branchId for filtering:
-   * - If user has a specific branch assigned, they can only see their branch
-   * - If user is admin with access to all branches, use query param if provided
-   * - Otherwise return null (all branches)
-   */
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
 
   @Get()
   @UseGuards(RolesGuard)
@@ -126,13 +106,6 @@ export class UsersController {
     type: Number,
     description: 'Gym ID (optional for superadmin - omit to see all gyms)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description:
-      'Branch ID for filtering (admin only, pass "all" for all branches)',
-  })
   @ApiQuery({ name: 'name', required: false, type: String, description: 'Filter by name (partial match)' })
   @ApiQuery({ name: 'phone', required: false, type: String, description: 'Filter by phone (partial match)' })
   @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city (partial match)' })
@@ -140,7 +113,6 @@ export class UsersController {
   @ApiQuery({ name: 'joinDateFrom', required: false, type: String, description: 'Filter join date from (YYYY-MM-DD)' })
   @ApiQuery({ name: 'joinDateTo', required: false, type: String, description: 'Filter join date to (YYYY-MM-DD)' })
   async findAll(
-    @Request() req: AuthenticatedRequest,
     @CurrentUser() user: AuthenticatedUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -149,7 +121,6 @@ export class UsersController {
     @Query('status') status?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
     @Query('name') filterName?: string,
     @Query('phone') filterPhone?: string,
     @Query('city') filterCity?: string,
@@ -167,11 +138,6 @@ export class UsersController {
         : undefined
       : resolveGymId(user.gymId, queryGymId, false);
 
-    // Resolve branchId for filtering (non-superadmin only)
-    const branchId = isSuperAdmin
-      ? null
-      : this.resolveBranchId(req, queryBranchId);
-
     const result = await this.usersService.findAll({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
@@ -179,7 +145,6 @@ export class UsersController {
       role,
       status,
       gymId,
-      branchId,
       isSuperAdmin,
       noPagination: noPagination === 'true',
       name: filterName,
@@ -646,15 +611,6 @@ export class UsersController {
       user.role === 'superadmin',
     );
 
-    // Propagate top-level branchId to each user that doesn't already have one
-    if (dto.branchId) {
-      for (const u of dto.users) {
-        if (!u.branchId) {
-          u.branchId = dto.branchId;
-        }
-      }
-    }
-
     const result = await this.usersService.bulkCreate(dto.users, gymId, user.role, {
       id: user.userId,
       name: user.name || user.email,
@@ -676,22 +632,14 @@ export class UsersController {
     description: 'Filter by role (e.g., client, trainer)',
   })
   @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
-  @ApiQuery({
     name: 'gymId',
     required: false,
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
   async getStatusCounts(
-    @Request() req: AuthenticatedRequest,
     @CurrentUser() user: AuthenticatedUser,
     @Query('role') role: string,
-    @Query('branchId') queryBranchId?: string,
     @Query('gymId') queryGymId?: string,
   ) {
     const isSuperAdmin = user.role === 'superadmin';
@@ -700,10 +648,7 @@ export class UsersController {
         ? parseInt(queryGymId)
         : undefined
       : resolveGymId(user.gymId, queryGymId, false);
-    const branchId = isSuperAdmin
-      ? null
-      : this.resolveBranchId(req, queryBranchId);
-    return this.usersService.getStatusCounts(role, gymId, branchId);
+    return this.usersService.getStatusCounts(role, gymId);
   }
 
   @Patch('bulk/update')
@@ -729,7 +674,7 @@ export class UsersController {
     );
     const result = await this.usersService.bulkUpdate(
       dto.userIds,
-      { branchIds: dto.branchIds, status: dto.status },
+      { status: dto.status },
       gymId,
       user.role,
     );

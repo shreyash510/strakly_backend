@@ -23,7 +23,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
@@ -41,10 +40,9 @@ export class LeadsController {
   @ApiOperation({ summary: 'List leads with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: LeadFiltersDto,
   ) {
-    return this.leadsService.findAll(gymId, branchId, filters);
+    return this.leadsService.findAll(gymId, filters);
   }
 
   @Get('sources')
@@ -59,10 +57,9 @@ export class LeadsController {
   @ApiOperation({ summary: 'Get lead pipeline stats' })
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: LeadStatsFiltersDto,
   ) {
-    return this.leadsService.getStats(gymId, branchId, filters);
+    return this.leadsService.getStats(gymId, filters);
   }
 
   @Get(':id/stage-history')
@@ -93,10 +90,9 @@ export class LeadsController {
   async create(
     @Body() dto: CreateLeadDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
   ) {
-    return this.leadsService.create(gymId, branchId, dto, userId);
+    return this.leadsService.create(gymId, dto, userId);
   }
 
   @Patch(':id')
@@ -135,10 +131,9 @@ export class LeadsController {
   async convertToUser(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
   ) {
-    return this.leadsService.convertToUser(id, gymId, branchId, userId);
+    return this.leadsService.convertToUser(id, gymId, userId);
   }
 
   @Delete(':id')
