@@ -243,6 +243,27 @@ export class MembershipsController {
     );
   }
 
+  @Get('audit-log')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get membership audit log from membership_history table' })
+  @ApiQuery({ name: 'clientId', required: true, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getAuditLog(
+    @Request() req: AuthenticatedRequest,
+    @Query('clientId') clientId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!clientId) {
+      throw new BadRequestException('clientId query parameter is required');
+    }
+    return this.membershipsService.getAuditLog(
+      parseInt(clientId),
+      req.user.gymId!,
+      limit ? parseInt(limit) : 50,
+    );
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
@@ -541,6 +562,19 @@ export class MembershipsController {
   ) {
     const result = await this.membershipsService.cancel(id, req.user.gymId!, dto);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'cancelled' });
+    return result;
+  }
+
+  @Delete(':id/void')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'Permanently delete a membership and its related data' })
+  async voidDelete(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const result = await this.membershipsService.voidDelete(id, req.user.gymId!);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'voided' });
     return result;
   }
 

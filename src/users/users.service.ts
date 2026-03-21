@@ -179,6 +179,7 @@ export class UsersService {
       city: user.city,
       state: user.state,
       zipCode: user.zipCode,
+      authType: user.authType || 'email',
       userType: 'admin',
       gymId: primaryAssignment?.gymId || null,
       gym: primaryAssignment?.gym

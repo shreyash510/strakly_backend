@@ -2293,11 +2293,14 @@ export class AuthService {
       throw new UnauthorizedException('Your account is inactive');
     }
 
-    // Update googleId if user was found by email but doesn't have googleId
+    // Update googleId and authType if user was found by email but doesn't have googleId
     if (!user.googleId) {
       user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { googleId: googleUser.googleId },
+        data: {
+          googleId: googleUser.googleId,
+          authType: 'google',
+        },
         include: {
           gymAssignments: {
             where: { isActive: true },
