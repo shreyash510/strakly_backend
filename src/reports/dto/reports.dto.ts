@@ -45,6 +45,7 @@ export class IncomeExpenseReportDto {
   };
   expense: {
     salaryPayments: number;
+    generalExpenses: number;
     totalExpense: number;
   };
   netProfit: number;
@@ -55,6 +56,8 @@ export class IncomeExpenseReportDto {
     }>;
     expenseByMonth: Array<{
       month: string;
+      salaryAmount: number;
+      generalExpenseAmount: number;
       amount: number;
     }>;
     incomeByPaymentMethod: Array<{

@@ -135,7 +135,31 @@ export class ReportsService {
       },
     );
 
+    // Get general expenses (from tenant schema)
+    const generalExpense = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        let whereClause = `payment_status = 'paid' AND is_deleted = FALSE`;
+        const values: SqlValue[] = [];
+        let paramIndex = 1;
+
+        if (month) {
+          whereClause += ` AND EXTRACT(MONTH FROM expense_date) = $${paramIndex++}`;
+          values.push(month);
+        }
+        whereClause += ` AND EXTRACT(YEAR FROM expense_date) = $${paramIndex++}`;
+        values.push(year);
+
+        const result = await client.query(
+          `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE ${whereClause}`,
+          values,
+        );
+        return parseFloat(result.rows[0]?.total || 0);
+      },
+    );
+
     const salaryTotal = salaryExpense.total;
+    const generalExpensesTotal = generalExpense;
 
     // Get income by month (memberships + product sales combined)
     const incomeByMonth = await this.tenantService.executeInTenant(
@@ -164,27 +188,39 @@ export class ReportsService {
       },
     );
 
-    // Get expense by month (from tenant schema)
+    // Get expense by month (salaries + general expenses from tenant schema)
     const expenseByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `s.payment_status = 'paid' AND s.year = $1`;
+        const salaryWhere = `s.payment_status = 'paid' AND s.year = $1`;
+        const expenseWhere = `payment_status = 'paid' AND is_deleted = FALSE AND EXTRACT(YEAR FROM expense_date) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
-          `SELECT
-            CASE s.month
-              WHEN 1 THEN 'Jan' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
-              WHEN 4 THEN 'Apr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
-              WHEN 7 THEN 'Jul' WHEN 8 THEN 'Aug' WHEN 9 THEN 'Sep'
-              WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dec'
-            END as month,
-            s.month as month_num,
-            COALESCE(SUM(s.net_amount), 0) as amount
-          FROM staff_salaries s
-          JOIN users u ON u.id = s.staff_id
-          WHERE ${whereClause}
-          GROUP BY s.month
+          `SELECT month, month_num, SUM(salary_amount) as salary_amount, SUM(expense_amount) as expense_amount, SUM(salary_amount + expense_amount) as amount FROM (
+            SELECT
+              CASE s.month
+                WHEN 1 THEN 'Jan' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
+                WHEN 4 THEN 'Apr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
+                WHEN 7 THEN 'Jul' WHEN 8 THEN 'Aug' WHEN 9 THEN 'Sep'
+                WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dec'
+              END as month,
+              s.month as month_num,
+              s.net_amount as salary_amount,
+              0 as expense_amount
+            FROM staff_salaries s
+            JOIN users u ON u.id = s.staff_id
+            WHERE ${salaryWhere}
+            UNION ALL
+            SELECT
+              TO_CHAR(expense_date, 'Mon') as month,
+              EXTRACT(MONTH FROM expense_date)::int as month_num,
+              0 as salary_amount,
+              amount as expense_amount
+            FROM expenses
+            WHERE ${expenseWhere}
+          ) combined
+          GROUP BY month, month_num
           ORDER BY month_num`,
           values,
         );
@@ -225,7 +261,7 @@ export class ReportsService {
     );
 
     const totalIncome = membershipIncome.total + productSalesIncome.total;
-    const totalExpense = salaryTotal;
+    const totalExpense = salaryTotal + generalExpensesTotal;
 
     return {
       period: month ? `${this.getMonthName(month)} ${year}` : `Year ${year}`,
@@ -236,6 +272,7 @@ export class ReportsService {
       },
       expense: {
         salaryPayments: salaryTotal,
+        generalExpenses: generalExpensesTotal,
         totalExpense,
       },
       netProfit: totalIncome - totalExpense,
@@ -243,6 +280,8 @@ export class ReportsService {
         incomeByMonth,
         expenseByMonth: expenseByMonth.map((r: Record<string, any>) => ({
           month: r.month,
+          salaryAmount: parseFloat(r.salary_amount),
+          generalExpenseAmount: parseFloat(r.expense_amount),
           amount: parseFloat(r.amount),
         })),
         incomeByPaymentMethod,
