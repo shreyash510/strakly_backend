@@ -48,6 +48,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
 import { MigrationModule } from './migration/migration.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
+import { ExpensesModule } from './expenses/expenses.module';
 import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
 import { ActivityLogsService } from './activity-logs/activity-logs.service';
 
@@ -110,6 +111,7 @@ import { HealthModule } from './health/health.module';
     ProductsModule,
     MigrationModule,
     PlatformSettingsModule,
+    ExpensesModule,
   ],
   controllers: [AppController],
   providers: [
