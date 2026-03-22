@@ -112,6 +112,95 @@ export class ExpensesController {
     return result.data;
   }
 
+  @Get('unified')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get unified expenses (expenses + salaries) with filters and pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'categoryId', required: false, type: Number })
+  @ApiQuery({ name: 'categoryCode', required: false, type: String, description: 'Filter by category code (e.g. employee_salary)' })
+  @ApiQuery({ name: 'month', required: false, type: Number })
+  @ApiQuery({ name: 'year', required: false, type: Number })
+  @ApiQuery({ name: 'paymentMethod', required: false, type: String })
+  @ApiQuery({ name: 'isRecurring', required: false, type: Boolean })
+  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filter from date (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filter to date (ISO string)' })
+  @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  async findAllUnified(
+    @Request() req: AuthenticatedRequest,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('categoryCode') categoryCode?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('isRecurring') isRecurring?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('noPagination') noPagination?: string,
+    @Query('gymId') queryGymId?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    const result = await this.expensesService.findAllUnified(
+      gymId,
+      {
+        page: page ? parseInt(page) : undefined,
+        limit: limit ? parseInt(limit) : undefined,
+        search,
+        category: categoryId ? parseInt(categoryId) : undefined,
+        categoryCode,
+        month: month ? parseInt(month) : undefined,
+        year: year ? parseInt(year) : undefined,
+        paymentMethod,
+        isRecurring: isRecurring === 'true' ? true : isRecurring === 'false' ? false : undefined,
+        startDate,
+        endDate,
+        noPagination: noPagination === 'true',
+      },
+    );
+
+    if (res && result.pagination) {
+      setPaginationHeaders(res, result.pagination);
+    }
+
+    return result.data;
+  }
+
+  @Get('unified-stats')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get unified expense statistics (includes salaries)' })
+  @ApiQuery({ name: 'year', required: false, type: Number })
+  @ApiQuery({ name: 'month', required: false, type: Number })
+  @ApiQuery({
+    name: 'gymId',
+    required: false,
+    type: Number,
+    description: 'Gym ID (required for superadmin)',
+  })
+  getUnifiedStats(
+    @Request() req: AuthenticatedRequest,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.getUnifiedStats(
+      gymId,
+      year ? parseInt(year) : undefined,
+      month ? parseInt(month) : undefined,
+    );
+  }
+
   @Get('stats')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get expense statistics' })
