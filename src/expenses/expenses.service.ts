@@ -402,17 +402,21 @@ export class ExpensesService {
   async getCategories(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT id, name, icon, color, created_at, updated_at
+        `SELECT id, name, code, icon, color, sort_order, is_system, is_active, created_at, updated_at
          FROM expense_categories
-         WHERE (is_deleted = FALSE OR is_deleted IS NULL)
-         ORDER BY name ASC`,
+         WHERE is_active = TRUE
+         ORDER BY sort_order ASC, name ASC`,
       );
 
       return result.rows.map((c: Record<string, any>) => ({
         id: c.id,
         name: c.name,
+        code: c.code,
         icon: c.icon,
         color: c.color,
+        sortOrder: c.sort_order,
+        isSystem: c.is_system,
+        isActive: c.is_active,
         createdAt: c.created_at,
         updatedAt: c.updated_at,
       }));
@@ -571,13 +575,13 @@ export class ExpensesService {
             salaryValues.push(filters.paymentStatus);
           }
           if (filters.search) {
-            salaryWhere += ` AND (u.full_name ILIKE $${salaryIdx})`;
+            salaryWhere += ` AND (u.name ILIKE $${salaryIdx})`;
             salaryValues.push(`%${filters.search}%`);
             salaryIdx++;
           }
 
           const salariesResult = await client.query(
-            `SELECT ss.*, u.full_name as staff_name
+            `SELECT ss.*, u.name as staff_name
              FROM staff_salaries ss
              LEFT JOIN users u ON u.id = ss.staff_id
              WHERE ${salaryWhere}
