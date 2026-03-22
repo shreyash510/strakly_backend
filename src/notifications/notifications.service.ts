@@ -88,12 +88,11 @@ export class NotificationsService {
         const result = await client.query(
           `
         INSERT INTO notifications
-        (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `,
           [
-            dto.branchId || null,
             dto.userId,
             dto.type,
             dto.title,
@@ -145,10 +144,9 @@ export class NotificationsService {
 
         for (const userId of dto.userIds) {
           placeholders.push(
-            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
+            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
           );
           values.push(
-            dto.branchId || null,
             userId,
             dto.type,
             dto.title,
@@ -164,7 +162,7 @@ export class NotificationsService {
         const result = await client.query(
           `
         INSERT INTO notifications
-        (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
         VALUES ${placeholders.join(', ')}
         RETURNING *
       `,

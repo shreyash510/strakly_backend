@@ -117,22 +117,21 @@ export class MembershipsService {
   ): Promise<void> {
     await client.query(
       `INSERT INTO membership_history (
-        branch_id, original_id, user_id, plan_id, offer_id,
+        original_id, user_id, plan_id, offer_id,
         start_date, end_date, status,
         original_amount, discount_amount, final_amount, currency,
         payment_status, payment_method, payment_ref, paid_at,
         cancelled_at, cancel_reason, notes,
         archive_reason, original_created_at
       ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8,
-        $9, $10, $11, $12,
-        $13, $14, $15, $16,
-        $17, $18, $19,
-        $20, $21
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17, $18,
+        $19, $20
       )`,
       [
-        membership.branch_id ?? null,
         membership.id,
         membership.user_id,
         membership.plan_id,
@@ -495,14 +494,13 @@ export class MembershipsService {
     const { membership, userName } = await this.tenantService.executeInTenantTransaction(
       gymId,
       async (client) => {
-        // Create membership with branch_id
+        // Create membership
         const membershipResult = await client.query(
-          `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
+          `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
           original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $14, $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, NOW(), NOW())
          RETURNING *`,
           [
-            membershipBranchId,
             dto.userId,
             dto.planId,
             offer?.id || null,
@@ -1229,9 +1227,9 @@ export class MembershipsService {
     // Create freeze record and update membership atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
-        `INSERT INTO membership_freezes (branch_id, membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())`,
-        [membership.branchId, id, startDate, endDate, dto.reason || null, approvedBy],
+        `INSERT INTO membership_freezes (membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())`,
+        [id, startDate, endDate, dto.reason || null, approvedBy],
       );
 
       await client.query(

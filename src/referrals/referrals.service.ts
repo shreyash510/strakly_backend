@@ -164,11 +164,10 @@ export class ReferralsService {
       const referralCode = dto.referralCode || this.generateReferralCode();
 
       const result = await client.query(
-        `INSERT INTO referrals (branch_id, referrer_id, referred_id, referral_code, status, notes)
-         VALUES ($1, $2, $3, $4, 'pending', $5)
+        `INSERT INTO referrals (referrer_id, referred_id, referral_code, status, notes)
+         VALUES ($1, $2, $3, 'pending', $4)
          RETURNING *`,
         [
-          null,
           dto.referrerId,
           dto.referredId || null,
           referralCode,

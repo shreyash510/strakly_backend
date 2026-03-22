@@ -77,7 +77,7 @@ export class NotificationsScheduler {
       const { memberships, alreadyNotifiedUserIds } =
         await this.tenantService.executeInTenant(gymId, async (client) => {
           const membershipsResult = await client.query(
-            `SELECT m.id, m.user_id, m.branch_id, m.end_date, p.name as plan_name
+            `SELECT m.id, m.user_id, m.end_date, p.name as plan_name
              FROM memberships m
              LEFT JOIN plans p ON p.id = m.plan_id
              WHERE m.status = 'active'
@@ -109,7 +109,7 @@ export class NotificationsScheduler {
           await this.notificationsService.notifyMembershipExpiry(
             membership.user_id,
             gymId,
-            membership.branch_id,
+            null,
             {
               planName: membership.plan_name || 'Membership',
               endDate: new Date(membership.end_date),

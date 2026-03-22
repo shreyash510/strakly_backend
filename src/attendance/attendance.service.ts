@@ -99,7 +99,7 @@ export class AttendanceService {
       async (client) => {
         // Search all users gym-wide (no branch filter)
         const query = `
-          SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
+          SELECT id, name, email, phone, avatar, status, attendance_code, role, created_at
           FROM users
           WHERE attendance_code = $1
         `;
@@ -159,7 +159,7 @@ export class AttendanceService {
       gymId,
       async (client) => {
         // First, check all conditions in parallel
-        const [existingResult, membershipResult, userResult] =
+        const [existingResult, membershipResult] =
           await Promise.all([
             client.query(
               `SELECT id FROM attendance WHERE user_id = $1 AND attendance_date = $2::DATE AND status = 'present'`,
@@ -170,14 +170,10 @@ export class AttendanceService {
                AND start_date::date <= CURRENT_DATE AND end_date::date >= CURRENT_DATE`,
               [user.id],
             ),
-            client.query(`SELECT branch_id FROM users WHERE id = $1`, [
-              user.id,
-            ]),
           ]);
 
         const existingRecord = existingResult.rows[0];
         const activeMembership = membershipResult.rows[0];
-        const userBranchId = userResult.rows[0]?.branch_id;
 
         if (existingRecord) {
           return { error: 'already_checked_in' };
@@ -187,16 +183,12 @@ export class AttendanceService {
           return { error: 'no_active_membership' };
         }
 
-        // Use user's branch
-        const attendanceBranchId = userBranchId;
-
         // Insert attendance record
         const insertResult = await client.query(
-          `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
-           VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
+          `INSERT INTO attendance (user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
+           VALUES ($1, $2, NOW(), $3::DATE, $3::DATE, $4, $5, 'present', NOW(), NOW())
            RETURNING *`,
           [
-            attendanceBranchId,
             user.id,
             activeMembership.id,
             today,
@@ -207,7 +199,6 @@ export class AttendanceService {
 
         return {
           attendance: insertResult.rows[0],
-          attendanceBranchId,
         };
       },
     );
@@ -225,7 +216,7 @@ export class AttendanceService {
       );
     }
 
-    const { attendance, attendanceBranchId } = result;
+    const { attendance } = result;
 
     // Log activity asynchronously (don't wait for it)
     this.activityLogsService

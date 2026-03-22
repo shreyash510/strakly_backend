@@ -139,15 +139,14 @@ export class LeadsService {
       const initialStage = dto.pipelineStage || 'new';
       const result = await client.query(
         `INSERT INTO leads (
-           branch_id, name, email, phone, lead_source,
+           name, email, phone, lead_source,
            pipeline_stage, assigned_to, score,
            inquiry_date, expected_close_date, deal_value, notes,
            stage_entered_at, created_at, updated_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), NOW())
          RETURNING *`,
         [
-          null,
           dto.name,
           dto.email || null,
           dto.phone || null,
@@ -317,15 +316,14 @@ export class LeadsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Insert a new user from the lead data
       const userResult = await client.query(
-        `INSERT INTO users (name, email, phone, role, status, lead_source, branch_id, created_at, updated_at)
-         VALUES ($1, $2, $3, 'client', 'onboarding', $4, $5, NOW(), NOW())
+        `INSERT INTO users (name, email, phone, role, status, lead_source, created_at, updated_at)
+         VALUES ($1, $2, $3, 'client', 'onboarding', $4, NOW(), NOW())
          RETURNING *`,
         [
           lead.name,
           lead.email || null,
           lead.phone || null,
           lead.leadSource || null,
-          null,
         ],
       );
       const user = userResult.rows[0];

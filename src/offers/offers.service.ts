@@ -178,11 +178,10 @@ export class OffersService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO offers (branch_id, code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, true, NOW(), NOW())
+          `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, NOW(), NOW())
          RETURNING *`,
           [
-            null,
             dto.code,
             dto.name,
             dto.description || null,

@@ -196,15 +196,14 @@ export class ActivityLogsService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO activity_logs (
-          branch_id, actor_id, actor_type, actor_name,
+          actor_id, actor_type, actor_name,
           action, action_category, target_type, target_id, target_name,
           description, old_values, new_values, metadata,
           ip_address, user_agent, request_id, created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
         ) RETURNING *`,
           [
-            dto.branchId || null,
             dto.actorId,
             dto.actorType,
             dto.actorName || null,
