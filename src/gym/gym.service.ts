@@ -708,37 +708,37 @@ export class GymService {
           const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
             await Promise.all([
               client.query(
-                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role = 'client' AND status = 'active' GROUP BY branch_id`,
-                [branchIds],
+                `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               ),
               client.query(
-                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role IN ('manager', 'trainer') AND status = 'active' GROUP BY branch_id`,
-                [branchIds],
+                `SELECT COUNT(*) as count FROM users WHERE role IN ('manager', 'trainer') AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               ),
               client.query(
-                `SELECT COALESCE(branch_id, 0) as branch_id, COUNT(*) as count FROM facilities WHERE (branch_id = ANY($1) OR branch_id IS NULL) AND is_active = true GROUP BY COALESCE(branch_id, 0)`,
-                [branchIds],
+                `SELECT COUNT(*) as count FROM facilities WHERE is_active = true`,
               ),
               client.query(
-                `SELECT COALESCE(branch_id, 0) as branch_id, COUNT(*) as count FROM amenities WHERE (branch_id = ANY($1) OR branch_id IS NULL) AND is_active = true GROUP BY COALESCE(branch_id, 0)`,
-                [branchIds],
+                `SELECT COUNT(*) as count FROM amenities WHERE is_active = true`,
               ),
             ]);
 
-          const toMap = (rows: any[]) => {
-            const map: Record<number, number> = {};
-            for (const row of rows) {
-              map[row.branch_id] = parseInt(row.count, 10);
-            }
-            return map;
-          };
+          const totalMembers = parseInt(membersResult.rows[0]?.count || '0', 10);
+          const totalStaff = parseInt(staffResult.rows[0]?.count || '0', 10);
+          const totalFacilities = parseInt(facilitiesResult.rows[0]?.count || '0', 10);
+          const totalAmenities = parseInt(amenitiesResult.rows[0]?.count || '0', 10);
 
-          return {
-            members: toMap(membersResult.rows),
-            staff: toMap(staffResult.rows),
-            facilities: toMap(facilitiesResult.rows),
-            amenities: toMap(amenitiesResult.rows),
-          };
+          // Return same count for all branches (no branch filtering)
+          const members: Record<number, number> = {};
+          const staff: Record<number, number> = {};
+          const facilities: Record<number, number> = {};
+          const amenities: Record<number, number> = {};
+          for (const id of branchIds) {
+            members[id] = totalMembers;
+            staff[id] = totalStaff;
+            facilities[id] = totalFacilities;
+            amenities[id] = totalAmenities;
+          }
+
+          return { members, staff, facilities, amenities };
         },
       );
 
