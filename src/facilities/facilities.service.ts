@@ -108,11 +108,10 @@ export class FacilitiesService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO facilities (branch_id, name, code, description, icon, is_active, display_order, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+          `INSERT INTO facilities (name, code, description, icon, is_active, display_order, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
           [
-            null,
             dto.name,
             dto.code,
             dto.description || null,

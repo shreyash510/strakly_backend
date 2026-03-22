@@ -196,15 +196,14 @@ export class AnnouncementsService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO announcements (
-          branch_id, title, content, type, priority,
+          title, content, type, priority,
           target_audience, target_user_ids,
           start_date, end_date, is_pinned, display_on_dashboard, display_on_mobile,
           attachments, created_by, is_active, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW(), NOW()
         ) RETURNING *`,
           [
-            null,
             dto.title,
             dto.content,
             dto.type || 'general',

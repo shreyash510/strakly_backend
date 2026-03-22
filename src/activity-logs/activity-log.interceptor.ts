@@ -809,7 +809,6 @@ export class ActivityLogInterceptor implements NestInterceptor {
         targetType: mapping.targetType,
         targetId: targetId || undefined,
         description: mapping.description,
-        branchId: undefined,
         ipAddress: typeof ipAddress === 'string' ? ipAddress : ipAddress?.[0],
         userAgent: request.headers['user-agent'],
       },

@@ -229,17 +229,16 @@ export class PaymentsService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO payments (
-          branch_id, payment_type, reference_id, reference_table,
+          payment_type, reference_id, reference_table,
           payer_type, payer_id, payer_name,
           payee_type, payee_id, payee_name,
           amount, currency, tax_amount, discount_amount, net_amount,
           payment_method, payment_ref, payment_gateway, payment_gateway_ref,
           status, processed_at, processed_by, notes, metadata, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, NOW(), NOW()
         ) RETURNING *`,
           [
-            null,
             dto.paymentType,
             dto.referenceId,
             dto.referenceTable,
@@ -570,17 +569,16 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     const result = await client.query(
       `INSERT INTO payments (
-        branch_id, payment_type, reference_id, reference_table,
+        payment_type, reference_id, reference_table,
         payer_type, payer_id, payer_name,
         payee_type, payee_id, payee_name,
         amount, currency, tax_amount, discount_amount, net_amount,
         payment_method, payment_ref, payment_gateway, payment_gateway_ref,
         status, processed_at, processed_by, notes, metadata, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, NOW(), NOW()
       ) RETURNING *`,
       [
-        null,
         dto.paymentType,
         dto.referenceId,
         dto.referenceTable,

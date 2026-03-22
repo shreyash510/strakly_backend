@@ -8,10 +8,6 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateActivityLogDto {
-  @IsOptional()
-  @IsNumber()
-  branchId?: number;
-
   @IsNotEmpty()
   @IsNumber()
   actorId: number;

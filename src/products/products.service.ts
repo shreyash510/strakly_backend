@@ -91,7 +91,7 @@ export class ProductsService {
 
   // ─── Categories ───
 
-  async findAllCategories(gymId: number, branchId: number | null) {
+  async findAllCategories(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['(is_deleted = FALSE OR is_deleted IS NULL)'];
       const values: SqlValue[] = [];
@@ -107,14 +107,13 @@ export class ProductsService {
 
   async createCategory(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductCategoryDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO product_categories (branch_id, name, description, display_order)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [branchId, dto.name, dto.description || null, dto.displayOrder || 0],
+        `INSERT INTO product_categories (name, description, display_order)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [dto.name, dto.description || null, dto.displayOrder || 0],
       );
       return this.formatCategory(result.rows[0]);
     });
@@ -183,7 +182,6 @@ export class ProductsService {
 
   async findAllProducts(
     gymId: number,
-    branchId: number | null,
     filters: ProductFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -256,7 +254,7 @@ export class ProductsService {
     });
   }
 
-  async findLowStockProducts(gymId: number, branchId: number | null) {
+  async findLowStockProducts(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -280,7 +278,6 @@ export class ProductsService {
 
   async createProduct(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductDto,
   ) {
     // Check subscription limit for maxProducts
@@ -314,11 +311,10 @@ export class ProductsService {
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO products (branch_id, category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `INSERT INTO products (category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
-          branchId,
           dto.categoryId || null,
           dto.name,
           dto.sku || null,
@@ -391,7 +387,7 @@ export class ProductsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Get current stock before adjustment
       const current = await client.query(
-        `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT stock_quantity FROM products WHERE id = $1 AND is_deleted = FALSE`,
         [id],
       );
       if (current.rows.length === 0) {
@@ -416,9 +412,9 @@ export class ProductsService {
 
       // Record stock movement
       await client.query(
-        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, current.rows[0].branch_id, 'adjustment', dto.adjustment, stockBefore, stockAfter, dto.reason || null, userId],
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, 'adjustment', dto.adjustment, stockBefore, stockAfter, dto.reason || null, userId],
       );
 
       return this.formatProduct(result.rows[0]);
@@ -440,7 +436,7 @@ export class ProductsService {
       for (const item of dto.items) {
         /* Fetch current product and lock the row */
         const current = await client.query(
-          `SELECT id, name, stock_quantity, branch_id
+          `SELECT id, name, stock_quantity
            FROM products
            WHERE id = $1 AND is_deleted = FALSE
            FOR UPDATE`,
@@ -484,11 +480,10 @@ export class ProductsService {
         /* Record stock movement */
         await client.query(
           `INSERT INTO product_stock_movements
-             (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+             (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             item.productId,
-            product.branch_id,
             dto.movementType,
             signedQuantity,
             stockBefore,
@@ -532,7 +527,6 @@ export class ProductsService {
 
   async findAllSales(
     gymId: number,
-    branchId: number | null,
     filters: SalesFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -610,7 +604,6 @@ export class ProductsService {
    */
   async findSalesTransactions(
     gymId: number,
-    branchId: number | null,
     filters: SalesFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -768,7 +761,6 @@ export class ProductsService {
 
   async createSale(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductSaleDto,
     soldBy: number,
   ) {
@@ -806,11 +798,10 @@ export class ProductsService {
 
       // Create sale record
       const sale = await client.query(
-        `INSERT INTO product_sales (branch_id, product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
-          branchId,
           dto.productId,
           dto.userId || null,
           dto.quantity,
@@ -829,9 +820,9 @@ export class ProductsService {
       const stockBefore = parseInt(p.stock_quantity) + dto.quantity; // stock before decrement
       const stockAfter = parseInt(p.stock_quantity); // RETURNING gave us the post-update value
       await client.query(
-        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [dto.productId, branchId, 'sale', -dto.quantity, stockBefore, stockAfter, saleRecord.id, soldBy],
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [dto.productId, 'sale', -dto.quantity, stockBefore, stockAfter, saleRecord.id, soldBy],
       );
 
       // Create payment record
@@ -846,7 +837,7 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         saleRecord.id,
-        branchId,
+        null,
         dto.userId || null,
         buyerName,
         totalAmount,
@@ -871,7 +862,6 @@ export class ProductsService {
 
   async createBatchSale(
     gymId: number,
-    branchId: number | null,
     dto: CreateBatchSaleDto,
     soldBy: number,
   ) {
@@ -944,11 +934,10 @@ export class ProductsService {
 
         // Create sale record
         const sale = await client.query(
-          `INSERT INTO product_sales (branch_id, product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING *`,
           [
-            branchId,
             item.productId,
             dto.userId || null,
             item.quantity,
@@ -962,9 +951,9 @@ export class ProductsService {
         );
 
         await client.query(
-          `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [item.productId, branchId, 'sale', -item.quantity, batchStockBefore, batchStockAfter, sale.rows[0].id, soldBy],
+          `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [item.productId, 'sale', -item.quantity, batchStockBefore, batchStockAfter, sale.rows[0].id, soldBy],
         );
 
         sales.push({ ...sale.rows[0], product_name: p.name });
@@ -994,7 +983,7 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         sales[0].id,
-        branchId,
+        null,
         dto.userId || null,
         buyerName,
         batchTotal,
@@ -1021,7 +1010,6 @@ export class ProductsService {
 
   async getSalesStats(
     gymId: number,
-    branchId: number | null,
     filters: SalesStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -1125,7 +1113,6 @@ export class ProductsService {
 
   async getSalesStatsTrend(
     gymId: number,
-    branchId: number | null,
     filters: SalesTrendFiltersDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -1188,7 +1175,7 @@ export class ProductsService {
 
   /* ─── Inventory Stats ─── */
 
-  async getInventoryStats(gymId: number, branchId: number | null) {
+  async getInventoryStats(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
@@ -1255,7 +1242,7 @@ export class ProductsService {
 
   /* ─── Barcode Lookup (TASK 4) ─── */
 
-  async findByBarcode(gymId: number, branchId: number | null, barcode: string) {
+  async findByBarcode(gymId: number, barcode: string) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.barcode = $1'];
       const values: SqlValue[] = [barcode];
@@ -1366,7 +1353,7 @@ export class ProductsService {
 
   /* ─── Reorder Suggestions ─── */
 
-  async getReorderSuggestions(gymId: number, branchId: number | null) {
+  async getReorderSuggestions(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -1441,7 +1428,7 @@ export class ProductsService {
 
   /* ─── Dead Stock ─── */
 
-  async getDeadStock(gymId: number, branchId: number | null, days: number = 30) {
+  async getDeadStock(gymId: number, days: number = 30) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -1509,7 +1496,6 @@ export class ProductsService {
       id: row.id,
       productId: row.product_id,
       productName: row.product_name,
-      branchId: row.branch_id,
       movementType: row.movement_type,
       quantity: row.quantity,
       stockBefore: row.stock_before,
@@ -1525,7 +1511,6 @@ export class ProductsService {
   async getStockMovements(
     gymId: number,
     productId: number,
-    branchId: number | null,
     filters: StockMovementFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1593,7 +1578,6 @@ export class ProductsService {
 
   async getAllStockMovements(
     gymId: number,
-    branchId: number | null,
     filters: AllStockMovementsFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1665,7 +1649,6 @@ export class ProductsService {
   private formatStockTake(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       status: row.status,
       startedBy: row.started_by,
       startedByName: row.started_by_name,
@@ -1702,17 +1685,16 @@ export class ProductsService {
    */
   async startStockTake(
     gymId: number,
-    branchId: number | null,
     userId: number,
     dto: StartStockTakeDto = {},
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       /* Create the stock take header */
       const stResult = await client.query(
-        `INSERT INTO stock_takes (branch_id, started_by, notes)
-         VALUES ($1, $2, $3)
+        `INSERT INTO stock_takes (started_by, notes)
+         VALUES ($1, $2)
          RETURNING *`,
-        [branchId, userId, dto.notes || null],
+        [userId, dto.notes || null],
       );
       const stockTake = stResult.rows[0];
 
@@ -1755,7 +1737,6 @@ export class ProductsService {
    */
   async getStockTakes(
     gymId: number,
-    branchId: number | null,
     filters: StockTakeFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1918,7 +1899,7 @@ export class ProductsService {
 
           /* Get current stock (may have changed since stock take started) */
           const productResult = await client.query(
-            `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+            `SELECT stock_quantity FROM products WHERE id = $1 AND is_deleted = FALSE`,
             [item.product_id],
           );
           if (productResult.rows.length === 0) continue;
@@ -1936,11 +1917,10 @@ export class ProductsService {
 
           /* Record the stock movement */
           await client.query(
-            `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               item.product_id,
-              productResult.rows[0].branch_id,
               'stock_take',
               diff,
               stockBefore,
@@ -2021,9 +2001,9 @@ export class ProductsService {
       const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
       const stockBefore = stockAfter - sale.quantity;
       await client.query(
-        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [sale.product_id, sale.branch_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, saleId, deletedById],
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [sale.product_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, saleId, deletedById],
       );
 
       // 4. Void the payment record
@@ -2072,9 +2052,9 @@ export class ProductsService {
         const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
         const stockBefore = stockAfter - sale.quantity;
         await client.query(
-          `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [sale.product_id, sale.branch_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, sale.id, deletedById],
+          `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [sale.product_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, sale.id, deletedById],
         );
       }
 

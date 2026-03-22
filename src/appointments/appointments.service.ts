@@ -135,11 +135,10 @@ export class AppointmentsService {
   async createService(gymId: number, dto: CreateServiceDto) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO services (branch_id, name, description, duration_minutes, price, currency, max_participants, category, buffer_minutes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        `INSERT INTO services (name, description, duration_minutes, price, currency, max_participants, category, buffer_minutes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
-          null,
           dto.name,
           dto.description ?? null,
           dto.durationMinutes,
@@ -231,16 +230,6 @@ export class AppointmentsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query('BEGIN');
       try {
-        // Use trainer's branch
-        let resolvedBranchId: number | null = null;
-        const trainerResult = await client.query(
-          `SELECT branch_id FROM users WHERE id = $1`,
-          [dto.trainerId],
-        );
-        if (trainerResult.rows.length > 0) {
-          resolvedBranchId = trainerResult.rows[0].branch_id ?? null;
-        }
-
         // Upsert: delete existing for this trainer + day, then insert
         await client.query(
           `DELETE FROM trainer_availability WHERE trainer_id = $1 AND day_of_week = $2`,
@@ -248,12 +237,11 @@ export class AppointmentsService {
         );
 
         const result = await client.query(
-          `INSERT INTO trainer_availability (trainer_id, branch_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          `INSERT INTO trainer_availability (trainer_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING *`,
           [
             dto.trainerId,
-            resolvedBranchId,
             dto.dayOfWeek,
             dto.startTime,
             dto.endTime,
@@ -412,25 +400,14 @@ export class AppointmentsService {
           throw new BadRequestException('Trainer has a conflicting appointment at this time');
         }
 
-        // Use client's branch
-        let resolvedBranchId: number | null = null;
-        const userResult = await client.query(
-          `SELECT branch_id FROM users WHERE id = $1`,
-          [dto.userId],
-        );
-        if (userResult.rows.length > 0) {
-          resolvedBranchId = userResult.rows[0].branch_id ?? null;
-        }
-
         const result = await client.query(
-          `INSERT INTO appointments (service_id, trainer_id, user_id, branch_id, start_time, end_time, status, notes, created_by, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, 'booked', $7, $8, NOW(), NOW())
+          `INSERT INTO appointments (service_id, trainer_id, user_id, start_time, end_time, status, notes, created_by, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'booked', $6, $7, NOW(), NOW())
            RETURNING *`,
           [
             dto.serviceId ?? null,
             dto.trainerId,
             dto.userId,
-            resolvedBranchId,
             dto.startTime,
             dto.endTime,
             dto.notes ?? null,
@@ -681,14 +658,14 @@ export class AppointmentsService {
           const apt = full.rows[0];
           // Notify the client
           await this.notificationsService.notifyAppointmentStatusChanged(
-            apt.user_id, gymId, apt.branch_id, {
+            apt.user_id, gymId, null, {
               appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
             },
           );
           // Notify the trainer
           if (apt.trainer_id) {
             await this.notificationsService.notifyAppointmentStatusChanged(
-              apt.trainer_id, gymId, apt.branch_id, {
+              apt.trainer_id, gymId, null, {
                 appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
               },
             );
@@ -801,24 +778,13 @@ export class AppointmentsService {
 
   async createPackage(gymId: number, dto: CreateSessionPackageDto) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Use client's branch
-      let resolvedBranchId: number | null = null;
-      const userResult = await client.query(
-        `SELECT branch_id FROM users WHERE id = $1`,
-        [dto.userId],
-      );
-      if (userResult.rows.length > 0) {
-        resolvedBranchId = userResult.rows[0].branch_id ?? null;
-      }
-
       const result = await client.query(
-        `INSERT INTO session_packages (user_id, service_id, branch_id, total_sessions, used_sessions, remaining_sessions, purchased_at, expires_at, status, payment_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 0, $4, NOW(), $5, 'active', $6, NOW(), NOW())
+        `INSERT INTO session_packages (user_id, service_id, total_sessions, used_sessions, remaining_sessions, purchased_at, expires_at, status, payment_id, created_at, updated_at)
+         VALUES ($1, $2, $3, 0, $3, NOW(), $4, 'active', $5, NOW(), NOW())
          RETURNING *`,
         [
           dto.userId,
           dto.serviceId ?? null,
-          resolvedBranchId,
           dto.totalSessions,
           dto.expiresAt ?? null,
           dto.paymentId ?? null,

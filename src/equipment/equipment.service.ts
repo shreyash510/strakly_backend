@@ -131,11 +131,10 @@ export class EquipmentService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO equipment (branch_id, name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO equipment (name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
-          null,
           dto.name,
           dto.brand || null,
           dto.model || null,
@@ -337,7 +336,7 @@ export class EquipmentService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const equip = await client.query(
-        `SELECT id, branch_id FROM equipment WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT id FROM equipment WHERE id = $1 AND is_deleted = FALSE`,
         [equipmentId],
       );
       if (equip.rows.length === 0) {
@@ -347,12 +346,11 @@ export class EquipmentService {
       }
 
       const result = await client.query(
-        `INSERT INTO equipment_maintenance (equipment_id, branch_id, type, description, scheduled_date, completed_date, performed_by, cost, notes, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO equipment_maintenance (equipment_id, type, description, scheduled_date, completed_date, performed_by, cost, notes, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           equipmentId,
-          equip.rows[0].branch_id,
           dto.type,
           dto.description,
           dto.scheduledDate,

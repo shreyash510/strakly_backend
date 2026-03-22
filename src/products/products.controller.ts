@@ -64,7 +64,7 @@ export class ProductsController {
   findAllCategories(
     @GymId() gymId: number,
   ) {
-    return this.productsService.findAllCategories(gymId, null);
+    return this.productsService.findAllCategories(gymId);
   }
 
   @Post('categories')
@@ -74,7 +74,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Body() dto: CreateProductCategoryDto,
   ) {
-    return this.productsService.createCategory(gymId, null, dto);
+    return this.productsService.createCategory(gymId, dto);
   }
 
   @Patch('categories/:id')
@@ -109,7 +109,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: SalesFiltersDto,
   ) {
-    return this.productsService.findAllSales(gymId, null, filters);
+    return this.productsService.findAllSales(gymId, filters);
   }
 
   @Get('sales/transactions')
@@ -119,7 +119,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: SalesFiltersDto,
   ) {
-    return this.productsService.findSalesTransactions(gymId, null, filters);
+    return this.productsService.findSalesTransactions(gymId, filters);
   }
 
   @Get('sales/stats')
@@ -129,7 +129,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: SalesStatsFiltersDto,
   ) {
-    return this.productsService.getSalesStats(gymId, null, filters);
+    return this.productsService.getSalesStats(gymId, filters);
   }
 
   @Get('sales/stats/trend')
@@ -139,7 +139,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: SalesTrendFiltersDto,
   ) {
-    return this.productsService.getSalesStatsTrend(gymId, null, filters);
+    return this.productsService.getSalesStatsTrend(gymId, filters);
   }
 
   @Get('sales/:id')
@@ -173,7 +173,7 @@ export class ProductsController {
     @UserId() userId: number,
     @Body() dto: CreateProductSaleDto,
   ) {
-    return this.productsService.createSale(gymId, null, dto, userId);
+    return this.productsService.createSale(gymId, dto, userId);
   }
 
   @Post('sales/batch')
@@ -185,7 +185,7 @@ export class ProductsController {
     @UserId() userId: number,
     @Body() dto: CreateBatchSaleDto,
   ) {
-    return this.productsService.createBatchSale(gymId, null, dto, userId);
+    return this.productsService.createBatchSale(gymId, dto, userId);
   }
 
   @Delete('sales/batch/:paymentId')
@@ -222,7 +222,7 @@ export class ProductsController {
     @Query() filters: AllStockMovementsFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.getAllStockMovements(gymId, null, filters);
+    const result = await this.productsService.getAllStockMovements(gymId, filters);
     const total = result.total;
     const page = result.page;
     const limit = result.limit;
@@ -245,7 +245,7 @@ export class ProductsController {
     @Query() filters: ProductFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.findAllProducts(gymId, null, filters);
+    const result = await this.productsService.findAllProducts(gymId, filters);
     /* Set standard pagination headers */
     const total = result.total;
     const page = result.page;
@@ -265,7 +265,7 @@ export class ProductsController {
   findLowStockProducts(
     @GymId() gymId: number,
   ) {
-    return this.productsService.findLowStockProducts(gymId, null);
+    return this.productsService.findLowStockProducts(gymId);
   }
 
   @Get('barcode/:barcode')
@@ -276,7 +276,7 @@ export class ProductsController {
     @Param('barcode') barcode: string,
     @GymId() gymId: number,
   ) {
-    return this.productsService.findByBarcode(gymId, null, barcode);
+    return this.productsService.findByBarcode(gymId, barcode);
   }
 
   @Get('inventory/stats')
@@ -285,7 +285,7 @@ export class ProductsController {
   getInventoryStats(
     @GymId() gymId: number,
   ) {
-    return this.productsService.getInventoryStats(gymId, null);
+    return this.productsService.getInventoryStats(gymId);
   }
 
   /* ─── Batch Stock Adjustment ─── */
@@ -310,7 +310,7 @@ export class ProductsController {
   getReorderSuggestions(
     @GymId() gymId: number,
   ) {
-    return this.productsService.getReorderSuggestions(gymId, null);
+    return this.productsService.getReorderSuggestions(gymId);
   }
 
   /* ─── Dead Stock ─── */
@@ -322,7 +322,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query('days') days?: string,
   ) {
-    return this.productsService.getDeadStock(gymId, null, days ? parseInt(days) : 30);
+    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30);
   }
 
   /* ─── Stock Take (Physical Count) ─── */
@@ -336,7 +336,7 @@ export class ProductsController {
     @UserId() userId: number,
     @Body() dto: StartStockTakeDto,
   ) {
-    return this.productsService.startStockTake(gymId, null, userId, dto);
+    return this.productsService.startStockTake(gymId, userId, dto);
   }
 
   @Get('inventory/stock-takes')
@@ -346,7 +346,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: StockTakeFiltersDto,
   ) {
-    return this.productsService.getStockTakes(gymId, null, filters);
+    return this.productsService.getStockTakes(gymId, filters);
   }
 
   @Get('inventory/stock-takes/:id')
@@ -408,7 +408,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Body() dto: CreateProductDto,
   ) {
-    return this.productsService.createProduct(gymId, null, dto);
+    return this.productsService.createProduct(gymId, dto);
   }
 
   @Patch(':id')
@@ -447,7 +447,7 @@ export class ProductsController {
     @GymId() gymId: number,
     @Query() filters: StockMovementFiltersDto,
   ) {
-    return this.productsService.getStockMovements(gymId, id, null, filters);
+    return this.productsService.getStockMovements(gymId, id, filters);
   }
 
   @Delete(':id')

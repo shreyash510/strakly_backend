@@ -137,11 +137,10 @@ export class GuestVisitsService {
       }
 
       const result = await client.query(
-        `INSERT INTO guest_visits (branch_id, guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10, NOW())
+        `INSERT INTO guest_visits (guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, created_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9, NOW())
          RETURNING *`,
         [
-          null,
           dto.guestName,
           dto.guestPhone ?? null,
           dto.guestEmail ?? null,

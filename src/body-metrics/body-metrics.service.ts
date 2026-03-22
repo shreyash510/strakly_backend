@@ -94,8 +94,8 @@ export class BodyMetricsService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
-            [userId, null],
+            `INSERT INTO body_metrics (user_id, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING *`,
+            [userId],
           );
           return result.rows[0];
         },
@@ -255,11 +255,10 @@ export class BodyMetricsService {
           );
         } else {
           await client.query(
-            `INSERT INTO body_metrics (user_id, branch_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
+            `INSERT INTO body_metrics (user_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW())`,
             [
               userId,
-              null,
               dto.height,
               dto.weight,
               bmi,
@@ -298,12 +297,11 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, biceps, thighs, calves, shoulders, neck, forearms, upper_abdomen, middle_abdomen, lower_abdomen, upper_calf, lower_calf, subcutaneous_fat, visceral_fat, resting_metabolism, bone_mass, water_percentage, resting_heart_rate, blood_pressure_sys, blood_pressure_dia, target_weight, target_body_fat, measured_by, notes, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW())
+          `INSERT INTO body_metrics_history (user_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, biceps, thighs, calves, shoulders, neck, forearms, upper_abdomen, middle_abdomen, lower_abdomen, upper_calf, lower_calf, subcutaneous_fat, visceral_fat, resting_metabolism, bone_mass, water_percentage, resting_heart_rate, blood_pressure_sys, blood_pressure_dia, target_weight, target_body_fat, measured_by, notes, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW())
          RETURNING *`,
           [
             userId,
-            null,
             measuredAt,
             dto.height || null,
             dto.weight || null,
@@ -425,7 +423,6 @@ export class BodyMetricsService {
       const data = result.rows.map((h: Record<string, any>) => ({
         id: h.id,
         userId: h.user_id,
-        branchId: h.branch_id,
         measuredAt: h.measured_at,
         height: h.height,
         weight: h.weight,

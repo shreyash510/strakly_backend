@@ -740,9 +740,9 @@ export class MigrationService {
                   categoryId = categoryMap.get(categoryKey)!;
                 } else {
                   const catResult = await client.query(
-                    `INSERT INTO product_categories (branch_id, name, description, display_order)
-                     VALUES ($1, $2, NULL, 0) RETURNING id`,
-                    [branchId, categoryName],
+                    `INSERT INTO product_categories (name, description, display_order)
+                     VALUES ($1, NULL, 0) RETURNING id`,
+                    [categoryName],
                   );
                   categoryId = catResult.rows[0].id as number;
                   categoryMap.set(categoryKey, categoryId!);
@@ -751,10 +751,9 @@ export class MigrationService {
 
               // Insert product
               await client.query(
-                `INSERT INTO products (branch_id, category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                `INSERT INTO products (category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
                 [
-                  branchId,
                   categoryId,
                   name,
                   sku,

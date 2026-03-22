@@ -208,11 +208,10 @@ export class DietsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO diets (branch_id, title, type, description, category, content, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+          `INSERT INTO diets (title, type, description, category, content, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
          RETURNING *`,
           [
-            null,
             dto.title,
             dto.type,
             dto.description || null,
@@ -328,11 +327,10 @@ export class DietsService {
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Insert the assignment
         const assignmentResult = await client.query(
-          `INSERT INTO diet_assignments (branch_id, diet_id, user_id, assigned_by, assigned_at, status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), 'active', $5, NOW(), NOW())
+          `INSERT INTO diet_assignments (diet_id, user_id, assigned_by, assigned_at, status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), 'active', $4, NOW(), NOW())
          RETURNING *`,
           [
-            null,
             dto.dietId,
             dto.userId,
             assignedBy,

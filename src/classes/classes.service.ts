@@ -177,11 +177,10 @@ export class ClassesService {
   async createType(gymId: number, dto: CreateClassTypeDto) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_types (branch_id, name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        `INSERT INTO class_types (name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
          RETURNING *`,
         [
-          null,
           dto.name,
           dto.description ?? null,
           dto.category ?? null,
@@ -282,12 +281,11 @@ export class ClassesService {
 
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_schedules (class_type_id, branch_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        `INSERT INTO class_schedules (class_type_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
          RETURNING *`,
         [
           dto.classTypeId,
-          null,
           dto.instructorId ?? null,
           dto.room ?? null,
           dto.dayOfWeek,
@@ -542,9 +540,9 @@ export class ClassesService {
 
               if (existing.rows.length === 0) {
                 await client.query(
-                  `INSERT INTO class_sessions (schedule_id, branch_id, date, instructor_id, status, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, 'scheduled', NOW(), NOW())`,
-                  [schedule.id, schedule.branch_id, dateStr, schedule.instructor_id],
+                  `INSERT INTO class_sessions (schedule_id, date, instructor_id, status, created_at, updated_at)
+                   VALUES ($1, $2, $3, 'scheduled', NOW(), NOW())`,
+                  [schedule.id, dateStr, schedule.instructor_id],
                 );
                 created++;
               }
@@ -750,7 +748,7 @@ export class ClassesService {
         // Notifications (after commit, non-blocking)
         try {
           const classInfo = await client.query(
-            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id, cs.instructor_id
+            `SELECT ct.name as class_type_name, cs.start_time, s.date, cs.instructor_id
              FROM class_sessions s
              JOIN class_schedules cs ON cs.id = s.schedule_id
              JOIN class_types ct ON ct.id = cs.class_type_id
@@ -762,7 +760,7 @@ export class ClassesService {
             const dateStr = info.date?.toISOString?.().split('T')[0] || String(info.date);
             // Notify the client
             await this.notificationsService.notifyClassBooked(
-              userId, gymId, info.branch_id, {
+              userId, gymId, null, {
                 sessionId, className: info.class_type_name, date: dateStr,
                 startTime: info.start_time, isWaitlisted, position,
               },
@@ -883,7 +881,7 @@ export class ClassesService {
         // Notifications (after commit, non-blocking)
         try {
           const classInfo = await client.query(
-            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id
+            `SELECT ct.name as class_type_name, cs.start_time, s.date
              FROM class_sessions s
              JOIN class_schedules cs ON cs.id = s.schedule_id
              JOIN class_types ct ON ct.id = cs.class_type_id
@@ -896,7 +894,7 @@ export class ClassesService {
             // Notify booking owner about cancellation
             if (dto.status === 'cancelled') {
               await this.notificationsService.notifyClassBookingCancelled(
-                current.rows[0].user_id, gymId, info.branch_id, {
+                current.rows[0].user_id, gymId, null, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name, date: dateStr,
                 },
               );
@@ -904,7 +902,7 @@ export class ClassesService {
             // Notify promoted waitlist user
             if (promotedUserId) {
               await this.notificationsService.notifyClassWaitlistPromoted(
-                promotedUserId, gymId, info.branch_id, {
+                promotedUserId, gymId, null, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name,
                   date: dateStr, startTime: info.start_time,
                 },
