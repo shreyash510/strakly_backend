@@ -53,6 +53,11 @@ export class CreateMembershipDto {
   @IsOptional()
   @IsBoolean()
   autoRenew?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountAmount?: number;
 }
 
 export class UpdateMembershipDto {
