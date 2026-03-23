@@ -115,6 +115,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('Your account is inactive');
       }
 
+      // Check if gym is active
+      if (payload.gymId) {
+        const gym = await this.prisma.gym.findUnique({
+          where: { id: payload.gymId },
+          select: { isActive: true },
+        });
+        if (gym && !gym.isActive) {
+          throw new UnauthorizedException('Your gym account has been deactivated');
+        }
+      }
+
       return {
         userId: userId,
         email: payload.email,
@@ -174,6 +185,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       if (userData.status === 'expired') {
         throw new UnauthorizedException('Your account has expired');
+      }
+    }
+
+    // Check if gym is active
+    if (payload.gymId) {
+      const gym = await this.prisma.gym.findUnique({
+        where: { id: payload.gymId },
+        select: { isActive: true },
+      });
+      if (gym && !gym.isActive) {
+        throw new UnauthorizedException('Your gym account has been deactivated');
       }
     }
 

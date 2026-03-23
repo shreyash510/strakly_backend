@@ -351,7 +351,7 @@ export class SaasSubscriptionsController {
     @Body() dto: UpdateGymSubscriptionDto,
   ) {
     const result = await this.service.updateSubscription(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_updated' });
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_updated', gymId: result.gym.id });
     return result;
   }
 
@@ -363,7 +363,7 @@ export class SaasSubscriptionsController {
     @Body() dto: CancelSubscriptionDto,
   ) {
     const result = await this.service.cancelSubscription(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_cancelled' });
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_cancelled', gymId: result.gym.id });
     return result;
   }
 
@@ -378,7 +378,7 @@ export class SaasSubscriptionsController {
       ...dto,
       subscriptionId,
     });
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_recorded' });
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_recorded', gymId: result.gym?.id });
     return result;
   }
 

@@ -415,10 +415,13 @@ export class NotificationsGateway
   /**
    * Emit saas-subscription:changed event to all superadmins
    */
-  emitSaasSubscriptionChanged(payload: { action: string }) {
+  emitSaasSubscriptionChanged(payload: { action: string; gymId?: number }) {
     this.server.to('superadmin').emit('saas-subscription:changed', payload);
+    if (payload.gymId) {
+      this.server.to(`gym:${payload.gymId}`).emit('saas-subscription:changed', payload);
+    }
     this.logger.debug(
-      `saas-subscription:changed event emitted to superadmins (action: ${payload.action})`,
+      `saas-subscription:changed event emitted to superadmins${payload.gymId ? ` and gym ${payload.gymId}` : ''} (action: ${payload.action})`,
     );
   }
 
