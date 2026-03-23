@@ -355,6 +355,18 @@ export class SaasSubscriptionsController {
     return result;
   }
 
+  @Post(':id/renew')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Renew a gym subscription (extends by plan duration)' })
+  async renewSubscription(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('planId') planId?: number,
+  ) {
+    const result = await this.service.renewSubscription(id, planId);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_renewed', gymId: result.gym.id });
+    return result;
+  }
+
   @Post(':id/cancel')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Cancel a gym subscription' })
