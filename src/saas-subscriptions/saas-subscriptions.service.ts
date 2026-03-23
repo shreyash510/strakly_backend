@@ -407,7 +407,8 @@ export class SaasSubscriptionsService {
 
     const updateData: Record<string, any> = {};
 
-    if (dto.planId) {
+    // If plan is changing, auto-recalculate dates and amount from the new plan
+    if (dto.planId && dto.planId !== subscription.planId) {
       const plan = await this.prisma.saasPlan.findUnique({
         where: { id: dto.planId },
       });
@@ -415,12 +416,21 @@ export class SaasSubscriptionsService {
         throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
       }
       updateData.planId = dto.planId;
+      updateData.amount = plan.price.toNumber();
+
+      // Auto-calculate new dates from today + plan duration
+      const now = new Date();
+      const newEndDate = new Date(now);
+      newEndDate.setMonth(newEndDate.getMonth() + (plan.durationMonths || 1));
+      updateData.startDate = now;
+      updateData.endDate = newEndDate;
     }
 
-    if (dto.startDate) updateData.startDate = new Date(dto.startDate);
-    if (dto.endDate) updateData.endDate = new Date(dto.endDate);
+    // Manual date overrides (only if not already set by plan change)
+    if (dto.startDate && !updateData.startDate) updateData.startDate = new Date(dto.startDate);
+    if (dto.endDate && !updateData.endDate) updateData.endDate = new Date(dto.endDate);
     if (dto.status) updateData.status = dto.status;
-    if (dto.amount !== undefined) updateData.amount = dto.amount;
+    if (dto.amount !== undefined && !updateData.amount) updateData.amount = dto.amount;
     if (dto.paymentStatus) updateData.paymentStatus = dto.paymentStatus;
     if (dto.paymentMethod !== undefined)
       updateData.paymentMethod = dto.paymentMethod;
@@ -469,6 +479,144 @@ export class SaasSubscriptionsService {
         plan: true,
       },
     });
+  }
+
+  async renewSubscription(id: number, planId?: number) {
+    const subscription = await this.findSubscriptionById(id);
+
+    // Use provided planId or fall back to current plan
+    let plan = subscription.plan;
+    if (planId && planId !== subscription.planId) {
+      const newPlan = await this.prisma.saasPlan.findUnique({ where: { id: planId } });
+      if (!newPlan) {
+        throw new NotFoundException(`Plan with ID ${planId} not found`);
+      }
+      if (!newPlan.isActive) {
+        throw new BadRequestException('Selected plan is not active');
+      }
+      plan = newPlan;
+    }
+
+    if (!plan) {
+      throw new BadRequestException('Subscription has no associated plan');
+    }
+
+    const now = new Date();
+    const currentEndDate = new Date(subscription.endDate);
+
+    // If still active/future, extend from current endDate; otherwise from today
+    const baseDate = currentEndDate > now && ['active', 'trial'].includes(subscription.status)
+      ? currentEndDate
+      : now;
+
+    const newEndDate = new Date(baseDate);
+    newEndDate.setMonth(newEndDate.getMonth() + (plan.durationMonths || 1));
+
+    // Update subscription
+    const updated = await this.prisma.saasGymSubscription.update({
+      where: { id },
+      data: {
+        planId: plan.id,
+        startDate: baseDate,
+        endDate: newEndDate,
+        status: 'active',
+        paymentStatus: 'paid',
+        amount: plan.price.toNumber(),
+        lastPaymentAt: now,
+        cancelledAt: null,
+        cancelReason: null,
+        trialEndsAt: null,
+      },
+      include: {
+        gym: { select: { id: true, name: true, logo: true } },
+        plan: true,
+      },
+    });
+
+    // Reactivate gym if deactivated
+    await this.prisma.gym.update({
+      where: { id: updated.gymId },
+      data: { isActive: true },
+    });
+
+    // Create payment history record
+    const invoiceNumber = await this.generateInvoiceNumber();
+    await this.prisma.saasPaymentHistory.create({
+      data: {
+        subscriptionId: id,
+        gymId: updated.gymId,
+        planId: plan.id,
+        amount: plan.price.toNumber(),
+        currency: plan.currency,
+        status: 'completed',
+        paymentMethod: 'manual',
+        paymentRef: `RENEW-${Date.now()}`,
+        gateway: 'manual',
+        billingPeriodStart: baseDate,
+        billingPeriodEnd: newEndDate,
+        invoiceNumber,
+        processedAt: now,
+        notes: 'Renewed by superadmin',
+      },
+    });
+
+    // Notify gym admin(s) about the renewal
+    try {
+      const adminXrefs = await this.prisma.userGymXref.findMany({
+        where: { gymId: updated.gymId, role: 'admin', isActive: true },
+        select: { userId: true },
+      });
+
+      for (const xref of adminXrefs) {
+        await this.prisma.systemNotification.create({
+          data: {
+            userId: xref.userId,
+            type: 'subscription_renewed',
+            title: 'Subscription Renewed',
+            message: `Your gym subscription has been renewed on the ${plan.name} plan. Valid until ${newEndDate.toLocaleDateString()}.`,
+            data: {
+              gymId: updated.gymId,
+              gymName: updated.gym.name,
+              planName: plan.name,
+              endDate: newEndDate.toISOString(),
+            },
+            actionUrl: '/gym-subscription',
+            priority: 'normal',
+          },
+        });
+
+        // Emit real-time notification
+        this.notificationsGateway.emitToSuperadmin(xref.userId, {
+          id: 0,
+          branchId: null,
+          userId: xref.userId,
+          type: 'subscription_renewed' as any,
+          title: 'Subscription Renewed',
+          message: `Your gym subscription has been renewed on the ${plan.name} plan. Valid until ${newEndDate.toLocaleDateString()}.`,
+          data: null,
+          isRead: false,
+          readAt: null,
+          actionUrl: '/gym-subscription',
+          priority: 'normal' as any,
+          expiresAt: null,
+          createdAt: now,
+          createdBy: null,
+        });
+      }
+    } catch (error) {
+      // Don't fail the renewal if notification fails
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to notify gym admins about renewal: ${msg}`);
+    }
+
+    // Send payment receipt email
+    try {
+      await this.sendPaymentReceiptEmail(id);
+    } catch {
+      this.logger.warn(`Failed to send renewal receipt email for subscription ${id}`);
+    }
+
+    return updated;
   }
 
   async cancelSubscription(id: number, dto: CancelSubscriptionDto) {
