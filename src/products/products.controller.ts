@@ -189,7 +189,7 @@ export class ProductsController {
   }
 
   @Delete('sales/batch/:paymentId')
-  @Roles('admin')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Void all sales in a batch (admin only)' })
   @ApiParam({ name: 'paymentId', type: Number })
   voidBatchSale(
@@ -201,7 +201,7 @@ export class ProductsController {
   }
 
   @Delete('sales/:id')
-  @Roles('admin')
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Void a product sale (admin only)' })
   @ApiParam({ name: 'id', type: Number })
   voidSale(

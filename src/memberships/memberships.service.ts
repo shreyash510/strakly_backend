@@ -476,6 +476,12 @@ export class MembershipsService {
           discountAmount = offer.discount_value;
         }
       }
+    } else if (dto.discountAmount && dto.discountAmount > 0) {
+      discountAmount = dto.discountAmount;
+      // Ensure discount doesn't exceed plan price
+      if (discountAmount > plan.price) {
+        discountAmount = plan.price;
+      }
     }
 
     const originalAmount = plan.price;
