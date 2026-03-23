@@ -126,8 +126,59 @@ export class NotificationsScheduler {
   }
 
   /**
+   * Run every day at 11:30 PM to auto-renew subscriptions before midnight expiry check.
+   * Finds subscriptions with autoRenew=true that are about to expire and extends them.
+   */
+  @Cron('0 30 23 * * *')
+  async handleAutoRenewals() {
+    this.logger.log('Running auto-renewal check...');
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const subscriptionsToRenew =
+      await this.prisma.saasGymSubscription.findMany({
+        where: {
+          autoRenew: true,
+          status: { in: ['active', 'trial'] },
+          endDate: { lte: tomorrow },
+        },
+        include: { plan: true, gym: { select: { id: true, name: true } } },
+      });
+
+    for (const sub of subscriptionsToRenew) {
+      try {
+        const durationMonths = sub.plan?.durationMonths || 1;
+        const newEndDate = new Date(sub.endDate);
+        newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
+
+        await this.prisma.saasGymSubscription.update({
+          where: { id: sub.id },
+          data: {
+            startDate: sub.endDate,
+            endDate: newEndDate,
+          },
+        });
+
+        this.logger.log(
+          `Auto-renewed subscription ${sub.id} for gym "${sub.gym.name}" until ${newEndDate.toISOString()}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to auto-renew subscription ${sub.id}: ${error.message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Auto-renewal check complete. Renewed ${subscriptionsToRenew.length} subscriptions.`,
+    );
+  }
+
+  /**
    * Run every day at 10:00 AM to check for expiring gym subscriptions
    * Notifies superadmins about gyms whose subscriptions expire in 14, 7, 3, or 1 day(s)
+   * Also notifies gym admins about subscriptions that have expired today
    */
   @Cron(CronExpression.EVERY_DAY_AT_10AM)
   async handleGymSubscriptionExpiryNotifications() {
@@ -200,6 +251,11 @@ export class NotificationsScheduler {
         }
       }
 
+      // Also notify gym admins about subscriptions that expired today
+      const expiredNotificationsSent =
+        await this.notifyGymAdminsAboutExpiredSubscriptions();
+      totalNotificationsSent += expiredNotificationsSent;
+
       this.logger.log(
         `Gym subscription expiry notification job completed. Sent ${totalNotificationsSent} notifications.`,
       );
@@ -208,6 +264,101 @@ export class NotificationsScheduler {
         `Gym subscription expiry notification job failed: ${error.message}`,
       );
     }
+  }
+
+  /**
+   * Find subscriptions that expired today (or yesterday) and notify the gym's admin users
+   */
+  private async notifyGymAdminsAboutExpiredSubscriptions(): Promise<number> {
+    let notificationsSent = 0;
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+
+    const now = new Date();
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    // Find subscriptions that expired between yesterday start and now
+    const expiredSubscriptions =
+      await this.prisma.saasGymSubscription.findMany({
+        where: {
+          status: 'expired',
+          endDate: {
+            gte: yesterday,
+            lte: endOfToday,
+          },
+        },
+        include: {
+          gym: true,
+          plan: true,
+        },
+      });
+
+    for (const subscription of expiredSubscriptions) {
+      try {
+        // Find admin users for this gym via UserGymXref
+        const adminXrefs = await this.prisma.userGymXref.findMany({
+          where: {
+            gymId: subscription.gymId,
+            role: 'admin',
+            isActive: true,
+          },
+          select: { userId: true },
+        });
+
+        for (const xref of adminXrefs) {
+          // Check if we already sent this notification today
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          const alreadyNotified =
+            await this.prisma.systemNotification.findFirst({
+              where: {
+                type: 'subscription_expired_gym_admin',
+                userId: xref.userId,
+                createdAt: { gte: today },
+                data: {
+                  path: ['gymId'],
+                  equals: subscription.gymId,
+                },
+              },
+            });
+
+          if (!alreadyNotified) {
+            // Create a system notification for the gym admin
+            await this.prisma.systemNotification.create({
+              data: {
+                userId: xref.userId,
+                type: 'subscription_expired_gym_admin',
+                title: 'Subscription Expired',
+                message: `Your gym "${subscription.gym.name}" subscription (${subscription.plan.name}) has expired. Please renew to continue using the platform.`,
+                data: {
+                  gymId: subscription.gymId,
+                  gymName: subscription.gym.name,
+                  planName: subscription.plan.name,
+                  endDate: subscription.endDate.toISOString(),
+                },
+                actionUrl: `/gym/${subscription.gymId}/subscription`,
+                priority: 'urgent',
+              },
+            });
+            notificationsSent++;
+
+            this.logger.log(
+              `Notified admin user ${xref.userId} about expired subscription for gym "${subscription.gym.name}"`,
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to notify gym admins about expired subscription ${subscription.id}: ${error.message}`,
+        );
+      }
+    }
+
+    return notificationsSent;
   }
 
   /**

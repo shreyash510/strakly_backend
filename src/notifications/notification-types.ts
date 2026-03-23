@@ -16,6 +16,7 @@ export enum NotificationType {
   CLASS_SCHEDULE_ASSIGNED = 'class_schedule_assigned',
   APPOINTMENT_BOOKED = 'appointment_booked',
   APPOINTMENT_STATUS_CHANGED = 'appointment_status_changed',
+  SUBSCRIPTION_EXPIRED = 'subscription_expired',
 }
 
 export enum NotificationPriority {

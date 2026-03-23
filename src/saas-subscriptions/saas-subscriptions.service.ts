@@ -22,6 +22,7 @@ import {
 } from './dto/saas-subscriptions.dto';
 import { RazorpayService } from '../razorpay/razorpay.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import {
   PaginationParams,
   PaginatedResponse,
@@ -44,6 +45,7 @@ export class SaasSubscriptionsService {
     private readonly tenantService: TenantService,
     private readonly emailService: EmailService,
     private readonly razorpayService: RazorpayService,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   // ============================================
@@ -368,6 +370,11 @@ export class SaasSubscriptionsService {
     const paymentStatus =
       dto.paymentStatus || (plan.price.toNumber() === 0 ? 'paid' : 'pending');
 
+    // Validate date order
+    if (endDate <= startDate) {
+      throw new BadRequestException('End date must be after start date');
+    }
+
     return this.prisma.saasGymSubscription.create({
       data: {
         gymId: dto.gymId,
@@ -396,7 +403,7 @@ export class SaasSubscriptionsService {
   }
 
   async updateSubscription(id: number, dto: UpdateGymSubscriptionDto) {
-    await this.findSubscriptionById(id);
+    const subscription = await this.findSubscriptionById(id);
 
     const updateData: Record<string, any> = {};
 
@@ -421,9 +428,31 @@ export class SaasSubscriptionsService {
     if (dto.autoRenew !== undefined) updateData.autoRenew = dto.autoRenew;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
-    // If payment status changed to paid, update lastPaymentAt
+    // If payment status CHANGED to paid (was not already paid), auto-extend endDate by plan duration (renewal)
     if (dto.paymentStatus === 'paid') {
       updateData.lastPaymentAt = new Date();
+
+      // Only auto-extend if paymentStatus is actually changing (not already 'paid')
+      if (subscription.paymentStatus !== 'paid') {
+        const plan = subscription.plan;
+        if (plan?.durationMonths) {
+          const currentEndDate = new Date(subscription.endDate);
+          const now = new Date();
+          // If subscription already expired, extend from today; otherwise from current endDate
+          const baseDate = currentEndDate > now ? currentEndDate : now;
+          const newEndDate = new Date(baseDate);
+          newEndDate.setMonth(newEndDate.getMonth() + plan.durationMonths);
+          updateData.endDate = newEndDate;
+          updateData.startDate = baseDate;
+        }
+      }
+    }
+
+    // Validate date order
+    const finalStartDate = updateData.startDate || subscription.startDate;
+    const finalEndDate = updateData.endDate || subscription.endDate;
+    if (finalEndDate && finalStartDate && new Date(finalEndDate) <= new Date(finalStartDate)) {
+      throw new BadRequestException('End date must be after start date');
     }
 
     return this.prisma.saasGymSubscription.update({
@@ -474,12 +503,18 @@ export class SaasSubscriptionsService {
       totalGyms,
       activeSubscriptions,
       trialSubscriptions,
+      expiredSubscriptions,
+      cancelledSubscriptions,
+      suspendedSubscriptions,
       monthlyRevenue,
       planDistribution,
     ] = await Promise.all([
       this.prisma.saasGymSubscription.count(),
       this.prisma.saasGymSubscription.count({ where: { status: 'active' } }),
       this.prisma.saasGymSubscription.count({ where: { status: 'trial' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'expired' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'cancelled' } }),
+      this.prisma.saasGymSubscription.count({ where: { status: 'suspended' } }),
       this.prisma.saasGymSubscription.aggregate({
         where: {
           paymentStatus: 'paid',
@@ -510,8 +545,9 @@ export class SaasSubscriptionsService {
       totalGyms,
       activeSubscriptions,
       trialSubscriptions,
-      expiredSubscriptions:
-        totalGyms - activeSubscriptions - trialSubscriptions,
+      expiredSubscriptions,
+      cancelledSubscriptions,
+      suspendedSubscriptions,
       monthlyRevenue: monthlyRevenue._sum.amount?.toNumber() || 0,
       planDistribution: distribution,
     };
@@ -913,19 +949,18 @@ export class SaasSubscriptionsService {
       });
     } else if (existing) {
       // Paid plan, existing but expired/cancelled: update to pending
+      // Don't change subscription status on payment initiation - only update when payment is confirmed
       subscription = await this.prisma.saasGymSubscription.update({
         where: { gymId },
         data: {
           planId: dto.planId,
           startDate,
           endDate,
-          status: 'trial',
           paymentStatus: 'pending',
           amount,
           paymentMethod: dto.paymentMethod,
           paymentRef: dto.paymentRef,
           notes: dto.notes,
-          trialEndsAt: endDate,
           cancelledAt: null,
           cancelReason: null,
         },
@@ -933,19 +968,19 @@ export class SaasSubscriptionsService {
       });
     } else {
       // Paid plan, no existing subscription: create new with pending status
+      // Don't change subscription status on payment initiation - only update when payment is confirmed
       subscription = await this.prisma.saasGymSubscription.create({
         data: {
           gymId,
           planId: dto.planId,
           startDate,
           endDate,
-          status: 'trial',
+          status: 'pending',
           paymentStatus: 'pending',
           amount,
           paymentMethod: dto.paymentMethod,
           paymentRef: dto.paymentRef,
           notes: dto.notes,
-          trialEndsAt: endDate,
         },
         include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
       });
@@ -1033,6 +1068,12 @@ export class SaasSubscriptionsService {
         paymentMethod: payment.paymentMethod,
         trialEndsAt: null,
       },
+    });
+
+    // Reactivate gym if it was deactivated
+    await this.prisma.gym.update({
+      where: { id: payment.subscription.gymId },
+      data: { isActive: true },
     });
 
     // Send receipt email
@@ -1416,17 +1457,44 @@ export class SaasSubscriptionsService {
     try {
       const now = new Date();
 
-      const result = await this.prisma.saasGymSubscription.updateMany({
+      // Find all expired subscriptions (including free plans) with their plan info
+      const expiredSubscriptions = await this.prisma.saasGymSubscription.findMany({
         where: {
           endDate: { lt: now },
           status: { in: ['active', 'trial'] },
         },
-        data: {
-          status: 'expired',
-        },
+        include: { plan: true },
       });
 
-      if (result.count > 0) {
+      if (expiredSubscriptions.length === 0) {
+        this.logger.log('No subscriptions to expire');
+        return;
+      }
+
+      const toExpireIds: number[] = [];
+
+      // Auto-renew free plan subscriptions instead of expiring them
+      for (const sub of expiredSubscriptions) {
+        if (sub.plan && Number(sub.plan.price) === 0) {
+          // Auto-renew: extend endDate by plan duration
+          const newEndDate = new Date(sub.endDate);
+          newEndDate.setMonth(newEndDate.getMonth() + (sub.plan.durationMonths || 1));
+          await this.prisma.saasGymSubscription.update({
+            where: { id: sub.id },
+            data: { endDate: newEndDate, status: 'active' },
+          });
+          this.logger.log(`Auto-renewed free plan subscription ${sub.id} for gym ${sub.gymId}`);
+          continue; // Skip expiration for free plans
+        }
+        toExpireIds.push(sub.id);
+      }
+
+      if (toExpireIds.length > 0) {
+        const result = await this.prisma.saasGymSubscription.updateMany({
+          where: { id: { in: toExpireIds } },
+          data: { status: 'expired' },
+        });
+
         this.logger.log(`Expired ${result.count} subscription(s)`);
 
         // Deactivate gyms with expired subscriptions
@@ -1448,10 +1516,19 @@ export class SaasSubscriptionsService {
             this.logger.log(
               `Deactivated ${deactivated.count} gym(s) with expired subscriptions`,
             );
+
+            // Emit socket events so connected users see the deactivation immediately
+            for (const gymId of gymIds) {
+              this.notificationsGateway.emitSaasSubscriptionChanged({
+                action: 'subscription_expired',
+                gymId,
+              });
+              this.notificationsGateway.emitGymChanged(gymId, {
+                action: 'gym_deactivated',
+              });
+            }
           }
         }
-      } else {
-        this.logger.log('No subscriptions to expire');
       }
     } catch (error) {
       this.logger.error('Failed to expire subscriptions', error);
