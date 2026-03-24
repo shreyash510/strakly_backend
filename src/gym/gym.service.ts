@@ -294,8 +294,8 @@ export class GymService {
 
     const data: Record<string, any> = { ...dto };
 
-    // Auto-set currency when country changes
-    if (dto.country) {
+    // Auto-set currency when country changes (only if currency not explicitly provided)
+    if (dto.country && !dto.currency) {
       data.currency = getCurrencyFromCountry(dto.country).code;
     }
 
