@@ -67,6 +67,7 @@ export interface UserResponse {
   gymId?: number;
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
+  managerPermissions?: Record<string, any>;
   authType?: string; /* email | google */
   createdAt?: Date;
   updatedAt?: Date;
@@ -176,6 +177,7 @@ export class AuthService {
         }
         : undefined,
       gyms,
+      managerPermissions: user.manager_permissions || user.managerPermissions || null,
       authType: user.authType || user.auth_type || 'email', /* default to email */
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,
