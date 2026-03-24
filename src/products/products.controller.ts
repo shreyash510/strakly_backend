@@ -69,6 +69,7 @@ export class ProductsController {
 
   @Post('categories')
   @Roles('admin', 'manager')
+  @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Create product category' })
   createCategory(
     @GymId() gymId: number,
@@ -79,6 +80,7 @@ export class ProductsController {
 
   @Patch('categories/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Update product category' })
   @ApiParam({ name: 'id', type: Number })
   updateCategory(
@@ -91,6 +93,7 @@ export class ProductsController {
 
   @Delete('categories/:id')
   @Roles('admin')
+  @ManagerPermission('products', 'delete')
   @ApiOperation({ summary: 'Delete product category' })
   @ApiParam({ name: 'id', type: Number })
   removeCategory(

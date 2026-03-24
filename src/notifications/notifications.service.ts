@@ -368,7 +368,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.MEMBERSHIP_EXPIRY,
           title: 'Membership Expiring Soon',
           message: `Your ${membershipData.planName} membership expires in ${membershipData.daysRemaining} day${membershipData.daysRemaining > 1 ? 's' : ''}. Renew now to continue your fitness journey!`,
@@ -407,7 +406,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.MEMBERSHIP_RENEWED,
           title: 'Membership Activated',
           message: `Your ${membershipData.planName} membership is now active until ${membershipData.endDate.toLocaleDateString()}.`,
@@ -442,7 +440,6 @@ export class NotificationsService {
       await this.create(
         {
           userId: clientUserId,
-    
           type: NotificationType.TRAINER_ASSIGNED,
           title: 'Trainer Assigned',
           message: `${trainerData.trainerName} has been assigned as your trainer.`,
@@ -475,7 +472,6 @@ export class NotificationsService {
       await this.create(
         {
           userId: clientUserId,
-    
           type: NotificationType.TRAINER_UNASSIGNED,
           title: 'Trainer Changed',
           message: `${trainerData.trainerName} is no longer your assigned trainer.`,
@@ -511,7 +507,6 @@ export class NotificationsService {
       await this.createBulk(
         {
           userIds,
-    
           type: NotificationType.NEW_ANNOUNCEMENT,
           title: 'New Announcement',
           message: announcementData.title,
@@ -573,7 +568,6 @@ export class NotificationsService {
       try {
         this.gateway.emitToSuperadmin(data.userId, {
           id: notification.id,
-    
           userId: notification.userId,
           type: notification.type as NotificationType,
           title: notification.title,
@@ -644,7 +638,6 @@ export class NotificationsService {
       try {
         this.gateway.emitToAllSuperadmins({
           id: 0,
-    
           userId: 0,
           type: data.type as NotificationType,
           title: data.title,
@@ -888,7 +881,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.SUPPORT_TICKET_RESOLVED,
           title: 'Support Ticket Resolved',
           message: `Your support ticket #${ticketData.ticketNumber} has been resolved.`,
@@ -925,7 +917,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.CLASS_BOOKED,
           title: data.isWaitlisted ? 'Added to Waitlist' : 'Class Booking Confirmed',
           message: data.isWaitlisted
@@ -958,7 +949,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.CLASS_BOOKING_CANCELLED,
           title: 'Class Booking Cancelled',
           message: `Your booking for ${data.className} on ${data.date} has been cancelled.`,
@@ -989,7 +979,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.CLASS_WAITLIST_PROMOTED,
           title: 'Moved Off Waitlist',
           message: `A spot opened up! You're now booked for ${data.className} on ${data.date} at ${data.startTime}.`,
@@ -1021,7 +1010,6 @@ export class NotificationsService {
       await this.create(
         {
           userId: instructorId,
-    
           type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
           title: 'Class Schedule Assigned',
           message: `You've been assigned to teach ${data.className} on ${days[data.dayOfWeek]}s at ${data.startTime}.`,
@@ -1058,7 +1046,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.APPOINTMENT_BOOKED,
           title: 'Appointment Booked',
           message: data.serviceName
@@ -1100,7 +1087,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-    
           type: NotificationType.APPOINTMENT_STATUS_CHANGED,
           title: 'Appointment Updated',
           message: `Your appointment on ${dateStr} ${statusText}.`,

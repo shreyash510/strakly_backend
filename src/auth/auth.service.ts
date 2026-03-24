@@ -12,7 +12,6 @@ import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
 import {
@@ -109,6 +108,27 @@ export class AuthService {
     this.logger.log(`Google OAuth Config: clientId=${clientId ? 'SET' : 'NOT SET'}, secret=${clientSecret ? 'SET' : 'NOT SET'}, redirectUri=${frontendUrl}/auth/google/callback`);
 
     this.googleOAuth2Client = new OAuth2Client(clientId, clientSecret);
+  }
+
+  /**
+   * Map raw gym assignment records to GymAssignment DTOs.
+   */
+  private mapGymAssignments(assignments: any[]): GymAssignment[] {
+    return assignments.map((assignment) => ({
+      gymId: assignment.gymId,
+      role: assignment.role,
+      isPrimary: assignment.isPrimary,
+      gym: {
+        id: assignment.gym.id,
+        name: assignment.gym.name,
+        logo: assignment.gym.logo || undefined,
+        city: assignment.gym.city || undefined,
+        state: assignment.gym.state || undefined,
+        country: assignment.gym.country || undefined,
+        currency: assignment.gym.currency || 'USD',
+        tenantSchemaName: assignment.gym.tenantSchemaName!,
+      },
+    }));
   }
 
   /**
@@ -631,23 +651,7 @@ export class AuthService {
       });
 
       // Build gym assignments list
-      const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
-        (assignment) => ({
-          gymId: assignment.gymId,
-          role: assignment.role,
-          isPrimary: assignment.isPrimary,
-          gym: {
-            id: assignment.gym.id,
-            name: assignment.gym.name,
-            logo: assignment.gym.logo || undefined,
-            city: assignment.gym.city || undefined,
-            state: assignment.gym.state || undefined,
-            country: assignment.gym.country || undefined,
-            currency: assignment.gym.currency || 'USD',
-            tenantSchemaName: assignment.gym.tenantSchemaName!,
-          },
-        }),
-      );
+      const gymAssignments = this.mapGymAssignments(adminUser.gymAssignments);
 
       if (gymAssignments.length === 0) {
         throw new UnauthorizedException('You are not assigned to any gym');
@@ -835,23 +839,7 @@ export class AuthService {
       throw new UnauthorizedException('You are not assigned to this gym');
     }
 
-    const gymAssignments: GymAssignment[] = user.gymAssignments.map(
-      (assignment) => ({
-        gymId: assignment.gymId,
-        role: assignment.role,
-        isPrimary: assignment.isPrimary,
-        gym: {
-          id: assignment.gym.id,
-          name: assignment.gym.name,
-          logo: assignment.gym.logo || undefined,
-          city: assignment.gym.city || undefined,
-          state: assignment.gym.state || undefined,
-          country: assignment.gym.country || undefined,
-          currency: assignment.gym.currency || 'USD',
-          tenantSchemaName: assignment.gym.tenantSchemaName!,
-        },
-      }),
-    );
+    const gymAssignments = this.mapGymAssignments(user.gymAssignments);
 
     const selectedAssignment = gymAssignments.find(
       (g) => g.gymId === targetGymId,
@@ -967,23 +955,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const gymAssignments: GymAssignment[] = adminUser.gymAssignments.map(
-      (assignment) => ({
-        gymId: assignment.gymId,
-        role: assignment.role,
-        isPrimary: assignment.isPrimary,
-        gym: {
-          id: assignment.gym.id,
-          name: assignment.gym.name,
-          logo: assignment.gym.logo || undefined,
-          city: assignment.gym.city || undefined,
-          state: assignment.gym.state || undefined,
-          country: assignment.gym.country || undefined,
-          currency: assignment.gym.currency || 'USD',
-          tenantSchemaName: assignment.gym.tenantSchemaName!,
-        },
-      }),
-    );
+    const gymAssignments = this.mapGymAssignments(adminUser.gymAssignments);
 
     // Find the specific gym assignment if gymId is provided
     const currentAssignment = gymId
@@ -1121,23 +1093,7 @@ export class AuthService {
       },
     });
 
-    const gymAssignments: GymAssignment[] = updatedUser.gymAssignments.map(
-      (assignment) => ({
-        gymId: assignment.gymId,
-        role: assignment.role,
-        isPrimary: assignment.isPrimary,
-        gym: {
-          id: assignment.gym.id,
-          name: assignment.gym.name,
-          logo: assignment.gym.logo || undefined,
-          city: assignment.gym.city || undefined,
-          state: assignment.gym.state || undefined,
-          country: assignment.gym.country || undefined,
-          currency: assignment.gym.currency || 'USD',
-          tenantSchemaName: assignment.gym.tenantSchemaName!,
-        },
-      }),
-    );
+    const gymAssignments = this.mapGymAssignments(updatedUser.gymAssignments);
 
     const currentAssignment = gymId
       ? gymAssignments.find((g) => g.gymId === gymId)
@@ -2052,23 +2008,6 @@ export class AuthService {
     return { verified: user?.emailVerified ?? false };
   }
 
-  // ============================================
-  // LEGACY METHODS (kept for backwards compatibility during migration)
-  // These will be removed after full migration to tenant-based architecture
-  // ============================================
-
-  async register(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
-    throw new BadRequestException(
-      'Direct registration not supported. Use registerAdminWithGym for new gyms or invite users to existing gyms.',
-    );
-  }
-
-  async registerAdmin(createUserDto: AuthRegisterDto): Promise<AuthResponse> {
-    throw new BadRequestException(
-      'Direct admin registration not supported. Use registerAdminWithGym instead.',
-    );
-  }
-
   /**
    * Impersonate a gym as superadmin
    * Creates a temporary token that allows superadmin to access gym as admin
@@ -2314,23 +2253,7 @@ export class AuthService {
     });
 
     // Build gym assignments list
-    const gymAssignments: GymAssignment[] = user.gymAssignments.map(
-      (assignment) => ({
-        gymId: assignment.gymId,
-        role: assignment.role,
-        isPrimary: assignment.isPrimary,
-        gym: {
-          id: assignment.gym.id,
-          name: assignment.gym.name,
-          logo: assignment.gym.logo || undefined,
-          city: assignment.gym.city || undefined,
-          state: assignment.gym.state || undefined,
-          country: assignment.gym.country || undefined,
-          currency: assignment.gym.currency || 'USD',
-          tenantSchemaName: assignment.gym.tenantSchemaName!,
-        },
-      }),
-    );
+    const gymAssignments = this.mapGymAssignments(user.gymAssignments);
 
     if (gymAssignments.length === 0) {
       throw new UnauthorizedException('You are not assigned to any gym');

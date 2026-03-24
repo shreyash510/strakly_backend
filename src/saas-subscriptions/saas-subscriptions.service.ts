@@ -360,7 +360,7 @@ export class SaasSubscriptionsService {
     } else {
       // Use plan's durationMonths to calculate end date
       endDate = new Date(startDate);
-      const months = plan.durationMonths || 3;
+      const months = plan.durationMonths || 1;
       endDate.setMonth(endDate.getMonth() + months);
     }
 
@@ -444,7 +444,10 @@ export class SaasSubscriptionsService {
 
       // Only auto-extend if paymentStatus is actually changing (not already 'paid')
       if (subscription.paymentStatus !== 'paid') {
-        const plan = subscription.plan;
+        const planToUse = updateData.planId
+          ? await this.prisma.saasPlan.findUnique({ where: { id: updateData.planId } })
+          : subscription.plan;
+        const plan = planToUse || subscription.plan;
         if (plan?.durationMonths) {
           const currentEndDate = new Date(subscription.endDate);
           const now = new Date();
