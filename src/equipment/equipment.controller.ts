@@ -170,7 +170,9 @@ export class EquipmentController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'delete')
   @ApiOperation({ summary: 'Delete equipment' })
   @ApiParam({ name: 'id', type: Number })
   remove(

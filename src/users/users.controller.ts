@@ -474,7 +474,7 @@ export class UsersController {
   @Patch(':id/approve')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
-  @ManagerPermission('clients', 'update')
+  @ManagerPermission('requests', 'update')
   @ApiOperation({
     summary: 'Approve a pending registration request with optional membership',
   })
@@ -495,7 +495,7 @@ export class UsersController {
   @Patch(':id/reject')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
-  @ManagerPermission('clients', 'update')
+  @ManagerPermission('requests', 'update')
   @ApiOperation({ summary: 'Reject a pending registration request' })
   async rejectRequest(
     @CurrentUser() user: AuthenticatedUser,
@@ -540,7 +540,7 @@ export class UsersController {
   @Post('trainers/:trainerId/clients')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
-  @ManagerPermission('clients', 'create')
+  @ManagerPermission('trainers', 'update')
   @ApiOperation({ summary: 'Assign a client to a trainer' })
   assignClientToTrainer(
     @CurrentUser() user: AuthenticatedUser,
@@ -556,7 +556,7 @@ export class UsersController {
   @Delete('trainers/:trainerId/clients/:clientId')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
-  @ManagerPermission('clients', 'delete')
+  @ManagerPermission('trainers', 'delete')
   @ApiOperation({ summary: 'Remove a client from a trainer' })
   removeClientFromTrainer(
     @CurrentUser() user: AuthenticatedUser,
