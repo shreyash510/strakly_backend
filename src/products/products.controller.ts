@@ -190,8 +190,8 @@ export class ProductsController {
 
   @Delete('sales/batch/:paymentId')
   @Roles('admin', 'manager')
-  @ManagerPermission('products', 'delete')
-  @ApiOperation({ summary: 'Void all sales in a batch (admin only)' })
+  @ManagerPermission('salesHistory', 'delete')
+  @ApiOperation({ summary: 'Void all sales in a batch' })
   @ApiParam({ name: 'paymentId', type: Number })
   voidBatchSale(
     @Param('paymentId', ParseIntPipe) paymentId: number,
@@ -203,8 +203,8 @@ export class ProductsController {
 
   @Delete('sales/:id')
   @Roles('admin', 'manager')
-  @ManagerPermission('products', 'delete')
-  @ApiOperation({ summary: 'Void a product sale (admin only)' })
+  @ManagerPermission('salesHistory', 'delete')
+  @ApiOperation({ summary: 'Void a product sale' })
   @ApiParam({ name: 'id', type: Number })
   voidSale(
     @Param('id', ParseIntPipe) id: number,
