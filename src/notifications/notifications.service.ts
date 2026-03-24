@@ -50,7 +50,6 @@ export class NotificationsService {
         await client.query(`
           CREATE TABLE IF NOT EXISTS notifications (
             id SERIAL PRIMARY KEY,
-            branch_id INTEGER,
             user_id INTEGER NOT NULL,
             type VARCHAR(50) NOT NULL,
             title VARCHAR(255) NOT NULL,
