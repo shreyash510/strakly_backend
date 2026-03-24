@@ -110,7 +110,7 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
   getStats(@Request() req: AuthenticatedRequest) {
-    return this.membershipsService.getStats(req.user.gymId!, null);
+    return this.membershipsService.getStats(req.user.gymId!);
   }
 
   @Get('overview')
@@ -140,7 +140,7 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    return this.membershipsService.getOverview(gymId, null);
+    return this.membershipsService.getOverview(gymId);
   }
 
   @Get('expiring')
@@ -154,7 +154,6 @@ export class MembershipsController {
   ) {
     return this.membershipsService.getExpiringSoon(
       req.user.gymId!,
-      null,
       days ? parseInt(days) : 7,
     );
   }
@@ -183,7 +182,6 @@ export class MembershipsController {
     return this.membershipsService.getHistory(
       parseInt(clientId),
       req.user.gymId!,
-      null,
       {
         page: page ? parseInt(page) : undefined,
         limit: limit ? parseInt(limit) : undefined,
@@ -265,7 +263,6 @@ export class MembershipsController {
     const result = await this.membershipsService.renew(
       req.user.userId,
       req.user.gymId!,
-      null,
       dto,
     );
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
@@ -291,7 +288,6 @@ export class MembershipsController {
     return this.membershipsService.findByUser(
       parseInt(userId),
       req.user.gymId!,
-      null,
     );
   }
 
@@ -350,7 +346,6 @@ export class MembershipsController {
     const result = await this.membershipsService.renew(
       parseInt(userId),
       req.user.gymId!,
-      null,
       dto,
     );
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
@@ -377,7 +372,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.membershipsService.findOne(id, req.user.gymId!, null);
+    return this.membershipsService.findOne(id, req.user.gymId!);
   }
 
   @Get(':id/facilities')
@@ -422,7 +417,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
   ) {
-    const result = await this.membershipsService.create(dto, req.user.gymId!, null, {
+    const result = await this.membershipsService.create(dto, req.user.gymId!, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
