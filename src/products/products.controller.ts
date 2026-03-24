@@ -166,7 +166,7 @@ export class ProductsController {
 
   @Post('sales')
   @Roles('admin', 'manager', 'trainer')
-  @ManagerPermission('products', 'create')
+  @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
     @GymId() gymId: number,
@@ -178,7 +178,7 @@ export class ProductsController {
 
   @Post('sales/batch')
   @Roles('admin', 'manager', 'trainer')
-  @ManagerPermission('products', 'create')
+  @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
     @GymId() gymId: number,
