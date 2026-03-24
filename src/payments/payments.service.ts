@@ -535,7 +535,7 @@ export class PaymentsService {
         referenceId: salaryId,
         referenceTable: 'staff_salaries',
         payerType: 'gym',
-        payerId: undefined,
+        payerId: undefined, // Intentional: gym is identified by the tenant schema, no numeric ID needed
         payeeType: 'staff',
         payeeId: staffId,
         payeeName: staffName,

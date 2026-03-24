@@ -13,7 +13,6 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -33,20 +32,6 @@ import { GymId, UserId, OptionalGymId } from './decorators';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  @Throttle({ default: { limit: 5, ttl: 900000 } })
-  @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() createUserDto: AuthRegisterDto) {
-    return this.authService.register(createUserDto);
-  }
-
-  @Throttle({ default: { limit: 5, ttl: 900000 } })
-  @Post('register-admin')
-  @ApiOperation({ summary: 'Register a new admin user' })
-  registerAdmin(@Body() createUserDto: AuthRegisterDto) {
-    return this.authService.registerAdmin(createUserDto);
-  }
 
   @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('register-admin-with-gym')
