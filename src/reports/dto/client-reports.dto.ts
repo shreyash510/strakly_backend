@@ -1,5 +1,4 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 
 export class ClientReportFilterDto {
   @IsOptional()
@@ -9,11 +8,6 @@ export class ClientReportFilterDto {
   @IsOptional()
   @IsString()
   endDate?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  branchId?: number;
 }
 
 /* Progress Report DTOs */

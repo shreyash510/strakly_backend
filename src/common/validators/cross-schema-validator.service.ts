@@ -171,7 +171,6 @@ export class CrossSchemaValidatorService {
   async validateStaffForOperation(
     staffId: number,
     gymId: number,
-    branchId?: number,
   ): Promise<{
     valid: boolean;
     message?: string;
@@ -194,28 +193,6 @@ export class CrossSchemaValidatorService {
         valid: false,
         message: 'User does not have staff permissions for this gym',
       };
-    }
-
-    // If branchId is specified, validate branch access
-    if (branchId) {
-      const assignment = await this.prisma.userGymXref.findFirst({
-        where: {
-          userId: staffId,
-          gymId,
-          isActive: true,
-          OR: [
-            { branchId: null }, // Has access to all branches
-            { branchId }, // Has access to this specific branch
-          ],
-        },
-      });
-
-      if (!assignment) {
-        return {
-          valid: false,
-          message: 'User does not have access to this branch',
-        };
-      }
     }
 
     return { valid: true };

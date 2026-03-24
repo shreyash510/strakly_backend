@@ -199,22 +199,6 @@ export class NotificationsGateway
   }
 
   /**
-   * Emit to all connected users in a branch
-   */
-  emitToBranch(
-    gymId: number,
-    branchId: number,
-    notification: Notification,
-  ) {
-    this.server
-      .to(`branch:${gymId}:${branchId}`)
-      .emit('notification', notification);
-    this.logger.debug(
-      `Notification broadcast to branch ${branchId} in gym ${gymId}`,
-    );
-  }
-
-  /**
    * Emit to all superadmins
    */
   emitToAllSuperadmins(notification: Notification) {
@@ -229,16 +213,6 @@ export class NotificationsGateway
     this.server.to(`gym:${gymId}`).emit('user:changed', payload);
     this.logger.debug(
       `user:changed event emitted to gym ${gymId} (action: ${payload.action})`,
-    );
-  }
-
-  /**
-   * Emit branch:changed event to all connected users in a gym
-   */
-  emitBranchChanged(gymId: number, payload: { action: string }) {
-    this.server.to(`gym:${gymId}`).emit('branch:changed', payload);
-    this.logger.debug(
-      `branch:changed event emitted to gym ${gymId} (action: ${payload.action})`,
     );
   }
 

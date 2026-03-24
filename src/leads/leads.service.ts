@@ -462,7 +462,7 @@ export class LeadsService {
                 COUNT(*) FILTER (WHERE l.pipeline_stage = 'won') as won
          FROM leads l
          LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE ${whereClause.replace(/(?<!\.)is_deleted/g, 'l.is_deleted').replace(/(?<!\.)branch_id/g, 'l.branch_id').replace(/(?<!\.)created_at/g, 'l.created_at')}
+         WHERE ${whereClause.replace(/(?<!\.)is_deleted/g, 'l.is_deleted').replace(/(?<!\.)created_at/g, 'l.created_at')}
            AND l.assigned_to IS NOT NULL
          GROUP BY l.assigned_to, u.name ORDER BY total DESC`,
         values,

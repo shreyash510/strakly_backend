@@ -35,7 +35,6 @@ export interface NotificationData {
 
 export interface Notification {
   id: number;
-  branchId: number | null;
   userId: number;
   type: NotificationType;
   title: string;

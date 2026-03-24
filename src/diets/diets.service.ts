@@ -27,7 +27,6 @@ export class DietsService {
         await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."diets" (
           id SERIAL PRIMARY KEY,
-          branch_id INTEGER,
           title VARCHAR(255) NOT NULL,
           type VARCHAR(50) NOT NULL,
           description TEXT,
@@ -40,20 +39,10 @@ export class DietsService {
         )
       `);
 
-        // Add branch_id column if it doesn't exist (for existing tables)
-        await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schemaName}' AND table_name = 'diets' AND column_name = 'branch_id') THEN
-            ALTER TABLE "${schemaName}"."diets" ADD COLUMN branch_id INTEGER;
-          END IF;
-        END $$;
-      `);
-
         // Create diet_assignments (xref) table
         await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."diet_assignments" (
           id SERIAL PRIMARY KEY,
-          branch_id INTEGER,
           diet_id INTEGER NOT NULL REFERENCES "${schemaName}"."diets"(id) ON DELETE CASCADE,
           user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
           assigned_by INTEGER NOT NULL,
@@ -63,15 +52,6 @@ export class DietsService {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-      `);
-
-        // Add branch_id column to diet_assignments if it doesn't exist (for existing tables)
-        await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schemaName}' AND table_name = 'diet_assignments' AND column_name = 'branch_id') THEN
-            ALTER TABLE "${schemaName}"."diet_assignments" ADD COLUMN branch_id INTEGER;
-          END IF;
-        END $$;
       `);
 
         // Create indexes

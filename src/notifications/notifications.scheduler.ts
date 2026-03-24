@@ -109,7 +109,6 @@ export class NotificationsScheduler {
           await this.notificationsService.notifyMembershipExpiry(
             membership.user_id,
             gymId,
-            null,
             {
               planName: membership.plan_name || 'Membership',
               endDate: new Date(membership.end_date),

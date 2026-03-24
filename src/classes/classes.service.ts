@@ -315,7 +315,7 @@ export class ClassesService {
     try {
       if (dto.instructorId) {
         await this.notificationsService.notifyClassScheduleAssigned(
-          dto.instructorId, gymId, null, {
+          dto.instructorId, gymId, {
             scheduleId: schedule.id,
             className: schedule.classTypeName,
             dayOfWeek: dto.dayOfWeek,
@@ -760,7 +760,7 @@ export class ClassesService {
             const dateStr = info.date?.toISOString?.().split('T')[0] || String(info.date);
             // Notify the client
             await this.notificationsService.notifyClassBooked(
-              userId, gymId, null, {
+              userId, gymId, {
                 sessionId, className: info.class_type_name, date: dateStr,
                 startTime: info.start_time, isWaitlisted, position,
               },
@@ -894,7 +894,7 @@ export class ClassesService {
             // Notify booking owner about cancellation
             if (dto.status === 'cancelled') {
               await this.notificationsService.notifyClassBookingCancelled(
-                current.rows[0].user_id, gymId, null, {
+                current.rows[0].user_id, gymId, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name, date: dateStr,
                 },
               );
@@ -902,7 +902,7 @@ export class ClassesService {
             // Notify promoted waitlist user
             if (promotedUserId) {
               await this.notificationsService.notifyClassWaitlistPromoted(
-                promotedUserId, gymId, null, {
+                promotedUserId, gymId, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name,
                   date: dateStr, startTime: info.start_time,
                 },

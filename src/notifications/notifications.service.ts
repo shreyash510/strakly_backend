@@ -363,14 +363,13 @@ export class NotificationsService {
   async notifyMembershipExpiry(
     userId: number,
     gymId: number,
-    branchId: number | null,
     membershipData: { planName: string; endDate: Date; daysRemaining: number; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.MEMBERSHIP_EXPIRY,
           title: 'Membership Expiring Soon',
           message: `Your ${membershipData.planName} membership expires in ${membershipData.daysRemaining} day${membershipData.daysRemaining > 1 ? 's' : ''}. Renew now to continue your fitness journey!`,
@@ -403,14 +402,13 @@ export class NotificationsService {
   async notifyMembershipRenewed(
     userId: number,
     gymId: number,
-    branchId: number | null,
     membershipData: { planName: string; endDate: Date; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.MEMBERSHIP_RENEWED,
           title: 'Membership Activated',
           message: `Your ${membershipData.planName} membership is now active until ${membershipData.endDate.toLocaleDateString()}.`,
@@ -439,14 +437,13 @@ export class NotificationsService {
   async notifyTrainerAssigned(
     clientUserId: number,
     gymId: number,
-    branchId: number | null,
     trainerData: { trainerId: number; trainerName: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId: clientUserId,
-          branchId,
+    
           type: NotificationType.TRAINER_ASSIGNED,
           title: 'Trainer Assigned',
           message: `${trainerData.trainerName} has been assigned as your trainer.`,
@@ -473,14 +470,13 @@ export class NotificationsService {
   async notifyTrainerUnassigned(
     clientUserId: number,
     gymId: number,
-    branchId: number | null,
     trainerData: { trainerId: number; trainerName: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId: clientUserId,
-          branchId,
+    
           type: NotificationType.TRAINER_UNASSIGNED,
           title: 'Trainer Changed',
           message: `${trainerData.trainerName} is no longer your assigned trainer.`,
@@ -506,7 +502,6 @@ export class NotificationsService {
   async notifyNewAnnouncement(
     userIds: number[],
     gymId: number,
-    branchId: number | null,
     announcementData: {
       announcementId: number;
       title: string;
@@ -517,7 +512,7 @@ export class NotificationsService {
       await this.createBulk(
         {
           userIds,
-          branchId,
+    
           type: NotificationType.NEW_ANNOUNCEMENT,
           title: 'New Announcement',
           message: announcementData.title,
@@ -579,7 +574,7 @@ export class NotificationsService {
       try {
         this.gateway.emitToSuperadmin(data.userId, {
           id: notification.id,
-          branchId: null,
+    
           userId: notification.userId,
           type: notification.type as NotificationType,
           title: notification.title,
@@ -650,7 +645,7 @@ export class NotificationsService {
       try {
         this.gateway.emitToAllSuperadmins({
           id: 0,
-          branchId: null,
+    
           userId: 0,
           type: data.type as NotificationType,
           title: data.title,
@@ -894,7 +889,7 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId: null,
+    
           type: NotificationType.SUPPORT_TICKET_RESOLVED,
           title: 'Support Ticket Resolved',
           message: `Your support ticket #${ticketData.ticketNumber} has been resolved.`,
@@ -925,14 +920,13 @@ export class NotificationsService {
   async notifyClassBooked(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string; startTime: string; isWaitlisted: boolean; position?: number | null },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.CLASS_BOOKED,
           title: data.isWaitlisted ? 'Added to Waitlist' : 'Class Booking Confirmed',
           message: data.isWaitlisted
@@ -959,14 +953,13 @@ export class NotificationsService {
   async notifyClassBookingCancelled(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.CLASS_BOOKING_CANCELLED,
           title: 'Class Booking Cancelled',
           message: `Your booking for ${data.className} on ${data.date} has been cancelled.`,
@@ -991,14 +984,13 @@ export class NotificationsService {
   async notifyClassWaitlistPromoted(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string; startTime: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.CLASS_WAITLIST_PROMOTED,
           title: 'Moved Off Waitlist',
           message: `A spot opened up! You're now booked for ${data.className} on ${data.date} at ${data.startTime}.`,
@@ -1023,7 +1015,6 @@ export class NotificationsService {
   async notifyClassScheduleAssigned(
     instructorId: number,
     gymId: number,
-    branchId: number | null,
     data: { scheduleId: number; className: string; dayOfWeek: number; startTime: string },
   ): Promise<void> {
     try {
@@ -1031,7 +1022,7 @@ export class NotificationsService {
       await this.create(
         {
           userId: instructorId,
-          branchId,
+    
           type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
           title: 'Class Schedule Assigned',
           message: `You've been assigned to teach ${data.className} on ${days[data.dayOfWeek]}s at ${data.startTime}.`,
@@ -1060,7 +1051,6 @@ export class NotificationsService {
   async notifyAppointmentBooked(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { appointmentId: number; otherPartyName: string; startTime: string; serviceName?: string },
   ): Promise<void> {
     try {
@@ -1069,7 +1059,7 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.APPOINTMENT_BOOKED,
           title: 'Appointment Booked',
           message: data.serviceName
@@ -1096,7 +1086,6 @@ export class NotificationsService {
   async notifyAppointmentStatusChanged(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { appointmentId: number; status: string; startTime: string },
   ): Promise<void> {
     try {
@@ -1112,7 +1101,7 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId,
+    
           type: NotificationType.APPOINTMENT_STATUS_CHANGED,
           title: 'Appointment Updated',
           message: `Your appointment on ${dateStr} ${statusText}.`,
@@ -1138,7 +1127,6 @@ export class NotificationsService {
   private mapToNotification(row: Record<string, any>): Notification {
     return {
       id: row.id,
-      branchId: row.branch_id,
       userId: row.user_id,
       type: row.type as NotificationType,
       title: row.title,

@@ -534,7 +534,6 @@ export class MigrationService {
     columnMapping: ColumnMapping,
     gymId: number,
     actorInfo: { id: number; name: string; role: string },
-    branchId?: number | null,
   ): Promise<{
     success: number;
     failed: number;
@@ -546,7 +545,7 @@ export class MigrationService {
     }
 
     if (dataType === 'products') {
-      return this.importProducts(fileId, columnMapping, gymId, branchId ?? null);
+      return this.importProducts(fileId, columnMapping, gymId);
     }
 
     throw new BadRequestException(`Unknown data type: ${dataType}. Use "members" or "products".`);
@@ -634,7 +633,6 @@ export class MigrationService {
     fileId: string,
     columnMapping: ColumnMapping,
     gymId: number,
-    branchId: number | null,
   ): Promise<{
     success: number;
     failed: number;

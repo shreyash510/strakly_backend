@@ -660,7 +660,7 @@ export class GymService {
   /**
    * Get gym profile for authenticated user with branch details and stats
    */
-  async getProfile(gymId: number, branchId?: number | null) {
+  async getProfile(gymId: number) {
     // Get gym details
     const gym = await this.prisma.gym.findUnique({
       where: { id: gymId },
@@ -685,75 +685,65 @@ export class GymService {
       throw new NotFoundException(`Gym with ID ${gymId} not found`);
     }
 
-    // Get branches with stats
-    let branches: Record<string, any>[];
-    if (branchId) {
-      // Get single branch
-      const branch = await this.prisma.branch.findFirst({
-        where: { id: branchId, gymId },
-      });
-      branches = branch ? [branch] : [];
-    } else {
-      // Get all branches with stats
-      const allBranches = await this.prisma.branch.findMany({
-        where: { gymId },
-        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-      });
+    // Get all branches with stats
+    const allBranches = await this.prisma.branch.findMany({
+      where: { gymId },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+    });
 
-      // Fetch stats for all branches in a single tenant query
-      const branchIds = allBranches.map((b) => b.id);
-      const allCounts = await this.tenantService.executeInTenant(
-        gymId,
-        async (client) => {
-          const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
-            await Promise.all([
-              client.query(
-                `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM users WHERE role IN ('manager', 'trainer') AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM facilities WHERE is_active = true`,
-              ),
-              client.query(
-                `SELECT COUNT(*) as count FROM amenities WHERE is_active = true`,
-              ),
-            ]);
+    // Fetch stats for all branches in a single tenant query
+    const branchIds = allBranches.map((b) => b.id);
+    const allCounts = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
+          await Promise.all([
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role IN ('manager', 'trainer') AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM facilities WHERE is_active = true`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM amenities WHERE is_active = true`,
+            ),
+          ]);
 
-          const totalMembers = parseInt(membersResult.rows[0]?.count || '0', 10);
-          const totalStaff = parseInt(staffResult.rows[0]?.count || '0', 10);
-          const totalFacilities = parseInt(facilitiesResult.rows[0]?.count || '0', 10);
-          const totalAmenities = parseInt(amenitiesResult.rows[0]?.count || '0', 10);
+        const totalMembers = parseInt(membersResult.rows[0]?.count || '0', 10);
+        const totalStaff = parseInt(staffResult.rows[0]?.count || '0', 10);
+        const totalFacilities = parseInt(facilitiesResult.rows[0]?.count || '0', 10);
+        const totalAmenities = parseInt(amenitiesResult.rows[0]?.count || '0', 10);
 
-          // Return same count for all branches (no branch filtering)
-          const members: Record<number, number> = {};
-          const staff: Record<number, number> = {};
-          const facilities: Record<number, number> = {};
-          const amenities: Record<number, number> = {};
-          for (const id of branchIds) {
-            members[id] = totalMembers;
-            staff[id] = totalStaff;
-            facilities[id] = totalFacilities;
-            amenities[id] = totalAmenities;
-          }
+        // Return same count for all branches (no branch filtering)
+        const members: Record<number, number> = {};
+        const staff: Record<number, number> = {};
+        const facilities: Record<number, number> = {};
+        const amenities: Record<number, number> = {};
+        for (const id of branchIds) {
+          members[id] = totalMembers;
+          staff[id] = totalStaff;
+          facilities[id] = totalFacilities;
+          amenities[id] = totalAmenities;
+        }
 
-          return { members, staff, facilities, amenities };
-        },
-      );
+        return { members, staff, facilities, amenities };
+      },
+    );
 
-      branches = allBranches.map((branch) => ({
-        ...branch,
-        membersCount: allCounts.members[branch.id] || 0,
-        staffCount: allCounts.staff[branch.id] || 0,
-        facilitiesCount:
-          (allCounts.facilities[branch.id] || 0) +
-          (allCounts.facilities[0] || 0),
-        amenitiesCount:
-          (allCounts.amenities[branch.id] || 0) +
-          (allCounts.amenities[0] || 0),
-      }));
-    }
+    const branches = allBranches.map((branch) => ({
+      ...branch,
+      membersCount: allCounts.members[branch.id] || 0,
+      staffCount: allCounts.staff[branch.id] || 0,
+      facilitiesCount:
+        (allCounts.facilities[branch.id] || 0) +
+        (allCounts.facilities[0] || 0),
+      amenitiesCount:
+        (allCounts.amenities[branch.id] || 0) +
+        (allCounts.amenities[0] || 0),
+    }));
 
     const adminAssignment = gym.userAssignments[0];
 

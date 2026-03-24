@@ -383,10 +383,9 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT s.*, u.name as staff_name, ugx.branch_id as staff_branch_id
+          `SELECT s.*, u.name as staff_name
            FROM staff_salaries s
            LEFT JOIN public.users u ON u.id = s.staff_id
-           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
            WHERE s.id = $1`,
           [salaryId],
         );
@@ -418,7 +417,6 @@ export class SalaryService {
       await this.paymentsService.createSalaryPaymentWithClient(
         client,
         salaryId,
-        salary.staff_branch_id,
         salary.staff_id,
         salary.staff_name,
         Number(salary.net_amount),
@@ -470,9 +468,6 @@ export class SalaryService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const salaryBranchFilter = '';
-        const staffBranchFilter = '';
-
         const [
           pendingResult,
           paidResult,
@@ -480,21 +475,21 @@ export class SalaryService {
           staffCountResult,
         ] = await Promise.all([
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending'${salaryBranchFilter}`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending'`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1${salaryBranchFilter}`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1`,
             [currentYear],
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2${salaryBranchFilter}`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2`,
             [currentMonth, currentYear],
           ),
           client.query(
             `SELECT COUNT(*) as count FROM public.user_gym_xref ugx
              JOIN public.users u ON u.id = ugx.user_id
              WHERE ugx.gym_id = ${gymId} AND ugx.is_active = true AND u.status = 'active'
-             AND ugx.role IN ('manager', 'trainer')${staffBranchFilter}`,
+             AND ugx.role IN ('manager', 'trainer')`,
           ),
         ]);
 
@@ -516,10 +511,9 @@ export class SalaryService {
   async getStaffList(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       /* Staff live in public.users, role/branch in user_gym_xref */
-      let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, ugx.role, ugx.branch_id, b.name as branch_name
+      let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, ugx.role
          FROM public.users u
          JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gymId} AND ugx.is_active = true
-         LEFT JOIN public.branches b ON b.id = ugx.branch_id
          WHERE u.status = 'active' AND ugx.role IN ('manager', 'trainer')`;
       const values: SqlValue[] = [];
 
@@ -538,8 +532,6 @@ export class SalaryService {
         email: u.email,
         avatar: u.avatar,
         phone: u.phone,
-        branchId: u.branch_id,
-        branchName: u.branch_name,
         role: { code: u.role, name: roleLabels[u.role] || u.role },
       }));
     });

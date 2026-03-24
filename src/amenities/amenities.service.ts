@@ -29,7 +29,6 @@ export class AmenitiesService {
   /**
    * Get all amenities for a gym
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    * @param includeInactive - Include inactive amenities
    */
   async findAll(
@@ -39,13 +38,10 @@ export class AmenitiesService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
 
       if (!includeInactive) {
         conditions.push('is_active = true');
       }
-
-      // Branch filtering removed — tenant-level isolation is sufficient
 
       const whereClause =
         conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -86,7 +82,7 @@ export class AmenitiesService {
     dto: CreateAmenityDto,
     gymId: number,
   ) {
-    // Check for duplicate code within the same branch
+    // Check for duplicate code
     const existing = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {

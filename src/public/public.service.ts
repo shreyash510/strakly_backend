@@ -200,38 +200,4 @@ export class PublicService {
     return gym;
   }
 
-  /* Get branch info for public registration page */
-  async getBranchInfo(gymId: number, branchId: number) {
-    const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
-      select: { isActive: true },
-    });
-
-    if (!gym) {
-      throw new NotFoundException('Gym not found');
-    }
-
-    if (!gym.isActive) {
-      throw new BadRequestException(
-        'This gym is not accepting new registrations',
-      );
-    }
-
-    const branch = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id, name, address, city, state, phone FROM branches WHERE id = $1 AND is_active = true`,
-          [branchId],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (!branch) {
-      throw new NotFoundException('Branch not found');
-    }
-
-    return branch;
-  }
 }

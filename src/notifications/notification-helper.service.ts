@@ -77,7 +77,6 @@ export class NotificationHelperService {
             title: payload.title,
             message: payload.message,
             priority: NotificationPriority.NORMAL,
-            branchId: null,
             actionUrl: payload.actionUrl,
             data: payload.data,
           },

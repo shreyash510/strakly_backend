@@ -436,11 +436,10 @@ export class AppointmentsService {
     });
 
     // Notifications (non-blocking, after successful creation)
-    const notifBranchId: number | null = null;
     try {
       // Notify the client
       await this.notificationsService.notifyAppointmentBooked(
-        dto.userId, gymId, notifBranchId, {
+        dto.userId, gymId, {
           appointmentId: appointment.id,
           otherPartyName: appointment.trainerName || 'Trainer',
           startTime: appointment.startTime,
@@ -449,7 +448,7 @@ export class AppointmentsService {
       );
       // Notify the trainer
       await this.notificationsService.notifyAppointmentBooked(
-        dto.trainerId, gymId, notifBranchId, {
+        dto.trainerId, gymId, {
           appointmentId: appointment.id,
           otherPartyName: appointment.userName || 'Client',
           startTime: appointment.startTime,
@@ -658,14 +657,14 @@ export class AppointmentsService {
           const apt = full.rows[0];
           // Notify the client
           await this.notificationsService.notifyAppointmentStatusChanged(
-            apt.user_id, gymId, null, {
+            apt.user_id, gymId, {
               appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
             },
           );
           // Notify the trainer
           if (apt.trainer_id) {
             await this.notificationsService.notifyAppointmentStatusChanged(
-              apt.trainer_id, gymId, null, {
+              apt.trainer_id, gymId, {
                 appointmentId: apt.id, status: dto.status, startTime: apt.start_time,
               },
             );

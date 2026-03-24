@@ -197,7 +197,6 @@ export class MembershipsService {
   private formatMembership(m: Record<string, any>) {
     return {
       id: m.id,
-      branchId: m.branch_id,
       userId: m.user_id,
       planId: m.plan_id,
       offerId: m.offer_id,
@@ -249,7 +248,7 @@ export class MembershipsService {
     };
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const membership = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -278,7 +277,6 @@ export class MembershipsService {
   async findByUser(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const memberships = await this.tenantService.executeInTenant(
       gymId,
@@ -304,7 +302,6 @@ export class MembershipsService {
   async getHistory(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
     options?: { page?: number; limit?: number },
   ) {
     const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 15);
@@ -398,12 +395,10 @@ export class MembershipsService {
    * Create a new membership
    * @param dto - Membership data
    * @param gymId - Gym ID
-   * @param branchId - Branch ID for the membership
    */
   async create(
     dto: CreateMembershipDto,
     gymId: number,
-    branchId: number | null = null,
     actorInfo?: { id: number; name: string; role: string },
   ) {
     // Verify user exists in tenant (and not soft-deleted)
@@ -411,7 +406,7 @@ export class MembershipsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id, branch_id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [dto.userId],
         );
         return result.rows[0];
@@ -421,9 +416,6 @@ export class MembershipsService {
     if (!user) {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
-
-    // Use user's branch if branchId not provided
-    const membershipBranchId = branchId ?? user.branch_id;
 
     // If user already has an active membership, queue the new one after it ends (renewal)
     // Old membership stays active and will expire naturally via the scheduler
@@ -563,7 +555,6 @@ export class MembershipsService {
         await this.paymentsService.createMembershipPaymentWithClient(
           client,
           txMembership.id,
-          membershipBranchId,
           dto.userId,
           txUserName,
           originalAmount,
@@ -588,7 +579,6 @@ export class MembershipsService {
     await this.notificationsService.notifyMembershipRenewed(
       dto.userId,
       gymId,
-      membershipBranchId,
       {
         planName: plan.name,
         endDate: endDate,
@@ -830,7 +820,6 @@ export class MembershipsService {
       await this.paymentsService.createMembershipPaymentWithClient(
         client,
         id,
-        membership.branchId,
         membership.userId,
         userName,
         membership.originalAmount,
@@ -967,7 +956,6 @@ export class MembershipsService {
 
   async getExpiringSoon(
     gymId: number,
-    branchId: number | null = null,
     days = 7,
   ) {
     const now = new Date();
@@ -996,7 +984,7 @@ export class MembershipsService {
     return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
-  async getStats(gymId: number, branchId: number | null = null) {
+  async getStats(gymId: number) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -1039,14 +1027,14 @@ export class MembershipsService {
     return stats;
   }
 
-  async getOverview(gymId: number, branchId: number | null = null) {
+  async getOverview(gymId: number) {
     const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] =
       await Promise.all([
-        this.getStats(gymId, branchId),
-        this.getExpiringSoon(gymId, branchId, 7),
-        this.getRecentSubscriptions(gymId, branchId, 10),
-        this.getPlansForOverview(gymId, branchId),
-        this.getPlanDistribution(gymId, branchId),
+        this.getStats(gymId),
+        this.getExpiringSoon(gymId, 7),
+        this.getRecentSubscriptions(gymId, 10),
+        this.getPlansForOverview(gymId),
+        this.getPlanDistribution(gymId),
       ]);
 
     return {
@@ -1060,7 +1048,6 @@ export class MembershipsService {
 
   private async getPlansForOverview(
     gymId: number,
-    branchId: number | null = null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
@@ -1079,7 +1066,6 @@ export class MembershipsService {
 
   private async getPlanDistribution(
     gymId: number,
-    branchId: number | null = null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT plan_id, COUNT(*) as count
@@ -1099,7 +1085,6 @@ export class MembershipsService {
 
   private async getRecentSubscriptions(
     gymId: number,
-    branchId: number | null = null,
     limit = 10,
   ) {
     const memberships = await this.tenantService.executeInTenant(
@@ -1128,7 +1113,6 @@ export class MembershipsService {
   async renew(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
     dto: RenewMembershipDto,
   ) {
     const currentMembership = await this.getActiveMembership(userId, gymId);
@@ -1156,7 +1140,6 @@ export class MembershipsService {
         notes: dto.notes,
       },
       gymId,
-      branchId,
     );
 
     // Log the renewed membership to history
