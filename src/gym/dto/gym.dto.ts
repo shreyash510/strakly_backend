@@ -104,6 +104,11 @@ export class CreateGymDto {
   @IsString()
   country?: string;
 
+  @ApiPropertyOptional({ description: 'Currency code', default: 'USD' })
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
   @ApiPropertyOptional({
     description: 'Opening time (HH:MM format)',
     example: '06:00',
