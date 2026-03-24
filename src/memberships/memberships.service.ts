@@ -555,7 +555,6 @@ export class MembershipsService {
         await this.paymentsService.createMembershipPaymentWithClient(
           client,
           txMembership.id,
-          null,
           dto.userId,
           txUserName,
           originalAmount,
@@ -580,7 +579,6 @@ export class MembershipsService {
     await this.notificationsService.notifyMembershipRenewed(
       dto.userId,
       gymId,
-      null,
       {
         planName: plan.name,
         endDate: endDate,
@@ -822,7 +820,6 @@ export class MembershipsService {
       await this.paymentsService.createMembershipPaymentWithClient(
         client,
         id,
-        null,
         membership.userId,
         userName,
         membership.originalAmount,

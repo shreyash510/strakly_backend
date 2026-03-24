@@ -45,10 +45,6 @@ export class CreateDietDto {
   @IsOptional()
   status?: 'draft' | 'active' | 'archived';
 
-  @ApiPropertyOptional({ description: 'Branch ID for the diet' })
-  @IsInt()
-  @IsOptional()
-  branchId?: number;
 }
 
 export class UpdateDietDto {

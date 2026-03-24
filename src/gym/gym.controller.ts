@@ -48,7 +48,7 @@ export class GymController {
     if (!gymId) {
       throw new BadRequestException('No gym associated with this user');
     }
-    return this.gymService.getProfile(gymId, null);
+    return this.gymService.getProfile(gymId);
   }
 
   @Get()

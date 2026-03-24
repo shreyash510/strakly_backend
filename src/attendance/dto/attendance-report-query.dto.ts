@@ -19,13 +19,6 @@ export class AttendanceReportQueryDto {
   @IsString()
   endDate?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by branch ID' })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  @Transform(({ value }) => (value ? Number(value) : undefined))
-  branchId?: number;
-
   @ApiPropertyOptional({ description: 'Gym ID (required for superadmin)' })
   @IsOptional()
   @IsNumber()

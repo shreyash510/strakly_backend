@@ -837,7 +837,6 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         saleRecord.id,
-        null,
         dto.userId || null,
         buyerName,
         totalAmount,
@@ -983,7 +982,6 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         sales[0].id,
-        null,
         dto.userId || null,
         buyerName,
         batchTotal,

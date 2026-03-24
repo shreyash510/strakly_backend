@@ -353,8 +353,6 @@ export class PaymentsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = '';
-
         const [totalResult, byTypeResult, byMethodResult, byStatusResult] =
           await Promise.all([
             client.query(
@@ -363,27 +361,27 @@ export class PaymentsService {
             COALESCE(SUM(net_amount), 0) as total_amount,
             COALESCE(SUM(CASE WHEN status = 'completed' THEN net_amount ELSE 0 END), 0) as completed_amount
           FROM payments
-          WHERE created_at >= $1 AND created_at <= $2${branchFilter}`,
+          WHERE created_at >= $1 AND created_at <= $2`,
               [start, end],
             ),
             client.query(
               `SELECT payment_type, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'
            GROUP BY payment_type`,
               [start, end],
             ),
             client.query(
               `SELECT payment_method, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'
            GROUP BY payment_method`,
               [start, end],
             ),
             client.query(
               `SELECT status, COUNT(*) as count
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2
            GROUP BY status`,
               [start, end],
             ),
@@ -420,7 +418,6 @@ export class PaymentsService {
   async createMembershipPayment(
     membershipId: number,
     gymId: number,
-    branchId: number | null,
     payerId: number,
     payerName: string,
     amount: number,
@@ -456,7 +453,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     membershipId: number,
-    branchId: number | null,
     payerId: number,
     payerName: string,
     amount: number,
@@ -491,7 +487,6 @@ export class PaymentsService {
   async createSalaryPayment(
     salaryId: number,
     gymId: number,
-    branchId: number | null,
     staffId: number,
     staffName: string,
     amount: number,
@@ -526,7 +521,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     salaryId: number,
-    branchId: number | null,
     staffId: number,
     staffName: string,
     amount: number,
@@ -612,7 +606,6 @@ export class PaymentsService {
   async createProductSalePayment(
     saleId: number,
     gymId: number,
-    branchId: number | null,
     buyerId: number | null,
     buyerName: string,
     amount: number,
@@ -646,7 +639,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     saleId: number,
-    branchId: number | null,
     buyerId: number | null,
     buyerName: string,
     amount: number,

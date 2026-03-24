@@ -17,12 +17,6 @@ export class CreateNotificationDto {
   @Type(() => Number)
   userId: number;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  branchId?: number | null;
-
   @ApiProperty({ enum: NotificationType })
   @IsEnum(NotificationType)
   type: NotificationType;
@@ -75,12 +69,6 @@ export class CreateBulkNotificationDto {
   @IsNumber({}, { each: true })
   @Type(() => Number)
   userIds: number[];
-
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  branchId?: number | null;
 
   @ApiProperty({ enum: NotificationType })
   @IsEnum(NotificationType)

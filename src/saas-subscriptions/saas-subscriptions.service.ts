@@ -588,7 +588,6 @@ export class SaasSubscriptionsService {
         // Emit real-time notification
         this.notificationsGateway.emitToSuperadmin(xref.userId, {
           id: 0,
-          branchId: null,
           userId: xref.userId,
           type: 'subscription_renewed' as any,
           title: 'Subscription Renewed',

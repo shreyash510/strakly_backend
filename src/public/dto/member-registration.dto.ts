@@ -42,11 +42,6 @@ export class MemberRegistrationDto {
   @IsNotEmpty()
   gymId: number;
 
-  @ApiPropertyOptional({ description: 'Branch ID to register for' })
-  @IsNumber()
-  @IsOptional()
-  branchId?: number;
-
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsString()
   @IsOptional()

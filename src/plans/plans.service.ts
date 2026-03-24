@@ -19,7 +19,6 @@ export class PlansService {
   /**
    * Get all plans for a gym
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    * @param includeInactive - Include inactive plans
    */
   async findAll(
@@ -50,7 +49,6 @@ export class PlansService {
   /**
    * Get featured plans
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    */
   async findFeatured(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -136,7 +134,6 @@ export class PlansService {
    * Create a new plan
    * @param dto - Plan data
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = available to all branches)
    */
   async create(
     dto: CreatePlanDto,

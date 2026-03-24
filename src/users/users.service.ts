@@ -2440,7 +2440,6 @@ export class UsersService {
     await this.notificationsService.notifyTrainerAssigned(
       dto.clientId,
       gymId,
-      null,
       {
         trainerId: trainer.id,
         trainerName: trainer.name,
@@ -2602,7 +2601,6 @@ export class UsersService {
     await this.notificationsService.notifyTrainerUnassigned(
       clientId,
       gymId,
-      null,
       {
         trainerId,
         trainerName: assignment.trainer_name,

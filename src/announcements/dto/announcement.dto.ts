@@ -35,10 +35,6 @@ export enum TargetAudience {
 }
 
 export class CreateAnnouncementDto {
-  @IsOptional()
-  @IsNumber()
-  branchId?: number;
-
   @IsNotEmpty()
   @IsString()
   title: string;

@@ -165,7 +165,6 @@ export class MigrationController {
       body.columnMapping,
       gymId,
       actorInfo,
-      null,
     );
   }
 }
