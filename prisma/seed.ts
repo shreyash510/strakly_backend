@@ -794,7 +794,7 @@ async function seedTenantFacilitiesAndAmenities() {
             INSERT INTO "${schemaName}"."facilities"
             (code, name, description, icon, display_order, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
-            ON CONFLICT (branch_id, code) DO NOTHING
+            ON CONFLICT (code) DO NOTHING
           `, [
             facility.code,
             facility.name,
@@ -817,7 +817,7 @@ async function seedTenantFacilitiesAndAmenities() {
             INSERT INTO "${schemaName}"."amenities"
             (code, name, description, icon, display_order, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
-            ON CONFLICT (branch_id, code) DO NOTHING
+            ON CONFLICT (code) DO NOTHING
           `, [
             amenity.code,
             amenity.name,
