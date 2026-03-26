@@ -136,11 +136,14 @@ export class ReportsController {
   @Get('deleted-transactions')
   @Roles('admin')
   @ApiOperation({ summary: 'Get deleted transactions (memberships + product sales)' })
+  @ApiQuery({ name: 'month', required: false, type: Number, description: 'Month (1-12)' })
+  @ApiQuery({ name: 'year', required: false, type: Number, description: 'Year' })
   async getDeletedTransactions(
+    @Query() filters: ReportFilterDto,
     @Req() req: AuthenticatedRequest,
   ) {
     const gymId = req.user.gymId!;
-    return this.reportsService.getDeletedTransactions(gymId);
+    return this.reportsService.getDeletedTransactions(gymId, filters);
   }
 
   // ============================================
