@@ -492,10 +492,47 @@ export class ReportsService {
 
   async getDeletedTransactions(
     gymId: number,
+    filters?: { month?: number; year?: number },
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const branchFilter = '';
       const productBranchFilter = '';
+
+      // Build date filter conditions
+      const membershipDateConditions: string[] = [];
+      const membershipDateValues: SqlValue[] = [];
+      const productDateConditions: string[] = [];
+      const productDateValues: SqlValue[] = [];
+      const voidedDateConditions: string[] = [];
+      const voidedDateValues: SqlValue[] = [];
+
+      if (filters?.month) {
+        membershipDateConditions.push(`EXTRACT(MONTH FROM m.deleted_at) = $PARAM`);
+        membershipDateValues.push(filters.month);
+        productDateConditions.push(`EXTRACT(MONTH FROM ps.deleted_at) = $PARAM`);
+        productDateValues.push(filters.month);
+        voidedDateConditions.push(`EXTRACT(MONTH FROM mh.archived_at) = $PARAM`);
+        voidedDateValues.push(filters.month);
+      }
+      if (filters?.year) {
+        membershipDateConditions.push(`EXTRACT(YEAR FROM m.deleted_at) = $PARAM`);
+        membershipDateValues.push(filters.year);
+        productDateConditions.push(`EXTRACT(YEAR FROM ps.deleted_at) = $PARAM`);
+        productDateValues.push(filters.year);
+        voidedDateConditions.push(`EXTRACT(YEAR FROM mh.archived_at) = $PARAM`);
+        voidedDateValues.push(filters.year);
+      }
+
+      // Build parameterized WHERE clauses
+      const membershipDateFilter = membershipDateConditions.length > 0
+        ? ' AND ' + membershipDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
+      const productDateFilter = productDateConditions.length > 0
+        ? ' AND ' + productDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
+      const voidedDateFilter = voidedDateConditions.length > 0
+        ? ' AND ' + voidedDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
 
       // Deleted memberships
       const membershipsResult = await client.query(
@@ -514,9 +551,10 @@ export class ReportsService {
         LEFT JOIN plans p ON p.id = m.plan_id
         LEFT JOIN public.users pub_del ON pub_del.id = m.deleted_by
         LEFT JOIN users del ON del.id = m.deleted_by
-        WHERE m.is_deleted = TRUE${branchFilter}
+        WHERE m.is_deleted = TRUE${branchFilter}${membershipDateFilter}
         ORDER BY m.deleted_at DESC
         LIMIT 100`,
+        membershipDateValues,
       );
 
       // Deleted product sales
@@ -536,9 +574,31 @@ export class ReportsService {
         LEFT JOIN products pr ON pr.id = ps.product_id
         LEFT JOIN public.users pub_del ON pub_del.id = COALESCE(ps.deleted_by, ps.sold_by)
         LEFT JOIN users del ON del.id = COALESCE(ps.deleted_by, ps.sold_by)
-        WHERE ps.is_deleted = TRUE${productBranchFilter}
+        WHERE ps.is_deleted = TRUE${productBranchFilter}${productDateFilter}
         ORDER BY ps.deleted_at DESC
         LIMIT 100`,
+        productDateValues,
+      );
+
+      // Voided memberships from membership_history
+      const voidedMembershipsResult = await client.query(
+        `SELECT
+          mh.id,
+          'voided_membership' as type,
+          u.name as client_name,
+          p.name as plan_name,
+          mh.final_amount as amount,
+          mh.payment_method,
+          mh.paid_at,
+          mh.archived_at as deleted_at,
+          NULL as deleted_by_name
+        FROM membership_history mh
+        LEFT JOIN users u ON u.id = mh.user_id
+        LEFT JOIN plans p ON p.id = mh.plan_id
+        WHERE mh.archive_reason = 'void_deleted'${voidedDateFilter}
+        ORDER BY mh.archived_at DESC
+        LIMIT 100`,
+        voidedDateValues,
       );
 
       const deletedMemberships = membershipsResult.rows.map((r: Record<string, any>) => ({
@@ -550,6 +610,17 @@ export class ReportsService {
         originalDate: r.paid_at,
         deletedAt: r.deleted_at,
         deletedBy: r.deleted_by_name || 'Unknown',
+      }));
+
+      const voidedMemberships = voidedMembershipsResult.rows.map((r: Record<string, any>) => ({
+        id: r.id,
+        type: r.type,
+        description: r.plan_name ? `${r.plan_name} - ${r.client_name}` : r.client_name,
+        amount: parseFloat(r.amount || 0),
+        paymentMethod: r.payment_method,
+        originalDate: r.paid_at,
+        deletedAt: r.deleted_at,
+        deletedBy: 'System',
       }));
 
       const deletedProductSales = productSalesResult.rows.map((r: Record<string, any>) => ({
@@ -564,7 +635,7 @@ export class ReportsService {
       }));
 
       // Combine and sort by deletion date
-      const allDeleted = [...deletedMemberships, ...deletedProductSales]
+      const allDeleted = [...deletedMemberships, ...voidedMemberships, ...deletedProductSales]
         .sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 
       return {
@@ -572,6 +643,7 @@ export class ReportsService {
         summary: {
           totalDeletedAmount: allDeleted.reduce((sum, t) => sum + t.amount, 0),
           deletedMemberships: deletedMemberships.length,
+          voidedMemberships: voidedMemberships.length,
           deletedProductSales: deletedProductSales.length,
         },
       };
