@@ -468,7 +468,10 @@ export class MembershipsService {
           discountAmount = offer.discount_value;
         }
       }
-    } else if (dto.discountAmount && dto.discountAmount > 0) {
+    }
+
+    // Fall back to manual discount if no offer was resolved
+    if (discountAmount === 0 && dto.discountAmount && dto.discountAmount > 0) {
       discountAmount = dto.discountAmount;
       // Ensure discount doesn't exceed plan price
       if (discountAmount > plan.price) {
@@ -1138,6 +1141,9 @@ export class MembershipsService {
         startDate: startDate.toISOString(),
         paymentMethod: dto.paymentMethod,
         notes: dto.notes,
+        discountAmount: dto.discountAmount,
+        facilityIds: dto.facilityIds,
+        amenityIds: dto.amenityIds,
       },
       gymId,
     );
