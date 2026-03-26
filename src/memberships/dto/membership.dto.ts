@@ -129,6 +129,23 @@ export class RenewMembershipDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountAmount?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  facilityIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  amenityIds?: number[];
 }
 
 export class RecordPaymentDto {
