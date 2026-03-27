@@ -56,39 +56,6 @@ export class PlansController {
     return this.plansService.findFeatured(req.user.gymId!);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get plan by ID' })
-  findOne(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.plansService.findOne(id, req.user.gymId!);
-  }
-
-  @Get('code/:code')
-  @ApiOperation({ summary: 'Get plan by code' })
-  findByCode(
-    @Request() req: AuthenticatedRequest,
-    @Param('code') code: string,
-  ) {
-    return this.plansService.findByCode(code, req.user.gymId!);
-  }
-
-  @Get(':id/price')
-  @ApiOperation({ summary: 'Calculate price with optional offer code' })
-  @ApiQuery({ name: 'offerCode', required: false })
-  calculatePrice(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-    @Query('offerCode') offerCode?: string,
-  ) {
-    return this.plansService.calculatePriceWithOffer(
-      id,
-      req.user.gymId!,
-      offerCode,
-    );
-  }
-
   @Post()
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')

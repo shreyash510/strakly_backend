@@ -24,9 +24,6 @@ import {
   UpdateSaasPlanDto,
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
-  CancelSubscriptionDto,
-  CreatePaymentHistoryDto,
-  UpdatePaymentHistoryDto,
   InitiateManualPaymentDto,
   CreateRazorpayOrderDto,
   VerifyRazorpayPaymentDto,
@@ -64,13 +61,6 @@ export class SaasSubscriptionsController {
   @ApiOperation({ summary: 'Get active SaaS plans (for viewing/renewal)' })
   findActivePlans() {
     return this.service.findAllPlans(false);
-  }
-
-  @Get('plans/:id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get a SaaS plan by ID' })
-  findPlanById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findPlanById(id);
   }
 
   @Post('plans')
@@ -276,46 +266,6 @@ export class SaasSubscriptionsController {
     return this.service.getPaymentStats(gymId ? parseInt(gymId, 10) : undefined);
   }
 
-  @Get('payments/:id')
-  @Roles('superadmin', 'admin')
-  @ApiOperation({ summary: 'Get payment by ID' })
-  getPaymentById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getPaymentById(id);
-  }
-
-  @Post('payments/:id/approve')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Approve a pending payment and activate subscription' })
-  async approvePayment(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.service.approvePayment(id);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_approved' });
-    return result;
-  }
-
-  @Post('payments/:id/reject')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Reject a pending payment with reason' })
-  async rejectPayment(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('reason') reason: string,
-  ) {
-    const result = await this.service.rejectPayment(id, reason || 'Payment rejected');
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_rejected' });
-    return result;
-  }
-
-  @Patch('payments/:id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Update a payment record' })
-  async updatePayment(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePaymentHistoryDto,
-  ) {
-    const result = await this.service.updatePaymentHistory(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_updated' });
-    return result;
-  }
-
   @Get('gym/:gymId')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Get subscription by gym ID' })
@@ -326,13 +276,6 @@ export class SaasSubscriptionsController {
   // ============================================
   // Wildcard :id routes (MUST be last)
   // ============================================
-
-  @Get(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get a gym subscription by ID' })
-  findSubscriptionById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findSubscriptionById(id);
-  }
 
   @Post()
   @Roles('superadmin')
@@ -367,49 +310,4 @@ export class SaasSubscriptionsController {
     return result;
   }
 
-  @Post(':id/cancel')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Cancel a gym subscription' })
-  async cancelSubscription(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CancelSubscriptionDto,
-  ) {
-    const result = await this.service.cancelSubscription(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_cancelled', gymId: result.gym.id });
-    return result;
-  }
-
-  @Post(':id/payments')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Record a payment for a subscription' })
-  async createPayment(
-    @Param('id', ParseIntPipe) subscriptionId: number,
-    @Body() dto: CreatePaymentHistoryDto,
-  ) {
-    const result = await this.service.createPaymentHistory({
-      ...dto,
-      subscriptionId,
-    });
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_recorded', gymId: result.gym?.id });
-    return result;
-  }
-
-  @Get(':id/payment-history')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get payment history for a subscription' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'status', required: false, type: String })
-  getSubscriptionPaymentHistory(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('status') status?: string,
-  ) {
-    return this.service.getPaymentHistoryBySubscriptionId(id, {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      status,
-    });
-  }
 }

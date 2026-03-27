@@ -3,15 +3,12 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
-  Param,
   Query,
   Headers,
   UseGuards,
   Request,
   BadRequestException,
-  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -108,21 +105,6 @@ export class BodyMetricsController {
   @ApiOperation({ summary: 'Get current user progress' })
   getMyProgress(@Request() req: AuthenticatedRequest) {
     return this.bodyMetricsService.getProgress(req.user.userId, req.user.gymId!);
-  }
-
-  @Delete('me/history/:id')
-  @ApiOperation({ summary: 'Delete a history record' })
-  async deleteMyHistoryRecord(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    const result = await this.bodyMetricsService.deleteHistoryRecord(
-      id,
-      req.user.userId,
-      req.user.gymId!,
-    );
-    this.notificationsGateway.emitBodyMetricsChanged(req.user.gymId!, { action: 'deleted' });
-    return result;
   }
 
   // ============ ADMIN ENDPOINTS (for managing other users) ============

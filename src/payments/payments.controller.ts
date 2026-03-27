@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  Post,
   Body,
   Param,
   Query,
@@ -11,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import {
-  CreatePaymentDto,
   UpdatePaymentDto,
   PaymentFiltersDto,
 } from './dto/payment.dto';
@@ -19,7 +17,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -61,26 +58,6 @@ export class PaymentsController {
     @GymId() gymId: number,
   ) {
     return this.paymentsService.findOne(id, gymId);
-  }
-
-  @Get('reference/:table/:id')
-  async findByReference(
-    @Param('table') table: string,
-    @Param('id', ParseIntPipe) referenceId: number,
-    @GymId() gymId: number,
-  ) {
-    return this.paymentsService.findByReference(table, referenceId, gymId);
-  }
-
-  @Post()
-  async create(
-    @Body() dto: CreatePaymentDto,
-    @GymId() gymId: number,
-    @UserId() userId: number,
-  ) {
-    const result = await this.paymentsService.create(dto, gymId, userId);
-    this.notificationsGateway.emitPaymentChanged(gymId, { action: 'created' });
-    return result;
   }
 
   @Patch(':id')

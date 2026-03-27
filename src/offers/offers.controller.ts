@@ -56,33 +56,6 @@ export class OffersController {
     return this.offersService.findActive(req.user.gymId!);
   }
 
-  @Get('validate/:code')
-  @ApiOperation({ summary: 'Validate an offer code' })
-  validateCode(
-    @Request() req: AuthenticatedRequest,
-    @Param('code') code: string,
-  ) {
-    return this.offersService.validateOfferCode(code, req.user.gymId!);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get offer by ID' })
-  findOne(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.offersService.findOne(id, req.user.gymId!);
-  }
-
-  @Get('code/:code')
-  @ApiOperation({ summary: 'Get offer by code' })
-  findByCode(
-    @Request() req: AuthenticatedRequest,
-    @Param('code') code: string,
-  ) {
-    return this.offersService.findByCode(code, req.user.gymId!);
-  }
-
   @Post()
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')

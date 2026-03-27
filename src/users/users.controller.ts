@@ -31,7 +31,6 @@ import {
   ApproveRequestDto,
   BulkUpdateUserDto,
   BulkDeleteUserDto,
-  BulkCreateUserDto,
   UpdateManagerPermissionsDto,
 } from './dto/create-user.dto';
 import { AssignClientDto } from './dto/trainer-client.dto';
@@ -407,36 +406,6 @@ export class UsersController {
     return this.usersService.regenerateAttendanceCode(parseInt(userId), gymId);
   }
 
-  @Get('role/:role')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get users by role' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
-  async findByRole(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('role') role: string,
-    @Query('gymId') queryGymId?: string,
-    @Res({ passthrough: true }) res?: Response,
-  ) {
-    const gymId = resolveGymId(
-      user.gymId,
-      queryGymId,
-      user.role === 'superadmin',
-    );
-    const result = await this.usersService.findByRole(role, gymId);
-
-    if (res && result.pagination) {
-      setPaginationHeaders(res, result.pagination);
-    }
-
-    return result.data;
-  }
-
   // ============ MANAGER PERMISSIONS ENDPOINTS ============
 
   @Patch(':id/permissions')
@@ -588,38 +557,6 @@ export class UsersController {
   }
 
   // ============ BULK OPERATIONS ============
-
-  @Post('bulk/create')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('superadmin', 'admin', 'manager')
-  @ManagerPermission('clients', 'create')
-  @ApiOperation({ summary: 'Bulk create users (max 50)' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
-  async bulkCreate(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: BulkCreateUserDto,
-    @Query('gymId') queryGymId?: string,
-  ) {
-    const gymId = resolveGymId(
-      user.gymId,
-      queryGymId,
-      user.role === 'superadmin',
-    );
-
-    const result = await this.usersService.bulkCreate(dto.users, gymId, user.role, {
-      id: user.userId,
-      name: user.name || user.email,
-      role: user.role,
-    });
-    this.notificationsGateway.emitUserChanged(gymId, { action: 'bulk_created' });
-    this.rabbitMqService.publish('dashboard.recalculate', { gymId });
-    return result;
-  }
 
   @Get('status-counts')
   @UseGuards(RolesGuard)

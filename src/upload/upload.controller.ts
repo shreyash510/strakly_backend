@@ -23,57 +23,6 @@ export class UploadController {
   ) {}
 
   /**
-   * Upload payment proof (screenshot/PDF)
-   * POST /upload/payment-proof
-   *
-   * Body (multipart/form-data):
-   * - file: Image or PDF file (max 10MB)
-   */
-  @Post('payment-proof')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB max
-      },
-      fileFilter: (req, file, callback) => {
-        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-        if (!allowed.includes(file.mimetype)) {
-          return callback(
-            new BadRequestException('Only JPG, PNG, WebP, and PDF files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
-    }),
-  )
-  async uploadPaymentProof(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-
-    const gymId = req.user?.gymId;
-    if (!gymId) {
-      throw new BadRequestException('Gym ID is required');
-    }
-
-    const result = await this.uploadService.uploadFile(
-      file,
-      `gyms/${gymId}/payment-proofs`,
-    );
-
-    return {
-      success: true,
-      url: result.url,
-      size: result.size,
-      message: 'Payment proof uploaded successfully',
-    };
-  }
-
-  /**
    * Upload avatar image
    * POST /upload/avatar
    *
