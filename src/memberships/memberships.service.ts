@@ -462,6 +462,12 @@ export class MembershipsService {
       );
 
       if (offer) {
+        if (offer.discount_value < 0) {
+          throw new BadRequestException('Offer discount value cannot be negative')
+        }
+        if (offer.discount_type === 'percentage' && offer.discount_value > 100) {
+          throw new BadRequestException('Percentage discount value cannot exceed 100')
+        }
         if (offer.discount_type === 'percentage') {
           discountAmount = (plan.price * offer.discount_value) / 100;
         } else {
@@ -472,6 +478,9 @@ export class MembershipsService {
 
     // Fall back to manual discount if no offer was resolved
     if (discountAmount === 0 && dto.discountAmount && dto.discountAmount > 0) {
+      if (dto.discountAmount < 0) {
+        throw new BadRequestException('Discount amount cannot be negative')
+      }
       discountAmount = dto.discountAmount;
       // Ensure discount doesn't exceed plan price
       if (discountAmount > plan.price) {
@@ -817,6 +826,11 @@ export class MembershipsService {
       );
     }
 
+    const endDate = new Date(membership.endDate)
+    if (endDate < new Date()) {
+      throw new BadRequestException('Cannot record payment for an expired membership')
+    }
+
     // Update membership status and create payment record atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
@@ -860,6 +874,10 @@ export class MembershipsService {
 
     if (membership.status === 'cancelled') {
       throw new BadRequestException('Membership is already cancelled');
+    }
+
+    if (membership.status === 'expired') {
+      throw new BadRequestException('Cannot cancel an already expired membership')
     }
 
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
@@ -1270,6 +1288,14 @@ export class MembershipsService {
       throw new BadRequestException('End date must be after start date');
     }
 
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const freezeStart = new Date(dto.startDate)
+    freezeStart.setHours(0, 0, 0, 0)
+    if (freezeStart < today) {
+      throw new BadRequestException('Freeze start date cannot be in the past')
+    }
+
     // Check against plan's max freeze days
     const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(`SELECT * FROM plans WHERE id = $1`, [membership.planId]);
@@ -1319,6 +1345,10 @@ export class MembershipsService {
     const freezeStart = new Date(membership.freezeStartDate);
     const now = new Date();
     const actualFreezeDays = Math.ceil((now.getTime() - freezeStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (actualFreezeDays <= 0) {
+      throw new BadRequestException('Membership freeze has not started yet')
+    }
 
     // Complete freeze and extend membership atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
