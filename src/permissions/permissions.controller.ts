@@ -15,8 +15,8 @@ import { AssignRolePermissionsDto } from './dto/permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, CurrentUser } from '../auth/decorators';
-import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('permissions')
 @Controller('permissions')

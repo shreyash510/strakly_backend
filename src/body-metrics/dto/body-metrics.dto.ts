@@ -225,20 +225,3 @@ export class RecordMetricsDto extends UpdateBodyMetricsDto {
   @IsDateString()
   measuredAt?: string;
 }
-
-export class GetMetricsHistoryDto {
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  @Type(() => Number)
-  limit?: number;
-}
