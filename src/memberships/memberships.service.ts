@@ -1235,6 +1235,9 @@ export class MembershipsService {
       case 'day':
         endDate.setDate(endDate.getDate() + durationValue);
         break;
+      case 'week':
+        endDate.setDate(endDate.getDate() + durationValue * 7);
+        break;
       case 'month':
         endDate.setMonth(endDate.getMonth() + durationValue);
         break;
