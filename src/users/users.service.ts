@@ -2260,11 +2260,13 @@ export class UsersService {
     const durationValue = parseInt(plan.duration_value) || 30;
     const durationType = plan.duration_type || 'days';
 
-    if (durationType === 'days') {
+    if (durationType === 'day' || durationType === 'days') {
       endDate.setDate(endDate.getDate() + durationValue);
-    } else if (durationType === 'months') {
+    } else if (durationType === 'week' || durationType === 'weeks') {
+      endDate.setDate(endDate.getDate() + durationValue * 7);
+    } else if (durationType === 'month' || durationType === 'months') {
       endDate.setMonth(endDate.getMonth() + durationValue);
-    } else if (durationType === 'years') {
+    } else if (durationType === 'year' || durationType === 'years') {
       endDate.setFullYear(endDate.getFullYear() + durationValue);
     } else {
       // Default to days
