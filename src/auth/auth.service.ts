@@ -2384,6 +2384,24 @@ export class AuthService {
       });
       this.logger.log(`Tenant schema name updated: ${tenantSchemaName}`);
 
+      // Create default branch for the gym
+      await this.prisma.branch.create({
+        data: {
+          gymId: gym.id,
+          name: dto.gym.name,
+          code: 'MAIN',
+          phone: dto.gym.phone,
+          email: dto.gym.email,
+          address: dto.gym.address,
+          city: dto.gym.city,
+          state: dto.gym.state,
+          zipCode: dto.gym.zipCode,
+          isDefault: true,
+          isActive: true,
+        },
+      });
+      this.logger.log('Default branch created');
+
       // Create the tenant schema in background (non-blocking — schema is only needed
       // when admin starts adding clients/plans, not for login/dashboard)
       const gymIdForSchema = gym.id;
