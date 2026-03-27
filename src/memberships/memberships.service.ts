@@ -910,7 +910,7 @@ export class MembershipsService {
     // Verify membership exists
     await this.findOne(id, gymId);
 
-    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+    const txResult = await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Log BEFORE hard deleting so we capture the membership state while it still exists
       const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
       if (snapshot.rows[0]) {
@@ -952,9 +952,44 @@ export class MembershipsService {
         `DELETE FROM memberships WHERE id = $1`,
         [id],
       );
+
+      // If the deleted membership was active, immediately activate the earliest pending membership for the same user
+      if (snapshot.rows[0]?.status === 'active') {
+        const pendingResult = await client.query(
+          `SELECT id FROM memberships
+           WHERE user_id = $1
+           AND status = 'pending'
+           AND (is_deleted = FALSE OR is_deleted IS NULL)
+           ORDER BY start_date ASC
+           LIMIT 1`,
+          [snapshot.rows[0].user_id],
+        );
+
+        if (pendingResult.rows.length > 0) {
+          const pendingId = pendingResult.rows[0].id;
+
+          await client.query(
+            `UPDATE memberships
+             SET status = 'active', updated_at = NOW()
+             WHERE id = $1`,
+            [pendingId],
+          );
+
+          await client.query(
+            `UPDATE users
+             SET status = 'active', updated_at = NOW()
+             WHERE id = $1`,
+            [snapshot.rows[0].user_id],
+          );
+
+          return { pendingActivated: true };
+        }
+      }
+
+      return { pendingActivated: false };
     });
 
-    return { id, voided: true, message: 'Membership permanently deleted' };
+    return { id, voided: true, pendingActivated: txResult?.pendingActivated ?? false, message: 'Membership permanently deleted' };
   }
 
   async getExpiringSoon(
