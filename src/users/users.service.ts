@@ -1073,7 +1073,9 @@ export class UsersService {
     ]);
 
     // Create client in tenant schema with role='client'
-    const createdClient = await this.tenantService.executeInTenant(
+    let createdClient: Record<string, any>;
+    try {
+    createdClient = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
@@ -1122,6 +1124,12 @@ export class UsersService {
         return result.rows[0];
       },
     );
+    } catch (error: any) {
+      if (error?.code === '23505' || error?.message?.includes('duplicate key')) {
+        throw new ConflictException('A user with this email already exists in this gym');
+      }
+      throw error;
+    }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
