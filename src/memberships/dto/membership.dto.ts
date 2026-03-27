@@ -109,10 +109,6 @@ export class FreezeMembershipDto {
 }
 
 export class RenewMembershipDto {
-  @IsNumber()
-  @Type(() => Number)
-  gymId: number;
-
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
@@ -146,6 +142,20 @@ export class RenewMembershipDto {
   @IsNumber({}, { each: true })
   @Type(() => Number)
   amenityIds?: number[];
+}
+
+export class UpdateMembershipFacilitiesDto {
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  facilityIds?: number[]
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  amenityIds?: number[]
 }
 
 export class RecordPaymentDto {

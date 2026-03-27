@@ -27,6 +27,7 @@ import {
   CancelMembershipDto,
   FreezeMembershipDto,
   RenewMembershipDto,
+  UpdateMembershipFacilitiesDto,
 } from './dto/membership.dto';
 import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -80,7 +81,7 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
-  ) {
+  ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
         ? queryGymId
@@ -106,7 +107,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
-  getStats(@Request() req: AuthenticatedRequest) {
+  getStats(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getStats(req.user.gymId!);
   }
 
@@ -125,7 +126,7 @@ export class MembershipsController {
   getOverview(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
-  ) {
+  ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
         ? queryGymId
@@ -148,7 +149,7 @@ export class MembershipsController {
   getExpiringSoon(
     @Request() req: AuthenticatedRequest,
     @Query('days') days?: string,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.getExpiringSoon(
       req.user.gymId!,
       days ? parseInt(days) : 7,
@@ -172,7 +173,7 @@ export class MembershipsController {
     @Query('clientId') clientId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-  ) {
+  ): Promise<any> {
     if (!clientId) {
       throw new BadRequestException('clientId query parameter is required');
     }
@@ -196,7 +197,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Query('clientId') clientId?: string,
     @Query('limit') limit?: string,
-  ) {
+  ): Promise<any> {
     if (!clientId) {
       throw new BadRequestException('clientId query parameter is required');
     }
@@ -211,7 +212,7 @@ export class MembershipsController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user memberships' })
-  getMyMemberships(@Request() req: AuthenticatedRequest) {
+  getMyMemberships(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.findByUser(
       req.user.userId,
       req.user.gymId!,
@@ -220,7 +221,7 @@ export class MembershipsController {
 
   @Get('me/active')
   @ApiOperation({ summary: 'Get current user active membership' })
-  getMyActiveMembership(@Request() req: AuthenticatedRequest) {
+  getMyActiveMembership(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getActiveMembership(
       req.user.userId,
       req.user.gymId!,
@@ -231,7 +232,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Get facilities for current user active membership',
   })
-  async getMyFacilities(@Request() req: AuthenticatedRequest) {
+  async getMyFacilities(@Request() req: AuthenticatedRequest): Promise<any> {
     const activeMembership = await this.membershipsService.getActiveMembership(
       req.user.userId,
       req.user.gymId!,
@@ -247,7 +248,7 @@ export class MembershipsController {
 
   @Post('me/renew')
   @ApiOperation({ summary: 'Renew current user membership' })
-  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
+  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto): Promise<any> {
     const result = await this.membershipsService.renew(
       req.user.userId,
       req.user.gymId!,
@@ -271,7 +272,7 @@ export class MembershipsController {
   findByUser(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
-  ) {
+  ): Promise<any> {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.membershipsService.findByUser(
       parseInt(userId),
@@ -291,7 +292,7 @@ export class MembershipsController {
   getActiveMembership(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
-  ) {
+  ): Promise<any> {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.membershipsService.getActiveMembership(
       parseInt(userId),
@@ -305,7 +306,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get cancellation reasons' })
-  async getCancellationReasons(@Request() req: AuthenticatedRequest) {
+  async getCancellationReasons(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getCancellationReasons(req.user.gymId!);
   }
 
@@ -318,7 +319,7 @@ export class MembershipsController {
   findOne(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.findOne(id, req.user.gymId!);
   }
 
@@ -329,7 +330,7 @@ export class MembershipsController {
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.getMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
@@ -343,8 +344,8 @@ export class MembershipsController {
   async updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
-  ) {
+    @Body() dto: UpdateMembershipFacilitiesDto,
+  ): Promise<any> {
     const result = await this.membershipsService.updateMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
@@ -363,7 +364,7 @@ export class MembershipsController {
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.create(dto, req.user.gymId!, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
@@ -382,7 +383,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMembershipDto,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.update(id, req.user.gymId!, dto);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
     return result;
@@ -397,7 +398,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelMembershipDto,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.cancel(id, req.user.gymId!, dto);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'cancelled' });
     return result;
@@ -410,7 +411,7 @@ export class MembershipsController {
   async voidDelete(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.voidDelete(id, req.user.gymId!);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'voided' });
     return result;
@@ -431,7 +432,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true', req.user.userId);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
     return result;
@@ -445,7 +446,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: FreezeMembershipDto,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.freeze(id, req.user.gymId!, dto, req.user.userId);
   }
 
@@ -456,7 +457,7 @@ export class MembershipsController {
   async unfreeze(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.unfreeze(id, req.user.gymId!);
   }
 
@@ -467,7 +468,7 @@ export class MembershipsController {
   async getFreezeHistory(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
   }
 
