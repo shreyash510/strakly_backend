@@ -46,7 +46,8 @@ export class MembershipsScheduler {
                  SET status = 'expired', updated_at = NOW()
                  WHERE status = 'active'
                  AND end_date < NOW()
-                 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+                 AND (is_deleted = FALSE OR is_deleted IS NULL)
+                 AND (freeze_start_date IS NULL OR freeze_end_date < NOW())`,
               );
               const expiredCount = expiredResult.rowCount || 0;
 
