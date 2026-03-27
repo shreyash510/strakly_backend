@@ -145,8 +145,6 @@ export class UpdateStageDto {
   winLossReason?: string;
 }
 
-export class ConvertLeadDto {}
-
 export class CreateLeadActivityDto {
   @IsEnum(ActivityType)
   @IsNotEmpty()
