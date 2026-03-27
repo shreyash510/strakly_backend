@@ -273,12 +273,4 @@ export class OffersService {
     return { id, deleted: true };
   }
 
-  async incrementUsage(offerId: number, gymId: number) {
-    await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(
-        `UPDATE offers SET used_count = used_count + 1, updated_at = NOW() WHERE id = $1`,
-        [offerId],
-      );
-    });
-  }
 }

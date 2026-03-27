@@ -94,11 +94,6 @@ export class PermissionsService {
     return rolePermissions.map((rp) => rp.permission);
   }
 
-  async getPermissionCodesByRole(role: string) {
-    const permissions = await this.getPermissionsByRole(role);
-    return permissions.map((p) => p.code);
-  }
-
   async getAllRolesWithPermissions() {
     const rolePermissions = await this.prisma.rolePermissionXref.findMany({
       include: {
@@ -273,12 +268,4 @@ export class PermissionsService {
     return permissions.map((p) => p.code);
   }
 
-  async userHasPermission(
-    userId: number,
-    gymId: number,
-    permissionCode: string,
-  ): Promise<boolean> {
-    const permissionCodes = await this.getUserPermissionCodes(userId, gymId);
-    return permissionCodes.includes(permissionCode);
-  }
 }

@@ -3,18 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
   SendEmailDto,
-  SendBulkEmailDto,
-  SendTemplateEmailDto,
 } from './dto/email.dto';
 import {
   passwordResetOtpTemplate,
   passwordResetOtpPlainText,
   passwordResetSuccessTemplate,
   passwordResetSuccessPlainText,
-  welcomeTemplate,
-  welcomePlainText,
-  membershipExpiryTemplate,
-  membershipExpiryPlainText,
   paymentReceiptTemplate,
   paymentReceiptPlainText,
   emailVerificationTemplate,
@@ -161,89 +155,6 @@ export class EmailService {
   }
 
   /**
-   * Send bulk emails (multiple recipients, same content)
-   * Documentation: https://developers.brevo.com/reference/sendtransacemail
-   */
-  async sendBulkEmail(dto: SendBulkEmailDto): Promise<EmailResponse> {
-    try {
-      // Build Brevo API payload
-      const emailPayload: Record<string, any> = {
-        sender: {
-          name: dto.fromName || this.defaultFromName,
-          email: dto.from || this.defaultFromEmail,
-        },
-        to: dto.to.map((email) => ({
-          email,
-          name: email,
-        })),
-        subject: dto.subject,
-      };
-
-      // Add HTML body
-      if (dto.html) {
-        emailPayload.htmlContent = dto.html;
-      }
-
-      // Add plain text body
-      if (dto.text) {
-        emailPayload.textContent = dto.text;
-      }
-
-      const response = await axios.post(this.brevoApiUrl, emailPayload, {
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'api-key': this.brevoApiKey,
-        },
-      });
-
-      const data: BrevoResponse = response.data;
-
-      if (data.code) {
-        const errorMessage = data.message || 'Unknown Brevo error';
-        this.logger.error(`Failed to send bulk email: ${errorMessage}`);
-        return {
-          success: false,
-          error: errorMessage,
-        };
-      }
-
-      this.logger.log(
-        `Bulk email sent successfully to ${dto.to.length} recipients`,
-      );
-      return {
-        success: true,
-        messageId: data.messageId,
-      };
-    } catch (error: unknown) {
-      const axiosErr = error as Record<string, any>;
-      const errorMessage =
-        axiosErr.response?.data?.message ||
-        axiosErr.response?.data?.code ||
-        (error instanceof Error ? error.message : String(error));
-      this.logger.error(`Failed to send bulk email: ${errorMessage}`);
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
-  }
-
-  /**
-   * Send email using template
-   */
-  async sendTemplateEmail(dto: SendTemplateEmailDto): Promise<EmailResponse> {
-    this.logger.warn(
-      'Brevo template emails require template setup in Brevo dashboard.',
-    );
-    return {
-      success: false,
-      error:
-        'Template emails require Brevo template setup. Use sendEmail with HTML instead.',
-    };
-  }
-
-  /**
    * Send password reset OTP email
    */
   async sendPasswordResetOtpEmail(
@@ -305,73 +216,6 @@ export class EmailService {
     return this.sendEmail({
       to,
       subject: 'Your password has been reset - Strakly',
-      html,
-      text,
-    });
-  }
-
-  /**
-   * Send welcome email to new client
-   */
-  async sendWelcomeEmail(
-    to: string,
-    clientName: string,
-    gymName: string,
-  ): Promise<EmailResponse> {
-    const frontendUrl =
-      this.configService.get<string>('FRONTEND_URL') ||
-      'https://app.strakly.com';
-    const html = welcomeTemplate({
-      userName: clientName,
-      gymName,
-      loginUrl: `${frontendUrl}/login`,
-    });
-    const text = welcomePlainText({
-      userName: clientName,
-      gymName,
-      loginUrl: `${frontendUrl}/login`,
-    });
-
-    return this.sendEmail({
-      to,
-      subject: `Welcome to ${gymName}!`,
-      html,
-      text,
-    });
-  }
-
-  /**
-   * Send membership expiry reminder
-   */
-  async sendMembershipExpiryReminder(
-    to: string,
-    clientName: string,
-    gymName: string,
-    expiryDate: Date,
-    daysRemaining: number,
-  ): Promise<EmailResponse> {
-    const formattedDate = expiryDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    const html = membershipExpiryTemplate({
-      userName: clientName,
-      gymName,
-      expiryDate: formattedDate,
-      daysRemaining,
-    });
-    const text = membershipExpiryPlainText({
-      userName: clientName,
-      gymName,
-      expiryDate: formattedDate,
-      daysRemaining,
-    });
-
-    return this.sendEmail({
-      to,
-      subject: `Membership Expiry Reminder - ${gymName}`,
       html,
       text,
     });
