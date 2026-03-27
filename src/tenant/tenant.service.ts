@@ -2142,14 +2142,6 @@ export class TenantService {
         CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_lead_source"
         ON "${schemaName}"."users"(lead_source) WHERE lead_source IS NOT NULL
       `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_fitness_goal"
-        ON "${schemaName}"."users"(fitness_goal) WHERE fitness_goal IS NOT NULL
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS "idx_${schemaName}_users_referred_by"
-        ON "${schemaName}"."users"(referred_by) WHERE referred_by IS NOT NULL
-      `);
     } catch (error) {
       this.logger.error(
         `Error creating phase1 indexes for ${schemaName}:`,
@@ -2628,7 +2620,6 @@ export class TenantService {
       // Class schedules
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_type" ON "${schemaName}"."class_schedules"(class_type_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_instructor" ON "${schemaName}"."class_schedules"(instructor_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_schedules_day" ON "${schemaName}"."class_schedules"(day_of_week)`);
       // Class sessions
       await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_schedule_date" ON "${schemaName}"."class_sessions"(schedule_id, date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_class_sessions_date" ON "${schemaName}"."class_sessions"(date)`);
@@ -2640,7 +2631,6 @@ export class TenantService {
       // Services
       // Trainer availability
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_avail_trainer" ON "${schemaName}"."trainer_availability"(trainer_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_trainer_avail_day" ON "${schemaName}"."trainer_availability"(day_of_week)`);
       // Appointments
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_trainer" ON "${schemaName}"."appointments"(trainer_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_appointments_user" ON "${schemaName}"."appointments"(user_id)`);
@@ -2653,8 +2643,6 @@ export class TenantService {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_session_pkgs_service" ON "${schemaName}"."session_packages"(service_id) WHERE service_id IS NOT NULL`);
       // Guest visits
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_date" ON "${schemaName}"."guest_visits"(visit_date)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_brought_by" ON "${schemaName}"."guest_visits"(brought_by) WHERE brought_by IS NOT NULL`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_guest_visits_checked_in" ON "${schemaName}"."guest_visits"(checked_in_by) WHERE checked_in_by IS NOT NULL`);
     } catch (err) {
       this.logger.warn(`Failed to create guest visits indexes for schema ${schemaName}`, err);
     }
@@ -2797,7 +2785,6 @@ export class TenantService {
     try {
       // Equipment
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equipment_status" ON "${schemaName}"."equipment"(status) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equipment_serial" ON "${schemaName}"."equipment"(serial_number) WHERE is_deleted = FALSE`);
       // Equipment maintenance
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equip_maint_equipment" ON "${schemaName}"."equipment_maintenance"(equipment_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_equip_maint_scheduled" ON "${schemaName}"."equipment_maintenance"(scheduled_date) WHERE is_deleted = FALSE AND status = 'scheduled'`);
@@ -2807,7 +2794,6 @@ export class TenantService {
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_sku" ON "${schemaName}"."products"(sku) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_barcode" ON "${schemaName}"."products"(barcode) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_active" ON "${schemaName}"."products"(is_active) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_products_low_stock" ON "${schemaName}"."products"(stock_quantity, low_stock_threshold) WHERE is_deleted = FALSE AND is_active = TRUE`);
       // Product sales
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_product" ON "${schemaName}"."product_sales"(product_id) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_product_sales_user" ON "${schemaName}"."product_sales"(user_id) WHERE is_deleted = FALSE`);
@@ -2904,115 +2890,7 @@ export class TenantService {
     client: PoolClient,
     schemaName: string,
   ): Promise<void> {
-    // ─── 1. Custom Fields System ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."custom_fields" (
-        id SERIAL PRIMARY KEY,
-        entity_type VARCHAR(30) NOT NULL DEFAULT 'user',
-        name VARCHAR(100) NOT NULL,
-        label VARCHAR(200) NOT NULL,
-        field_type VARCHAR(30) NOT NULL,
-        options JSONB,
-        default_value TEXT,
-        is_required BOOLEAN DEFAULT FALSE,
-        is_active BOOLEAN DEFAULT TRUE,
-        visibility VARCHAR(20) DEFAULT 'all',
-        display_order INTEGER DEFAULT 0,
-        validation_rules JSONB,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_by INTEGER NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."custom_field_values" (
-        id SERIAL PRIMARY KEY,
-        custom_field_id INTEGER NOT NULL REFERENCES "${schemaName}"."custom_fields"(id) ON DELETE CASCADE,
-        entity_id INTEGER NOT NULL,
-        value TEXT,
-        file_url TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(custom_field_id, entity_id)
-      )
-    `);
-
-    // ─── 2. NPS & Client Surveys ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."surveys" (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        description TEXT,
-        type VARCHAR(30) NOT NULL DEFAULT 'custom',
-        status VARCHAR(20) NOT NULL DEFAULT 'draft',
-        is_anonymous BOOLEAN DEFAULT FALSE,
-        trigger_type VARCHAR(30),
-        trigger_config JSONB,
-        start_date TIMESTAMP,
-        end_date TIMESTAMP,
-        created_by INTEGER NOT NULL,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_questions" (
-        id SERIAL PRIMARY KEY,
-        survey_id INTEGER NOT NULL REFERENCES "${schemaName}"."surveys"(id) ON DELETE CASCADE,
-        question_text TEXT NOT NULL,
-        question_type VARCHAR(30) NOT NULL,
-        options JSONB,
-        is_required BOOLEAN DEFAULT TRUE,
-        display_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_responses" (
-        id SERIAL PRIMARY KEY,
-        survey_id INTEGER NOT NULL REFERENCES "${schemaName}"."surveys"(id) ON DELETE CASCADE,
-        user_id INTEGER,
-        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."survey_answers" (
-        id SERIAL PRIMARY KEY,
-        response_id INTEGER NOT NULL REFERENCES "${schemaName}"."survey_responses"(id) ON DELETE CASCADE,
-        question_id INTEGER NOT NULL REFERENCES "${schemaName}"."survey_questions"(id) ON DELETE CASCADE,
-        answer_text TEXT,
-        answer_numeric NUMERIC(5,2),
-        answer_choices JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // ─── 3. Loyalty / Rewards Program ───
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_config" (
-        id SERIAL PRIMARY KEY,
-        is_enabled BOOLEAN DEFAULT TRUE,
-        points_per_visit INTEGER DEFAULT 10,
-        points_per_referral INTEGER DEFAULT 100,
-        points_per_purchase_unit NUMERIC(5,2) DEFAULT 1,
-        points_per_class_booking INTEGER DEFAULT 5,
-        point_expiry_days INTEGER DEFAULT 365,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    // ─── Loyalty Tiers ───
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_tiers" (
@@ -3030,78 +2908,8 @@ export class TenantService {
       )
     `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_points" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL UNIQUE,
-        total_earned INTEGER NOT NULL DEFAULT 0,
-        total_redeemed INTEGER NOT NULL DEFAULT 0,
-        current_balance INTEGER NOT NULL DEFAULT 0,
-        tier_id INTEGER REFERENCES "${schemaName}"."loyalty_tiers"(id) ON DELETE SET NULL,
-        tier_updated_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_transactions" (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        type VARCHAR(10) NOT NULL,
-        points INTEGER NOT NULL,
-        balance_after INTEGER NOT NULL,
-        source VARCHAR(30) NOT NULL,
-        reference_type VARCHAR(30),
-        reference_id INTEGER,
-        description TEXT,
-        expires_at TIMESTAMP,
-        created_by INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schemaName}"."loyalty_rewards" (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(200) NOT NULL,
-        description TEXT,
-        points_cost INTEGER NOT NULL,
-        reward_type VARCHAR(30) NOT NULL,
-        reward_value JSONB,
-        stock INTEGER,
-        max_per_user INTEGER,
-        is_active BOOLEAN DEFAULT TRUE,
-        is_deleted BOOLEAN DEFAULT FALSE,
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     // ─── Phase 5 Indexes ───
     try {
-      // Custom Fields
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_fields_entity_type" ON "${schemaName}"."custom_fields"(entity_type) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_field" ON "${schemaName}"."custom_field_values"(custom_field_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_entity" ON "${schemaName}"."custom_field_values"(entity_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_custom_field_values_composite" ON "${schemaName}"."custom_field_values"(custom_field_id, entity_id)`);
-      // Surveys
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_surveys_status" ON "${schemaName}"."surveys"(status) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_surveys_type" ON "${schemaName}"."surveys"(type) WHERE is_deleted = FALSE`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_questions_survey" ON "${schemaName}"."survey_questions"(survey_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_responses_survey" ON "${schemaName}"."survey_responses"(survey_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_responses_user" ON "${schemaName}"."survey_responses"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_response" ON "${schemaName}"."survey_answers"(response_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_survey_answers_question" ON "${schemaName}"."survey_answers"(question_id)`);
-      // Loyalty
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_user" ON "${schemaName}"."loyalty_points"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_points_tier" ON "${schemaName}"."loyalty_points"(tier_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_user" ON "${schemaName}"."loyalty_transactions"(user_id)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_type" ON "${schemaName}"."loyalty_transactions"(type)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_source" ON "${schemaName}"."loyalty_transactions"(source)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_transactions_created" ON "${schemaName}"."loyalty_transactions"(created_at DESC)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_rewards_active" ON "${schemaName}"."loyalty_rewards"(is_active) WHERE is_deleted = FALSE`);
       await client.query(`CREATE INDEX IF NOT EXISTS "idx_${schemaName}_loyalty_tiers_points" ON "${schemaName}"."loyalty_tiers"(min_points)`);
     } catch (err) {
       this.logger.warn(`Failed to create Phase 5 indexes for schema ${schemaName}`, err);
