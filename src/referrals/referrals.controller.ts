@@ -60,16 +60,6 @@ export class ReferralsController {
     return this.referralsService.findByUser(userId, gymId);
   }
 
-  @Get(':id')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get a referral by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.referralsService.findOne(id, gymId);
-  }
-
   @Post()
   @Roles('admin', 'manager')
   @UseGuards(ManagerPermissionsGuard)

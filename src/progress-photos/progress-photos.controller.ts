@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
   Delete,
   Body,
   Param,
@@ -17,7 +16,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ProgressPhotosService } from './progress-photos.service';
 import {
   CreateProgressPhotoDto,
-  UpdateProgressPhotoDto,
   PhotoFiltersDto,
 } from './dto/progress-photo.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -85,28 +83,6 @@ export class ProgressPhotosController {
     @Query() filters: PhotoFiltersDto,
   ) {
     return this.progressPhotosService.findMyPhotos(userId, gymId, filters);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a progress photo by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-    @UserId() requesterId: number,
-    @CurrentUserRole() requesterRole: string,
-  ) {
-    return this.progressPhotosService.findOne(id, gymId, requesterId, requesterRole);
-  }
-
-  @Patch(':id')
-  @Roles('admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Update progress photo metadata' })
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateProgressPhotoDto,
-    @GymId() gymId: number,
-  ) {
-    return this.progressPhotosService.update(id, gymId, dto);
   }
 
   @Delete(':id')

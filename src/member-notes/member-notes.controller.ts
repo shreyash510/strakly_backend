@@ -40,16 +40,6 @@ export class MemberNotesController {
     return this.memberNotesService.findAll(gymId, filters);
   }
 
-  @Get(':id')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get a client note by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.memberNotesService.findOne(id, gymId);
-  }
-
   @Post()
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a client note' })

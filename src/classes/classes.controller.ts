@@ -162,16 +162,6 @@ export class ClassesController {
     return this.classesService.generateSessions(gymId, dto);
   }
 
-  @Get('sessions/:id')
-  @Roles('admin', 'manager', 'trainer', 'client')
-  @ApiOperation({ summary: 'Get a single session by ID' })
-  async findOneSession(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.classesService.findOneSession(id, gymId);
-  }
-
   @Patch('sessions/:id')
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('classes', 'update')

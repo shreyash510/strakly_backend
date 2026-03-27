@@ -5,11 +5,9 @@ import {
   UseGuards,
   Req,
   Res,
-  Param,
-  ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiQuery, ApiParam, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiQuery, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -18,7 +16,6 @@ import { PdfGeneratorService } from './pdf-generator.service';
 import { PdfTemplateService } from './pdf-template.service';
 import { ReportFilterDto, DailySalesFilterDto } from './dto/reports.dto';
 import { PdfReportFilterDto } from './dto/pdf-report.dto';
-import { ClientReportFilterDto } from './dto/client-reports.dto';
 import type { AuthenticatedRequest } from '../common/types';
 
 @ApiTags('reports')
@@ -146,83 +143,4 @@ export class ReportsController {
     return this.reportsService.getDeletedTransactions(gymId, filters);
   }
 
-  // ============================================
-  // TRAINER CLIENT REPORTS
-  // ============================================
-
-  @Get('trainer/clients/summary')
-  @Roles('trainer', 'admin', 'manager')
-  @ApiOperation({ summary: "Get summary of all trainer's clients" })
-  async getTrainerClientsSummary(
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const gymId = req.user.gymId!;
-    const trainerId = req.user.userId;
-    return this.reportsService.getTrainerClientsSummary(
-      trainerId,
-      gymId,
-    );
-  }
-
-  @Get('trainer/clients/:clientId/progress')
-  @Roles('trainer', 'admin', 'manager')
-  @ApiOperation({ summary: 'Get progress report for a specific client' })
-  @ApiParam({ name: 'clientId', type: Number, description: 'Client ID' })
-  @ApiQuery({
-    name: 'startDate',
-    required: false,
-    type: String,
-    description: 'Start date (YYYY-MM-DD)',
-  })
-  @ApiQuery({
-    name: 'endDate',
-    required: false,
-    type: String,
-    description: 'End date (YYYY-MM-DD)',
-  })
-  async getClientProgressReport(
-    @Param('clientId', ParseIntPipe) clientId: number,
-    @Query() filters: ClientReportFilterDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const gymId = req.user.gymId!;
-    const trainerId = req.user.userId;
-    return this.reportsService.getClientProgressReport(
-      trainerId,
-      clientId,
-      gymId,
-      filters,
-    );
-  }
-
-  @Get('trainer/clients/:clientId/attendance')
-  @Roles('trainer', 'admin', 'manager')
-  @ApiOperation({ summary: 'Get attendance report for a specific client' })
-  @ApiParam({ name: 'clientId', type: Number, description: 'Client ID' })
-  @ApiQuery({
-    name: 'startDate',
-    required: false,
-    type: String,
-    description: 'Start date (YYYY-MM-DD)',
-  })
-  @ApiQuery({
-    name: 'endDate',
-    required: false,
-    type: String,
-    description: 'End date (YYYY-MM-DD)',
-  })
-  async getClientAttendanceReport(
-    @Param('clientId', ParseIntPipe) clientId: number,
-    @Query() filters: ClientReportFilterDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const gymId = req.user.gymId!;
-    const trainerId = req.user.userId;
-    return this.reportsService.getClientAttendanceReport(
-      trainerId,
-      clientId,
-      gymId,
-      filters,
-    );
-  }
 }

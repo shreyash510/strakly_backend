@@ -31,8 +31,6 @@ import {
   ProductFiltersDto,
   SalesFiltersDto,
   SalesStatsFiltersDto,
-  StockMovementFiltersDto,
-  SalesTrendFiltersDto,
   AllStockMovementsFiltersDto,
   BatchStockAdjustDto,
   StockTakeFiltersDto,
@@ -133,38 +131,6 @@ export class ProductsController {
     @Query() filters: SalesStatsFiltersDto,
   ) {
     return this.productsService.getSalesStats(gymId, filters);
-  }
-
-  @Get('sales/stats/trend')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sales trend data grouped by period' })
-  getSalesStatsTrend(
-    @GymId() gymId: number,
-    @Query() filters: SalesTrendFiltersDto,
-  ) {
-    return this.productsService.getSalesStatsTrend(gymId, filters);
-  }
-
-  @Get('sales/:id')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sale by ID' })
-  @ApiParam({ name: 'id', type: Number })
-  findOneSale(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.productsService.findOneSale(id, gymId);
-  }
-
-  @Get('sales/:id/receipt')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sale receipt with gym info and all items' })
-  @ApiParam({ name: 'id', type: Number })
-  getSaleReceipt(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.productsService.getSaleReceipt(id, gymId);
   }
 
   @Post('sales')
@@ -271,17 +237,6 @@ export class ProductsController {
     @GymId() gymId: number,
   ) {
     return this.productsService.findLowStockProducts(gymId);
-  }
-
-  @Get('barcode/:barcode')
-  @Roles('admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Look up a product by barcode' })
-  @ApiParam({ name: 'barcode', type: String })
-  findByBarcode(
-    @Param('barcode') barcode: string,
-    @GymId() gymId: number,
-  ) {
-    return this.productsService.findByBarcode(gymId, barcode);
   }
 
   @Get('inventory/stats')
@@ -441,18 +396,6 @@ export class ProductsController {
     @Body() dto: AdjustStockDto,
   ) {
     return this.productsService.adjustStock(id, gymId, dto, userId);
-  }
-
-  @Get(':id/stock-movements')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get stock movements for a product' })
-  @ApiParam({ name: 'id', type: Number })
-  getStockMovements(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-    @Query() filters: StockMovementFiltersDto,
-  ) {
-    return this.productsService.getStockMovements(gymId, id, filters);
   }
 
   @Delete(':id')

@@ -21,14 +21,12 @@ import {
   ApiHeader,
 } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
-import { MembershipsScheduler } from './memberships.scheduler';
 import {
   CreateMembershipDto,
   UpdateMembershipDto,
   CancelMembershipDto,
   FreezeMembershipDto,
   RenewMembershipDto,
-  RecordPaymentDto,
 } from './dto/membership.dto';
 import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -45,7 +43,6 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 export class MembershipsController {
   constructor(
     private readonly membershipsService: MembershipsService,
-    private readonly membershipsScheduler: MembershipsScheduler,
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
@@ -230,15 +227,6 @@ export class MembershipsController {
     );
   }
 
-  @Get('me/status')
-  @ApiOperation({ summary: 'Check current user membership status' })
-  checkMyStatus(@Request() req: AuthenticatedRequest) {
-    return this.membershipsService.checkMembershipStatus(
-      req.user.userId,
-      req.user.gymId!,
-    );
-  }
-
   @Get('me/facilities')
   @ApiOperation({
     summary: 'Get facilities for current user active membership',
@@ -309,47 +297,6 @@ export class MembershipsController {
       parseInt(userId),
       req.user.gymId!,
     );
-  }
-
-  @Get('user/status')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Check membership status for a user' })
-  @ApiHeader({
-    name: 'x-user-id',
-    required: true,
-    description: 'Target user ID',
-  })
-  checkStatus(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
-    if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.checkMembershipStatus(
-      parseInt(userId),
-      req.user.gymId!,
-    );
-  }
-
-  @Post('user/renew')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Renew membership for a user' })
-  @ApiHeader({
-    name: 'x-user-id',
-    required: true,
-    description: 'Target user ID',
-  })
-  async renew(
-    @Request() req: AuthenticatedRequest,
-    @Headers('x-user-id') userId: string,
-    @Body() dto: RenewMembershipDto,
-  ) {
-    if (!userId) throw new BadRequestException('x-user-id header is required');
-    const result = await this.membershipsService.renew(
-      parseInt(userId),
-      req.user.gymId!,
-      dto,
-    );
-    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
-    return result;
   }
 
   // ============ LOOKUP ENDPOINTS (must be before :id to avoid route shadowing) ============
@@ -441,25 +388,6 @@ export class MembershipsController {
     return result;
   }
 
-  @Post(':id/payment')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Record payment for a membership' })
-  async recordPayment(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: RecordPaymentDto,
-  ) {
-    const result = await this.membershipsService.recordPayment(
-      id,
-      req.user.gymId!,
-      dto,
-      req.user.userId,
-    );
-    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'payment_recorded' });
-    return result;
-  }
-
   @Post(':id/cancel')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
@@ -541,14 +469,6 @@ export class MembershipsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
-  }
-
-  @Post('run-expiry-check')
-  @Roles('superadmin', 'admin')
-  @ApiOperation({ summary: 'Manually trigger membership expiry check' })
-  async runExpiryCheck() {
-    await this.membershipsScheduler.handleExpiredMemberships();
-    return { message: 'Membership expiry check completed' };
   }
 
 }
