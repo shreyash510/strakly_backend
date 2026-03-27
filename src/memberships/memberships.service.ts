@@ -527,24 +527,24 @@ export class MembershipsService {
           );
         }
 
-        // Save membership facilities
+        // Save membership facilities (bulk insert)
         if (dto.facilityIds && dto.facilityIds.length > 0) {
-          for (const facilityId of dto.facilityIds) {
-            await client.query(
-              `INSERT INTO membership_facilities (membership_id, facility_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [txMembership.id, facilityId],
-            );
-          }
+          await client.query(
+            `INSERT INTO membership_facilities (membership_id, facility_id)
+             SELECT $1, unnest($2::int[])
+             ON CONFLICT DO NOTHING`,
+            [txMembership.id, dto.facilityIds],
+          );
         }
 
-        // Save membership amenities
+        // Save membership amenities (bulk insert)
         if (dto.amenityIds && dto.amenityIds.length > 0) {
-          for (const amenityId of dto.amenityIds) {
-            await client.query(
-              `INSERT INTO membership_amenities (membership_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [txMembership.id, amenityId],
-            );
-          }
+          await client.query(
+            `INSERT INTO membership_amenities (membership_id, amenity_id)
+             SELECT $1, unnest($2::int[])
+             ON CONFLICT DO NOTHING`,
+            [txMembership.id, dto.amenityIds],
+          );
         }
 
         // Get user name for payment record
@@ -579,47 +579,59 @@ export class MembershipsService {
     // transaction commits so they don't cause a rollback if they fail.
 
     // Send membership renewed notification
-    await this.notificationsService.notifyMembershipRenewed(
-      dto.userId,
-      gymId,
-      {
-        planName: plan.name,
-        endDate: endDate,
-        membershipId: membership.id,
-      },
-    );
+    try {
+      await this.notificationsService.notifyMembershipRenewed(
+        dto.userId,
+        gymId,
+        {
+          planName: plan.name,
+          endDate: endDate,
+          membershipId: membership.id,
+        },
+      );
+    } catch (err) {
+      console.error('Failed to send notifyMembershipRenewed notification:', err);
+    }
 
     // Log activity
     if (actorInfo) {
-      await this.activityLogsService.logMembershipCreated(
-        gymId,
-        actorInfo.id,
-        actorInfo.role,
-        actorInfo.name,
-        membership.id,
-        userName,
-        plan.name,
-      );
+      try {
+        await this.activityLogsService.logMembershipCreated(
+          gymId,
+          actorInfo.id,
+          actorInfo.role,
+          actorInfo.name,
+          membership.id,
+          userName,
+          plan.name,
+        );
+      } catch (err) {
+        console.error('Failed to log membership created activity:', err);
+      }
     }
 
     // Notify admin and manager about new enrollment
-    await this.notificationHelper.notifyStaff(
-      gymId,
-      {
-        type: NotificationType.NEW_ENROLLMENT,
-        title: 'New Membership Enrollment',
-        message: `${userName} has been enrolled in ${plan.name}.`,
-        actionUrl: `/clients/${dto.userId}?tab=subscription`,
-        data: {
-          entityId: membership.id,
-          entityType: 'membership',
-          userId: dto.userId,
-          membershipId: membership.id,
-          metadata: { userName, planName: plan.name },
+    try {
+      await this.notificationHelper.notifyStaff(
+        gymId,
+        {
+          type: NotificationType.NEW_ENROLLMENT,
+          title: 'New Membership Enrollment',
+          message: `${userName} has been enrolled in ${plan.name}.`,
+          actionUrl: `/clients/${dto.userId}?tab=subscription`,
+          data: {
+            entityId: membership.id,
+            entityType: 'membership',
+            userId: dto.userId,
+            membershipId: membership.id,
+            metadata: { userName, planName: plan.name },
+          },
         },
-      },
-      { excludeUserId: actorInfo?.id },
-    );
+        { excludeUserId: actorInfo?.id },
+      );
+    } catch (err) {
+      console.error('Failed to send notifyStaff notification:', err);
+    }
 
     return this.findOne(membership.id, gymId);
   }
@@ -781,7 +793,7 @@ export class MembershipsService {
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
         values,
@@ -851,16 +863,16 @@ export class MembershipsService {
     }
 
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
-      // Log before cancelling so we capture the pre-cancellation state
-      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
-      if (snapshot.rows[0]) {
-        await this.logToHistory(client, snapshot.rows[0], 'cancelled');
-      }
-
       await client.query(
         `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, cancellation_reason_code = $2, updated_at = NOW() WHERE id = $3`,
         [dto.reason || null, dto.cancellationReasonCode || null, id],
       );
+
+      // Log after cancelling so cancel_reason and cancellation metadata are captured
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'cancelled');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -885,16 +897,16 @@ export class MembershipsService {
 
     // Soft delete the membership and void associated payment atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
-      // Log before soft deleting so we capture the pre-deletion state
-      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
-      if (snapshot.rows[0]) {
-        await this.logToHistory(client, snapshot.rows[0], 'deleted');
-      }
-
       await client.query(
         `UPDATE memberships SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
         [id, deletedById || null],
       );
+
+      // Log after soft deleting so deletion metadata is captured in the history entry
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'deleted');
+      }
 
       // Void the associated payment record
       await client.query(
@@ -959,6 +971,7 @@ export class MembershipsService {
           `SELECT id FROM memberships
            WHERE user_id = $1
            AND status = 'pending'
+           AND end_date >= NOW()
            AND (is_deleted = FALSE OR is_deleted IS NULL)
            ORDER BY start_date ASC
            LIMIT 1`,
@@ -982,8 +995,23 @@ export class MembershipsService {
             [snapshot.rows[0].user_id],
           );
 
+          // Audit log for the auto-activated membership
+          const activatedSnapshot = await client.query(
+            `SELECT * FROM memberships WHERE id = $1`,
+            [pendingId],
+          );
+          if (activatedSnapshot.rows[0]) {
+            await this.logToHistory(client, activatedSnapshot.rows[0], 'activated');
+          }
+
           return { pendingActivated: true };
         }
+
+        // No pending membership found — mark the user as inactive
+        await client.query(
+          `UPDATE users SET status = 'inactive', updated_at = NOW() WHERE id = $1`,
+          [snapshot.rows[0].user_id],
+        );
       }
 
       return { pendingActivated: false };
