@@ -491,112 +491,9 @@ export class NotificationsService {
     }
   }
 
-  /**
-   * Trigger notification for new announcement
-   */
-  async notifyNewAnnouncement(
-    userIds: number[],
-    gymId: number,
-    announcementData: {
-      announcementId: number;
-      title: string;
-      priority?: string;
-    },
-  ): Promise<void> {
-    try {
-      await this.createBulk(
-        {
-          userIds,
-          type: NotificationType.NEW_ANNOUNCEMENT,
-          title: 'New Announcement',
-          message: announcementData.title,
-          data: {
-            entityType: 'announcement',
-            entityId: announcementData.announcementId,
-          },
-          actionUrl: `/announcements/${announcementData.announcementId}`,
-          priority:
-            announcementData.priority === 'urgent'
-              ? NotificationPriority.URGENT
-              : NotificationPriority.NORMAL,
-        },
-        gymId,
-      );
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to create announcement notification: ${msg}`,
-      );
-    }
-  }
-
   // ============================================
   // SUPERADMIN NOTIFICATIONS (main schema)
   // ============================================
-
-  /**
-   * Create a notification for a superadmin
-   */
-  async createSystemNotification(data: {
-    userId: number;
-    type: string;
-    title: string;
-    message: string;
-    data?: Record<string, any>;
-    actionUrl?: string;
-    priority?: string;
-  }): Promise<Record<string, any>> {
-    try {
-      // Default expiry: 15 days from now
-      const defaultExpiry = new Date();
-      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
-
-      const notification = await this.prisma.systemNotification.create({
-        data: {
-          userId: data.userId,
-          type: data.type,
-          title: data.title,
-          message: data.message,
-          data: data.data || undefined,
-          actionUrl: data.actionUrl || null,
-          priority: data.priority || 'normal',
-          expiresAt: defaultExpiry,
-        },
-      });
-
-      // Emit real-time notification to superadmin
-      try {
-        this.gateway.emitToSuperadmin(data.userId, {
-          id: notification.id,
-          userId: notification.userId,
-          type: notification.type as NotificationType,
-          title: notification.title,
-          message: notification.message,
-          data: notification.data as NotificationData | null,
-          isRead: notification.isRead,
-          readAt: notification.readAt,
-          actionUrl: notification.actionUrl,
-          priority: notification.priority as NotificationPriority,
-          expiresAt: null,
-          createdAt: notification.createdAt,
-          createdBy: null,
-        });
-      } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `Failed to emit real-time system notification: ${msg}`,
-        );
-      }
-
-      return notification;
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to create system notification: ${msg}`,
-      );
-      throw error;
-    }
-  }
 
   /**
    * Create notifications for all superadmins
@@ -830,15 +727,46 @@ export class NotificationsService {
     assignedByName: string;
   }): Promise<void> {
     try {
-      await this.createSystemNotification({
-        userId: ticketData.assignedToUserId,
-        type: SystemNotificationType.SUPPORT_TICKET_ASSIGNED,
-        title: 'Support Ticket Assigned',
-        message: `Ticket #${ticketData.ticketNumber} "${ticketData.subject}" has been assigned to you by ${ticketData.assignedByName}.`,
-        data: { ticketId: ticketData.ticketId },
-        actionUrl: `/superadmin/support/${ticketData.ticketId}`,
-        priority: 'high',
+      // Default expiry: 15 days from now
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
+      const notification = await this.prisma.systemNotification.create({
+        data: {
+          userId: ticketData.assignedToUserId,
+          type: SystemNotificationType.SUPPORT_TICKET_ASSIGNED,
+          title: 'Support Ticket Assigned',
+          message: `Ticket #${ticketData.ticketNumber} "${ticketData.subject}" has been assigned to you by ${ticketData.assignedByName}.`,
+          data: { ticketId: ticketData.ticketId },
+          actionUrl: `/superadmin/support/${ticketData.ticketId}`,
+          priority: 'high',
+          expiresAt: defaultExpiry,
+        },
       });
+
+      // Emit real-time notification to superadmin
+      try {
+        this.gateway.emitToSuperadmin(ticketData.assignedToUserId, {
+          id: notification.id,
+          userId: notification.userId,
+          type: notification.type as NotificationType,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data as NotificationData | null,
+          isRead: notification.isRead,
+          readAt: notification.readAt,
+          actionUrl: notification.actionUrl,
+          priority: notification.priority as NotificationPriority,
+          expiresAt: null,
+          createdAt: notification.createdAt,
+          createdBy: null,
+        });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to emit real-time system notification: ${msg}`,
+        );
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
