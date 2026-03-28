@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
@@ -150,6 +151,7 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
     @Body('gymId') gymId: string,
     @Body('oldUrl') oldUrl: string,
+    @Request() req: AuthenticatedRequest,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -157,6 +159,12 @@ export class UploadController {
 
     if (!gymId) {
       throw new BadRequestException('Gym ID is required');
+    }
+
+    if (!req.user.isSuperAdmin) {
+      if (req.user.gymId !== parseInt(gymId, 10)) {
+        throw new ForbiddenException('Access denied: not your gym');
+      }
     }
 
     const result = await this.uploadService.uploadGymLogo(file, gymId, oldUrl);

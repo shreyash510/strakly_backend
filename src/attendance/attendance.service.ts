@@ -155,7 +155,8 @@ export class AttendanceService {
     const staffName = staffUser?.name;
 
     // Single tenant query that checks existing record, membership, user branch, and inserts if valid
-    const result = await this.tenantService.executeInTenant(
+    // Wrapped in a transaction so the duplicate-check SELECT and the INSERT are atomic
+    const result = await this.tenantService.executeInTenantTransaction(
       gymId,
       async (client) => {
         // First, check all conditions in parallel
@@ -305,7 +306,9 @@ export class AttendanceService {
     });
     const staffName = staffUserForCheckout?.name;
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    // Wrapped in a transaction so the history INSERT and the attendance UPDATE are atomic,
+    // preventing duplicate history records under concurrent checkout requests
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, 'checked_out', NOW())`,

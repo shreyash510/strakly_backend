@@ -4,7 +4,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
+import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { UploadService } from '../upload/upload.service';
@@ -124,7 +126,11 @@ export class GymService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, caller?: AuthenticatedUser) {
+    if (caller && !caller.isSuperAdmin && caller.gymId !== id) {
+      throw new ForbiddenException('Access denied: not your gym');
+    }
+
     const gym = await this.prisma.gym.findUnique({
       where: { id },
       include: {
@@ -289,8 +295,8 @@ export class GymService {
     return this.findOne(gym.id);
   }
 
-  async update(id: number, dto: UpdateGymDto) {
-    await this.findOne(id);
+  async update(id: number, dto: UpdateGymDto, caller?: AuthenticatedUser) {
+    await this.findOne(id, caller);
 
     const data: Record<string, any> = { ...dto };
 
@@ -305,8 +311,8 @@ export class GymService {
     });
   }
 
-  async remove(id: number) {
-    const gym = await this.findOne(id);
+  async remove(id: number, caller?: AuthenticatedUser) {
+    const gym = await this.findOne(id, caller);
 
     // Check if gym has any staff assignments
     const staffCount = await this.prisma.userGymXref.count({
@@ -495,8 +501,8 @@ export class GymService {
     };
   }
 
-  async toggleStatus(id: number) {
-    const gym = await this.findOne(id);
+  async toggleStatus(id: number, caller?: AuthenticatedUser) {
+    const gym = await this.findOne(id, caller);
 
     return this.prisma.gym.update({
       where: { id },
