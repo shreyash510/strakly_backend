@@ -16,7 +16,7 @@ export class DashboardScheduler {
    * Every 10 minutes, refresh all currently cached gym dashboards.
    * Safety net: if RabbitMQ messages are lost, cached data stays fresh.
    */
-  @Cron('*/10 * * * *')
+  @Cron('*/30 * * * *')
   async refreshActiveCaches(): Promise<void> {
     const gymIds = this.dashboardCacheService.getAllGymIds();
     if (gymIds.length === 0) return;

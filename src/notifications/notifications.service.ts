@@ -120,6 +120,74 @@ export class NotificationsService {
   }
 
   /**
+   * Create many notifications with different content per row (single bulk INSERT).
+   * Each DTO can have a different userId, type, title, message, etc.
+   */
+  async createMany(
+    dtos: CreateNotificationDto[],
+    gymId: number,
+  ): Promise<number> {
+    if (!dtos || dtos.length === 0) {
+      return 0;
+    }
+
+    const notifications = await this.executeWithTable(
+      gymId,
+      async (client) => {
+        const values: SqlValue[] = [];
+        const placeholders: string[] = [];
+        let paramIndex = 1;
+
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
+        for (const dto of dtos) {
+          placeholders.push(
+            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
+          );
+          values.push(
+            dto.userId,
+            dto.type,
+            dto.title,
+            dto.message,
+            dto.data ? JSON.stringify(dto.data) : null,
+            dto.actionUrl || null,
+            dto.priority || NotificationPriority.NORMAL,
+            dto.expiresAt || defaultExpiry,
+            dto.createdBy || null,
+          );
+        }
+
+        const result = await client.query(
+          `
+        INSERT INTO notifications
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        VALUES ${placeholders.join(', ')}
+        RETURNING *
+      `,
+          values,
+        );
+
+        return result.rows.map((row: Record<string, any>) => this.mapToNotification(row));
+      },
+    );
+
+    // Emit real-time notifications via WebSocket
+    try {
+      notifications.forEach((notification: Notification) => {
+        this.gateway.emitToUser(gymId, notification.userId, notification);
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to emit bulk real-time notifications: ${msg}`,
+      );
+    }
+
+    return notifications.length;
+  }
+
+  /**
    * Create notifications for multiple users
    */
   async createBulk(
