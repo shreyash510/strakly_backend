@@ -20,7 +20,18 @@ interface SocketData {
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: [
+      process.env.FRONTEND_URL,
+      process.env.NEXT_FRONTEND_URL,
+      'https://strakly.com',
+      'https://www.strakly.com',
+      'https://app.strakly.com',
+      'https://strakly-g9ovf.ondigitalocean.app',
+      'https://shark-app-yak3y.ondigitalocean.app',
+      ...(process.env.NODE_ENV !== 'production'
+        ? ['http://localhost:5173', 'http://localhost:3000']
+        : []),
+    ].filter(Boolean),
     credentials: true,
   },
   namespace: '/notifications',
@@ -62,7 +73,12 @@ export class NotificationsGateway
       // Verify JWT
       const secret =
         this.configService.get<string>('JWT_SECRET') ||
-        'strakly-secret-key-change-in-production';
+        (() => {
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error('JWT_SECRET must be set in production');
+          }
+          return 'strakly-secret-key-change-in-production';
+        })();
 
       let payload: JwtPayload;
       try {

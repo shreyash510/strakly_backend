@@ -1448,7 +1448,7 @@ export class ReportsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Active clients
       const activeMembersResult = await client.query(
-        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`,
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       );
 
       // New clients this month
@@ -1456,13 +1456,13 @@ export class ReportsService {
         .toISOString()
         .split('T')[0];
       const newMembersResult = await client.query(
-        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND created_at >= $1`,
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1`,
         [firstOfMonth],
       );
 
       // Expired memberships
       const expiredResult = await client.query(
-        `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired'`,
+        `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       );
 
       // Monthly revenue
@@ -1506,7 +1506,7 @@ export class ReportsService {
     year: number,
   ): Promise<TrainerStaffReportItem[]> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const whereClause = `u.role IN ('trainer', 'manager')`;
+      const whereClause = `u.role IN ('trainer', 'manager') AND (u.is_deleted = FALSE OR u.is_deleted IS NULL)`;
       const values: SqlValue[] = [year];
 
       const result = await client.query(

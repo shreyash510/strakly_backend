@@ -347,9 +347,9 @@ export class NotificationsService {
       const result = await client.query(
         `
         DELETE FROM notifications
-        WHERE created_at < NOW() - INTERVAL '${daysOld} days'
+        WHERE created_at < NOW() - ($1 * INTERVAL '1 day')
       `,
-        [],
+        [daysOld],
       );
 
       return result.rowCount || 0;

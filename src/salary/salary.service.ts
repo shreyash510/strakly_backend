@@ -76,9 +76,9 @@ export class SalaryService {
         /* Staff info from public.users + role from user_gym_xref */
         const result = await client.query(
           `SELECT u.id, u.name, ugx.role FROM public.users u
-           JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gymId} AND ugx.is_active = true
+           JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = $2 AND ugx.is_active = true
            WHERE u.id = $1 AND ugx.role IN ('manager', 'trainer', 'branch_admin', 'admin')`,
-          [createSalaryDto.staffId],
+          [createSalaryDto.staffId, gymId],
         );
         return result.rows[0];
       },
@@ -93,7 +93,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+          `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [
             createSalaryDto.staffId,
             createSalaryDto.month,
@@ -175,12 +175,16 @@ export class SalaryService {
           values.push(`%${filters.search}%`);
         }
 
+        // Add gymId as the next parameterized value (shared by both queries)
+        const gymIdParam = `$${paramIndex++}`;
+        values.push(gymId);
+
         const [salariesResult, countResult] = await Promise.all([
           client.query(
             `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, ugx.role as staff_role
            FROM staff_salaries s
            LEFT JOIN public.users u ON u.id = s.staff_id
-           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
+           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymIdParam}
            WHERE ${whereClause}
            ORDER BY s.year DESC, s.month DESC, s.created_at DESC
            LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
@@ -189,7 +193,7 @@ export class SalaryService {
           client.query(
             `SELECT COUNT(*) as count FROM staff_salaries s
            LEFT JOIN public.users u ON u.id = s.staff_id
-           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
+           LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymIdParam}
            WHERE ${whereClause}`,
             values,
           ),
@@ -245,10 +249,10 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, ugx.role as staff_role
          FROM staff_salaries s
          LEFT JOIN public.users u ON u.id = s.staff_id
-         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
+         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = $3
          WHERE s.staff_id = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
          ORDER BY s.year DESC, s.month DESC`,
-          [staffId, currentYear],
+          [staffId, currentYear, gymId],
         );
         return result.rows;
       },
@@ -290,9 +294,9 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name, u.email as staff_email, u.avatar as staff_avatar, u.phone as staff_phone, ugx.role as staff_role
          FROM staff_salaries s
          LEFT JOIN public.users u ON u.id = s.staff_id
-         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = ${gymId}
+         LEFT JOIN public.user_gym_xref ugx ON ugx.user_id = s.staff_id AND ugx.gym_id = $2
          WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
-          [salaryId],
+          [salaryId, gymId],
         );
         return result.rows[0];
       },
@@ -334,7 +338,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM staff_salaries WHERE id = $1`,
+          `SELECT * FROM staff_salaries WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -386,7 +390,7 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name
            FROM staff_salaries s
            LEFT JOIN public.users u ON u.id = s.staff_id
-           WHERE s.id = $1`,
+           WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -434,7 +438,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM staff_salaries WHERE id = $1`,
+          `SELECT * FROM staff_salaries WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -475,21 +479,22 @@ export class SalaryService {
           staffCountResult,
         ] = await Promise.all([
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending'`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending' AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
             [currentYear],
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
             [currentMonth, currentYear],
           ),
           client.query(
             `SELECT COUNT(*) as count FROM public.user_gym_xref ugx
              JOIN public.users u ON u.id = ugx.user_id
-             WHERE ugx.gym_id = ${gymId} AND ugx.is_active = true AND u.status = 'active'
+             WHERE ugx.gym_id = $1 AND ugx.is_active = true AND u.status = 'active'
              AND ugx.role IN ('manager', 'trainer')`,
+            [gymId],
           ),
         ]);
 
@@ -513,9 +518,9 @@ export class SalaryService {
       /* Staff live in public.users, role/branch in user_gym_xref */
       let query = `SELECT u.id, u.name, u.email, u.avatar, u.phone, ugx.role
          FROM public.users u
-         JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gymId} AND ugx.is_active = true
+         JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = $1 AND ugx.is_active = true
          WHERE u.status = 'active' AND ugx.role IN ('manager', 'trainer')`;
-      const values: SqlValue[] = [];
+      const values: SqlValue[] = [gymId];
 
       query += ` ORDER BY u.name ASC`;
 
@@ -587,7 +592,7 @@ export class SalaryService {
             const salariesResult = await client.query(
               `SELECT id, staff_id, base_salary, bonus, deductions, net_amount
                FROM staff_salaries
-               WHERE is_recurring = true AND month = $1 AND year = $2`,
+               WHERE is_recurring = true AND month = $1 AND year = $2 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               [prevMonth, prevYear],
             );
 
@@ -595,7 +600,7 @@ export class SalaryService {
               try {
                 // Check if salary already exists for current month
                 const existingResult = await client.query(
-                  `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+                  `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
                   [salary.staff_id, currentMonth, currentYear],
                 );
 
@@ -607,9 +612,9 @@ export class SalaryService {
                 /* Check if staff is still active (role is in user_gym_xref, not users) */
                 const staffResult = await client.query(
                   `SELECT u.id FROM public.users u
-                   JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = ${gym.id} AND ugx.is_active = true
+                   JOIN public.user_gym_xref ugx ON ugx.user_id = u.id AND ugx.gym_id = $2 AND ugx.is_active = true
                    WHERE u.id = $1 AND u.status = 'active' AND ugx.role IN ('manager', 'trainer')`,
-                  [salary.staff_id],
+                  [salary.staff_id, gym.id],
                 );
 
                 if (staffResult.rows.length === 0) {

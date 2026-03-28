@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -110,6 +111,25 @@ export class BodyMetricsController {
   // ============ ADMIN ENDPOINTS (for managing other users) ============
   // userId passed via x-user-id header
 
+  // TODO: For trainers, we should also verify the target user is assigned to them
+  // via trainer_client_xref. This is a known limitation to address in a future update.
+  /**
+   * Trainers can only access client-role users' metrics, not other trainers' or managers'.
+   */
+  private async assertTrainerCanAccessUser(
+    callerRole: string,
+    targetUserId: number,
+    gymId: number,
+  ) {
+    if (callerRole !== 'trainer') return;
+    const targetRole = await this.bodyMetricsService.getUserRole(targetUserId, gymId);
+    if (!targetRole || targetRole !== 'client') {
+      throw new ForbiddenException(
+        'Trainers can only access body metrics of client-role users',
+      );
+    }
+  }
+
   @Get('user')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
@@ -119,8 +139,9 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  getUserMetrics(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
+  async getUserMetrics(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    await this.assertTrainerCanAccessUser(req.user.role, parseInt(userId), req.user.gymId!);
     return this.bodyMetricsService.getOrCreateMetrics(
       parseInt(userId),
       req.user.gymId!,
@@ -142,6 +163,7 @@ export class BodyMetricsController {
     @Body() dto: UpdateBodyMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    await this.assertTrainerCanAccessUser(req.user.role, parseInt(userId), req.user.gymId!);
     const result = await this.bodyMetricsService.updateMetrics(
       parseInt(userId),
       req.user.gymId!,
@@ -166,6 +188,7 @@ export class BodyMetricsController {
     @Body() dto: RecordMetricsDto,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    await this.assertTrainerCanAccessUser(req.user.role, parseInt(userId), req.user.gymId!);
     const result = await this.bodyMetricsService.recordMetrics(
       parseInt(userId),
       req.user.gymId!,
@@ -207,6 +230,7 @@ export class BodyMetricsController {
     @Query('endDate') endDate?: string,
   ) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    await this.assertTrainerCanAccessUser(req.user.role, parseInt(userId), req.user.gymId!);
     return this.bodyMetricsService.getHistory(
       parseInt(userId),
       req.user.gymId!,
@@ -228,8 +252,9 @@ export class BodyMetricsController {
     required: true,
     description: 'Target user ID',
   })
-  getUserProgress(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
+  async getUserProgress(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
     if (!userId) throw new BadRequestException('x-user-id header is required');
+    await this.assertTrainerCanAccessUser(req.user.role, parseInt(userId), req.user.gymId!);
     return this.bodyMetricsService.getProgress(
       parseInt(userId),
       req.user.gymId!,

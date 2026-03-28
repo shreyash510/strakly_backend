@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsArray,
   IsIn,
+  MinLength,
   ValidateNested,
   ArrayMinSize,
   ArrayMaxSize,
@@ -176,6 +177,7 @@ export class CreateStaffDto {
   @ApiProperty({ description: 'Staff password' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(8)
   password: string;
 
   @ApiProperty({
@@ -253,6 +255,7 @@ export class CreateClientDto {
   @ApiProperty({ description: 'Client password' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(8)
   password: string;
 
   @ApiPropertyOptional({ description: 'Client phone' })
@@ -531,6 +534,7 @@ export class UpdateManagerPermissionsDto {
 
 export class AdminResetPasswordDto {
   @IsString()
+  @MinLength(8)
   newPassword: string;
 }
 

@@ -11,6 +11,7 @@ import {
   UseGuards,
   Res,
   BadRequestException,
+  ForbiddenException,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -502,6 +503,10 @@ export class UsersController {
   ) {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
+    }
+    // Trainers can only view their own client list
+    if (user.role === 'trainer' && trainerId !== user.userId) {
+      throw new ForbiddenException('Trainers can only view their own clients');
     }
     return this.usersService.getTrainerClients(trainerId, user.gymId);
   }

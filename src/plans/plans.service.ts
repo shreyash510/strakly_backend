@@ -315,7 +315,7 @@ export class PlansService {
       const offer = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
-          const query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`;
+          const query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL)`;
           const values: SqlValue[] = [offerCode];
 
           const result = await client.query(query, values);

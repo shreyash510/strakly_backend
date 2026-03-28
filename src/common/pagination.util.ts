@@ -23,7 +23,7 @@ export function getPaginationParams(query: Record<string, any>): {
   page: number;
   limit: number;
   skip: number;
-  take: number | undefined;
+  take: number;
   noPagination: boolean;
 } {
   const page = Math.max(1, parseInt(query.page) || 1);
@@ -35,7 +35,7 @@ export function getPaginationParams(query: Record<string, any>): {
     page,
     limit,
     skip: noPagination ? 0 : (page - 1) * limit,
-    take: noPagination ? undefined : limit,
+    take: noPagination ? 5000 : Math.min(limit, 100),
     noPagination,
   };
 }

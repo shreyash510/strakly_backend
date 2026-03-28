@@ -6,6 +6,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { ApiQuery, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,6 +31,7 @@ export class ReportsController {
   ) {}
 
   @Get('download-pdf')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Download comprehensive PDF report' })
   @ApiQuery({

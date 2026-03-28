@@ -253,8 +253,11 @@ export class SupportService {
       throw new ForbiddenException('You can only view tickets from your gym');
     }
 
-    if (!isAdmin && userId && ticket.userId !== userId) {
-      throw new ForbiddenException('You can only view your own tickets');
+    // Ownership check: non-admin users can only view their own tickets
+    if (!isAdmin) {
+      if (!userId || ticket.userId !== userId) {
+        throw new ForbiddenException('You can only view your own tickets');
+      }
     }
 
     const messagesWithSenderInfo = ticket.messages.map((message) => ({
@@ -316,8 +319,9 @@ export class SupportService {
       throw new ForbiddenException('You can only update tickets from your gym');
     }
 
+    // Ownership check: non-admin users can only update their own tickets
     if (!isAdmin) {
-      if (ticket.userId !== userId) {
+      if (!userId || ticket.userId !== userId) {
         throw new ForbiddenException('You can only update your own tickets');
       }
       const allowedFields = ['subject', 'description', 'category'];
@@ -438,10 +442,13 @@ export class SupportService {
       );
     }
 
-    if (!isAdmin && ticket.userId !== senderId) {
-      throw new ForbiddenException(
-        'You can only add messages to your own tickets',
-      );
+    // Ownership check: non-admin users can only message their own tickets
+    if (!isAdmin) {
+      if (!senderId || ticket.userId !== senderId) {
+        throw new ForbiddenException(
+          'You can only add messages to your own tickets',
+        );
+      }
     }
 
     const senderType = isAdmin ? 'admin' : 'user';

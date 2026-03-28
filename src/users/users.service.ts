@@ -35,6 +35,30 @@ import { ROLES, USER_STATUS } from '../common/constants';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
+const DEFAULT_MANAGER_PERMISSIONS = {
+  clients: { create: true, read: true, update: true, delete: true },
+  requests: { create: true, read: true, update: true, delete: true },
+  trainers: { create: true, read: true, update: true, delete: true },
+  support: { create: true, read: true, update: true, delete: true },
+  classes: { create: true, read: true, update: true, delete: true },
+  salary: { create: true, read: true, update: true, delete: true },
+  announcements: { create: true, read: true, update: true, delete: true },
+  amenities: { create: true, read: true, update: true, delete: true },
+  attendance: { create: true, read: true, update: true, delete: true },
+  referrals: { create: true, read: true, update: true, delete: true },
+  appointments: { create: true, read: true, update: true, delete: true },
+  equipment: { create: true, read: true, update: true, delete: true },
+  guestVisits: { create: true, read: true, update: true, delete: true },
+  leads: { create: true, read: true, update: true, delete: true },
+  facilities: { create: true, read: true, update: true, delete: true },
+  offers: { create: true, read: true, update: true, delete: true },
+  subscriptions: { create: true, read: true, update: true, delete: true },
+  products: { create: true, read: true, update: true, delete: true },
+  productSales: { create: true, read: true, update: true, delete: true },
+  programs: { create: true, read: true, update: true, delete: true },
+  plans: { create: true, read: true, update: true, delete: true },
+};
+
 export interface UserFilters extends PaginationParams {
   role?: string;
   status?: string;
@@ -616,7 +640,7 @@ export class UsersService {
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer')`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -668,8 +692,8 @@ export class UsersService {
           `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+          join_date, manager_permissions, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -688,6 +712,9 @@ export class UsersService {
             dto.state || null,
             dto.zipCode || null,
             new Date(),
+            role === ROLES.MANAGER
+              ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
+              : null,
           ],
         );
 
@@ -917,7 +944,7 @@ export class UsersService {
         values,
       );
 
-      const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+      const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
         id,
       ]);
       return result.rows[0];
@@ -1030,7 +1057,7 @@ export class UsersService {
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role = 'client'`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -1541,7 +1568,7 @@ export class UsersService {
           values,
         );
 
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           id,
         ]);
         return result.rows[0];
@@ -1945,7 +1972,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT role FROM users WHERE id = $1`,
+            `SELECT role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [id],
           );
           return result.rows[0];
@@ -2011,7 +2038,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT role FROM users WHERE id = $1`,
+            `SELECT role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [id],
           );
           return result.rows[0];
@@ -2091,7 +2118,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT id FROM users WHERE id = $1`,
+            `SELECT id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];
@@ -2174,7 +2201,7 @@ export class UsersService {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           userId,
         ]);
         return result.rows[0];
@@ -2309,7 +2336,7 @@ export class UsersService {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           userId,
         ]);
         return result.rows[0];

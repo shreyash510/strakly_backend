@@ -70,18 +70,20 @@ export class ManagerPermissionsGuard implements CanActivate {
     );
 
     if (!managerPermissions) {
-      // No permissions set — allow all actions by default
+      // No permissions configured — allow all (backward compat).
+      // Once permissions are set, deny anything not explicitly granted.
       return true;
     }
 
     const modulePerms = managerPermissions[permission.module];
     if (!modulePerms) {
-      // Module not in permissions — allow all actions by default
-      return true;
+      throw new ForbiddenException(
+        `You do not have permission to ${permission.action} ${permission.module}`,
+      );
     }
 
     const allowed = modulePerms[permission.action];
-    if (allowed === false) {
+    if (allowed !== true) {
       throw new ForbiddenException(
         `You do not have permission to ${permission.action} ${permission.module}`,
       );

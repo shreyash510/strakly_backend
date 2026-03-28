@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 
 @Injectable()
-export class TenantService {
+export class TenantService implements OnModuleDestroy {
   private readonly logger = new Logger(TenantService.name);
   private pool: Pool;
 
@@ -24,6 +24,10 @@ export class TenantService {
     this.pool.on('error', (err) => {
       this.logger.error('Unexpected pool client error:', err.message);
     });
+  }
+
+  async onModuleDestroy() {
+    await this.pool.end();
   }
 
   /**

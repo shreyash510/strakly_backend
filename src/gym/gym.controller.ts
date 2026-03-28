@@ -156,8 +156,8 @@ export class GymController {
   @Get(':id')
   @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    return this.gymService.findOne(id, req.user);
   }
 
   @Post()
@@ -167,9 +167,14 @@ export class GymController {
   }
 
   @Patch(':id')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update a gym' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
-    const result = await this.gymService.update(id, dto);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateGymDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const result = await this.gymService.update(id, dto, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'updated' });
     return result;
   }
@@ -184,17 +189,19 @@ export class GymController {
   }
 
   @Delete(':id')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a gym' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.gymService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    const result = await this.gymService.remove(id, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
     return result;
   }
 
   @Post(':id/toggle-status')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Toggle gym active status' })
-  async toggleStatus(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.gymService.toggleStatus(id);
+  async toggleStatus(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    const result = await this.gymService.toggleStatus(id, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'status_changed' });
     return result;
   }

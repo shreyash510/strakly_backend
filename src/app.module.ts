@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -50,6 +50,7 @@ import { MigrationModule } from './migration/migration.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ActivityLogsService } from './activity-logs/activity-logs.service';
 
 // Health check
@@ -116,6 +117,10 @@ import { HealthModule } from './health/health.module';
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
