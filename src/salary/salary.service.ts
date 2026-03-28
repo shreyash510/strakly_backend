@@ -93,7 +93,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+          `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [
             createSalaryDto.staffId,
             createSalaryDto.month,
@@ -338,7 +338,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM staff_salaries WHERE id = $1`,
+          `SELECT * FROM staff_salaries WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -390,7 +390,7 @@ export class SalaryService {
           `SELECT s.*, u.name as staff_name
            FROM staff_salaries s
            LEFT JOIN public.users u ON u.id = s.staff_id
-           WHERE s.id = $1`,
+           WHERE s.id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -438,7 +438,7 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM staff_salaries WHERE id = $1`,
+          `SELECT * FROM staff_salaries WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [salaryId],
         );
         return result.rows[0];
@@ -479,14 +479,14 @@ export class SalaryService {
           staffCountResult,
         ] = await Promise.all([
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending'`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'pending' AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.payment_status = 'paid' AND s.year = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
             [currentYear],
           ),
           client.query(
-            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2`,
+            `SELECT COALESCE(SUM(s.net_amount), 0) as sum, COUNT(*) as count FROM staff_salaries s WHERE s.month = $1 AND s.year = $2 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
             [currentMonth, currentYear],
           ),
           client.query(
@@ -592,7 +592,7 @@ export class SalaryService {
             const salariesResult = await client.query(
               `SELECT id, staff_id, base_salary, bonus, deductions, net_amount
                FROM staff_salaries
-               WHERE is_recurring = true AND month = $1 AND year = $2`,
+               WHERE is_recurring = true AND month = $1 AND year = $2 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               [prevMonth, prevYear],
             );
 
@@ -600,7 +600,7 @@ export class SalaryService {
               try {
                 // Check if salary already exists for current month
                 const existingResult = await client.query(
-                  `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3`,
+                  `SELECT id FROM staff_salaries WHERE staff_id = $1 AND month = $2 AND year = $3 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
                   [salary.staff_id, currentMonth, currentYear],
                 );
 

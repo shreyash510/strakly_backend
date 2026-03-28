@@ -55,6 +55,20 @@ export class BodyMetricsService {
     };
   }
 
+  async getUserRole(userId: number, gymId: number): Promise<string | null> {
+    const user = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT role FROM users WHERE id = $1`,
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
+    return user?.role ?? null;
+  }
+
   async getMetrics(userId: number, gymId: number) {
     const metrics = await this.tenantService.executeInTenant(
       gymId,
