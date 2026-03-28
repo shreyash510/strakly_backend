@@ -278,7 +278,22 @@ export class PaymentsService {
     gymId: number,
     dto: UpdatePaymentDto,
   ): Promise<PaymentRecord> {
-    await this.findOne(id, gymId);
+    const currentPayment = await this.findOne(id, gymId);
+
+    // Validate payment status transitions
+    if (dto.status) {
+      const allowedTransitions: Record<string, string[]> = {
+        [PaymentStatus.PENDING]: [PaymentStatus.COMPLETED, PaymentStatus.FAILED, PaymentStatus.CANCELLED],
+        [PaymentStatus.COMPLETED]: [PaymentStatus.REFUNDED],
+      };
+
+      const allowed = allowedTransitions[currentPayment.status];
+      if (!allowed || !allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          `Invalid status transition from '${currentPayment.status}' to '${dto.status}'`,
+        );
+      }
+    }
 
     const updates: string[] = [];
     const values: SqlValue[] = [];

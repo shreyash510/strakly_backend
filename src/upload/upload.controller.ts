@@ -65,6 +65,16 @@ export class UploadController {
       throw new BadRequestException('User ID is required');
     }
 
+    // Authorization: trainers and clients can only upload their own avatar
+    const normalizedRoleCheck = userRole?.toLowerCase();
+    if (
+      userId &&
+      String(userId) !== String(req.user?.userId) &&
+      !['superadmin', 'admin', 'manager'].includes(normalizedRoleCheck)
+    ) {
+      throw new ForbiddenException('You can only upload your own avatar');
+    }
+
     const result = await this.uploadService.uploadAvatar(file, targetUserId, oldUrl);
 
     // Update user's avatar in database

@@ -24,11 +24,19 @@ export class RazorpayService {
   verifyPaymentSignature(orderId: string, paymentId: string, signature: string): boolean {
     const body = orderId + '|' + paymentId;
     const expectedSignature = crypto.createHmac('sha256', this.keySecret).update(body).digest('hex');
-    return expectedSignature === signature;
+    try {
+      return crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
+    } catch {
+      return false;
+    }
   }
 
   verifyWebhookSignature(body: string, signature: string): boolean {
     const expectedSignature = crypto.createHmac('sha256', this.webhookSecret).update(body).digest('hex');
-    return expectedSignature === signature;
+    try {
+      return crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
+    } catch {
+      return false;
+    }
   }
 }

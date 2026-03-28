@@ -135,7 +135,7 @@ export class AuthService {
    * Generate a 6-digit OTP
    */
   private generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 999999).toString();
   }
 
   private generateToken(
@@ -709,7 +709,7 @@ export class AuthService {
             gym.id,
             async (client) => {
               const result = await client.query(
-                `SELECT * FROM users WHERE email = $1`,
+                `SELECT * FROM users WHERE email = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
                 [loginDto.email],
               );
               return result.rows[0];
@@ -915,7 +915,7 @@ export class AuthService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT * FROM users WHERE id = $1`,
+            `SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];
@@ -1062,7 +1062,7 @@ export class AuthService {
           );
 
           const result = await client.query(
-            `SELECT * FROM users WHERE id = $1`,
+            `SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];
@@ -1123,7 +1123,7 @@ export class AuthService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT * FROM users WHERE id = $1`,
+            `SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];
@@ -1256,6 +1256,7 @@ export class AuthService {
          WHERE id != $1
          AND role IN ('manager', 'trainer')
          AND (name ILIKE $2 OR email ILIKE $2)
+         AND (is_deleted = FALSE OR is_deleted IS NULL)
          ORDER BY name ASC`,
           [currentUserId, searchPattern],
         );
@@ -1324,6 +1325,22 @@ export class AuthService {
       };
     }
 
+    // Check if there's a recent OTP (less than 1 minute old)
+    const recentOtp = await this.prisma.emailVerification.findFirst({
+      where: {
+        email,
+        userType: 'password_reset',
+        isUsed: false,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+      },
+    });
+
+    if (recentOtp) {
+      throw new BadRequestException(
+        'Please wait before requesting a new code.',
+      );
+    }
+
     // Invalidate any existing OTPs for this email
     await this.prisma.emailVerification.updateMany({
       where: { email, userType: 'password_reset', isUsed: false },
@@ -1347,13 +1364,13 @@ export class AuthService {
       },
     });
 
-    // Send OTP email
-    await this.emailService.sendPasswordResetOtpEmail(
+    // Send OTP email (fire-and-forget)
+    this.emailService.sendPasswordResetOtpEmail(
       email,
       userInfo.userName,
       otp,
       this.OTP_EXPIRY_MINUTES,
-    );
+    ).catch(err => this.logger.error('Failed to send password reset email', err));
 
     return {
       success: true,
@@ -1558,7 +1575,7 @@ export class AuthService {
             gym.id,
             async (client) => {
               const result = await client.query(
-                `SELECT name, role FROM users WHERE email = $1`,
+                `SELECT name, role FROM users WHERE email = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
                 [email],
               );
               return result.rows[0];
@@ -1756,13 +1773,13 @@ export class AuthService {
       },
     });
 
-    // Send verification email
-    await this.emailService.sendEmailVerificationEmail(
+    // Send verification email (fire-and-forget)
+    this.emailService.sendEmailVerificationEmail(
       email,
       user.name,
       verificationOtp,
       this.VERIFICATION_EXPIRY_MINUTES,
-    );
+    ).catch(err => this.logger.error('Failed to send verification email', err));
 
     return {
       success: true,
@@ -1834,27 +1851,13 @@ export class AuthService {
       },
     });
 
-    // Send verification email
-    try {
-      const emailResult = await this.emailService.sendEmailVerificationEmail(
-        email,
-        name,
-        otp,
-        this.VERIFICATION_EXPIRY_MINUTES,
-      );
-
-      if (!emailResult.success) {
-        this.logger.error('Email sending failed:', emailResult.error);
-        throw new BadRequestException(
-          'Failed to send verification email. Please try again.',
-        );
-      }
-    } catch (error) {
-      this.logger.error('Email sending error:', error);
-      throw new BadRequestException(
-        'Failed to send verification email. Please try again.',
-      );
-    }
+    // Send verification email (fire-and-forget)
+    this.emailService.sendEmailVerificationEmail(
+      email,
+      name,
+      otp,
+      this.VERIFICATION_EXPIRY_MINUTES,
+    ).catch(err => this.logger.error('Failed to send signup verification email', err));
 
     return {
       success: true,
@@ -1924,7 +1927,7 @@ export class AuthService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT email_verified FROM users WHERE id = $1`,
+            `SELECT email_verified FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];

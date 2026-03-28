@@ -280,8 +280,8 @@ export class DashboardService {
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
+        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
@@ -332,8 +332,8 @@ export class DashboardService {
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
+        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
@@ -404,7 +404,8 @@ export class DashboardService {
               COUNT(*) FILTER (WHERE role = 'client' AND status = 'active' AND created_at >= $1) as new_clients_this_month,
               COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm')) as pending_onboarding,
               COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1) as new_enquiries_this_month
-            FROM users`,
+            FROM users
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
             [startOfMonth],
           ),
           // 2) All membership counts + revenue in ONE query
@@ -413,11 +414,12 @@ export class DashboardService {
               COUNT(*) FILTER (WHERE status = 'active') as active_memberships,
               COUNT(*) FILTER (WHERE status = 'active' AND end_date >= $1::TIMESTAMP AND end_date <= $2::TIMESTAMP) as expiring_soon,
               COUNT(*) FILTER (WHERE status = 'expired') as expired_memberships,
-              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)), 0) as total_revenue,
-              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND payment_method = 'cash'), 0) as total_cash_revenue,
-              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $3 AND paid_at <= $4), 0) as last_month_revenue,
-              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $5), 0) as this_month_revenue
-            FROM memberships`,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid'), 0) as total_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND payment_method = 'cash'), 0) as total_cash_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $3 AND paid_at <= $4), 0) as last_month_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $5), 0) as this_month_revenue
+            FROM memberships
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
             [now, endOfWeek, startOfLastMonth, endOfLastMonth, startOfMonth],
           ),
           // 3) Attendance: present today
@@ -565,7 +567,8 @@ export class DashboardService {
               -- Enquiries
               COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1) as this_week_enquiries,
               COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $2 AND created_at < $1) as last_week_enquiries
-            FROM users`,
+            FROM users
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
             [startOfThisWeek, startOfLastWeek],
           ),
           // Daily sparkline data for last 7 days
@@ -583,7 +586,7 @@ export class DashboardService {
             FROM days d
             LEFT JOIN (
               SELECT created_at::date AS day, COUNT(*) AS cnt
-              FROM users WHERE role='client' AND status='active' AND created_at >= $1
+              FROM users WHERE role='client' AND status='active' AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1
               GROUP BY created_at::date
             ) c ON c.day = d.day
             LEFT JOIN (
@@ -593,7 +596,7 @@ export class DashboardService {
             ) a ON a.day = d.day
             LEFT JOIN (
               SELECT created_at::date AS day, COUNT(*) AS cnt
-              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1
+              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1
               GROUP BY created_at::date
             ) e ON e.day = d.day
             LEFT JOIN (
@@ -603,7 +606,7 @@ export class DashboardService {
             ) r ON r.day = d.day
             LEFT JOIN (
               SELECT end_date::date AS day, COUNT(*) AS cnt
-              FROM memberships WHERE status='expired' AND end_date >= $1
+              FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL) AND end_date >= $1
               GROUP BY end_date::date
             ) ex ON ex.day = d.day
             ORDER BY d.day ASC`,
@@ -632,7 +635,7 @@ export class DashboardService {
           `SELECT
             COUNT(*) FILTER (WHERE end_date >= $1::date) as this_week,
             COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date < $1::date) as last_week
-          FROM memberships WHERE status='expired'`,
+          FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [startOfThisWeek, startOfLastWeek],
         );
 
@@ -646,7 +649,8 @@ export class DashboardService {
           `SELECT
             COUNT(*) FILTER (WHERE status='active' AND end_date >= CURRENT_DATE AND end_date <= $1::date) as this_week,
             COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date <= $3::date) as last_week
-          FROM memberships`,
+          FROM memberships
+          WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
           [endOfWeekDate, lastWeekEnd, lastWeekEndPlus7],
         );
 
@@ -737,7 +741,7 @@ export class DashboardService {
     const clients = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
+        let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
         query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;

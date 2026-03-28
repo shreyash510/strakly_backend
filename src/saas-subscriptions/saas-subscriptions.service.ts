@@ -1372,6 +1372,18 @@ export class SaasSubscriptionsService {
       throw new BadRequestException('Invalid payment signature');
     }
 
+    // Idempotency: check if this payment was already processed
+    const existingPayment = await this.prisma.saasPaymentHistory.findFirst({
+      where: { gatewayRef: dto.razorpay_payment_id },
+    });
+    if (existingPayment) {
+      const subscription = await this.prisma.saasGymSubscription.findUnique({
+        where: { gymId },
+        include: { gym: { select: { id: true, name: true, logo: true } }, plan: true },
+      });
+      return { subscription, payment: existingPayment };
+    }
+
     // Fetch plan
     const plan = await this.prisma.saasPlan.findUnique({
       where: { id: dto.planId },
