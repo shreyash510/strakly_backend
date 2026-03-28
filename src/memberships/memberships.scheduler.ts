@@ -21,7 +21,7 @@ export class MembershipsScheduler {
   /**
    * Run every day at 00:05 AM — expire memberships and update client statuses
    */
-  @Cron('5 0 * * *')
+  // @Cron('5 0 * * *') // Disabled — expiry now handled elsewhere
   async handleExpiredMemberships(): Promise<void> {
     this.logger.log('Running membership expiry check...');
 
