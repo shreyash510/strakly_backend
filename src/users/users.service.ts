@@ -35,28 +35,40 @@ import { ROLES, USER_STATUS } from '../common/constants';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
+const CRUD_DEFAULT = { create: true, read: true, update: true, delete: false };
 const DEFAULT_MANAGER_PERMISSIONS = {
-  clients: { create: true, read: true, update: true, delete: true },
-  requests: { create: true, read: true, update: true, delete: true },
-  trainers: { create: true, read: true, update: true, delete: true },
-  support: { create: true, read: true, update: true, delete: true },
-  classes: { create: true, read: true, update: true, delete: true },
-  salary: { create: true, read: true, update: true, delete: true },
-  announcements: { create: true, read: true, update: true, delete: true },
-  amenities: { create: true, read: true, update: true, delete: true },
-  attendance: { create: true, read: true, update: true, delete: true },
-  referrals: { create: true, read: true, update: true, delete: true },
-  appointments: { create: true, read: true, update: true, delete: true },
-  equipment: { create: true, read: true, update: true, delete: true },
-  guestVisits: { create: true, read: true, update: true, delete: true },
-  leads: { create: true, read: true, update: true, delete: true },
-  facilities: { create: true, read: true, update: true, delete: true },
-  offers: { create: true, read: true, update: true, delete: true },
-  subscriptions: { create: true, read: true, update: true, delete: true },
-  products: { create: true, read: true, update: true, delete: true },
-  productSales: { create: true, read: true, update: true, delete: true },
-  programs: { create: true, read: true, update: true, delete: true },
-  plans: { create: true, read: true, update: true, delete: true },
+  // Daily Operations
+  clients: CRUD_DEFAULT,
+  attendance: CRUD_DEFAULT,
+  classes: CRUD_DEFAULT,
+  appointments: CRUD_DEFAULT,
+  guestVisits: CRUD_DEFAULT,
+  requests: CRUD_DEFAULT,
+  // Programs & Content
+  programs: CRUD_DEFAULT,
+  announcements: CRUD_DEFAULT,
+  // Staff Management
+  trainers: CRUD_DEFAULT,
+  salary: CRUD_DEFAULT,
+  // Resources
+  facilities: CRUD_DEFAULT,
+  amenities: CRUD_DEFAULT,
+  equipment: CRUD_DEFAULT,
+  // Growth & Marketing
+  leads: CRUD_DEFAULT,
+  referrals: CRUD_DEFAULT,
+  // Finance
+  subscriptions: CRUD_DEFAULT,
+  plans: CRUD_DEFAULT,
+  offers: CRUD_DEFAULT,
+  products: CRUD_DEFAULT,
+  productSales: { create: true, read: true, update: true, delete: false },
+  financialReports: { read: true },
+  expenses: CRUD_DEFAULT,
+  // Admin
+  settings: { read: true },
+  reports: { read: true },
+  support: CRUD_DEFAULT,
 };
 
 export interface UserFilters extends PaginationParams {
@@ -802,6 +814,11 @@ export class UsersService {
           );
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
         }
 
         const whereClause = conditions.join(' AND ');

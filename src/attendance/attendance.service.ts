@@ -743,6 +743,8 @@ export class AttendanceService {
       })();
 
     const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+    const branchFilterA = branchId ? ` AND a.branch_id = ${branchId}` : '';
+    const branchFilterAh = branchId ? ` AND ah.branch_id = ${branchId}` : '';
     const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
     const reportData = await this.tenantService.executeInTenant(
@@ -886,13 +888,13 @@ export class AttendanceService {
           SELECT a.user_id, u.name, COUNT(*) as visits
           FROM attendance a
           JOIN users u ON u.id = a.user_id
-          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${branchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${branchFilterA} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
           GROUP BY a.user_id, u.name
           UNION ALL
           SELECT ah.user_id, u.name, COUNT(*) as visits
           FROM attendance_history ah
           JOIN users u ON u.id = ah.user_id
-          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${branchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
+          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${branchFilterAh} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
           GROUP BY ah.user_id, u.name
         ) combined
         GROUP BY user_id, name

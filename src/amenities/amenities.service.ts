@@ -34,13 +34,20 @@ export class AmenitiesService {
   async findAll(
     gymId: number,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
+      let paramIndex = 1;
 
       if (!includeInactive) {
         conditions.push('is_active = true');
+      }
+
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+        values.push(branchId);
       }
 
       const whereClause =

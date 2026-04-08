@@ -250,6 +250,12 @@ export class EquipmentFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class MaintenanceFiltersDto {
