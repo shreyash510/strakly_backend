@@ -255,10 +255,10 @@ export class GuestVisitsService {
     });
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchCondition = '';
-      const branchValues: SqlValue[] = [];
+      const branchCondition = branchId ? ` AND branch_id = $1` : '';
+      const branchValues: SqlValue[] = branchId ? [branchId] : [];
 
       const totalResult = await client.query(
         `SELECT COUNT(*) FROM guest_visits WHERE 1=1${branchCondition}`,

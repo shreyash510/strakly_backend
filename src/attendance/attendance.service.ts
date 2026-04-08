@@ -876,8 +876,6 @@ export class AttendanceService {
         });
 
         // 5. Top members - combine both tables
-        const topMembersBranchFilter = '';
-        const topMembersHistoryBranchFilter = '';
         const topMembersResult = await client.query(
           `
         SELECT
@@ -888,13 +886,13 @@ export class AttendanceService {
           SELECT a.user_id, u.name, COUNT(*) as visits
           FROM attendance a
           JOIN users u ON u.id = a.user_id
-          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${topMembersBranchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${branchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
           GROUP BY a.user_id, u.name
           UNION ALL
           SELECT ah.user_id, u.name, COUNT(*) as visits
           FROM attendance_history ah
           JOIN users u ON u.id = ah.user_id
-          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${topMembersHistoryBranchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
+          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${branchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
           GROUP BY ah.user_id, u.name
         ) combined
         GROUP BY user_id, name
