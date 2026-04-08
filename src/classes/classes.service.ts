@@ -136,6 +136,11 @@ export class ClassesService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`ct.branch_id = $${paramIndex++}`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       const countResult = await client.query(
@@ -438,6 +443,11 @@ export class ClassesService {
       if (filters.status) {
         conditions.push(`s.status = $${paramIndex++}`);
         values.push(filters.status);
+      }
+
+      if (filters.branchId) {
+        conditions.push(`s.branch_id = $${paramIndex++}`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

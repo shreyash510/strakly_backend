@@ -94,6 +94,11 @@ export class AnnouncementsService {
           conditions.push(`(end_date >= NOW() OR end_date IS NULL)`);
         }
 
+        if (filters.branchId) {
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

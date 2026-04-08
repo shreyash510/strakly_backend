@@ -374,6 +374,7 @@ export class AttendanceService {
 
   async getTodayAttendance(
     gymId: number,
+    branchId?: number,
   ): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
@@ -381,11 +382,12 @@ export class AttendanceService {
     const records = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const branchFilter = branchId ? ` AND a.branch_id = ${branchId}` : '';
         let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users mb ON mb.id = a.marked_by
-         WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
+         WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [today];
 
         query += ` ORDER BY a.check_in_time DESC`;
@@ -401,14 +403,15 @@ export class AttendanceService {
   async getAttendanceByDate(
     date: string,
     gymId: number,
+    branchId?: number,
   ): Promise<AttendanceRecord[]> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const { activeRecords, historyRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Build filters with table aliases
-        const attendanceBranchFilter = '';
-        const historyBranchFilter = '';
+        const attendanceBranchFilter = branchId ? ` AND a.branch_id = ${branchId}` : '';
+        const historyBranchFilter = branchId ? ` AND ah.branch_id = ${branchId}` : '';
         const attendanceSoftDeleteFilter = ` AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const historySoftDeleteFilter = ` AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)`;
 
@@ -544,6 +547,7 @@ export class AttendanceService {
 
   async getAttendanceStats(
     gymId: number,
+    branchId?: number,
   ): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
@@ -552,8 +556,7 @@ export class AttendanceService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Branch filter removed - gym-wide results
-        const branchFilter = '';
+        const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
 
         const [
           todayResult,
@@ -603,11 +606,13 @@ export class AttendanceService {
 
   async getCurrentlyPresentCount(
     gymId: number,
+    branchId?: number,
   ): Promise<number> {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+      const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+      const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`;
       const values: SqlValue[] = [today];
 
       const result = await client.query(query, values);
@@ -621,6 +626,7 @@ export class AttendanceService {
     rawLimit: number = 50,
     startDate?: string,
     endDate?: string,
+    branchId?: number,
   ): Promise<{
     records: AttendanceRecord[];
     total: number;
@@ -634,6 +640,7 @@ export class AttendanceService {
       gymId,
       async (client) => {
         let whereClause = '(ah.is_deleted = FALSE OR ah.is_deleted IS NULL)';
+        if (branchId) whereClause += ` AND ah.branch_id = ${branchId}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -723,6 +730,7 @@ export class AttendanceService {
     gymId: number,
     startDate?: string,
     endDate?: string,
+    branchId?: number,
   ): Promise<AttendanceReportData> {
     // Default to last 30 days if no dates provided
     const end = endDate || this.getTodayDate();
@@ -734,7 +742,7 @@ export class AttendanceService {
         return d.toLocaleDateString('en-CA');
       })();
 
-    const branchFilter = '';
+    const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
     const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
     const reportData = await this.tenantService.executeInTenant(

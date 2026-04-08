@@ -89,6 +89,7 @@ export class DietsService {
       search?: string;
       page?: number;
       limit?: number;
+      branchId?: number;
     },
   ) {
     await this.ensureTablesExist(gymId);
@@ -120,6 +121,11 @@ export class DietsService {
           whereClause += ` AND (d.title ILIKE $${paramIndex} OR d.description ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        if (filters?.branchId) {
+          whereClause += ` AND d.branch_id = $${paramIndex++}`;
+          values.push(filters.branchId);
         }
 
         const [dietsResult, countResult] = await Promise.all([

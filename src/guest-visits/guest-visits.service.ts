@@ -68,6 +68,11 @@ export class GuestVisitsService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`gv.branch_id = $${paramIndex++}`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Sorting
