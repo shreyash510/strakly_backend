@@ -2322,6 +2322,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."leads" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         name VARCHAR(100) NOT NULL,
         email VARCHAR(255),
         phone VARCHAR(30),
@@ -2360,6 +2361,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."referrals" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         referrer_id INTEGER NOT NULL,
         referred_id INTEGER,
         referral_code VARCHAR(20) NOT NULL,
@@ -2764,6 +2766,10 @@ export class TenantService implements OnModuleDestroy {
       ALTER TABLE "${schemaName}"."product_sales"
       ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
+
+    // Add branch_id to leads and referrals if not exists (migration)
+    await client.query(`ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."referrals" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
