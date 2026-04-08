@@ -692,8 +692,8 @@ export class UsersService {
           `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, manager_permissions, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+          join_date, manager_permissions, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -715,6 +715,7 @@ export class UsersService {
             role === ROLES.MANAGER
               ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
               : null,
+            dto.branchId || null,
           ],
         );
 
@@ -1112,8 +1113,8 @@ export class UsersService {
           emergency_contact_name, emergency_contact_phone,
           referred_by, referral_code, lead_source, occupation, blood_group,
           medical_conditions, fitness_goal, preferred_time_slot, nationality, id_type, id_number,
-          join_date, attendance_code, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW(), NOW())
+          join_date, attendance_code, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -1146,6 +1147,7 @@ export class UsersService {
             dto.idNumber || null,
             new Date(),
             attendanceCode,
+            dto.branchId || null,
           ],
         );
         return result.rows[0];

@@ -69,14 +69,18 @@ export class DashboardController {
     description: 'Admin dashboard data retrieved successfully',
     type: AdminDashboardDto,
   })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by branch ID' })
   async getAdminDashboard(
     @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
   ): Promise<AdminDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
     return this.dashboardService.getAdminDashboard(
       Number(userId),
       Number(gymId),
+      parsedBranchId,
     );
   }
 
@@ -119,18 +123,22 @@ export class DashboardController {
     type: Number,
     description: 'Items per page (default: 5)',
   })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by branch ID' })
   async getNewClients(
     @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('branchId') branchId?: string,
   ): Promise<PaginatedClientsDto> {
     const gymId = req.user?.gymId;
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
     return this.dashboardService.getNewClients(
       Number(gymId),
       pageNum,
       limitNum,
+      parsedBranchId,
     );
   }
 
@@ -156,18 +164,22 @@ export class DashboardController {
     type: Number,
     description: 'Items per page (default: 5)',
   })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by branch ID' })
   async getNewInquiries(
     @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('branchId') branchId?: string,
   ): Promise<PaginatedClientsDto> {
     const gymId = req.user?.gymId;
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
     return this.dashboardService.getNewInquiries(
       Number(gymId),
       pageNum,
       limitNum,
+      parsedBranchId,
     );
   }
 }

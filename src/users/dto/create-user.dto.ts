@@ -238,6 +238,10 @@ export class CreateStaffDto {
   @IsString()
   zipCode?: string;
 
+  @ApiPropertyOptional({ description: 'Branch ID to assign the staff to' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 // DTO for creating client - stored in tenant.users
@@ -377,6 +381,11 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID to assign the client to' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class UpdateUserDto {

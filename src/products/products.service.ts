@@ -254,7 +254,7 @@ export class ProductsService {
     });
   }
 
-  async findLowStockProducts(gymId: number) {
+  async findLowStockProducts(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -262,6 +262,11 @@ export class ProductsService {
         'p.stock_quantity <= p.low_stock_threshold',
       ];
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        values.push(branchId);
+        conditions.push(`p.branch_id = $${values.length}`);
+      }
 
       const result = await client.query(
         `SELECT p.*, pc.name as category_name

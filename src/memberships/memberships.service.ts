@@ -507,8 +507,8 @@ export class MembershipsService {
         // Create membership
         const membershipResult = await client.query(
           `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
-          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, NOW(), NOW())
+          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, (SELECT branch_id FROM users WHERE id = $1), NOW(), NOW())
          RETURNING *`,
           [
             dto.userId,

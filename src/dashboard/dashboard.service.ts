@@ -234,29 +234,31 @@ export class DashboardService {
   async getAdminDashboard(
     userId: number,
     gymId: number,
+    branchId?: number | null,
   ): Promise<AdminDashboardDto> {
-    const cached = this.dashboardCacheService.get(gymId);
+    const cached = this.dashboardCacheService.get(gymId, branchId);
     if (cached) {
       return cached;
     }
 
     // Cache miss — compute and store
-    const result = await this.computeAdminDashboard(gymId);
-    this.dashboardCacheService.set(gymId, result);
+    const result = await this.computeAdminDashboard(gymId, branchId);
+    this.dashboardCacheService.set(gymId, result, branchId);
     return result;
   }
 
   /** Raw computation without cache — used by consumer and scheduler */
   async computeAdminDashboard(
     gymId: number,
+    branchId?: number | null,
   ): Promise<AdminDashboardDto> {
     const [stats, newClients, newInquiries, recentTickets, recentAttendance, expiringMemberships] = await Promise.all([
-      this.getAdminStats(gymId),
-      this.getNewClients(gymId, 1, 5),
-      this.getNewInquiries(gymId, 1, 5),
+      this.getAdminStats(gymId, branchId),
+      this.getNewClients(gymId, 1, 5, branchId),
+      this.getNewInquiries(gymId, 1, 5, branchId),
       this.getRecentTicketsForGym(gymId),
       this.getRecentAttendance(gymId, 5),
-      this.getExpiringMemberships(gymId, 5),
+      this.getExpiringMemberships(gymId, 5, branchId),
     ]);
 
     return {
@@ -274,15 +276,21 @@ export class DashboardService {
     gymId: number,
     page: number = 1,
     limit: number = 5,
+    branchId?: number | null,
   ) {
     const offset = (page - 1) * limit;
 
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
+        let baseWhere = `role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        if (branchId) {
+          values.push(branchId);
+          baseWhere += ` AND branch_id = $${values.length}`;
+        }
+        const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
@@ -326,15 +334,21 @@ export class DashboardService {
     gymId: number,
     page: number = 1,
     limit: number = 5,
+    branchId?: number | null,
   ) {
     const offset = (page - 1) * limit;
 
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
+        let baseWhere = `role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        if (branchId) {
+          values.push(branchId);
+          baseWhere += ` AND branch_id = $${values.length}`;
+        }
+        const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
@@ -375,6 +389,7 @@ export class DashboardService {
 
   private async getAdminStats(
     gymId: number,
+    branchId?: number | null,
   ): Promise<AdminDashboardStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -382,6 +397,8 @@ export class DashboardService {
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
 
     const stats = await this.tenantService.executeInTenant(
       gymId,
@@ -405,7 +422,7 @@ export class DashboardService {
               COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm')) as pending_onboarding,
               COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1) as new_enquiries_this_month
             FROM users
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
             [startOfMonth],
           ),
           // 2) All membership counts + revenue in ONE query
@@ -419,15 +436,15 @@ export class DashboardService {
               COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $3 AND paid_at <= $4), 0) as last_month_revenue,
               COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $5), 0) as this_month_revenue
             FROM memberships
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
             [now, endOfWeek, startOfLastMonth, endOfLastMonth, startOfMonth],
           ),
           // 3) Attendance: present today
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`,
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${branchFilter}`,
             [today],
           ),
-          // 4) All product sales revenue + product count in ONE query
+          // 4) Product sales revenue + product count
           client.query(
             `SELECT
               COALESCE(SUM(s.total_amount), 0) as total_revenue,
@@ -435,7 +452,7 @@ export class DashboardService {
               COALESCE(SUM(s.total_amount) FILTER (WHERE s.sold_at >= $3), 0) as this_month_revenue,
               (SELECT COUNT(*) FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL) as total_products
             FROM product_sales s
-            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)${branchFilter}`,
             [startOfLastMonth, endOfLastMonth, startOfMonth],
           ),
         ]);
@@ -485,7 +502,7 @@ export class DashboardService {
               EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
               COALESCE(SUM(final_amount), 0) as revenue
             FROM memberships
-            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1
+            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${branchFilter}
             GROUP BY month, month_num, year_num
             ORDER BY year_num ASC, month_num ASC`,
             [fiveMonthsAgo],
@@ -497,7 +514,7 @@ export class DashboardService {
               EXTRACT(YEAR FROM DATE_TRUNC('month', sold_at)) as year_num,
               COALESCE(SUM(total_amount), 0) as revenue
             FROM product_sales
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${branchFilter}
             GROUP BY month, month_num, year_num
             ORDER BY year_num ASC, month_num ASC`,
             [fiveMonthsAgo],
@@ -561,14 +578,12 @@ export class DashboardService {
           // Week-over-week counts
           client.query(
             `SELECT
-              -- New clients
               COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $1) as this_week_clients,
               COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $2 AND created_at < $1) as last_week_clients,
-              -- Enquiries
               COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1) as this_week_enquiries,
               COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $2 AND created_at < $1) as last_week_enquiries
             FROM users
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
             [startOfThisWeek, startOfLastWeek],
           ),
           // Daily sparkline data for last 7 days
@@ -581,32 +596,37 @@ export class DashboardService {
               COALESCE(c.cnt, 0) as new_clients,
               COALESCE(a.cnt, 0) as attendance,
               COALESCE(e.cnt, 0) as enquiries,
-              COALESCE(r.rev, 0) as revenue,
+              COALESCE(r.rev, 0) + COALESCE(ps.prod_rev, 0) as revenue,
               COALESCE(ex.cnt, 0) as expired
             FROM days d
             LEFT JOIN (
               SELECT created_at::date AS day, COUNT(*) AS cnt
-              FROM users WHERE role='client' AND status='active' AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1
+              FROM users WHERE role='client' AND status='active' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND created_at >= $1
               GROUP BY created_at::date
             ) c ON c.day = d.day
             LEFT JOIN (
               SELECT attendance_date AS day, COUNT(*) AS cnt
-              FROM attendance WHERE status='present' AND attendance_date >= $1
+              FROM attendance WHERE status='present'${branchFilter} AND attendance_date >= $1
               GROUP BY attendance_date
             ) a ON a.day = d.day
             LEFT JOIN (
               SELECT created_at::date AS day, COUNT(*) AS cnt
-              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1
+              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND created_at >= $1
               GROUP BY created_at::date
             ) e ON e.day = d.day
             LEFT JOIN (
               SELECT paid_at::date AS day, COALESCE(SUM(final_amount),0) AS rev
-              FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL) AND paid_at >= $1
+              FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $1
               GROUP BY paid_at::date
             ) r ON r.day = d.day
             LEFT JOIN (
+              SELECT sold_at::date AS day, COALESCE(SUM(total_amount),0) AS prod_rev
+              FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $1
+              GROUP BY sold_at::date
+            ) ps ON ps.day = d.day
+            LEFT JOIN (
               SELECT end_date::date AS day, COUNT(*) AS cnt
-              FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL) AND end_date >= $1
+              FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND end_date >= $1
               GROUP BY end_date::date
             ) ex ON ex.day = d.day
             ORDER BY d.day ASC`,
@@ -619,15 +639,22 @@ export class DashboardService {
           `SELECT
             COUNT(*) FILTER (WHERE attendance_date >= $1::date) as this_week,
             COUNT(*) FILTER (WHERE attendance_date >= $2::date AND attendance_date < $1::date) as last_week
-          FROM attendance WHERE status='present'`,
+          FROM attendance WHERE status='present'${branchFilter}`,
           [startOfThisWeek, startOfLastWeek],
         );
 
         const weekRevenueResult = await client.query(
           `SELECT
-            COALESCE(SUM(final_amount) FILTER (WHERE paid_at >= $1), 0) as this_week,
-            COALESCE(SUM(final_amount) FILTER (WHERE paid_at >= $2 AND paid_at < $1), 0) as last_week
-          FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)`,
+            COALESCE(
+              (SELECT SUM(final_amount) FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $1), 0
+            ) + COALESCE(
+              (SELECT SUM(total_amount) FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $1), 0
+            ) as this_week,
+            COALESCE(
+              (SELECT SUM(final_amount) FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $2 AND paid_at < $1), 0
+            ) + COALESCE(
+              (SELECT SUM(total_amount) FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $2 AND sold_at < $1), 0
+            ) as last_week`,
           [startOfThisWeek, startOfLastWeek],
         );
 
@@ -635,11 +662,10 @@ export class DashboardService {
           `SELECT
             COUNT(*) FILTER (WHERE end_date >= $1::date) as this_week,
             COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date < $1::date) as last_week
-          FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
           [startOfThisWeek, startOfLastWeek],
         );
 
-        // Expiring soon comparison (memberships expiring in next 7 days vs same window last week)
         const endOfWeekDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         const lastWeekEnd = new Date(startOfThisWeek);
         const lastWeekEndPlus7 = new Date(
@@ -650,7 +676,7 @@ export class DashboardService {
             COUNT(*) FILTER (WHERE status='active' AND end_date >= CURRENT_DATE AND end_date <= $1::date) as this_week,
             COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date <= $3::date) as last_week
           FROM memberships
-          WHERE (is_deleted = FALSE OR is_deleted IS NULL)`,
+          WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
           [endOfWeekDate, lastWeekEnd, lastWeekEndPlus7],
         );
 
@@ -808,6 +834,7 @@ export class DashboardService {
   private async getExpiringMemberships(
     gymId: number,
     limit = 5,
+    branchId?: number | null,
   ): Promise<ExpiringMembershipDto[]> {
     const now = new Date();
     const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -821,6 +848,11 @@ export class DashboardService {
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE m.status = 'active' AND m.end_date >= $1::TIMESTAMP AND m.end_date <= $2::TIMESTAMP`;
+
+        if (branchId) {
+          values.push(branchId);
+          query += ` AND m.branch_id = $${values.length}`;
+        }
 
         query += ` ORDER BY m.end_date ASC LIMIT $${values.length + 1}`;
         values.push(limit);

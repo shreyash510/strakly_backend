@@ -112,6 +112,11 @@ export class ActivityLogsService {
           values.push(new Date(filters.endDate));
         }
 
+        if (filters.branchId) {
+          conditions.push(`branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -199,9 +204,11 @@ export class ActivityLogsService {
           actor_id, actor_type, actor_name,
           action, action_category, target_type, target_id, target_name,
           description, old_values, new_values, metadata,
-          ip_address, user_agent, request_id, created_at
+          ip_address, user_agent, request_id, branch_id, created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          (SELECT branch_id FROM users WHERE id = $1),
+          NOW()
         ) RETURNING *`,
           [
             dto.actorId,

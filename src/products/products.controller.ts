@@ -235,8 +235,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.findLowStockProducts(gymId);
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    return this.productsService.findLowStockProducts(gymId, parsedBranchId);
   }
 
   @Get('inventory/stats')
