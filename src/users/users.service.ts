@@ -72,6 +72,7 @@ export interface UserFilters extends PaginationParams {
   gender?: string;
   joinDateFrom?: string;
   joinDateTo?: string;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -1183,6 +1184,7 @@ export class UsersService {
   async getStatusCounts(
     role: string,
     gymId: number | undefined,
+    branchId?: number | null,
   ): Promise<Record<string, number>> {
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching status counts');
@@ -1197,6 +1199,11 @@ export class UsersService {
         ];
         const values: SqlValue[] = [role];
         let paramIndex = 2;
+
+        if (branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(branchId);
+        }
 
         const whereClause = conditions.join(' AND ');
         const result = await client.query(
@@ -1281,6 +1288,11 @@ export class UsersService {
         if (filters.joinDateTo) {
           conditions.push(`u.join_date <= $${paramIndex++}`);
           values.push(filters.joinDateTo + ' 23:59:59');
+        }
+
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
         }
 
         const whereClause = conditions.join(' AND ');
@@ -1558,6 +1570,10 @@ export class UsersService {
     if (updateDto.idNumber !== undefined) {
       updates.push(`id_number = $${paramIndex++}`);
       values.push(updateDto.idNumber);
+    }
+    if (updateDto.branchId !== undefined) {
+      updates.push(`branch_id = $${paramIndex++}`);
+      values.push(updateDto.branchId ?? null);
     }
     updates.push(`updated_at = NOW()`);
     values.push(id);

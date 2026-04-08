@@ -101,6 +101,11 @@ export class CreateUserDto {
   @IsInt()
   trainerId?: number;
 
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -533,6 +538,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class UpdateManagerPermissionsDto {

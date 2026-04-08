@@ -24,20 +24,24 @@ export class PlansService {
   async findAll(
     gymId: number,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Always filter out soft-deleted plans
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
       const values: SqlValue[] = [];
+      let paramIndex = 1;
 
       if (!includeInactive) {
         conditions.push('is_active = true');
       }
+      if (branchId) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
 
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
       const result = await client.query(
         `SELECT * FROM plans ${whereClause} ORDER BY display_order ASC`,
         values,
@@ -50,7 +54,7 @@ export class PlansService {
    * Get featured plans
    * @param gymId - Gym ID
    */
-  async findFeatured(gymId: number) {
+  async findFeatured(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
@@ -58,6 +62,12 @@ export class PlansService {
         'is_featured = true',
       ];
       const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (branchId) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
 
       const result = await client.query(
         `SELECT * FROM plans WHERE ${conditions.join(' AND ')} ORDER BY display_order ASC`,
@@ -164,8 +174,8 @@ export class PlansService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO plans (code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, max_freeze_days, includes_pt_sessions, access_hours, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW(), NOW())
+          `INSERT INTO plans (code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, max_freeze_days, includes_pt_sessions, access_hours, branch_id, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW())
          RETURNING *`,
           [
             dto.code,
@@ -181,6 +191,7 @@ export class PlansService {
             dto.maxFreezeDays || 0,
             dto.includesPtSessions || 0,
             dto.accessHours || 'all_day',
+            dto.branchId || null,
           ],
         );
         return result.rows[0];

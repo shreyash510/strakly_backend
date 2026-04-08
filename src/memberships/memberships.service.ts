@@ -42,6 +42,7 @@ export class MembershipsService {
       search?: string;
       page?: number;
       limit?: number;
+      branchId?: number | null;
     },
   ) {
     const { page, limit, skip } = sanitizePagination(filters?.page, filters?.limit, 15);
@@ -70,6 +71,10 @@ export class MembershipsService {
           whereClause += ` AND (u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+        if (filters?.branchId) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(filters.branchId);
         }
 
         const [membershipsResult, countResult] = await Promise.all([

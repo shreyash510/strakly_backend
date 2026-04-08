@@ -59,6 +59,11 @@ export class CreateOfferDto {
   @IsNumber({}, { each: true })
   @Type(() => Number)
   planIds?: number[]; // Plan IDs this offer applies to (if not applicableToAll)
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class UpdateOfferDto {
@@ -111,6 +116,11 @@ export class UpdateOfferDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class AssignOfferToPlansDto {

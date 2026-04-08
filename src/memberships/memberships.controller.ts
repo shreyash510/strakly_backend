@@ -81,6 +81,7 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
@@ -100,6 +101,7 @@ export class MembershipsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
+      branchId: branchId ? parseInt(branchId, 10) : null,
     });
   }
 

@@ -66,6 +66,11 @@ export class CreatePlanDto {
   @IsOptional()
   @IsString()
   accessHours?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class UpdatePlanDto {
@@ -130,4 +135,9 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsString()
   accessHours?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
