@@ -94,6 +94,11 @@ export class AnnouncementsService {
           conditions.push(`(end_date >= NOW() OR end_date IS NULL)`);
         }
 
+        if (filters.branchId) {
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -129,6 +134,7 @@ export class AnnouncementsService {
   async getActive(
     gymId: number,
     platform: 'dashboard' | 'mobile' = 'dashboard',
+    branchId?: number,
   ): Promise<AnnouncementRecord[]> {
     const announcements = await this.tenantService.executeInTenant(
       gymId,
@@ -138,6 +144,9 @@ export class AnnouncementsService {
             ? 'display_on_dashboard = true'
             : 'display_on_mobile = true';
 
+        const values: SqlValue[] = [];
+        let paramIndex = 1;
+
         let query = `
         SELECT * FROM announcements
         WHERE is_active = true
@@ -146,7 +155,11 @@ export class AnnouncementsService {
           AND (end_date >= NOW() OR end_date IS NULL)
           AND ${platformFilter}
       `;
-        const values: SqlValue[] = [];
+
+        if (branchId) {
+          query += ` AND (branch_id = $${paramIndex++} OR branch_id IS NULL)`;
+          values.push(branchId);
+        }
 
         query += ` ORDER BY is_pinned DESC, priority DESC, created_at DESC LIMIT 20`;
 

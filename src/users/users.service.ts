@@ -35,28 +35,40 @@ import { ROLES, USER_STATUS } from '../common/constants';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
+const CRUD_DEFAULT = { create: true, read: true, update: true, delete: false };
 const DEFAULT_MANAGER_PERMISSIONS = {
-  clients: { create: true, read: true, update: true, delete: true },
-  requests: { create: true, read: true, update: true, delete: true },
-  trainers: { create: true, read: true, update: true, delete: true },
-  support: { create: true, read: true, update: true, delete: true },
-  classes: { create: true, read: true, update: true, delete: true },
-  salary: { create: true, read: true, update: true, delete: true },
-  announcements: { create: true, read: true, update: true, delete: true },
-  amenities: { create: true, read: true, update: true, delete: true },
-  attendance: { create: true, read: true, update: true, delete: true },
-  referrals: { create: true, read: true, update: true, delete: true },
-  appointments: { create: true, read: true, update: true, delete: true },
-  equipment: { create: true, read: true, update: true, delete: true },
-  guestVisits: { create: true, read: true, update: true, delete: true },
-  leads: { create: true, read: true, update: true, delete: true },
-  facilities: { create: true, read: true, update: true, delete: true },
-  offers: { create: true, read: true, update: true, delete: true },
-  subscriptions: { create: true, read: true, update: true, delete: true },
-  products: { create: true, read: true, update: true, delete: true },
-  productSales: { create: true, read: true, update: true, delete: true },
-  programs: { create: true, read: true, update: true, delete: true },
-  plans: { create: true, read: true, update: true, delete: true },
+  // Daily Operations
+  clients: CRUD_DEFAULT,
+  attendance: CRUD_DEFAULT,
+  classes: CRUD_DEFAULT,
+  appointments: CRUD_DEFAULT,
+  guestVisits: CRUD_DEFAULT,
+  requests: CRUD_DEFAULT,
+  // Programs & Content
+  programs: CRUD_DEFAULT,
+  announcements: CRUD_DEFAULT,
+  // Staff Management
+  trainers: CRUD_DEFAULT,
+  salary: CRUD_DEFAULT,
+  // Resources
+  facilities: CRUD_DEFAULT,
+  amenities: CRUD_DEFAULT,
+  equipment: CRUD_DEFAULT,
+  // Growth & Marketing
+  leads: CRUD_DEFAULT,
+  referrals: CRUD_DEFAULT,
+  // Finance
+  subscriptions: CRUD_DEFAULT,
+  plans: CRUD_DEFAULT,
+  offers: CRUD_DEFAULT,
+  products: CRUD_DEFAULT,
+  productSales: { create: true, read: true, update: true, delete: false },
+  financialReports: { read: true },
+  expenses: CRUD_DEFAULT,
+  // Admin
+  settings: { read: true },
+  reports: { read: true },
+  support: CRUD_DEFAULT,
 };
 
 export interface UserFilters extends PaginationParams {
@@ -72,6 +84,7 @@ export interface UserFilters extends PaginationParams {
   gender?: string;
   joinDateFrom?: string;
   joinDateTo?: string;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -692,8 +705,8 @@ export class UsersService {
           `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, manager_permissions, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+          join_date, manager_permissions, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -715,6 +728,7 @@ export class UsersService {
             role === ROLES.MANAGER
               ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
               : null,
+            dto.branchId || null,
           ],
         );
 
@@ -800,6 +814,11 @@ export class UsersService {
           );
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
         }
 
         const whereClause = conditions.join(' AND ');
@@ -1112,8 +1131,8 @@ export class UsersService {
           emergency_contact_name, emergency_contact_phone,
           referred_by, referral_code, lead_source, occupation, blood_group,
           medical_conditions, fitness_goal, preferred_time_slot, nationality, id_type, id_number,
-          join_date, attendance_code, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW(), NOW())
+          join_date, attendance_code, branch_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -1146,6 +1165,7 @@ export class UsersService {
             dto.idNumber || null,
             new Date(),
             attendanceCode,
+            dto.branchId || null,
           ],
         );
         return result.rows[0];
@@ -1181,6 +1201,7 @@ export class UsersService {
   async getStatusCounts(
     role: string,
     gymId: number | undefined,
+    branchId?: number | null,
   ): Promise<Record<string, number>> {
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching status counts');
@@ -1195,6 +1216,11 @@ export class UsersService {
         ];
         const values: SqlValue[] = [role];
         let paramIndex = 2;
+
+        if (branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(branchId);
+        }
 
         const whereClause = conditions.join(' AND ');
         const result = await client.query(
@@ -1279,6 +1305,11 @@ export class UsersService {
         if (filters.joinDateTo) {
           conditions.push(`u.join_date <= $${paramIndex++}`);
           values.push(filters.joinDateTo + ' 23:59:59');
+        }
+
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
         }
 
         const whereClause = conditions.join(' AND ');
@@ -1556,6 +1587,10 @@ export class UsersService {
     if (updateDto.idNumber !== undefined) {
       updates.push(`id_number = $${paramIndex++}`);
       values.push(updateDto.idNumber);
+    }
+    if (updateDto.branchId !== undefined) {
+      updates.push(`branch_id = $${paramIndex++}`);
+      values.push(updateDto.branchId ?? null);
     }
     updates.push(`updated_at = NOW()`);
     values.push(id);

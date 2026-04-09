@@ -33,8 +33,9 @@ export class GuestVisitsController {
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.guestVisitsService.getStats(gymId);
+    return this.guestVisitsService.getStats(gymId, branchId ? parseInt(branchId) : undefined);
   }
 
   @Get()

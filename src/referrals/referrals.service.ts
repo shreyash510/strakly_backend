@@ -55,6 +55,11 @@ export class ReferralsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
+      if (filters.branchId) {
+        conditions.push(`(r.branch_id = $${paramIndex++} OR r.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       if (filters.status) {
         conditions.push(`r.status = $${paramIndex++}`);
         values.push(filters.status);
@@ -242,11 +247,16 @@ export class ReferralsService {
     return this.findOne(id, gymId);
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
+
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+        values.push(branchId);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

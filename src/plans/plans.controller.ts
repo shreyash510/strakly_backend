@@ -43,17 +43,22 @@ export class PlansController {
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.plansService.findAll(
       req.user.gymId!,
       includeInactive === 'true',
+      branchId ? parseInt(branchId, 10) : null,
     );
   }
 
   @Get('featured')
   @ApiOperation({ summary: 'Get featured plans' })
-  findFeatured(@Request() req: AuthenticatedRequest) {
-    return this.plansService.findFeatured(req.user.gymId!);
+  findFeatured(
+    @Request() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.plansService.findFeatured(req.user.gymId!, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Post()

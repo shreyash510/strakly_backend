@@ -235,8 +235,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.findLowStockProducts(gymId);
+    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    return this.productsService.findLowStockProducts(gymId, parsedBranchId);
   }
 
   @Get('inventory/stats')
@@ -244,8 +246,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get inventory valuation and stock stats' })
   getInventoryStats(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getInventoryStats(gymId);
+    return this.productsService.getInventoryStats(gymId, branchId ? parseInt(branchId) : undefined);
   }
 
   /* ─── Batch Stock Adjustment ─── */
@@ -269,8 +272,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get reorder suggestions based on sales velocity' })
   getReorderSuggestions(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getReorderSuggestions(gymId);
+    return this.productsService.getReorderSuggestions(gymId, branchId ? parseInt(branchId) : undefined);
   }
 
   /* ─── Dead Stock ─── */
@@ -281,8 +285,9 @@ export class ProductsController {
   getDeadStock(
     @GymId() gymId: number,
     @Query('days') days?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30);
+    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30, branchId ? parseInt(branchId) : undefined);
   }
 
   /* ─── Stock Take (Physical Count) ─── */

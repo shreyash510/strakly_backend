@@ -49,6 +49,7 @@ import { ProductsModule } from './products/products.module';
 import { MigrationModule } from './migration/migration.module';
 import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { BranchModule } from './branch/branch.module';
 import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ActivityLogsService } from './activity-logs/activity-logs.service';
@@ -113,6 +114,7 @@ import { HealthModule } from './health/health.module';
     MigrationModule,
     PlatformSettingsModule,
     ExpensesModule,
+    BranchModule,
   ],
   controllers: [AppController],
   providers: [

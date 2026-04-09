@@ -82,6 +82,7 @@ export class DietsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId =
       req.user.role === 'superadmin'
@@ -101,6 +102,7 @@ export class DietsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
+      branchId: branchId ? parseInt(branchId, 10) : undefined,
     });
   }
 

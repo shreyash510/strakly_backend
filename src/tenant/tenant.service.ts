@@ -1126,6 +1126,8 @@ export class TenantService implements OnModuleDestroy {
           is_active BOOLEAN DEFAULT TRUE,
           is_deleted BOOLEAN DEFAULT FALSE,
           deleted_at TIMESTAMP,
+          deleted_by INTEGER,
+          branch_id INTEGER,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -1244,6 +1246,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."plans" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         code VARCHAR(100) NOT NULL,
         name VARCHAR(255) NOT NULL,
         description TEXT,
@@ -1333,6 +1336,7 @@ export class TenantService implements OnModuleDestroy {
         freeze_end_date TIMESTAMP,
         freeze_reason TEXT,
         total_freeze_days INTEGER DEFAULT 0,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -1384,6 +1388,7 @@ export class TenantService implements OnModuleDestroy {
         marked_by INTEGER NOT NULL, -- public.users.id (staff who marked)
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'present',
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -1404,6 +1409,7 @@ export class TenantService implements OnModuleDestroy {
         checked_out_by INTEGER,
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'checked_out',
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -2322,6 +2328,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."leads" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         name VARCHAR(100) NOT NULL,
         email VARCHAR(255),
         phone VARCHAR(30),
@@ -2360,6 +2367,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."referrals" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         referrer_id INTEGER NOT NULL,
         referred_id INTEGER,
         referral_code VARCHAR(20) NOT NULL,
@@ -2476,6 +2484,7 @@ export class TenantService implements OnModuleDestroy {
         is_active BOOLEAN DEFAULT TRUE,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -2512,6 +2521,7 @@ export class TenantService implements OnModuleDestroy {
         actual_capacity INTEGER,
         notes TEXT,
         cancelled_reason TEXT,
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -2577,6 +2587,7 @@ export class TenantService implements OnModuleDestroy {
         cancelled_reason TEXT,
         cancelled_at TIMESTAMP,
         created_by INTEGER,
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -2730,6 +2741,7 @@ export class TenantService implements OnModuleDestroy {
         stock_quantity INTEGER NOT NULL DEFAULT 0,
         low_stock_threshold INTEGER DEFAULT 5,
         is_active BOOLEAN DEFAULT TRUE,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -2751,6 +2763,7 @@ export class TenantService implements OnModuleDestroy {
         sold_by INTEGER NOT NULL,
         sold_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         notes TEXT,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -2764,6 +2777,21 @@ export class TenantService implements OnModuleDestroy {
       ALTER TABLE "${schemaName}"."product_sales"
       ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
+
+    // Add branch_id to leads, referrals, plans, memberships, products, product_sales, expenses if not exists (migration)
+    await client.query(`ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."referrals" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."plans" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."memberships" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."products" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."product_sales" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."expenses" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."attendance" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."attendance_history" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."announcements" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."class_types" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."class_sessions" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."appointments" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (

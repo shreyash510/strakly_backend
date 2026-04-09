@@ -27,6 +27,7 @@ export interface AuthenticatedUser {
   tenantSchemaName: string | null;
   isSuperAdmin: boolean;
   isImpersonating: boolean;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -126,6 +127,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
       }
 
+      const branchId = adminUser.gymAssignments?.[0]?.branchId ?? null;
+
       return {
         userId: userId,
         email: payload.email,
@@ -135,6 +138,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantSchemaName: tenantSchemaName,
         isSuperAdmin: false,
         isImpersonating: false,
+        branchId,
       };
     }
 

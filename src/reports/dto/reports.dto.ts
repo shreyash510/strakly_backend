@@ -28,6 +28,11 @@ export class ReportFilterDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  branchId?: number;
 }
 
 export class IncomeExpenseReportDto {

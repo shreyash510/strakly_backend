@@ -122,6 +122,7 @@ export class AttendanceController {
       body.staffId,
       gymId,
       body.checkInMethod || 'code',
+      body.branchId,
     );
     this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'checked_in' });
     return result;
@@ -189,9 +190,10 @@ export class AttendanceController {
   async getTodayAttendance(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getTodayAttendance(gymId);
+    return this.attendanceService.getTodayAttendance(gymId, branchId ? parseInt(branchId, 10) : undefined);
   }
 
   @Get('date/:date')
@@ -208,9 +210,10 @@ export class AttendanceController {
     @Request() req: AuthenticatedRequest,
     @Param('date') date: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getAttendanceByDate(date, gymId);
+    return this.attendanceService.getAttendanceByDate(date, gymId, branchId ? parseInt(branchId, 10) : undefined);
   }
 
   @Get('user')
@@ -268,9 +271,10 @@ export class AttendanceController {
   async getAttendanceStats(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getAttendanceStats(gymId);
+    return this.attendanceService.getAttendanceStats(gymId, branchId ? parseInt(branchId, 10) : undefined);
   }
 
   @Get('present-count')
@@ -286,10 +290,12 @@ export class AttendanceController {
   async getCurrentlyPresentCount(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
     const count = await this.attendanceService.getCurrentlyPresentCount(
       gymId,
+      branchId ? parseInt(branchId, 10) : undefined,
     );
     return { count };
   }
@@ -323,6 +329,7 @@ export class AttendanceController {
       gymId,
       query.startDate,
       query.endDate,
+      query.branchId,
     );
   }
 
@@ -347,6 +354,7 @@ export class AttendanceController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.attendanceService.getAllAttendance(
@@ -355,6 +363,7 @@ export class AttendanceController {
       limit || 50,
       startDate,
       endDate,
+      branchId ? parseInt(branchId, 10) : undefined,
     );
   }
 

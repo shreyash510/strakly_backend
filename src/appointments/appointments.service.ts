@@ -342,6 +342,11 @@ export class AppointmentsService {
         values.push(filters.status);
       }
 
+      if (filters.branchId) {
+        conditions.push(`a.branch_id = $${paramIndex++}`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const countResult = await client.query(
