@@ -1033,6 +1033,9 @@ export class TenantService implements OnModuleDestroy {
         CREATE TABLE IF NOT EXISTS "${schemaName}"."activity_logs" (
           id SERIAL PRIMARY KEY,
 
+          -- Branch
+          branch_id INTEGER,
+
           -- Actor (who performed the action)
           actor_id INTEGER NOT NULL,
           actor_type VARCHAR(20) NOT NULL,
@@ -1078,8 +1081,11 @@ export class TenantService implements OnModuleDestroy {
         `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_created" ON "${schemaName}"."activity_logs"(created_at DESC)`,
       );
       await client.query(
-        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_branch_created" ON "${schemaName}"."activity_logs"(created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_activity_logs_branch_created" ON "${schemaName}"."activity_logs"(branch_id, created_at DESC)`,
       );
+
+      // Add branch_id for existing tables created before this column was introduced
+      await client.query(`ALTER TABLE "${schemaName}"."activity_logs" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
 
       this.logger.log(`Ensured 'activity_logs' table exists in ${schemaName}`);
     } catch (error) {
@@ -2792,6 +2798,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`ALTER TABLE "${schemaName}"."class_types" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."class_sessions" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."appointments" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN IF NOT EXISTS allowed_branch_ids JSONB DEFAULT '[]'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
