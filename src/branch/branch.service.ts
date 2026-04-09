@@ -409,12 +409,27 @@ export class BranchService {
         const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
         if (schemaExists) {
           await this.tenantService.executeInTenant(gym.id, async (client) => {
-            await client.query(`UPDATE users SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            // Non-admin users get the default branch; admins keep NULL (all-branch access)
+            await client.query(`UPDATE users SET branch_id = $1 WHERE branch_id IS NULL AND role != 'admin'`, [branch.id]);
             await client.query(`UPDATE plans SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
             await client.query(`UPDATE offers SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
             await client.query(`UPDATE memberships SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE membership_history SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
             await client.query(`UPDATE attendance SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE attendance_history SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
             await client.query(`UPDATE staff_salaries SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE expenses SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE products SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE product_sales SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE leads SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE referrals SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE announcements SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE appointments SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE guest_visits SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE class_types SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE class_schedules SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE class_sessions SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
+            await client.query(`UPDATE activity_logs SET branch_id = $1 WHERE branch_id IS NULL`, [branch.id]);
           });
         }
 
