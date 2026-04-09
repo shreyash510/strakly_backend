@@ -106,6 +106,11 @@ export class CreateUserDto {
   @IsInt()
   branchId?: number;
 
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
+
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -543,6 +548,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
 }
 
 export class UpdateManagerPermissionsDto {

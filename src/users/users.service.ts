@@ -277,6 +277,13 @@ export class UsersService {
       idType: user.id_type || user.idType,
       idNumber: user.id_number || user.idNumber,
       managerPermissions: user.manager_permissions || user.managerPermissions || null,
+      branchId: user.branch_id ?? user.branchId ?? null,
+      branchIds: (() => {
+        const raw = user.allowed_branch_ids ?? user.allowedBranchIds;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw;
+        try { return JSON.parse(raw); } catch { return []; }
+      })(),
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
       gym: gym
@@ -705,8 +712,8 @@ export class UsersService {
           `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, manager_permissions, branch_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
+          join_date, manager_permissions, branch_id, allowed_branch_ids, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -729,6 +736,7 @@ export class UsersService {
               ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
               : null,
             dto.branchId || null,
+            JSON.stringify(dto.allowedBranchIds || []),
           ],
         );
 
@@ -949,6 +957,10 @@ export class UsersService {
     if (updateDto.zipCode !== undefined) {
       updates.push(`zip_code = $${paramIndex++}`);
       values.push(updateDto.zipCode);
+    }
+    if (updateDto.allowedBranchIds !== undefined) {
+      updates.push(`allowed_branch_ids = $${paramIndex++}`);
+      values.push(JSON.stringify(updateDto.allowedBranchIds));
     }
     if (updates.length === 0) {
       return this.findOneStaff(id, gymId);

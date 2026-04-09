@@ -2798,6 +2798,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`ALTER TABLE "${schemaName}"."class_types" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."class_sessions" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."appointments" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN IF NOT EXISTS allowed_branch_ids JSONB DEFAULT '[]'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
