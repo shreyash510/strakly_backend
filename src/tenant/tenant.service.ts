@@ -321,10 +321,10 @@ export class TenantService implements OnModuleDestroy {
    */
   private async addBranchIdColumns(client: PoolClient, schemaName: string): Promise<void> {
     const tables = [
-      'leads', 'referrals', 'plans', 'memberships', 'products',
+      'users', 'leads', 'referrals', 'plans', 'memberships', 'products',
       'product_sales', 'expenses', 'attendance', 'attendance_history',
       'announcements', 'class_types', 'class_schedules', 'class_sessions',
-      'appointments', 'guest_visits', 'activity_logs',
+      'appointments', 'guest_visits', 'activity_logs', 'staff_salaries',
     ];
 
     for (const table of tables) {
@@ -1277,6 +1277,8 @@ export class TenantService implements OnModuleDestroy {
         id_type VARCHAR(30),
         id_number VARCHAR(50),
         manager_permissions JSONB,
+        branch_id INTEGER,
+        allowed_branch_ids JSONB DEFAULT '[]',
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
