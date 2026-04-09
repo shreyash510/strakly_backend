@@ -46,8 +46,9 @@ export class ReferralsController {
   @ApiOperation({ summary: 'Get referral statistics' })
   async getStats(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.referralsService.getStats(gymId);
+    return this.referralsService.getStats(gymId, branchId ? parseInt(branchId) : undefined);
   }
 
   @Get('user/:userId')

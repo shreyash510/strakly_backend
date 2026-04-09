@@ -101,6 +101,16 @@ export class CreateUserDto {
   @IsInt()
   trainerId?: number;
 
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
+
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -238,6 +248,15 @@ export class CreateStaffDto {
   @IsString()
   zipCode?: string;
 
+  @ApiPropertyOptional({ description: 'Branch ID to assign the staff to' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
 }
 
 // DTO for creating client - stored in tenant.users
@@ -377,6 +396,11 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID to assign the client to' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class UpdateUserDto {
@@ -524,6 +548,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
 }
 
 export class UpdateManagerPermissionsDto {

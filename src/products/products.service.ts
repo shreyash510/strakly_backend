@@ -211,6 +211,11 @@ export class ProductsService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       const countResult = await client.query(
@@ -254,7 +259,7 @@ export class ProductsService {
     });
   }
 
-  async findLowStockProducts(gymId: number) {
+  async findLowStockProducts(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -262,6 +267,11 @@ export class ProductsService {
         'p.stock_quantity <= p.low_stock_threshold',
       ];
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        values.push(branchId);
+        conditions.push(`p.branch_id = $${values.length}`);
+      }
 
       const result = await client.query(
         `SELECT p.*, pc.name as category_name
@@ -568,6 +578,11 @@ export class ProductsService {
         values.push(filters.endDate);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       const countResult = await client.query(
@@ -634,6 +649,11 @@ export class ProductsService {
         conditions.push(`(p.name ILIKE $${paramIndex} OR u.name ILIKE $${paramIndex})`);
         values.push(`%${filters.search}%`);
         paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -1025,6 +1045,11 @@ export class ProductsService {
         values.push(filters.endDate);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       /* Total revenue, items, average, and profit */
@@ -1173,10 +1198,13 @@ export class ProductsService {
 
   /* ─── Inventory Stats ─── */
 
-  async getInventoryStats(gymId: number) {
+  async getInventoryStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1351,13 +1379,16 @@ export class ProductsService {
 
   /* ─── Reorder Suggestions ─── */
 
-  async getReorderSuggestions(gymId: number) {
+  async getReorderSuggestions(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
       ];
       const values: SqlValue[] = [];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1426,13 +1457,16 @@ export class ProductsService {
 
   /* ─── Dead Stock ─── */
 
-  async getDeadStock(gymId: number, days: number = 30) {
+  async getDeadStock(gymId: number, days: number = 30, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
         'p.stock_quantity > 0',
       ];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
@@ -1612,12 +1646,16 @@ export class ProductsService {
         values.push(filters.performedBy);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = ${filters.branchId} OR p.branch_id IS NULL)`);
+      }
+
       const whereClause = conditions.length > 0
         ? 'WHERE ' + conditions.join(' AND ')
         : '';
 
       const countResult = await client.query(
-        `SELECT COUNT(*) as total FROM product_stock_movements sm ${whereClause}`,
+        `SELECT COUNT(*) as total FROM product_stock_movements sm LEFT JOIN products p ON p.id = sm.product_id ${whereClause}`,
         values,
       );
       const total = parseInt(countResult.rows[0].total);

@@ -32,6 +32,7 @@ export interface ExpenseFilters extends PaginationParams {
   year?: number;
   paymentMethod?: string;
   noPagination?: boolean;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -105,6 +106,10 @@ export class ExpensesService {
           whereClause += ` AND (e.title ILIKE $${paramIndex} OR e.description ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+        if (filters.branchId) {
+          whereClause += ` AND (e.branch_id = $${paramIndex++} OR e.branch_id IS NULL)`;
+          values.push(filters.branchId);
         }
 
         const [expensesResult, countResult] = await Promise.all([
@@ -298,7 +303,7 @@ export class ExpensesService {
     return { success: true, message: 'Expense deleted successfully' };
   }
 
-  async getStats(gymId: number, year?: number, month?: number) {
+  async getStats(gymId: number, year?: number, month?: number, branchId?: number | null) {
     const currentDate = new Date();
     const targetYear = year || currentDate.getFullYear();
     const currentMonth = month || currentDate.getMonth() + 1;
@@ -313,6 +318,7 @@ export class ExpensesService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const branchFilter = branchId ? ` AND (e.branch_id = ${branchId} OR e.branch_id IS NULL)` : '';
         const deletedFilter = `(e.is_deleted = FALSE OR e.is_deleted IS NULL)`;
 
         const [
@@ -327,7 +333,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1`,
             [targetYear],
           ),
@@ -335,7 +341,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
                AND EXTRACT(MONTH FROM e.expense_date) = $2`,
             [targetYear, currentMonth],
@@ -344,7 +350,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
                AND EXTRACT(MONTH FROM e.expense_date) = $2`,
             [prevMonthYear, prevMonth],
@@ -353,14 +359,14 @@ export class ExpensesService {
           client.query(
             `SELECT COUNT(*) as count
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND e.payment_status = 'pending'`,
           ),
           // Paid count
           client.query(
             `SELECT COUNT(*) as count
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND e.payment_status = 'paid'`,
           ),
           // Category breakdown (top categories by amount)
@@ -368,7 +374,7 @@ export class ExpensesService {
             `SELECT ec.id, ec.name, ec.icon, ec.color, COALESCE(SUM(e.amount), 0) as total
              FROM expenses e
              LEFT JOIN expense_categories ec ON ec.id = e.category_id
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
              GROUP BY ec.id, ec.name, ec.icon, ec.color
              ORDER BY total DESC
@@ -539,6 +545,10 @@ export class ExpensesService {
             values.push(`%${filters.search}%`);
             paramIndex++;
           }
+          if (filters.branchId) {
+            whereClause += ` AND (e.branch_id = $${paramIndex++} OR e.branch_id IS NULL)`;
+            values.push(filters.branchId);
+          }
 
           const expensesResult = await client.query(
             `SELECT e.*, ec.name as category_name, ec.code as category_code, ec.icon as category_icon, ec.color as category_color
@@ -632,7 +642,7 @@ export class ExpensesService {
     };
   }
 
-  async getUnifiedStats(gymId: number, year?: number, month?: number) {
+  async getUnifiedStats(gymId: number, year?: number, month?: number, branchId?: number | null) {
     const currentDate = new Date();
     const targetYear = year || currentDate.getFullYear();
     const currentMonth = month || currentDate.getMonth() + 1;
@@ -647,6 +657,7 @@ export class ExpensesService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const branchFilter = branchId ? ` AND (e.branch_id = ${branchId} OR e.branch_id IS NULL)` : '';
         const deletedFilter = `(e.is_deleted = FALSE OR e.is_deleted IS NULL)`;
         const salaryDeletedFilter = `(ss.is_deleted = FALSE OR ss.is_deleted IS NULL)`;
 
@@ -666,7 +677,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1`,
             [targetYear],
           ),
@@ -674,7 +685,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
                AND EXTRACT(MONTH FROM e.expense_date) = $2`,
             [targetYear, currentMonth],
@@ -683,7 +694,7 @@ export class ExpensesService {
           client.query(
             `SELECT COALESCE(SUM(e.amount), 0) as sum
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
                AND EXTRACT(MONTH FROM e.expense_date) = $2`,
             [prevMonthYear, prevMonth],
@@ -692,14 +703,14 @@ export class ExpensesService {
           client.query(
             `SELECT COUNT(*) as count
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND e.payment_status = 'pending'`,
           ),
           // Paid count
           client.query(
             `SELECT COUNT(*) as count
              FROM expenses e
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND e.payment_status = 'paid'`,
           ),
           // Category breakdown (top categories by amount)
@@ -707,7 +718,7 @@ export class ExpensesService {
             `SELECT ec.id, ec.name, ec.icon, ec.color, COALESCE(SUM(e.amount), 0) as total
              FROM expenses e
              LEFT JOIN expense_categories ec ON ec.id = e.category_id
-             WHERE ${deletedFilter}
+             WHERE ${deletedFilter}${branchFilter}
                AND EXTRACT(YEAR FROM e.expense_date) = $1
              GROUP BY ec.id, ec.name, ec.icon, ec.color
              ORDER BY total DESC

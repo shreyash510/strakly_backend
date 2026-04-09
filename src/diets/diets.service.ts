@@ -33,11 +33,17 @@ export class DietsService {
           category VARCHAR(100) NOT NULL,
           content TEXT NOT NULL,
           status VARCHAR(50) DEFAULT 'draft',
+          branch_id INTEGER,
           created_by INTEGER NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+
+        // Add branch_id column if it doesn't exist (for existing tables)
+        await client.query(`
+          ALTER TABLE "${schemaName}"."diets" ADD COLUMN IF NOT EXISTS branch_id INTEGER
+        `);
 
         // Create diet_assignments (xref) table
         await client.query(`
@@ -89,6 +95,7 @@ export class DietsService {
       search?: string;
       page?: number;
       limit?: number;
+      branchId?: number;
     },
   ) {
     await this.ensureTablesExist(gymId);
@@ -120,6 +127,11 @@ export class DietsService {
           whereClause += ` AND (d.title ILIKE $${paramIndex} OR d.description ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        if (filters?.branchId) {
+          whereClause += ` AND (d.branch_id = $${paramIndex++} OR d.branch_id IS NULL)`;
+          values.push(filters.branchId);
         }
 
         const [dietsResult, countResult] = await Promise.all([

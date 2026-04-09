@@ -65,6 +65,11 @@ export class LeadsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
+      if (filters.branchId) {
+        conditions.push(`(l.branch_id = $${paramIndex++} OR l.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       if (filters.pipelineStage) {
         conditions.push(`l.pipeline_stage = $${paramIndex++}`);
         values.push(filters.pipelineStage);
@@ -377,6 +382,11 @@ export class LeadsService {
       const conditions: string[] = ['is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
+
+      if (dateFilters.branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+        values.push(dateFilters.branchId);
+      }
 
       if (dateFilters.dateFrom) {
         conditions.push(`created_at >= $${paramIndex++}`);

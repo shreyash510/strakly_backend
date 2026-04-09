@@ -25,4 +25,11 @@ export class AttendanceReportQueryDto {
   @Type(() => Number)
   @Transform(({ value }) => (value ? Number(value) : undefined))
   gymId?: number;
+
+  @ApiPropertyOptional({ description: 'Branch ID to filter by' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  @Transform(({ value }) => (value ? Number(value) : undefined))
+  branchId?: number;
 }

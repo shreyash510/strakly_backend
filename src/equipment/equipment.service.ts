@@ -85,6 +85,11 @@ export class EquipmentService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`(e.branch_id = $${paramIndex++} OR e.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       const countResult = await client.query(
@@ -217,10 +222,10 @@ export class EquipmentService {
     });
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = '';
-      const branchValues: SqlValue[] = [];
+      const branchFilter = branchId ? ` AND (branch_id = $1 OR branch_id IS NULL)` : '';
+      const branchValues: SqlValue[] = branchId ? [branchId] : [];
 
       const countByStatus = await client.query(
         `SELECT status, COUNT(*) as count FROM equipment WHERE is_deleted = FALSE ${branchFilter} GROUP BY status`,

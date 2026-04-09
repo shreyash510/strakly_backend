@@ -41,13 +41,16 @@ export class FacilitiesController {
   @Get()
   @ApiOperation({ summary: 'Get all facilities' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.facilitiesService.findAll(
       req.user.gymId!,
       includeInactive === 'true',
+      branchId ? parseInt(branchId) : null,
     );
   }
 

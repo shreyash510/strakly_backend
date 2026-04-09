@@ -54,8 +54,9 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Get equipment statistics' })
   getStats(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.equipmentService.getStats(gymId);
+    return this.equipmentService.getStats(gymId, branchId ? parseInt(branchId) : null);
   }
 
   @Get('maintenance/upcoming')

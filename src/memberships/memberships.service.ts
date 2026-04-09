@@ -42,6 +42,7 @@ export class MembershipsService {
       search?: string;
       page?: number;
       limit?: number;
+      branchId?: number | null;
     },
   ) {
     const { page, limit, skip } = sanitizePagination(filters?.page, filters?.limit, 15);
@@ -70,6 +71,10 @@ export class MembershipsService {
           whereClause += ` AND (u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+        if (filters?.branchId) {
+          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          values.push(filters.branchId);
         }
 
         const [membershipsResult, countResult] = await Promise.all([
@@ -507,8 +512,8 @@ export class MembershipsService {
         // Create membership
         const membershipResult = await client.query(
           `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
-          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, NOW(), NOW())
+          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, (SELECT branch_id FROM users WHERE id = $1), NOW(), NOW())
          RETURNING *`,
           [
             dto.userId,
@@ -1041,6 +1046,7 @@ export class MembershipsService {
   async getExpiringSoon(
     gymId: number,
     days = 7,
+    branchId?: number | null,
   ) {
     const now = new Date();
     const futureDate = new Date();
@@ -1058,6 +1064,9 @@ export class MembershipsService {
            AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [now, futureDate];
 
+        if (branchId) {
+          query += ` AND m.branch_id = ${branchId}`;
+        }
         query += ` ORDER BY m.end_date ASC`;
 
         const result = await client.query(query, values);
@@ -1068,7 +1077,7 @@ export class MembershipsService {
     return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId?: number | null) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -1076,7 +1085,7 @@ export class MembershipsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = '';
+        const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
         const softDeleteFilter =
           ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
 
@@ -1111,14 +1120,14 @@ export class MembershipsService {
     return stats;
   }
 
-  async getOverview(gymId: number) {
+  async getOverview(gymId: number, branchId?: number | null) {
     const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] =
       await Promise.all([
-        this.getStats(gymId),
-        this.getExpiringSoon(gymId, 7),
-        this.getRecentSubscriptions(gymId, 10),
-        this.getPlansForOverview(gymId),
-        this.getPlanDistribution(gymId),
+        this.getStats(gymId, branchId),
+        this.getExpiringSoon(gymId, 7, branchId),
+        this.getRecentSubscriptions(gymId, 10, branchId),
+        this.getPlansForOverview(gymId, branchId),
+        this.getPlanDistribution(gymId, branchId),
       ]);
 
     return {
@@ -1132,10 +1141,15 @@ export class MembershipsService {
 
   private async getPlansForOverview(
     gymId: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
+      let query = `SELECT id, code, name FROM plans WHERE is_active = true AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        query += ` AND (branch_id = ${branchId} OR branch_id IS NULL)`;
+      }
 
       query += ` ORDER BY display_order ASC`;
 
@@ -1150,12 +1164,17 @@ export class MembershipsService {
 
   private async getPlanDistribution(
     gymId: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT plan_id, COUNT(*) as count
          FROM memberships
          WHERE status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        query += ` AND branch_id = ${branchId}`;
+      }
 
       query += ` GROUP BY plan_id ORDER BY count DESC`;
 
@@ -1170,6 +1189,7 @@ export class MembershipsService {
   private async getRecentSubscriptions(
     gymId: number,
     limit = 10,
+    branchId?: number | null,
   ) {
     const memberships = await this.tenantService.executeInTenant(
       gymId,
@@ -1183,6 +1203,9 @@ export class MembershipsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
+        if (branchId) {
+          query += ` AND m.branch_id = ${branchId}`;
+        }
         query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
         values.push(limit);
 

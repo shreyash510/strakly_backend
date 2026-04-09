@@ -67,6 +67,8 @@ export interface UserResponse {
   gym?: GymInfo;
   gyms?: GymAssignment[]; // For multi-gym users
   managerPermissions?: Record<string, any>;
+  branchId?: number | null;
+  branchIds?: number[];
   authType?: string; /* email | google */
   createdAt?: Date;
   updatedAt?: Date;
@@ -198,6 +200,13 @@ export class AuthService {
         : undefined,
       gyms,
       managerPermissions: user.manager_permissions || user.managerPermissions || null,
+      branchId: user.branch_id ?? user.branchId ?? null,
+      branchIds: (() => {
+        const raw = user.allowed_branch_ids ?? user.allowedBranchIds;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw;
+        try { return JSON.parse(raw); } catch { return []; }
+      })(),
       authType: user.authType || user.auth_type || 'email', /* default to email */
       createdAt: user.created_at || user.createdAt,
       updatedAt: user.updated_at || user.updatedAt,

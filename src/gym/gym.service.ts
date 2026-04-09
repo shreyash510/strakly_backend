@@ -292,6 +292,23 @@ export class GymService {
       });
     }
 
+    // Create default branch for the new gym
+    await this.prisma.branch.create({
+      data: {
+        gymId: gym.id,
+        name: gym.name,
+        code: 'MAIN',
+        phone: dto.phone,
+        email: dto.email,
+        address: dto.address,
+        city: dto.city,
+        state: dto.state,
+        zipCode: dto.zipCode,
+        isDefault: true,
+        isActive: true,
+      },
+    });
+
     return this.findOne(gym.id);
   }
 

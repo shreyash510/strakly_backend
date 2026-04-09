@@ -8,6 +8,7 @@ import {
   IsDateString,
   IsEnum,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export enum AnnouncementType {
   GENERAL = 'general',
@@ -162,4 +163,9 @@ export class AnnouncementFiltersDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }

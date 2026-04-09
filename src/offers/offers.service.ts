@@ -37,20 +37,24 @@ export class OffersService {
   async findAll(
     gymId: number,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Always filter out soft-deleted offers
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
       const values: SqlValue[] = [];
+      let paramIndex = 1;
 
       if (!includeInactive) {
         conditions.push('is_active = true');
       }
+      if (branchId) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
 
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
       const result = await client.query(
         `SELECT * FROM offers ${whereClause} ORDER BY created_at DESC`,
         values,
@@ -59,11 +63,26 @@ export class OffersService {
     });
   }
 
-  async findActive(gymId: number) {
+  async findActive(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL) ORDER BY valid_to ASC`;
+      const conditions = [
+        'is_active = true',
+        'valid_from <= NOW()',
+        'valid_to >= NOW()',
+        '(is_deleted = FALSE OR is_deleted IS NULL)',
+      ];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
 
-      const result = await client.query(query);
+      if (branchId) {
+        conditions.push(`branch_id = $${paramIndex++}`);
+        values.push(branchId);
+      }
+
+      const result = await client.query(
+        `SELECT * FROM offers WHERE ${conditions.join(' AND ')} ORDER BY valid_to ASC`,
+        values,
+      );
       return result.rows.map((o: Record<string, any>) => this.formatOffer(o));
     });
   }
@@ -178,8 +197,8 @@ export class OffersService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, true, NOW(), NOW())
+          `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, branch_id, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, true, NOW(), NOW())
          RETURNING *`,
           [
             dto.code,
@@ -190,6 +209,7 @@ export class OffersService {
             startDate,
             endDate,
             dto.maxUsageCount || null,
+            dto.branchId || null,
           ],
         );
         return result.rows[0];

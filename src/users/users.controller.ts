@@ -112,6 +112,7 @@ export class UsersController {
   @ApiQuery({ name: 'gender', required: false, type: String, description: 'Filter by gender (male/female/other)' })
   @ApiQuery({ name: 'joinDateFrom', required: false, type: String, description: 'Filter join date from (YYYY-MM-DD)' })
   @ApiQuery({ name: 'joinDateTo', required: false, type: String, description: 'Filter join date to (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Filter by branch ID' })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('page') page?: string,
@@ -127,6 +128,7 @@ export class UsersController {
     @Query('gender') filterGender?: string,
     @Query('joinDateFrom') joinDateFrom?: string,
     @Query('joinDateTo') joinDateTo?: string,
+    @Query('branchId') branchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const isSuperAdmin = user.role === 'superadmin';
@@ -153,6 +155,7 @@ export class UsersController {
       gender: filterGender,
       joinDateFrom,
       joinDateTo,
+      branchId: branchId ? parseInt(branchId, 10) : null,
     });
 
     if (res && result.pagination) {
@@ -583,6 +586,7 @@ export class UsersController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('role') role: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const isSuperAdmin = user.role === 'superadmin';
     const gymId = isSuperAdmin
@@ -590,7 +594,7 @@ export class UsersController {
         ? parseInt(queryGymId)
         : undefined
       : resolveGymId(user.gymId, queryGymId, false);
-    return this.usersService.getStatusCounts(role, gymId);
+    return this.usersService.getStatusCounts(role, gymId, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Patch('bulk/update')

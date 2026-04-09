@@ -315,6 +315,12 @@ export class ProductFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class SalesFiltersDto {
@@ -367,6 +373,12 @@ export class SalesFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class SalesStatsFiltersDto {
@@ -379,6 +391,12 @@ export class SalesStatsFiltersDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class StockMovementFiltersDto {
@@ -439,6 +457,12 @@ export class AllStockMovementsFiltersDto {
   @IsNumber()
   @Type(() => Number)
   performedBy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

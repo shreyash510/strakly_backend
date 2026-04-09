@@ -46,10 +46,12 @@ export class AnnouncementsController {
   async getActive(
     @GymId() gymId: number,
     @Query('platform') platform?: 'dashboard' | 'mobile',
+    @Query('branchId') branchId?: string,
   ) {
     return this.announcementsService.getActive(
       gymId,
       platform || 'dashboard',
+      branchId ? parseInt(branchId) : undefined,
     );
   }
 

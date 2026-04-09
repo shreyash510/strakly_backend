@@ -43,17 +43,22 @@ export class OffersController {
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.offersService.findAll(
       req.user.gymId!,
       includeInactive === 'true',
+      branchId ? parseInt(branchId, 10) : null,
     );
   }
 
   @Get('active')
   @ApiOperation({ summary: 'Get currently active offers' })
-  findActive(@Request() req: AuthenticatedRequest) {
-    return this.offersService.findActive(req.user.gymId!);
+  findActive(
+    @Request() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.offersService.findActive(req.user.gymId!, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Post()
