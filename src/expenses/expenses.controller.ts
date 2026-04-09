@@ -85,6 +85,7 @@ export class ExpensesController {
     @Query('endDate') endDate?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
@@ -102,6 +103,7 @@ export class ExpensesController {
         startDate,
         endDate,
         noPagination: noPagination === 'true',
+        branchId: branchId ? parseInt(branchId, 10) : null,
       },
     );
 
@@ -148,6 +150,7 @@ export class ExpensesController {
     @Query('endDate') endDate?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
@@ -166,6 +169,7 @@ export class ExpensesController {
         startDate,
         endDate,
         noPagination: noPagination === 'true',
+        branchId: branchId ? parseInt(branchId, 10) : null,
       },
     );
 
@@ -192,12 +196,14 @@ export class ExpensesController {
     @Query('year') year?: string,
     @Query('month') month?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.expensesService.getUnifiedStats(
       gymId,
       year ? parseInt(year) : undefined,
       month ? parseInt(month) : undefined,
+      branchId ? parseInt(branchId, 10) : null,
     );
   }
 
@@ -217,12 +223,14 @@ export class ExpensesController {
     @Query('year') year?: string,
     @Query('month') month?: string,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
     return this.expensesService.getStats(
       gymId,
       year ? parseInt(year) : undefined,
       month ? parseInt(month) : undefined,
+      branchId ? parseInt(branchId, 10) : null,
     );
   }
 

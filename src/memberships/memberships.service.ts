@@ -1046,6 +1046,7 @@ export class MembershipsService {
   async getExpiringSoon(
     gymId: number,
     days = 7,
+    branchId?: number | null,
   ) {
     const now = new Date();
     const futureDate = new Date();
@@ -1063,6 +1064,9 @@ export class MembershipsService {
            AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [now, futureDate];
 
+        if (branchId) {
+          query += ` AND m.branch_id = ${branchId}`;
+        }
         query += ` ORDER BY m.end_date ASC`;
 
         const result = await client.query(query, values);
@@ -1073,7 +1077,7 @@ export class MembershipsService {
     return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
-  async getStats(gymId: number) {
+  async getStats(gymId: number, branchId?: number | null) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -1081,7 +1085,7 @@ export class MembershipsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = '';
+        const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
         const softDeleteFilter =
           ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
 
@@ -1116,14 +1120,14 @@ export class MembershipsService {
     return stats;
   }
 
-  async getOverview(gymId: number) {
+  async getOverview(gymId: number, branchId?: number | null) {
     const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] =
       await Promise.all([
-        this.getStats(gymId),
-        this.getExpiringSoon(gymId, 7),
-        this.getRecentSubscriptions(gymId, 10),
-        this.getPlansForOverview(gymId),
-        this.getPlanDistribution(gymId),
+        this.getStats(gymId, branchId),
+        this.getExpiringSoon(gymId, 7, branchId),
+        this.getRecentSubscriptions(gymId, 10, branchId),
+        this.getPlansForOverview(gymId, branchId),
+        this.getPlanDistribution(gymId, branchId),
       ]);
 
     return {
@@ -1137,10 +1141,15 @@ export class MembershipsService {
 
   private async getPlansForOverview(
     gymId: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
+      let query = `SELECT id, code, name FROM plans WHERE is_active = true AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        query += ` AND (branch_id = ${branchId} OR branch_id IS NULL)`;
+      }
 
       query += ` ORDER BY display_order ASC`;
 
@@ -1155,12 +1164,17 @@ export class MembershipsService {
 
   private async getPlanDistribution(
     gymId: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT plan_id, COUNT(*) as count
          FROM memberships
          WHERE status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        query += ` AND branch_id = ${branchId}`;
+      }
 
       query += ` GROUP BY plan_id ORDER BY count DESC`;
 
@@ -1175,6 +1189,7 @@ export class MembershipsService {
   private async getRecentSubscriptions(
     gymId: number,
     limit = 10,
+    branchId?: number | null,
   ) {
     const memberships = await this.tenantService.executeInTenant(
       gymId,
@@ -1188,6 +1203,9 @@ export class MembershipsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
+        if (branchId) {
+          query += ` AND m.branch_id = ${branchId}`;
+        }
         query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
         values.push(limit);
 

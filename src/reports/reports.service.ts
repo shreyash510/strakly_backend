@@ -43,12 +43,15 @@ export class ReportsService {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
+    const branchId = filters.branchId;
+    const membershipBranchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+    const productBranchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
 
     // Get membership income
     const membershipIncome = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        let whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -78,7 +81,7 @@ export class ReportsService {
     const productSalesIncome = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `(is_deleted = FALSE OR is_deleted IS NULL)`;
+        let whereClause = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -141,8 +144,8 @@ export class ReportsService {
     const incomeByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM sold_at) = $1`;
+        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter} AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter} AND EXTRACT(YEAR FROM sold_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -196,8 +199,8 @@ export class ReportsService {
     const incomeByPaymentMethod = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM sold_at) = $1`;
+        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter} AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter} AND EXTRACT(YEAR FROM sold_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -257,12 +260,14 @@ export class ReportsService {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
+    const branchId = filters.branchId;
+    const branchFilter = branchId ? ` AND m.branch_id = ${branchId}` : '';
 
     // Get sales summary
     const salesSummary = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
+        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -295,7 +300,7 @@ export class ReportsService {
     const salesByPlan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
+        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -344,7 +349,8 @@ export class ReportsService {
     const salesByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const branchClause = branchId ? ` AND branch_id = ${branchId}` : '';
+        const whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchClause} AND EXTRACT(YEAR FROM paid_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -390,6 +396,7 @@ export class ReportsService {
 
   async getPaymentDuesReport(
     gymId: number,
+    branchId?: number | null,
   ): Promise<PaymentDuesReportDto> {
     // Get membership dues (pending payments)
     const membershipDues = await this.tenantService.executeInTenant(
@@ -409,6 +416,9 @@ export class ReportsService {
           WHERE m.payment_status = 'pending' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
+        if (branchId) {
+          query += ` AND m.branch_id = ${branchId}`;
+        }
         query += ` ORDER BY m.created_at ASC`;
 
         const result = await client.query(query, values);
@@ -492,11 +502,11 @@ export class ReportsService {
 
   async getDeletedTransactions(
     gymId: number,
-    filters?: { month?: number; year?: number },
+    filters?: { month?: number; year?: number; branchId?: number },
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = '';
-      const productBranchFilter = '';
+      const branchFilter = filters?.branchId ? ` AND m.branch_id = ${filters.branchId}` : '';
+      const productBranchFilter = filters?.branchId ? ` AND ps.branch_id = ${filters.branchId}` : '';
 
       // Build date filter conditions
       const membershipDateConditions: string[] = [];
@@ -657,15 +667,18 @@ export class ReportsService {
   async getDailySalesReport(
     gymId: number,
     date: string,
+    branchId?: number | null,
   ) {
     const dayStart = `${date} 00:00:00`;
     const dayEnd = `${date} 23:59:59.999`;
+    const membershipBranchClause = branchId ? ` AND m.branch_id = ${branchId}` : '';
+    const productBranchClause = branchId ? ` AND ps.branch_id = ${branchId}` : '';
 
     // 1. Get membership payments for the day
     const membershipSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL) AND m.paid_at >= $1 AND m.paid_at <= $2`;
+        const whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${membershipBranchClause} AND m.paid_at >= $1 AND m.paid_at <= $2`;
         const values: SqlValue[] = [dayStart, dayEnd];
 
         const result = await client.query(
@@ -699,7 +712,7 @@ export class ReportsService {
     const productSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `(ps.is_deleted = FALSE OR ps.is_deleted IS NULL) AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
+        const whereClause = `(ps.is_deleted = FALSE OR ps.is_deleted IS NULL)${productBranchClause} AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
         const values: SqlValue[] = [dayStart, dayEnd];
 
         const result = await client.query(

@@ -109,8 +109,11 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
-  getStats(@Request() req: AuthenticatedRequest): Promise<any> {
-    return this.membershipsService.getStats(req.user.gymId!);
+  getStats(
+    @Request() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+  ): Promise<any> {
+    return this.membershipsService.getStats(req.user.gymId!, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Get('overview')
@@ -128,6 +131,7 @@ export class MembershipsController {
   getOverview(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
   ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
@@ -140,7 +144,7 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    return this.membershipsService.getOverview(gymId);
+    return this.membershipsService.getOverview(gymId, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Get('expiring')

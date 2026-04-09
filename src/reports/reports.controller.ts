@@ -112,24 +112,28 @@ export class ReportsController {
 
   @Get('payment-dues')
   @Roles('admin', 'manager')
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   async getPaymentDuesReport(
     @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    return this.reportsService.getPaymentDuesReport(gymId);
+    return this.reportsService.getPaymentDuesReport(gymId, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Get('daily-sales')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get daily sales report (memberships + products + expenses)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date (YYYY-MM-DD), defaults to today' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   async getDailySalesReport(
     @Query() filters: DailySalesFilterDto,
     @Req() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId = req.user.gymId!;
     const date = filters.date || new Date().toISOString().slice(0, 10);
-    return this.reportsService.getDailySalesReport(gymId, date);
+    return this.reportsService.getDailySalesReport(gymId, date, branchId ? parseInt(branchId, 10) : null);
   }
 
   @Get('deleted-transactions')

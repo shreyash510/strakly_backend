@@ -1244,6 +1244,7 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."plans" (
         id SERIAL PRIMARY KEY,
+        branch_id INTEGER,
         code VARCHAR(100) NOT NULL,
         name VARCHAR(255) NOT NULL,
         description TEXT,
@@ -1333,6 +1334,7 @@ export class TenantService implements OnModuleDestroy {
         freeze_end_date TIMESTAMP,
         freeze_reason TEXT,
         total_freeze_days INTEGER DEFAULT 0,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -2732,6 +2734,7 @@ export class TenantService implements OnModuleDestroy {
         stock_quantity INTEGER NOT NULL DEFAULT 0,
         low_stock_threshold INTEGER DEFAULT 5,
         is_active BOOLEAN DEFAULT TRUE,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -2753,6 +2756,7 @@ export class TenantService implements OnModuleDestroy {
         sold_by INTEGER NOT NULL,
         sold_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         notes TEXT,
+        branch_id INTEGER,
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -2767,9 +2771,14 @@ export class TenantService implements OnModuleDestroy {
       ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
 
-    // Add branch_id to leads and referrals if not exists (migration)
+    // Add branch_id to leads, referrals, plans, memberships, products, product_sales, expenses if not exists (migration)
     await client.query(`ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."referrals" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."plans" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."memberships" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."products" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."product_sales" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."expenses" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (

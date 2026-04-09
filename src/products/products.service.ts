@@ -211,6 +211,11 @@ export class ProductsService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       const countResult = await client.query(
@@ -573,6 +578,11 @@ export class ProductsService {
         values.push(filters.endDate);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.join(' AND ');
 
       const countResult = await client.query(
@@ -639,6 +649,11 @@ export class ProductsService {
         conditions.push(`(p.name ILIKE $${paramIndex} OR u.name ILIKE $${paramIndex})`);
         values.push(`%${filters.search}%`);
         paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -1028,6 +1043,11 @@ export class ProductsService {
       if (filters.endDate) {
         conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
         values.push(filters.endDate);
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
