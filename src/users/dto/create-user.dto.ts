@@ -252,6 +252,11 @@ export class CreateStaffDto {
   @IsOptional()
   @IsInt()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
 }
 
 // DTO for creating client - stored in tenant.users
