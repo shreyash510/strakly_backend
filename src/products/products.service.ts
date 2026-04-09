@@ -1198,10 +1198,13 @@ export class ProductsService {
 
   /* ─── Inventory Stats ─── */
 
-  async getInventoryStats(gymId: number) {
+  async getInventoryStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1376,13 +1379,16 @@ export class ProductsService {
 
   /* ─── Reorder Suggestions ─── */
 
-  async getReorderSuggestions(gymId: number) {
+  async getReorderSuggestions(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
       ];
       const values: SqlValue[] = [];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
 
       const whereClause = conditions.join(' AND ');
 
@@ -1451,13 +1457,16 @@ export class ProductsService {
 
   /* ─── Dead Stock ─── */
 
-  async getDeadStock(gymId: number, days: number = 30) {
+  async getDeadStock(gymId: number, days: number = 30, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
         'p.stock_quantity > 0',
       ];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
@@ -1637,12 +1646,16 @@ export class ProductsService {
         values.push(filters.performedBy);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = ${filters.branchId} OR p.branch_id IS NULL)`);
+      }
+
       const whereClause = conditions.length > 0
         ? 'WHERE ' + conditions.join(' AND ')
         : '';
 
       const countResult = await client.query(
-        `SELECT COUNT(*) as total FROM product_stock_movements sm ${whereClause}`,
+        `SELECT COUNT(*) as total FROM product_stock_movements sm LEFT JOIN products p ON p.id = sm.product_id ${whereClause}`,
         values,
       );
       const total = parseInt(countResult.rows[0].total);

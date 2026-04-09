@@ -462,6 +462,12 @@ export class AllStockMovementsFiltersDto {
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
+  branchId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   page?: number;
 
   @ApiPropertyOptional()
