@@ -122,6 +122,7 @@ export class AttendanceController {
       body.staffId,
       gymId,
       body.checkInMethod || 'code',
+      body.branchId,
     );
     this.notificationsGateway.emitAttendanceChanged(gymId, { action: 'checked_in' });
     return result;

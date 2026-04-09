@@ -342,16 +342,18 @@ export class ActivityLogsService {
    */
   async getStats(
     gymId: number,
+    branchId?: number,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const staffFilter = `actor_type IN ('manager', 'trainer')`;
+      const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
 
       const [actionCountsResult, activeStaffResult, totalResult, todayResult] =
         await Promise.all([
           client.query(
             `SELECT action_category, COUNT(*) as count
              FROM activity_logs
-             WHERE ${staffFilter}
+             WHERE ${staffFilter}${branchFilter}
              GROUP BY action_category
              ORDER BY count DESC
              LIMIT 20`,
@@ -359,14 +361,14 @@ export class ActivityLogsService {
           client.query(
             `SELECT actor_id, actor_name, actor_type, COUNT(*) as count
              FROM activity_logs
-             WHERE ${staffFilter}
+             WHERE ${staffFilter}${branchFilter}
              GROUP BY actor_id, actor_name, actor_type
              ORDER BY count DESC
              LIMIT 10`,
           ),
-          client.query(`SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}`),
+          client.query(`SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}${branchFilter}`),
           client.query(
-            `SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter} AND created_at >= CURRENT_DATE`,
+            `SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}${branchFilter} AND created_at >= CURRENT_DATE`,
           ),
         ]);
 

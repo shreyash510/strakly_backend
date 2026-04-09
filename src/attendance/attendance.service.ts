@@ -136,6 +136,7 @@ export class AttendanceService {
     staffId: number,
     gymId: number,
     checkInMethod: string = 'code',
+    branchId?: number,
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
 
@@ -186,8 +187,8 @@ export class AttendanceService {
 
         // Insert attendance record
         const insertResult = await client.query(
-          `INSERT INTO attendance (user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
-           VALUES ($1, $2, NOW(), $3::DATE, $3::DATE, $4, $5, 'present', NOW(), NOW())
+          `INSERT INTO attendance (user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, branch_id, created_at, updated_at)
+           VALUES ($1, $2, NOW(), $3::DATE, $3::DATE, $4, $5, 'present', $6, NOW(), NOW())
            RETURNING *`,
           [
             user.id,
@@ -195,6 +196,7 @@ export class AttendanceService {
             today,
             staffId,
             checkInMethod,
+            branchId || null,
           ],
         );
 

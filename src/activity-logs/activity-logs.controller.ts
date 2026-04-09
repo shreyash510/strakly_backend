@@ -33,8 +33,9 @@ export class ActivityLogsController {
   @Get('stats')
   async getStats(
     @GymId() gymId: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.activityLogsService.getStats(gymId);
+    return this.activityLogsService.getStats(gymId, branchId ? parseInt(branchId) : undefined);
   }
 
   @Get('target/:type/:id')

@@ -1386,6 +1386,7 @@ export class TenantService implements OnModuleDestroy {
         marked_by INTEGER NOT NULL, -- public.users.id (staff who marked)
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'present',
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -1406,6 +1407,7 @@ export class TenantService implements OnModuleDestroy {
         checked_out_by INTEGER,
         check_in_method VARCHAR(50) DEFAULT 'code',
         status VARCHAR(50) DEFAULT 'checked_out',
+        branch_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -2779,6 +2781,8 @@ export class TenantService implements OnModuleDestroy {
     await client.query(`ALTER TABLE "${schemaName}"."products" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."product_sales" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
     await client.query(`ALTER TABLE "${schemaName}"."expenses" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."attendance" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+    await client.query(`ALTER TABLE "${schemaName}"."attendance_history" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (
