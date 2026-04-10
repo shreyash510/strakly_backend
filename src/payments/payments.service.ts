@@ -217,6 +217,7 @@ export class PaymentsService {
     dto: CreatePaymentDto,
     gymId: number,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     // Use gym's currency as fallback instead of hardcoded 'INR'
     if (!dto.currency) {
@@ -234,9 +235,9 @@ export class PaymentsService {
           payee_type, payee_id, payee_name,
           amount, currency, tax_amount, discount_amount, net_amount,
           payment_method, payment_ref, payment_gateway, payment_gateway_ref,
-          status, processed_at, processed_by, notes, metadata, created_at, updated_at
+          status, processed_at, processed_by, notes, metadata, branch_id, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, $23, NOW(), NOW()
         ) RETURNING *`,
           [
             dto.paymentType,
@@ -261,6 +262,7 @@ export class PaymentsService {
             processedBy || null,
             dto.notes || null,
             dto.metadata ? JSON.stringify(dto.metadata) : null,
+            branchId || null,
           ],
         );
         return result.rows[0];
@@ -575,6 +577,7 @@ export class PaymentsService {
     client: any,
     dto: CreatePaymentDto,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     const result = await client.query(
       `INSERT INTO payments (
@@ -583,9 +586,9 @@ export class PaymentsService {
         payee_type, payee_id, payee_name,
         amount, currency, tax_amount, discount_amount, net_amount,
         payment_method, payment_ref, payment_gateway, payment_gateway_ref,
-        status, processed_at, processed_by, notes, metadata, created_at, updated_at
+        status, processed_at, processed_by, notes, metadata, branch_id, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, $23, NOW(), NOW()
       ) RETURNING *`,
       [
         dto.paymentType,
@@ -610,6 +613,7 @@ export class PaymentsService {
         processedBy || null,
         dto.notes || null,
         dto.metadata ? JSON.stringify(dto.metadata) : null,
+        branchId || null,
       ],
     );
     return this.formatPayment(result.rows[0]);
@@ -661,6 +665,7 @@ export class PaymentsService {
     netAmount: number,
     paymentMethod: string,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     return this.createWithClient(
       client,
@@ -677,6 +682,7 @@ export class PaymentsService {
         paymentMethod,
       },
       processedBy,
+      branchId,
     );
   }
 }

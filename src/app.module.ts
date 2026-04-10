@@ -51,6 +51,7 @@ import { PlatformSettingsModule } from './platform-settings/platform-settings.mo
 import { ExpensesModule } from './expenses/expenses.module';
 import { BranchModule } from './branch/branch.module';
 import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
+import { BranchContextInterceptor } from './auth/interceptors/branch-context.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ActivityLogsService } from './activity-logs/activity-logs.service';
 
@@ -126,6 +127,10 @@ import { HealthModule } from './health/health.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: BranchContextInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

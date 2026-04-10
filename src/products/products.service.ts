@@ -783,6 +783,7 @@ export class ProductsService {
     gymId: number,
     dto: CreateProductSaleDto,
     soldBy: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Verify product and decrement stock atomically
@@ -818,8 +819,8 @@ export class ProductsService {
 
       // Create sale record
       const sale = await client.query(
-        `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes, branch_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           dto.productId,
@@ -831,6 +832,7 @@ export class ProductsService {
           dto.paymentMethod,
           soldBy,
           dto.notes || null,
+          branchId || null,
         ],
       );
 
@@ -864,6 +866,7 @@ export class ProductsService {
         totalAmount,
         dto.paymentMethod,
         soldBy,
+        branchId,
       );
 
       // Link payment to sale
@@ -883,6 +886,7 @@ export class ProductsService {
     gymId: number,
     dto: CreateBatchSaleDto,
     soldBy: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Validate all products and stock upfront
@@ -953,8 +957,8 @@ export class ProductsService {
 
         // Create sale record
         const sale = await client.query(
-          `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes, branch_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING *`,
           [
             item.productId,
@@ -966,6 +970,7 @@ export class ProductsService {
             dto.paymentMethod,
             soldBy,
             dto.notes || null,
+            branchId || null,
           ],
         );
 
@@ -1009,6 +1014,7 @@ export class ProductsService {
         finalTotal,
         dto.paymentMethod,
         soldBy,
+        branchId,
       );
 
       // Link payment to all sales

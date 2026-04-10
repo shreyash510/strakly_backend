@@ -558,7 +558,7 @@ export class AttendanceService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+        const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
         const [
           todayResult,
@@ -613,7 +613,7 @@ export class AttendanceService {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+      const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
       const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`;
       const values: SqlValue[] = [today];
 
@@ -744,9 +744,9 @@ export class AttendanceService {
         return d.toLocaleDateString('en-CA');
       })();
 
-    const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
-    const branchFilterA = branchId ? ` AND a.branch_id = ${branchId}` : '';
-    const branchFilterAh = branchId ? ` AND ah.branch_id = ${branchId}` : '';
+    const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+    const branchFilterA = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
+    const branchFilterAh = branchId ? ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)` : '';
     const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
     const reportData = await this.tenantService.executeInTenant(

@@ -55,7 +55,9 @@ export function resolveEffectiveBranchId(
   queryBranchId?: string,
 ): number | null {
   if (user.role === 'admin' || user.role === 'superadmin') {
-    return queryBranchId ? parseInt(queryBranchId, 10) : null;
+    if (queryBranchId) return parseInt(queryBranchId, 10);
+    // Fall back to branchId set by BranchContextInterceptor (from x-branch-id header)
+    return user.branchId ?? null;
   }
 
   // Multi-branch non-admin: allow switching between their assigned branches

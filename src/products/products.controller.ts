@@ -46,6 +46,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import type { AuthenticatedRequest } from '../common/types';
 import { resolveEffectiveBranchId } from '../common';
 import { setPaginationHeaders } from '../common/pagination.util';
@@ -143,9 +144,10 @@ export class ProductsController {
   createSale(
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductSaleDto,
   ) {
-    return this.productsService.createSale(gymId, dto, userId);
+    return this.productsService.createSale(gymId, dto, userId, branchId);
   }
 
   @Post('sales/batch')
@@ -155,9 +157,10 @@ export class ProductsController {
   createBatchSale(
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateBatchSaleDto,
   ) {
-    return this.productsService.createBatchSale(gymId, dto, userId);
+    return this.productsService.createBatchSale(gymId, dto, userId, branchId);
   }
 
   @Delete('sales/batch/:paymentId')
