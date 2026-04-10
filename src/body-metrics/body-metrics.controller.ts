@@ -23,6 +23,7 @@ import { UpdateBodyMetricsDto, RecordMetricsDto } from './dto/body-metrics.dto';
 import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
@@ -48,6 +49,7 @@ export class BodyMetricsController {
   }
 
   @Patch('me')
+  @UseGuards(RequireBranchGuard)
   @ApiOperation({ summary: 'Update current user body metrics' })
   async updateMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: UpdateBodyMetricsDto) {
     const result = await this.bodyMetricsService.updateMetrics(
@@ -60,6 +62,7 @@ export class BodyMetricsController {
   }
 
   @Post('me/record')
+  @UseGuards(RequireBranchGuard)
   @ApiOperation({ summary: 'Record body metrics and save to history' })
   async recordMyMetrics(@Request() req: AuthenticatedRequest, @Body() dto: RecordMetricsDto) {
     const result = await this.bodyMetricsService.recordMetrics(
@@ -149,7 +152,7 @@ export class BodyMetricsController {
   }
 
   @Patch('user')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update body metrics for a specific user' })
   @ApiHeader({
@@ -174,7 +177,7 @@ export class BodyMetricsController {
   }
 
   @Post('user/record')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Record body metrics for a specific user' })
   @ApiHeader({

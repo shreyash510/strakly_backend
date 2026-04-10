@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
@@ -85,7 +86,7 @@ export class AttendanceController {
   }
 
   @Post('mark')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ManagerPermission('attendance', 'create')
   @ApiOperation({ summary: 'Mark attendance (check-in) for a user at a gym' })
@@ -130,7 +131,7 @@ export class AttendanceController {
   }
 
   @Patch('checkout/:id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ManagerPermission('attendance', 'update')
   @ApiOperation({ summary: 'Check out a user' })
@@ -369,7 +370,7 @@ export class AttendanceController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an attendance record' })
   @ApiQuery({

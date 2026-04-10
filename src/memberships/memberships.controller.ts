@@ -34,6 +34,7 @@ import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -254,6 +255,7 @@ export class MembershipsController {
   }
 
   @Post('me/renew')
+  @UseGuards(RequireBranchGuard)
   @ApiOperation({ summary: 'Renew current user membership' })
   async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto): Promise<any> {
     const result = await this.membershipsService.renew(
@@ -345,7 +347,7 @@ export class MembershipsController {
   }
 
   @Patch(':id/facilities')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
   async updateMembershipFacilities(
@@ -364,7 +366,7 @@ export class MembershipsController {
   }
 
   @Post()
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'create')
   @ApiOperation({ summary: 'Create a new membership' })
@@ -382,7 +384,7 @@ export class MembershipsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Update a membership' })
@@ -397,7 +399,7 @@ export class MembershipsController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Cancel a membership' })
@@ -412,7 +414,7 @@ export class MembershipsController {
   }
 
   @Delete(':id/void')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Permanently delete a membership and its related data' })
   async voidDelete(
@@ -425,7 +427,7 @@ export class MembershipsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin')
   @ManagerPermission('subscriptions', 'delete')
   @ApiOperation({ summary: 'Delete a membership' })
@@ -446,7 +448,7 @@ export class MembershipsController {
   }
 
   @Post(':id/freeze')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Freeze a membership' })
   async freeze(
@@ -458,7 +460,7 @@ export class MembershipsController {
   }
 
   @Post(':id/unfreeze')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Unfreeze a membership' })
   async unfreeze(

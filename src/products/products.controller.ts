@@ -42,6 +42,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
@@ -138,6 +139,7 @@ export class ProductsController {
   }
 
   @Post('sales')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
@@ -151,6 +153,7 @@ export class ProductsController {
   }
 
   @Post('sales/batch')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
@@ -164,6 +167,7 @@ export class ProductsController {
   }
 
   @Delete('sales/batch/:paymentId')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('productSales', 'delete')
   @ApiOperation({ summary: 'Void all sales in a batch' })
@@ -177,6 +181,7 @@ export class ProductsController {
   }
 
   @Delete('sales/:id')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('productSales', 'delete')
   @ApiOperation({ summary: 'Void a product sale' })

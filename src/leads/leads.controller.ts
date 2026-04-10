@@ -26,6 +26,7 @@ import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('leads')
@@ -84,7 +85,7 @@ export class LeadsController {
 
   @Post()
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Create a new lead' })
   async create(
@@ -97,7 +98,7 @@ export class LeadsController {
 
   @Patch(':id')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update a lead' })
   async update(
@@ -111,7 +112,7 @@ export class LeadsController {
 
   @Patch(':id/stage')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update lead pipeline stage' })
   async updateStage(
@@ -125,7 +126,7 @@ export class LeadsController {
 
   @Patch(':id/convert')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Convert lead to user' })
   async convertToUser(
@@ -138,7 +139,7 @@ export class LeadsController {
 
   @Delete(':id')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'delete')
   @ApiOperation({ summary: 'Soft delete a lead' })
   async remove(
@@ -150,7 +151,7 @@ export class LeadsController {
 
   @Post(':id/activities')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Add an activity to a lead' })
   async createActivity(

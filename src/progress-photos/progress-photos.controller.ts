@@ -20,6 +20,7 @@ import {
 } from './dto/progress-photo.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
@@ -33,6 +34,7 @@ export class ProgressPhotosController {
   constructor(private readonly progressPhotosService: ProgressPhotosService) {}
 
   @Post('upload')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Upload a progress photo' })
   @ApiConsumes('multipart/form-data')
@@ -86,6 +88,7 @@ export class ProgressPhotosController {
   }
 
   @Delete(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a progress photo' })
   async remove(

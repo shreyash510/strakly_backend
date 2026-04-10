@@ -24,6 +24,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
@@ -153,7 +154,7 @@ export class AppointmentsController {
 
   @Post()
   @Roles('admin', 'manager', 'trainer', 'client')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'create')
   @ApiOperation({ summary: 'Book an appointment (checks trainer conflicts)' })
   async create(
@@ -169,7 +170,7 @@ export class AppointmentsController {
 
   @Patch(':id')
   @Roles('admin', 'manager', 'trainer')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update an appointment' })
   async update(
@@ -186,7 +187,7 @@ export class AppointmentsController {
 
   @Patch(':id/status')
   @Roles('admin', 'manager', 'trainer', 'client')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update appointment status (confirm, complete, cancel, no_show)' })
   async updateStatus(
