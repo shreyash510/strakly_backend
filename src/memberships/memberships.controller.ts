@@ -30,6 +30,7 @@ import {
   UpdateMembershipFacilitiesDto,
 } from './dto/membership.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
@@ -101,7 +102,7 @@ export class MembershipsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
-      branchId: branchId ? parseInt(branchId, 10) : null,
+      branchId: resolveEffectiveBranchId(req.user, branchId),
     });
   }
 
@@ -113,7 +114,7 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Query('branchId') branchId?: string,
   ): Promise<any> {
-    return this.membershipsService.getStats(req.user.gymId!, branchId ? parseInt(branchId, 10) : null);
+    return this.membershipsService.getStats(req.user.gymId!, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('overview')
@@ -144,7 +145,7 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    return this.membershipsService.getOverview(gymId, branchId ? parseInt(branchId, 10) : null);
+    return this.membershipsService.getOverview(gymId, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('expiring')

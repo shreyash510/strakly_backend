@@ -1,4 +1,5 @@
 import { Controller, Get, UseGuards, Req, Query } from '@nestjs/common';
+import { resolveEffectiveBranchId } from '../common';
 import {
   ApiTags,
   ApiOperation,
@@ -76,7 +77,7 @@ export class DashboardController {
   ): Promise<AdminDashboardDto> {
     const userId = req.user?.userId;
     const gymId = req.user?.gymId;
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    const parsedBranchId = resolveEffectiveBranchId(req.user, branchId);
     return this.dashboardService.getAdminDashboard(
       Number(userId),
       Number(gymId),
@@ -133,7 +134,7 @@ export class DashboardController {
     const gymId = req.user?.gymId;
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    const parsedBranchId = resolveEffectiveBranchId(req.user, branchId);
     return this.dashboardService.getNewClients(
       Number(gymId),
       pageNum,
@@ -174,7 +175,7 @@ export class DashboardController {
     const gymId = req.user?.gymId;
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 5;
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
+    const parsedBranchId = resolveEffectiveBranchId(req.user, branchId);
     return this.dashboardService.getNewInquiries(
       Number(gymId),
       pageNum,

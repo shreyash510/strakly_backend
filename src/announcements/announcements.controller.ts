@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
 import {
@@ -24,6 +25,8 @@ import { ManagerPermission } from '../auth/decorators/manager-permission.decorat
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @Controller('announcements')
 @UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
@@ -44,6 +47,7 @@ export class AnnouncementsController {
 
   @Get('active')
   async getActive(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('platform') platform?: 'dashboard' | 'mobile',
     @Query('branchId') branchId?: string,
@@ -51,7 +55,7 @@ export class AnnouncementsController {
     return this.announcementsService.getActive(
       gymId,
       platform || 'dashboard',
-      branchId ? parseInt(branchId) : undefined,
+      resolveEffectiveBranchId(req.user, branchId) ?? undefined,
     );
   }
 

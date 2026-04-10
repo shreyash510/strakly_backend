@@ -18,6 +18,7 @@ import { PdfTemplateService } from './pdf-template.service';
 import { ReportFilterDto, DailySalesFilterDto } from './dto/reports.dto';
 import { PdfReportFilterDto } from './dto/pdf-report.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -118,7 +119,7 @@ export class ReportsController {
     @Query('branchId') branchId?: string,
   ) {
     const gymId = req.user.gymId!;
-    return this.reportsService.getPaymentDuesReport(gymId, branchId ? parseInt(branchId, 10) : null);
+    return this.reportsService.getPaymentDuesReport(gymId, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('daily-sales')
@@ -133,7 +134,7 @@ export class ReportsController {
   ) {
     const gymId = req.user.gymId!;
     const date = filters.date || new Date().toISOString().slice(0, 10);
-    return this.reportsService.getDailySalesReport(gymId, date, branchId ? parseInt(branchId, 10) : null);
+    return this.reportsService.getDailySalesReport(gymId, date, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('deleted-transactions')

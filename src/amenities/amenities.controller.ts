@@ -27,6 +27,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('amenities')
 @Controller('amenities')
@@ -50,7 +51,7 @@ export class AmenitiesController {
     return this.amenitiesService.findAll(
       req.user.gymId!,
       includeInactive === 'true',
-      branchId ? parseInt(branchId) : null,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
