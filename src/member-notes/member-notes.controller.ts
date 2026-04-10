@@ -18,6 +18,7 @@ import {
 } from './dto/member-note.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
@@ -41,6 +42,7 @@ export class MemberNotesController {
   }
 
   @Post()
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a client note' })
   async create(
@@ -52,6 +54,7 @@ export class MemberNotesController {
   }
 
   @Patch(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a client note' })
   async update(
@@ -63,6 +66,7 @@ export class MemberNotesController {
   }
 
   @Patch(':id/pin')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Toggle pin on a client note' })
   async togglePin(
@@ -73,6 +77,7 @@ export class MemberNotesController {
   }
 
   @Delete(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Delete a client note' })
   async remove(

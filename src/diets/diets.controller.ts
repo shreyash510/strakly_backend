@@ -31,6 +31,7 @@ import type { AuthenticatedRequest } from '../common/types';
 import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
@@ -175,7 +176,7 @@ export class DietsController {
   // ============ ASSIGNMENT ENDPOINTS ============
 
   @Post('assign')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
@@ -238,7 +239,7 @@ export class DietsController {
   }
 
   @Patch('assignments/:id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'update')
   @ApiOperation({ summary: 'Update a diet assignment' })
@@ -253,7 +254,7 @@ export class DietsController {
   }
 
   @Delete('assignments/:id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'delete')
   @ApiOperation({ summary: 'Unassign (cancel) a diet assignment' })

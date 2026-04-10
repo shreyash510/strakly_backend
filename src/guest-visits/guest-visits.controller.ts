@@ -15,6 +15,7 @@ import { GuestVisitsService } from './guest-visits.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
@@ -63,7 +64,7 @@ export class GuestVisitsController {
   }
 
   @Post()
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'create')
   @ApiOperation({ summary: 'Record a guest visit' })
@@ -76,7 +77,7 @@ export class GuestVisitsController {
   }
 
   @Patch(':id')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Update a guest visit' })
@@ -89,7 +90,7 @@ export class GuestVisitsController {
   }
 
   @Patch(':id/convert')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Mark guest as converted to client' })
@@ -101,7 +102,7 @@ export class GuestVisitsController {
   }
 
   @Delete(':id')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'delete')
   @ApiOperation({ summary: 'Delete a guest visit' })

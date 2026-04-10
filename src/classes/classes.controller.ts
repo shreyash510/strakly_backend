@@ -24,6 +24,7 @@ import {
 } from './dto/class.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
@@ -187,6 +188,7 @@ export class ClassesController {
   }
 
   @Post('sessions/:id/book')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer', 'client')
   @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Book into a session (auto-waitlist if full)' })
@@ -199,6 +201,7 @@ export class ClassesController {
   }
 
   @Patch('bookings/:id/status')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer', 'client')
   @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update booking status (attend, no_show, cancel)' })
