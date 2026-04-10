@@ -28,6 +28,8 @@ export interface AuthenticatedUser {
   isSuperAdmin: boolean;
   isImpersonating: boolean;
   branchId?: number | null;
+  /** All branches the user is allowed to access (non-admin multi-branch users) */
+  branchIds?: number[];
 }
 
 @Injectable()
@@ -154,7 +156,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id, email, name, status, role
+          `SELECT id, email, name, status, role, branch_id, allowed_branch_ids
          FROM users
          WHERE id = $1`,
           [userId],
@@ -212,6 +214,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantSchemaName: tenantSchemaName,
       isSuperAdmin: false,
       isImpersonating: false,
+      branchId: userData.branch_id ?? null,
+      branchIds: (() => {
+        const raw = userData.allowed_branch_ids;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw as number[];
+        try { return JSON.parse(raw) as number[]; } catch { return []; }
+      })(),
     };
   }
 }

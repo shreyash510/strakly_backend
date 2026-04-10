@@ -28,6 +28,7 @@ import {
   UpdateDietAssignmentDto,
 } from './dto/diet.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -102,7 +103,7 @@ export class DietsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
-      branchId: branchId ? parseInt(branchId, 10) : undefined,
+      branchId: resolveEffectiveBranchId(req.user, branchId) ?? undefined,
     });
   }
 

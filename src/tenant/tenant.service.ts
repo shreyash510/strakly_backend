@@ -310,6 +310,43 @@ export class TenantService implements OnModuleDestroy {
     } catch (error) {
       this.logger.error(`Error seeding plans for ${schemaName}:`, error.message);
     }
+
+    // Add branch_id columns — runs last, isolated, so a failed table creation never blocks this
+    await this.addBranchIdColumns(client, schemaName);
+  }
+
+  /**
+   * Add branch_id (and related multi-branch columns) to all tables that need it.
+   * Each ALTER TABLE runs in its own try/catch so a missing table never blocks the rest.
+   */
+  private async addBranchIdColumns(client: PoolClient, schemaName: string): Promise<void> {
+    const tables = [
+      'users', 'leads', 'referrals', 'plans', 'memberships', 'products',
+      'product_sales', 'expenses', 'attendance', 'attendance_history',
+      'announcements', 'class_types', 'class_schedules', 'class_sessions',
+      'appointments', 'guest_visits', 'activity_logs', 'staff_salaries',
+    ];
+
+    for (const table of tables) {
+      try {
+        await client.query(`ALTER TABLE "${schemaName}"."${table}" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to add branch_id to ${schemaName}.${table}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // allowed_branch_ids for multi-branch manager access
+    try {
+      await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN IF NOT EXISTS allowed_branch_ids JSONB DEFAULT '[]'`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to add allowed_branch_ids to ${schemaName}.users:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   /**
@@ -1240,6 +1277,8 @@ export class TenantService implements OnModuleDestroy {
         id_type VARCHAR(30),
         id_number VARCHAR(50),
         manager_permissions JSONB,
+        branch_id INTEGER,
+        allowed_branch_ids JSONB DEFAULT '[]',
         is_deleted BOOLEAN DEFAULT FALSE,
         deleted_at TIMESTAMP,
         deleted_by INTEGER,
@@ -2784,21 +2823,6 @@ export class TenantService implements OnModuleDestroy {
       ADD COLUMN IF NOT EXISTS deleted_by INTEGER
     `);
 
-    // Add branch_id to leads, referrals, plans, memberships, products, product_sales, expenses if not exists (migration)
-    await client.query(`ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."referrals" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."plans" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."memberships" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."products" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."product_sales" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."expenses" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."attendance" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."attendance_history" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."announcements" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."class_types" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."class_sessions" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."appointments" ADD COLUMN IF NOT EXISTS branch_id INTEGER`);
-    await client.query(`ALTER TABLE "${schemaName}"."users" ADD COLUMN IF NOT EXISTS allowed_branch_ids JSONB DEFAULT '[]'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS "${schemaName}"."product_stock_movements" (

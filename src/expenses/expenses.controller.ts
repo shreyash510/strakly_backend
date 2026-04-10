@@ -27,6 +27,7 @@ import {
   CreateExpenseCategoryDto,
 } from './dto/expense.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -103,7 +104,7 @@ export class ExpensesController {
         startDate,
         endDate,
         noPagination: noPagination === 'true',
-        branchId: branchId ? parseInt(branchId, 10) : null,
+        branchId: resolveEffectiveBranchId(req.user, branchId),
       },
     );
 
@@ -169,7 +170,7 @@ export class ExpensesController {
         startDate,
         endDate,
         noPagination: noPagination === 'true',
-        branchId: branchId ? parseInt(branchId, 10) : null,
+        branchId: resolveEffectiveBranchId(req.user, branchId),
       },
     );
 
@@ -203,7 +204,7 @@ export class ExpensesController {
       gymId,
       year ? parseInt(year) : undefined,
       month ? parseInt(month) : undefined,
-      branchId ? parseInt(branchId, 10) : null,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
@@ -230,7 +231,7 @@ export class ExpensesController {
       gymId,
       year ? parseInt(year) : undefined,
       month ? parseInt(month) : undefined,
-      branchId ? parseInt(branchId, 10) : null,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 

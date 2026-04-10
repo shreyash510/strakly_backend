@@ -9,6 +9,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,6 +32,8 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('equipment')
 @Controller('equipment')
@@ -53,10 +56,11 @@ export class EquipmentController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get equipment statistics' })
   getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.equipmentService.getStats(gymId, branchId ? parseInt(branchId) : null);
+    return this.equipmentService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('maintenance/upcoming')

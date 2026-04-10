@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { GuestVisitsService } from './guest-visits.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
@@ -17,6 +18,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
@@ -32,10 +35,11 @@ export class GuestVisitsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.guestVisitsService.getStats(gymId, branchId ? parseInt(branchId) : undefined);
+    return this.guestVisitsService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get()

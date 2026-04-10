@@ -27,6 +27,7 @@ import {
   AttendanceReportQueryDto,
 } from './dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles, GymId, UserId } from '../auth/decorators';
@@ -193,7 +194,7 @@ export class AttendanceController {
     @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getTodayAttendance(gymId, branchId ? parseInt(branchId, 10) : undefined);
+    return this.attendanceService.getTodayAttendance(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('date/:date')
@@ -213,7 +214,7 @@ export class AttendanceController {
     @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getAttendanceByDate(date, gymId, branchId ? parseInt(branchId, 10) : undefined);
+    return this.attendanceService.getAttendanceByDate(date, gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('user')
@@ -274,7 +275,7 @@ export class AttendanceController {
     @Query('branchId') branchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.attendanceService.getAttendanceStats(gymId, branchId ? parseInt(branchId, 10) : undefined);
+    return this.attendanceService.getAttendanceStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('present-count')
@@ -295,7 +296,7 @@ export class AttendanceController {
     const gymId = this.resolveGymId(req, queryGymId);
     const count = await this.attendanceService.getCurrentlyPresentCount(
       gymId,
-      branchId ? parseInt(branchId, 10) : undefined,
+      resolveEffectiveBranchId(req.user, branchId) ?? undefined,
     );
     return { count };
   }
@@ -363,7 +364,7 @@ export class AttendanceController {
       limit || 50,
       startDate,
       endDate,
-      branchId ? parseInt(branchId, 10) : undefined,
+      resolveEffectiveBranchId(req.user, branchId) ?? undefined,
     );
   }
 

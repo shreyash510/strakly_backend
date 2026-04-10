@@ -11,6 +11,7 @@ import {
   UseGuards,
   Res,
   Request,
+  Req,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -45,6 +46,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { setPaginationHeaders } from '../common/pagination.util';
 
 @ApiTags('products')
@@ -234,21 +237,22 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
-    return this.productsService.findLowStockProducts(gymId, parsedBranchId);
+    return this.productsService.findLowStockProducts(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('inventory/stats')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get inventory valuation and stock stats' })
   getInventoryStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getInventoryStats(gymId, branchId ? parseInt(branchId) : undefined);
+    return this.productsService.getInventoryStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Batch Stock Adjustment ─── */
@@ -271,10 +275,11 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get reorder suggestions based on sales velocity' })
   getReorderSuggestions(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getReorderSuggestions(gymId, branchId ? parseInt(branchId) : undefined);
+    return this.productsService.getReorderSuggestions(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Dead Stock ─── */
@@ -283,11 +288,12 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get dead stock products with no recent sales' })
   getDeadStock(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('days') days?: string,
     @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30, branchId ? parseInt(branchId) : undefined);
+    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Stock Take (Physical Count) ─── */

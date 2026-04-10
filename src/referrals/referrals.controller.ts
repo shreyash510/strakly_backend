@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import {
@@ -20,6 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
@@ -45,10 +48,11 @@ export class ReferralsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get referral statistics' })
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('branchId') branchId?: string,
   ) {
-    return this.referralsService.getStats(gymId, branchId ? parseInt(branchId) : undefined);
+    return this.referralsService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('user/:userId')

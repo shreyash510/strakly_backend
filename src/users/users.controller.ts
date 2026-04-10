@@ -44,6 +44,7 @@ import {
   setPaginationHeaders,
   resolveGymId,
   resolveOptionalGymId,
+  resolveEffectiveBranchId,
 } from '../common';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
@@ -155,7 +156,7 @@ export class UsersController {
       gender: filterGender,
       joinDateFrom,
       joinDateTo,
-      branchId: branchId ? parseInt(branchId, 10) : null,
+      branchId: resolveEffectiveBranchId(user, branchId),
     });
 
     if (res && result.pagination) {
@@ -594,7 +595,7 @@ export class UsersController {
         ? parseInt(queryGymId)
         : undefined
       : resolveGymId(user.gymId, queryGymId, false);
-    return this.usersService.getStatusCounts(role, gymId, branchId ? parseInt(branchId, 10) : null);
+    return this.usersService.getStatusCounts(role, gymId, resolveEffectiveBranchId(user, branchId));
   }
 
   @Patch('bulk/update')

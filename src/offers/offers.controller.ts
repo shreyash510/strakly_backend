@@ -26,6 +26,7 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('offers')
 @Controller('offers')
@@ -48,7 +49,7 @@ export class OffersController {
     return this.offersService.findAll(
       req.user.gymId!,
       includeInactive === 'true',
-      branchId ? parseInt(branchId, 10) : null,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
@@ -58,7 +59,7 @@ export class OffersController {
     @Request() req: AuthenticatedRequest,
     @Query('branchId') branchId?: string,
   ) {
-    return this.offersService.findActive(req.user.gymId!, branchId ? parseInt(branchId, 10) : null);
+    return this.offersService.findActive(req.user.gymId!, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Post()
