@@ -346,7 +346,7 @@ export class ActivityLogsService {
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const staffFilter = `actor_type IN ('manager', 'trainer')`;
-      const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+      const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
       const [actionCountsResult, activeStaffResult, totalResult, todayResult] =
         await Promise.all([

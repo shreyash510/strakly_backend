@@ -44,8 +44,8 @@ export class ReportsService {
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
     const branchId = filters.branchId;
-    const membershipBranchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
-    const productBranchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+    const membershipBranchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+    const productBranchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
     // Get membership income
     const membershipIncome = await this.tenantService.executeInTenant(
@@ -349,7 +349,7 @@ export class ReportsService {
     const salesByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchClause = branchId ? ` AND branch_id = ${branchId}` : '';
+        const branchClause = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
         const whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchClause} AND EXTRACT(YEAR FROM paid_at) = $1`;
         const values: SqlValue[] = [year];
 

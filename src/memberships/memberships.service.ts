@@ -1085,7 +1085,7 @@ export class MembershipsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+        const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
         const softDeleteFilter =
           ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
 
@@ -1173,7 +1173,7 @@ export class MembershipsService {
       const values: SqlValue[] = [];
 
       if (branchId) {
-        query += ` AND branch_id = ${branchId}`;
+        query += ` AND (branch_id = ${branchId} OR branch_id IS NULL)`;
       }
 
       query += ` GROUP BY plan_id ORDER BY count DESC`;

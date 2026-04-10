@@ -287,7 +287,7 @@ export class DashboardService {
         let baseWhere = `role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         if (branchId) {
           values.push(branchId);
-          baseWhere += ` AND branch_id = $${values.length}`;
+          baseWhere += ` AND (branch_id = $${values.length} OR branch_id IS NULL)`;
         }
         const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
@@ -345,7 +345,7 @@ export class DashboardService {
         let baseWhere = `role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         if (branchId) {
           values.push(branchId);
-          baseWhere += ` AND branch_id = $${values.length}`;
+          baseWhere += ` AND (branch_id = $${values.length} OR branch_id IS NULL)`;
         }
         const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
         let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
@@ -398,7 +398,7 @@ export class DashboardService {
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const branchFilter = branchId ? ` AND branch_id = ${branchId}` : '';
+    const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
     const stats = await this.tenantService.executeInTenant(
       gymId,
@@ -851,7 +851,7 @@ export class DashboardService {
 
         if (branchId) {
           values.push(branchId);
-          query += ` AND m.branch_id = $${values.length}`;
+          query += ` AND (m.branch_id = $${values.length} OR m.branch_id IS NULL)`;
         }
 
         query += ` ORDER BY m.end_date ASC LIMIT $${values.length + 1}`;
