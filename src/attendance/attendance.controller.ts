@@ -370,7 +370,7 @@ export class AttendanceController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete an attendance record' })
   @ApiQuery({
