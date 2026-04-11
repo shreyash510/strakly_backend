@@ -147,7 +147,7 @@ export class LeadsService {
     return this.formatLead(lead);
   }
 
-  async create(gymId: number, dto: CreateLeadDto, createdBy?: number) {
+  async create(gymId: number, dto: CreateLeadDto, createdBy?: number, branchId?: number | null) {
     const lead = await this.tenantService.executeInTenant(gymId, async (client) => {
       const initialStage = dto.pipelineStage || 'new';
       const result = await client.query(
@@ -155,9 +155,9 @@ export class LeadsService {
            name, email, phone, lead_source,
            pipeline_stage, assigned_to, score,
            inquiry_date, expected_close_date, deal_value, notes,
-           stage_entered_at, created_at, updated_at
+           branch_id, stage_entered_at, created_at, updated_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
          RETURNING *`,
         [
           dto.name,
@@ -171,6 +171,7 @@ export class LeadsService {
           dto.expectedCloseDate || null,
           dto.dealValue || null,
           dto.notes || null,
+          branchId ?? null,
         ],
       );
       const row = result.rows[0];

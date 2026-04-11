@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -29,6 +30,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('appointments')
@@ -162,8 +165,9 @@ export class AppointmentsController {
     @GymId() gymId: number,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    const result = await this.appointmentsService.createAppointment(gymId, dto, userId, userRole);
+    const result = await this.appointmentsService.createAppointment(gymId, dto, userId, userRole, resolveEffectiveBranchId(req.user, undefined));
     this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'created' });
     return result;
   }

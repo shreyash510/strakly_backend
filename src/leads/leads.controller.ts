@@ -96,8 +96,9 @@ export class LeadsController {
     @Body() dto: CreateLeadDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.leadsService.create(gymId, dto, userId);
+    return this.leadsService.create(gymId, dto, userId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

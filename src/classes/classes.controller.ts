@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { ClassesService } from './classes.service';
 import {
@@ -28,6 +29,8 @@ import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
@@ -68,8 +71,9 @@ export class ClassesController {
   async createType(
     @Body() dto: CreateClassTypeDto,
     @GymId() gymId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.classesService.createType(gymId, dto);
+    return this.classesService.createType(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch('types/:id')
@@ -113,8 +117,9 @@ export class ClassesController {
   async createSchedule(
     @Body() dto: CreateClassScheduleDto,
     @GymId() gymId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.classesService.createSchedule(gymId, dto);
+    return this.classesService.createSchedule(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch('schedules/:id')

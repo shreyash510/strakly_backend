@@ -261,7 +261,7 @@ export class ReportsService {
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
     const branchId = filters.branchId;
-    const branchFilter = branchId ? ` AND m.branch_id = ${branchId}` : '';
+    const branchFilter = branchId ? ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)` : '';
 
     // Get sales summary
     const salesSummary = await this.tenantService.executeInTenant(
@@ -417,7 +417,7 @@ export class ReportsService {
         const values: SqlValue[] = [];
 
         if (branchId) {
-          query += ` AND m.branch_id = ${branchId}`;
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
         }
         query += ` ORDER BY m.created_at ASC`;
 
@@ -671,8 +671,8 @@ export class ReportsService {
   ) {
     const dayStart = `${date} 00:00:00`;
     const dayEnd = `${date} 23:59:59.999`;
-    const membershipBranchClause = branchId ? ` AND m.branch_id = ${branchId}` : '';
-    const productBranchClause = branchId ? ` AND ps.branch_id = ${branchId}` : '';
+    const membershipBranchClause = branchId ? ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)` : '';
+    const productBranchClause = branchId ? ` AND (ps.branch_id = ${branchId} OR ps.branch_id IS NULL)` : '';
 
     // 1. Get membership payments for the day
     const membershipSales = await this.tenantService.executeInTenant(

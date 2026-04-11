@@ -158,6 +158,7 @@ export class ReferralsService {
   async create(
     gymId: number,
     dto: CreateReferralDto,
+    branchId?: number | null,
   ) {
     // Prevent self-referral
     if (dto.referredId && dto.referrerId === dto.referredId) {
@@ -169,14 +170,15 @@ export class ReferralsService {
       const referralCode = dto.referralCode || this.generateReferralCode();
 
       const result = await client.query(
-        `INSERT INTO referrals (referrer_id, referred_id, referral_code, status, notes)
-         VALUES ($1, $2, $3, 'pending', $4)
+        `INSERT INTO referrals (referrer_id, referred_id, referral_code, status, notes, branch_id)
+         VALUES ($1, $2, $3, 'pending', $4, $5)
          RETURNING *`,
         [
           dto.referrerId,
           dto.referredId || null,
           referralCode,
           dto.notes || null,
+          branchId ?? null,
         ],
       );
       return result.rows[0];

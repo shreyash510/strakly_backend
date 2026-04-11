@@ -142,6 +142,7 @@ export class DietsController {
       dto,
       req.user.gymId!,
       req.user.userId,
+      resolveEffectiveBranchId(req.user, undefined),
     );
     this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'created' });
     return result;

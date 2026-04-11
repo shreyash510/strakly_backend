@@ -178,7 +178,7 @@ export class ExpensesService {
     });
   }
 
-  async create(dto: CreateExpenseDto, gymId: number, userId: number) {
+  async create(dto: CreateExpenseDto, gymId: number, userId: number, branchId?: number | null) {
     // Get gym currency as default
     const gym = await this.prisma.gym.findUnique({
       where: { id: gymId },
@@ -194,8 +194,8 @@ export class ExpensesService {
           `INSERT INTO expenses (
             category_id, title, description, amount, currency, expense_date,
             payment_status, payment_method, payment_ref,
-            is_recurring, recurring_frequency, notes, created_by, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+            is_recurring, recurring_frequency, notes, created_by, branch_id, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
           RETURNING *`,
           [
             dto.categoryId || null,
@@ -211,6 +211,7 @@ export class ExpensesService {
             dto.recurringFrequency || null,
             dto.notes || null,
             userId,
+            branchId ?? null,
           ],
         );
         return result.rows[0];

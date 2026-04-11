@@ -130,7 +130,7 @@ export class GuestVisitsService {
     return this.formatVisit(visit);
   }
 
-  async create(gymId: number, dto: CreateGuestVisitDto, checkedInBy: number) {
+  async create(gymId: number, dto: CreateGuestVisitDto, checkedInBy: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Enforce guest visit limit per client per month
       if (dto.broughtBy) {
@@ -147,8 +147,8 @@ export class GuestVisitsService {
       }
 
       const result = await client.query(
-        `INSERT INTO guest_visits (guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, created_at)
-         VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9, NOW())
+        `INSERT INTO guest_visits (guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, branch_id, created_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9, $10, NOW())
          RETURNING *`,
         [
           dto.guestName,
@@ -160,6 +160,7 @@ export class GuestVisitsService {
           dto.paymentMethod ?? null,
           dto.notes ?? null,
           checkedInBy,
+          branchId ?? null,
         ],
       );
 

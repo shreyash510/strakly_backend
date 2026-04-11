@@ -193,6 +193,7 @@ export class DietsService {
     dto: CreateDietDto,
     gymId: number,
     userId: number,
+    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
 
@@ -200,8 +201,8 @@ export class DietsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO diets (title, type, description, category, content, status, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+          `INSERT INTO diets (title, type, description, category, content, status, created_by, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
           [
             dto.title,
@@ -211,6 +212,7 @@ export class DietsService {
             dto.content,
             dto.status || 'active',
             userId,
+            branchId ?? null,
           ],
         );
         return result.rows[0];
