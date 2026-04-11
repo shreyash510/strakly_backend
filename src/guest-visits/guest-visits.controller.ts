@@ -57,10 +57,11 @@ export class GuestVisitsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a guest visit by ID' })
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.guestVisitsService.findOne(id, gymId);
+    return this.guestVisitsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Post()

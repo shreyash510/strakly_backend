@@ -120,14 +120,22 @@ export class LeadsService {
     });
   }
 
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     const lead = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['l.id = $1', 'l.is_deleted = FALSE'];
+      const values: SqlValue[] = [id];
+
+      if (branchId) {
+        conditions.push(`(l.branch_id = $2 OR l.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
       const result = await client.query(
         `SELECT l.*, u.name as assigned_to_name
          FROM leads l
          LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE l.id = $1 AND l.is_deleted = FALSE`,
-        [id],
+         WHERE ${conditions.join(' AND ')}`,
+        values,
       );
       return result.rows[0];
     });

@@ -151,13 +151,18 @@ export class ActivityLogsService {
     targetType: string,
     targetId: number,
     gymId: number,
+    branchId?: number | null,
   ): Promise<ActivityLogRecord[]> {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 AND actor_type IN ('manager', 'trainer') ORDER BY created_at DESC LIMIT 100`;
         const values: SqlValue[] = [targetType, targetId];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
 
+        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 AND actor_type IN ('manager', 'trainer')${branchClause} ORDER BY created_at DESC LIMIT 100`;
         const result = await client.query(query, values);
         return result.rows;
       },
@@ -174,13 +179,21 @@ export class ActivityLogsService {
     actorType: string,
     gymId: number,
     limit = 50,
+    branchId?: number | null,
   ): Promise<ActivityLogRecord[]> {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const values: SqlValue[] = [actorId, actorType];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
+        values.push(limit);
+
         const result = await client.query(
-          `SELECT * FROM activity_logs WHERE actor_id = $1 AND actor_type = $2 ORDER BY created_at DESC LIMIT $3`,
-          [actorId, actorType, limit],
+          `SELECT * FROM activity_logs WHERE actor_id = $1 AND actor_type = $2${branchClause} ORDER BY created_at DESC LIMIT $${values.length}`,
+          values,
         );
         return result.rows;
       },

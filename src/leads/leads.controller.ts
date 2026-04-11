@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
 import {
@@ -28,6 +29,8 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('leads')
 @Controller('leads')
@@ -77,10 +80,11 @@ export class LeadsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a lead by ID' })
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.leadsService.findOne(id, gymId);
+    return this.leadsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Post()

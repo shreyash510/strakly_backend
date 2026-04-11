@@ -136,6 +136,11 @@ export class PaymentsService {
           values.push(new Date(filters.endDate));
         }
 
+        if (filters.branchId) {
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -169,14 +174,21 @@ export class PaymentsService {
   async findOne(
     id: number,
     gymId: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     const payment = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const query = `SELECT * FROM payments WHERE id = $1`;
         const values: SqlValue[] = [id];
+        const branchClause = branchId
+          ? ` AND (branch_id = $2 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
 
-        const result = await client.query(query, values);
+        const result = await client.query(
+          `SELECT * FROM payments WHERE id = $1${branchClause}`,
+          values,
+        );
         return result.rows[0];
       },
     );
@@ -195,13 +207,20 @@ export class PaymentsService {
     referenceTable: string,
     referenceId: number,
     gymId: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord[]> {
     const payments = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const values: SqlValue[] = [referenceTable, referenceId];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
+
         const result = await client.query(
-          `SELECT * FROM payments WHERE reference_table = $1 AND reference_id = $2 ORDER BY created_at DESC`,
-          [referenceTable, referenceId],
+          `SELECT * FROM payments WHERE reference_table = $1 AND reference_id = $2${branchClause} ORDER BY created_at DESC`,
+          values,
         );
         return result.rows;
       },
@@ -362,6 +381,7 @@ export class PaymentsService {
     gymId: number,
     startDate?: Date,
     endDate?: Date,
+    branchId?: number | null,
   ) {
     const now = new Date();
     const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
@@ -370,6 +390,12 @@ export class PaymentsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        const baseValues: SqlValue[] = [start, end];
+        if (branchId) baseValues.push(branchId);
+
         const [totalResult, byTypeResult, byMethodResult, byStatusResult] =
           await Promise.all([
             client.query(
@@ -378,29 +404,29 @@ export class PaymentsService {
             COALESCE(SUM(net_amount), 0) as total_amount,
             COALESCE(SUM(CASE WHEN status = 'completed' THEN net_amount ELSE 0 END), 0) as completed_amount
           FROM payments
-          WHERE created_at >= $1 AND created_at <= $2`,
-              [start, end],
+          WHERE created_at >= $1 AND created_at <= $2${branchClause}`,
+              baseValues,
             ),
             client.query(
               `SELECT payment_type, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchClause}
            GROUP BY payment_type`,
-              [start, end],
+              baseValues,
             ),
             client.query(
               `SELECT payment_method, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchClause}
            GROUP BY payment_method`,
-              [start, end],
+              baseValues,
             ),
             client.query(
               `SELECT status, COUNT(*) as count
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2
+           WHERE created_at >= $1 AND created_at <= $2${branchClause}
            GROUP BY status`,
-              [start, end],
+              baseValues,
             ),
           ]);
 
