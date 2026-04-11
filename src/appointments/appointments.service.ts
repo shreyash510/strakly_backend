@@ -377,7 +377,7 @@ export class AppointmentsService {
     });
   }
 
-  async createAppointment(gymId: number, dto: CreateAppointmentDto, createdBy: number, userRole: string) {
+  async createAppointment(gymId: number, dto: CreateAppointmentDto, createdBy: number, userRole: string, branchId?: number | null) {
     if (new Date(dto.startTime) >= new Date(dto.endTime)) {
       throw new BadRequestException('End time must be after start time');
     }
@@ -406,8 +406,8 @@ export class AppointmentsService {
         }
 
         const result = await client.query(
-          `INSERT INTO appointments (service_id, trainer_id, user_id, start_time, end_time, status, notes, created_by, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 'booked', $6, $7, NOW(), NOW())
+          `INSERT INTO appointments (service_id, trainer_id, user_id, start_time, end_time, status, notes, created_by, branch_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'booked', $6, $7, $8, NOW(), NOW())
            RETURNING *`,
           [
             dto.serviceId ?? null,
@@ -417,6 +417,7 @@ export class AppointmentsService {
             dto.endTime,
             dto.notes ?? null,
             createdBy,
+            branchId ?? null,
           ],
         );
 

@@ -179,11 +179,11 @@ export class ClassesService {
     return this.formatClassType(type);
   }
 
-  async createType(gymId: number, dto: CreateClassTypeDto) {
+  async createType(gymId: number, dto: CreateClassTypeDto, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_types (name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        `INSERT INTO class_types (name, description, category, default_duration, default_capacity, color, icon, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
           dto.name,
@@ -193,6 +193,7 @@ export class ClassesService {
           dto.defaultCapacity ?? 20,
           dto.color ?? null,
           dto.icon ?? null,
+          branchId ?? null,
         ],
       );
       return this.formatClassType(result.rows[0]);
@@ -276,7 +277,7 @@ export class ClassesService {
     });
   }
 
-  async createSchedule(gymId: number, dto: CreateClassScheduleDto) {
+  async createSchedule(gymId: number, dto: CreateClassScheduleDto, branchId?: number | null) {
     if (dto.startTime >= dto.endTime) {
       throw new BadRequestException('End time must be after start time');
     }
@@ -286,8 +287,8 @@ export class ClassesService {
 
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_schedules (class_type_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        `INSERT INTO class_schedules (class_type_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
          RETURNING *`,
         [
           dto.classTypeId,
@@ -300,6 +301,7 @@ export class ClassesService {
           dto.isRecurring !== undefined ? dto.isRecurring : true,
           dto.startDate ?? null,
           dto.endDate ?? null,
+          branchId ?? null,
         ],
       );
 

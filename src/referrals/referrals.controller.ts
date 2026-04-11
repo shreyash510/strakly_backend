@@ -73,8 +73,9 @@ export class ReferralsController {
   async create(
     @Body() dto: CreateReferralDto,
     @GymId() gymId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.referralsService.create(gymId, dto);
+    return this.referralsService.create(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

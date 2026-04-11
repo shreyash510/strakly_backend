@@ -73,8 +73,9 @@ export class GuestVisitsController {
     @Body() dto: CreateGuestVisitDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.guestVisitsService.create(gymId, dto, userId);
+    return this.guestVisitsService.create(gymId, dto, userId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

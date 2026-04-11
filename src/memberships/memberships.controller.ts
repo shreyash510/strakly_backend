@@ -378,6 +378,7 @@ export class MembershipsController {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
+      branchId: resolveEffectiveBranchId(req.user, undefined),
     });
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'created' });
     return result;

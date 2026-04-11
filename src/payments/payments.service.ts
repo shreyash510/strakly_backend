@@ -504,6 +504,7 @@ export class PaymentsService {
     paymentMethod: string,
     paymentRef?: string,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     return this.createWithClient(
       client,
@@ -521,6 +522,7 @@ export class PaymentsService {
         paymentRef,
       },
       processedBy,
+      branchId,
     );
   }
 

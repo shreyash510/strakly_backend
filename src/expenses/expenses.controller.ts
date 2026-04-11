@@ -303,7 +303,7 @@ export class ExpensesController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.expensesService.create(createExpenseDto, gymId, req.user.userId);
+    return this.expensesService.create(createExpenseDto, gymId, req.user.userId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')
