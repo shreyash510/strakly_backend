@@ -7,6 +7,7 @@ import {
   Patch,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import {
@@ -19,6 +20,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('payments')
 @ApiBearerAuth()
@@ -33,31 +36,37 @@ export class PaymentsController {
 
   @Get()
   async findAll(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query() filters: PaymentFiltersDto,
   ) {
+    filters.branchId = resolveEffectiveBranchId(req.user, filters.branchId ? String(filters.branchId) : undefined) ?? undefined;
     return this.paymentsService.findAll(gymId, filters);
   }
 
   @Get('stats')
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.paymentsService.getStats(
       gymId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
   @Get(':id')
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.paymentsService.findOne(id, gymId);
+    return this.paymentsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

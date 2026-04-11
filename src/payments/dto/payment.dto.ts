@@ -142,6 +142,10 @@ export class UpdatePaymentDto {
 
 export class PaymentFiltersDto {
   @IsOptional()
+  @IsNumber()
+  branchId?: number;
+
+  @IsOptional()
   @IsEnum(PaymentType)
   paymentType?: PaymentType;
 

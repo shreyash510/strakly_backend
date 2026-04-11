@@ -44,6 +44,7 @@ export class ActivityLogsController {
 
   @Get('target/:type/:id')
   async findByTarget(
+    @Req() req: AuthenticatedRequest,
     @Param('type') targetType: string,
     @Param('id', ParseIntPipe) targetId: number,
     @GymId() gymId: number,
@@ -52,11 +53,13 @@ export class ActivityLogsController {
       targetType,
       targetId,
       gymId,
+      resolveEffectiveBranchId(req.user, undefined),
     );
   }
 
   @Get('actor/:type/:id')
   async findByActor(
+    @Req() req: AuthenticatedRequest,
     @Param('type') actorType: string,
     @Param('id', ParseIntPipe) actorId: number,
     @GymId() gymId: number,
@@ -67,6 +70,7 @@ export class ActivityLogsController {
       actorType,
       gymId,
       limit || 50,
+      resolveEffectiveBranchId(req.user, undefined),
     );
   }
 }

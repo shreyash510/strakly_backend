@@ -105,10 +105,15 @@ export class GuestVisitsService {
     });
   }
 
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     const visit = await this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['gv.id = $1'];
       const values: SqlValue[] = [id];
+
+      if (branchId) {
+        conditions.push(`(gv.branch_id = $2 OR gv.branch_id IS NULL)`);
+        values.push(branchId);
+      }
 
       const result = await client.query(
         `SELECT gv.*, u.name as brought_by_name, staff.name as checked_in_by_name
