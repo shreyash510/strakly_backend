@@ -71,8 +71,8 @@ export class ReportsController {
       filters,
     );
 
-    const html = this.pdfTemplateService.buildFullReportHtml(fullData);
-    const pdfBuffer = await this.pdfGeneratorService.generatePdf(html);
+    const docDefinition = this.pdfTemplateService.buildDocDefinition(fullData);
+    const pdfBuffer = await this.pdfGeneratorService.generatePdf(docDefinition);
 
     const year = fullData.period.year;
     const month = fullData.period.month

@@ -1,82 +1,48 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import * as path from 'path';
+import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
 @Injectable()
-export class PdfGeneratorService implements OnModuleDestroy {
+export class PdfGeneratorService {
   private readonly logger = new Logger(PdfGeneratorService.name);
-  private browserInstance: any = null;
-  private browserLaunchPromise: Promise<any> | null = null;
+  private pdfmake: any = null;
 
-  private async getBrowser() {
-    if (this.browserInstance?.connected) {
-      return this.browserInstance;
-    }
+  private async getPdfMake() {
+    if (this.pdfmake) return this.pdfmake;
 
-    if (this.browserLaunchPromise) {
-      return this.browserLaunchPromise;
-    }
+    // pdfmake v0.3 server-side usage
+    const pdfmakeModule = await import('pdfmake');
+    this.pdfmake = pdfmakeModule.default || pdfmakeModule;
 
-    this.browserLaunchPromise = (async () => {
-      const puppeteer = await import('puppeteer');
-      this.browserInstance = await puppeteer.default.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
-      });
+    // Register fonts
+    const fontsDir = path.join(
+      process.cwd(),
+      'node_modules',
+      'pdfmake',
+      'fonts',
+      'Roboto',
+    );
+    this.pdfmake.fonts = {
+      Roboto: {
+        normal: path.join(fontsDir, 'Roboto-Regular.ttf'),
+        bold: path.join(fontsDir, 'Roboto-Medium.ttf'),
+        italics: path.join(fontsDir, 'Roboto-Italic.ttf'),
+        bolditalics: path.join(fontsDir, 'Roboto-MediumItalic.ttf'),
+      },
+    };
 
-      this.browserInstance.on('disconnected', () => {
-        this.browserInstance = null;
-        this.browserLaunchPromise = null;
-      });
-
-      this.browserLaunchPromise = null;
-      return this.browserInstance;
-    })();
-
-    return this.browserLaunchPromise;
+    return this.pdfmake;
   }
 
-  async generatePdf(htmlContent: string): Promise<Buffer> {
-    const browser = await this.getBrowser();
-
-    const page = await browser.newPage();
+  async generatePdf(docDefinition: TDocumentDefinitions): Promise<Buffer> {
     try {
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20mm',
-          right: '15mm',
-          bottom: '25mm',
-          left: '15mm',
-        },
-        displayHeaderFooter: true,
-        headerTemplate: '<div></div>',
-        footerTemplate: `
-          <div style="font-size:9px;text-align:center;width:100%;color:#94a3b8;font-family:Arial,sans-serif;">
-            Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-          </div>
-        `,
-      });
-
-      return Buffer.from(pdfBuffer);
+      const pdfmake = await this.getPdfMake();
+      const pdfDoc = pdfmake.createPdf(docDefinition);
+      const buffer = await pdfDoc.getBuffer();
+      return Buffer.from(buffer);
     } catch (error) {
       this.logger.error('Failed to generate PDF', error);
       throw error;
-    } finally {
-      await page.close();
-    }
-  }
-
-  async onModuleDestroy() {
-    if (this.browserInstance) {
-      await this.browserInstance.close();
-      this.browserInstance = null;
     }
   }
 }
