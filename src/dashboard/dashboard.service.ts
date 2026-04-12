@@ -1219,7 +1219,7 @@ export class DashboardService {
           `SELECT cb.id, ct.name as class_name, cs.start_time, cs.end_time,
                   u.name as trainer_name, cb.status
            FROM class_bookings cb
-           JOIN class_sessions cs ON cs.id = cb.class_session_id
+           JOIN class_sessions cs ON cs.id = cb.session_id
            JOIN class_types ct ON ct.id = cs.class_type_id
            LEFT JOIN users u ON u.id = cs.trainer_id
            WHERE cb.user_id = $1
