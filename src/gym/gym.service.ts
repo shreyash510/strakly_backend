@@ -91,10 +91,33 @@ export class GymService {
       },
     });
 
+    // Fetch total client count per gym from each tenant schema (in parallel)
+    const clientCounts = await Promise.all(
+      gyms.map(async (gym) => {
+        if (!gym.tenantSchemaName || gym.tenantSchemaName === 'pending') {
+          return 0;
+        }
+        try {
+          const exists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!exists) return 0;
+          return await this.tenantService.executeInTenant(gym.id, async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            );
+            return parseInt(result.rows[0]?.count || '0', 10);
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to count clients for gym ${gym.id}`, err);
+          return 0;
+        }
+      }),
+    );
+
     // Format response with owner info
-    const formattedGyms = gyms.map((gym) => {
+    const formattedGyms = gyms.map((gym, index) => {
       const adminAssignment = gym.userAssignments[0];
       return {
+        totalClients: clientCounts[index],
         id: gym.id,
         name: gym.name,
         description: gym.description,
