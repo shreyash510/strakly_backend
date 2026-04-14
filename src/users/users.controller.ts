@@ -460,7 +460,8 @@ export class UsersController {
     if (!user.gymId) {
       throw new BadRequestException('Gym ID is required for this operation');
     }
-    const result = await this.usersService.approveRequest(id, user.gymId, dto);
+    const branchId = resolveEffectiveBranchId(user, undefined);
+    const result = await this.usersService.approveRequest(id, user.gymId, dto, branchId);
     this.notificationsGateway.emitUserChanged(user.gymId, { action: 'status_changed' });
     this.rabbitMqService.publish('dashboard.recalculate', { gymId: user.gymId });
     return result;

@@ -2244,6 +2244,7 @@ export class UsersService {
     userId: number,
     gymId: number,
     dto?: ApproveRequestDto,
+    branchId?: number | null,
   ): Promise<any> {
     const userData = await this.tenantService.executeInTenant(
       gymId,
@@ -2294,6 +2295,7 @@ export class UsersService {
         userId,
         gymId,
         dto,
+        branchId,
       );
     }
 
@@ -2308,6 +2310,7 @@ export class UsersService {
     userId: number,
     gymId: number,
     dto: ApproveRequestDto,
+    branchId?: number | null,
   ): Promise<void> {
     // Get plan details
     const plan = await this.tenantService.executeInTenant(
