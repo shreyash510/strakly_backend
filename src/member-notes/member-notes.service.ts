@@ -99,11 +99,12 @@ export class MemberNotesService {
     dto: CreateMemberNoteDto,
     gymId: number,
     createdBy: number,
+    branchId?: number | null,
   ) {
     const note = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO member_notes (user_id, note_type, content, visibility, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        `INSERT INTO member_notes (user_id, note_type, content, visibility, created_by, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
         [
           dto.userId,
@@ -111,6 +112,7 @@ export class MemberNotesService {
           dto.content,
           dto.visibility || 'all',
           createdBy,
+          branchId || null,
         ],
       );
       return result.rows[0];

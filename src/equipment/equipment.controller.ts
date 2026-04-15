@@ -32,6 +32,7 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import type { AuthenticatedRequest } from '../common/types';
 import { resolveEffectiveBranchId } from '../common';
 
@@ -156,8 +157,9 @@ export class EquipmentController {
   create(
     @GymId() gymId: number,
     @Body() dto: CreateEquipmentDto,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.equipmentService.create(gymId, dto);
+    return this.equipmentService.create(gymId, dto, branchId);
   }
 
   @Patch(':id')

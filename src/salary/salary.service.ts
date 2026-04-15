@@ -68,6 +68,7 @@ export class SalaryService {
     createSalaryDto: CreateSalaryDto,
     gymId: number,
     paidById: number,
+    branchId?: number | null,
   ) {
     // Verify staff belongs to the gym (tenant schema)
     const staff = await this.tenantService.executeInTenant(
@@ -119,8 +120,8 @@ export class SalaryService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, NOW(), NOW())
+          `INSERT INTO staff_salaries (staff_id, month, year, base_salary, bonus, deductions, net_amount, is_recurring, payment_status, notes, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, NOW(), NOW())
          RETURNING *`,
           [
             createSalaryDto.staffId,
@@ -132,6 +133,7 @@ export class SalaryService {
             netAmount,
             isRecurring,
             createSalaryDto.notes || null,
+            branchId || null,
           ],
         );
         return result.rows[0];

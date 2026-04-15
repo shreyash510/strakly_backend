@@ -289,6 +289,7 @@ export class ProductsService {
   async createProduct(
     gymId: number,
     dto: CreateProductDto,
+    branchId?: number | null,
   ) {
     // Check subscription limit for maxProducts
     const subscription = await this.prisma.saasGymSubscription.findUnique({
@@ -321,8 +322,8 @@ export class ProductsService {
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO products (category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO products (category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active, branch_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           dto.categoryId || null,
@@ -336,6 +337,7 @@ export class ProductsService {
           dto.stockQuantity ?? 0,
           dto.lowStockThreshold ?? 5,
           dto.isActive ?? true,
+          branchId || null,
         ],
       );
 

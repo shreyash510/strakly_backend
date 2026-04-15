@@ -34,6 +34,7 @@ import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guar
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { resolveEffectiveBranchId } from '../common/helpers/gym-context.helper';
 
 @ApiTags('salary')
 @Controller('salary')
@@ -74,7 +75,8 @@ export class SalaryController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const result = await this.salaryService.create(createSalaryDto, gymId, req.user.userId);
+    const branchId = resolveEffectiveBranchId(req.user, undefined);
+    const result = await this.salaryService.create(createSalaryDto, gymId, req.user.userId, branchId);
     this.notificationsGateway.emitSalaryChanged(gymId, { action: 'created' });
     return result;
   }

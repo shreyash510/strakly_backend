@@ -386,8 +386,9 @@ export class ProductsController {
   createProduct(
     @GymId() gymId: number,
     @Body() dto: CreateProductDto,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.createProduct(gymId, dto);
+    return this.productsService.createProduct(gymId, dto, branchId);
   }
 
   @Patch(':id')

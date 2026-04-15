@@ -22,6 +22,7 @@ import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('member-notes')
@@ -49,8 +50,9 @@ export class MemberNotesController {
     @Body() dto: CreateMemberNoteDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.memberNotesService.create(dto, gymId, userId);
+    return this.memberNotesService.create(dto, gymId, userId, branchId);
   }
 
   @Patch(':id')

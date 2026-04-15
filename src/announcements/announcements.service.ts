@@ -203,6 +203,7 @@ export class AnnouncementsService {
     dto: CreateAnnouncementDto,
     gymId: number,
     createdBy: number,
+    branchId?: number | null,
   ): Promise<AnnouncementRecord> {
     const announcement = await this.tenantService.executeInTenant(
       gymId,
@@ -212,9 +213,9 @@ export class AnnouncementsService {
           title, content, type, priority,
           target_audience, target_user_ids,
           start_date, end_date, is_pinned, display_on_dashboard, display_on_mobile,
-          attachments, created_by, is_active, created_at, updated_at
+          attachments, created_by, branch_id, is_active, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW()
         ) RETURNING *`,
           [
             dto.title,
@@ -230,6 +231,7 @@ export class AnnouncementsService {
             dto.displayOnMobile !== false,
             dto.attachments ? JSON.stringify(dto.attachments) : null,
             createdBy,
+            branchId || null,
           ],
         );
         return result.rows[0];

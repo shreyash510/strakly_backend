@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
 import { resolveEffectiveBranchId } from '../common';
@@ -73,8 +74,9 @@ export class AnnouncementsController {
     @Body() dto: CreateAnnouncementDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    const result = await this.announcementsService.create(dto, gymId, userId);
+    const result = await this.announcementsService.create(dto, gymId, userId, branchId);
     this.notificationsGateway.emitAnnouncementChanged(gymId, { action: 'created' });
     return result;
   }
