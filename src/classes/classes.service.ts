@@ -552,9 +552,9 @@ export class ClassesService {
 
               if (existing.rows.length === 0) {
                 await client.query(
-                  `INSERT INTO class_sessions (schedule_id, date, instructor_id, status, created_at, updated_at)
-                   VALUES ($1, $2, $3, 'scheduled', NOW(), NOW())`,
-                  [schedule.id, dateStr, schedule.instructor_id],
+                  `INSERT INTO class_sessions (schedule_id, date, instructor_id, branch_id, status, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, 'scheduled', NOW(), NOW())`,
+                  [schedule.id, dateStr, schedule.instructor_id, schedule.branch_id || null],
                 );
                 created++;
               }
