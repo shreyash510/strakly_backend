@@ -312,8 +312,8 @@ export class AttendanceService {
     // preventing duplicate history records under concurrent checkout requests
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
-        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, 'checked_out', NOW())`,
+        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, branch_id, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, $10, 'checked_out', NOW())`,
         [
           attendance.user_id,
           attendance.membership_id,
@@ -324,6 +324,7 @@ export class AttendanceService {
           attendance.marked_by,
           checkedOutById,
           attendance.check_in_method,
+          attendance.branch_id || null,
         ],
       );
 

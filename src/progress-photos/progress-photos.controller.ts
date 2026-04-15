@@ -24,6 +24,7 @@ import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 
 @ApiTags('progress-photos')
@@ -57,11 +58,12 @@ export class ProgressPhotosController {
     @Body() dto: CreateProgressPhotoDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
-    return this.progressPhotosService.upload(file, gymId, dto, userId);
+    return this.progressPhotosService.upload(file, gymId, dto, userId, branchId);
   }
 
   @Get('user/:userId')

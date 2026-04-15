@@ -133,11 +133,12 @@ export class EquipmentService {
   async create(
     gymId: number,
     dto: CreateEquipmentDto,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO equipment (name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO equipment (name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes, branch_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           dto.name,
@@ -150,6 +151,7 @@ export class EquipmentService {
           dto.status || 'operational',
           dto.location || null,
           dto.notes || null,
+          branchId || null,
         ],
       );
 

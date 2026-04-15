@@ -2359,9 +2359,9 @@ export class UsersService {
         `INSERT INTO memberships (
           user_id, plan_id, start_date, end_date,
           original_amount, discount_amount, final_amount,
-          status, payment_status, payment_method, notes,
+          status, payment_status, payment_method, notes, branch_id,
           created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
         [
           userId,
           dto.planId,
@@ -2374,6 +2374,7 @@ export class UsersService {
           'pending',
           dto.paymentMethod || null,
           dto.notes || null,
+          branchId || null,
         ],
       );
     });

@@ -39,6 +39,7 @@ export class ProgressPhotosService {
     gymId: number,
     dto: CreateProgressPhotoDto,
     uploadedBy: number,
+    branchId?: number | null,
   ) {
     const { url, thumbnailUrl, size } = await this.uploadService.uploadProgressPhoto(
       file,
@@ -48,8 +49,8 @@ export class ProgressPhotosService {
     const photo = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
         `INSERT INTO progress_photos
-           (user_id, photo_url, thumbnail_url, category, taken_at, notes, body_metrics_id, visibility, file_size, uploaded_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+           (user_id, photo_url, thumbnail_url, category, taken_at, notes, body_metrics_id, visibility, file_size, uploaded_by, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
          RETURNING *`,
         [
           dto.userId,
@@ -62,6 +63,7 @@ export class ProgressPhotosService {
           dto.visibility || 'all',
           size,
           uploadedBy,
+          branchId || null,
         ],
       );
       return result.rows[0];
