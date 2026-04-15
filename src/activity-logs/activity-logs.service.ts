@@ -113,7 +113,7 @@ export class ActivityLogsService {
         }
 
         if (filters.branchId) {
-          conditions.push(`branch_id = $${paramIndex++}`);
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
           values.push(filters.branchId);
         }
 

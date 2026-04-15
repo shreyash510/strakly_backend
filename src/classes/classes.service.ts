@@ -137,7 +137,7 @@ export class ClassesService {
       }
 
       if (filters.branchId) {
-        conditions.push(`ct.branch_id = $${paramIndex++}`);
+        conditions.push(`(ct.branch_id = $${paramIndex++} OR ct.branch_id IS NULL)`);
         values.push(filters.branchId);
       }
 
@@ -448,7 +448,7 @@ export class ClassesService {
       }
 
       if (filters.branchId) {
-        conditions.push(`s.branch_id = $${paramIndex++}`);
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
         values.push(filters.branchId);
       }
 

@@ -505,8 +505,8 @@ export class ReportsService {
     filters?: { month?: number; year?: number; branchId?: number },
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = filters?.branchId ? ` AND m.branch_id = ${filters.branchId}` : '';
-      const productBranchFilter = filters?.branchId ? ` AND ps.branch_id = ${filters.branchId}` : '';
+      const branchFilter = filters?.branchId ? ` AND (m.branch_id = ${filters.branchId} OR m.branch_id IS NULL)` : '';
+      const productBranchFilter = filters?.branchId ? ` AND (ps.branch_id = ${filters.branchId} OR ps.branch_id IS NULL)` : '';
 
       // Build date filter conditions
       const membershipDateConditions: string[] = [];

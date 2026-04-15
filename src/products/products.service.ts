@@ -270,7 +270,7 @@ export class ProductsService {
 
       if (branchId) {
         values.push(branchId);
-        conditions.push(`p.branch_id = $${values.length}`);
+        conditions.push(`(p.branch_id = $${values.length} OR p.branch_id IS NULL)`);
       }
 
       const result = await client.query(

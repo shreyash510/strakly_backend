@@ -343,7 +343,7 @@ export class AppointmentsService {
       }
 
       if (filters.branchId) {
-        conditions.push(`a.branch_id = $${paramIndex++}`);
+        conditions.push(`(a.branch_id = $${paramIndex++} OR a.branch_id IS NULL)`);
         values.push(filters.branchId);
       }
 

@@ -50,7 +50,7 @@ export class OffersService {
         conditions.push('is_active = true');
       }
       if (branchId) {
-        conditions.push(`branch_id = $${paramIndex++}`);
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -75,7 +75,7 @@ export class OffersService {
       let paramIndex = 1;
 
       if (branchId) {
-        conditions.push(`branch_id = $${paramIndex++}`);
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
       }
 

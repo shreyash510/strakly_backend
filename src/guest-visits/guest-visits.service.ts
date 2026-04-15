@@ -69,7 +69,7 @@ export class GuestVisitsService {
       }
 
       if (filters.branchId) {
-        conditions.push(`gv.branch_id = $${paramIndex++}`);
+        conditions.push(`(gv.branch_id = $${paramIndex++} OR gv.branch_id IS NULL)`);
         values.push(filters.branchId);
       }
 

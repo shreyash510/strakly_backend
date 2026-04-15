@@ -73,7 +73,7 @@ export class MembershipsService {
           paramIndex++;
         }
         if (filters?.branchId) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
+          whereClause += ` AND (m.branch_id = $${paramIndex++} OR m.branch_id IS NULL)`;
           values.push(filters.branchId);
         }
 
@@ -1067,7 +1067,7 @@ export class MembershipsService {
         const values: SqlValue[] = [now, futureDate];
 
         if (branchId) {
-          query += ` AND m.branch_id = ${branchId}`;
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
         }
         query += ` ORDER BY m.end_date ASC`;
 
@@ -1206,7 +1206,7 @@ export class MembershipsService {
         let paramIndex = 1;
 
         if (branchId) {
-          query += ` AND m.branch_id = ${branchId}`;
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
         }
         query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
         values.push(limit);

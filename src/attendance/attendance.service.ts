@@ -385,7 +385,7 @@ export class AttendanceService {
     const records = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = branchId ? ` AND a.branch_id = ${branchId}` : '';
+        const branchFilter = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
         let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id
@@ -413,8 +413,8 @@ export class AttendanceService {
     const { activeRecords, historyRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Build filters with table aliases
-        const attendanceBranchFilter = branchId ? ` AND a.branch_id = ${branchId}` : '';
-        const historyBranchFilter = branchId ? ` AND ah.branch_id = ${branchId}` : '';
+        const attendanceBranchFilter = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
+        const historyBranchFilter = branchId ? ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)` : '';
         const attendanceSoftDeleteFilter = ` AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const historySoftDeleteFilter = ` AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)`;
 
@@ -643,7 +643,7 @@ export class AttendanceService {
       gymId,
       async (client) => {
         let whereClause = '(ah.is_deleted = FALSE OR ah.is_deleted IS NULL)';
-        if (branchId) whereClause += ` AND ah.branch_id = ${branchId}`;
+        if (branchId) whereClause += ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
