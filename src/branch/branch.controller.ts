@@ -12,71 +12,30 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiQuery,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { BranchService } from './branch.service';
-import {
-  CreateBranchDto,
-  UpdateBranchDto,
-  TransferMemberDto,
-} from './dto/branch.dto';
+import { CreateBranchDto, UpdateBranchDto, TransferMemberDto } from './dto/branch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { setPaginationHeaders } from '../common/pagination.util';
-import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('branches')
 @Controller('gyms/:gymId/branches')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class BranchController {
-  constructor(
-    private readonly branchService: BranchService,
-    private readonly notificationsGateway: NotificationsGateway,
-  ) {}
+  constructor(private readonly branchService: BranchService) {}
 
   @Get()
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get all branches for a gym' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search by name, code, or city',
-  })
-  @ApiQuery({
-    name: 'includeInactive',
-    required: false,
-    type: Boolean,
-    description: 'Include inactive branches',
-  })
-  @ApiQuery({
-    name: 'noPagination',
-    required: false,
-    type: Boolean,
-    description: 'Disable pagination',
-  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
+  @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
   async findAll(
     @Param('gymId', ParseIntPipe) gymId: number,
     @Query('page') page?: string,
@@ -117,6 +76,18 @@ export class BranchController {
     return this.branchService.getDefaultBranch(gymId);
   }
 
+  @Get('member/:memberId/branch')
+  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @ApiOperation({ summary: 'Get the current branch of a member' })
+  @ApiParam({ name: 'gymId', description: 'Gym ID' })
+  @ApiParam({ name: 'memberId', description: 'Member ID' })
+  async getMemberBranch(
+    @Param('gymId', ParseIntPipe) gymId: number,
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ) {
+    return this.branchService.getMemberBranch(gymId, memberId);
+  }
+
   @Get(':id')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get a branch by ID' })
@@ -137,9 +108,7 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Body() dto: CreateBranchDto,
   ) {
-    const result = await this.branchService.create(gymId, dto);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'created' });
-    return result;
+    return this.branchService.create(gymId, dto);
   }
 
   @Patch(':id')
@@ -152,9 +121,7 @@ export class BranchController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateBranchDto,
   ) {
-    const result = await this.branchService.update(gymId, id, dto);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'updated' });
-    return result;
+    return this.branchService.update(gymId, id, dto);
   }
 
   @Delete(':id')
@@ -166,9 +133,7 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    const result = await this.branchService.remove(gymId, id);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'deleted' });
-    return result;
+    return this.branchService.remove(gymId, id);
   }
 
   @Post(':id/set-default')
@@ -180,40 +145,21 @@ export class BranchController {
     @Param('gymId', ParseIntPipe) gymId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    const result = await this.branchService.setDefaultBranch(gymId, id);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'default_changed' });
-    return result;
+    return this.branchService.setDefaultBranch(gymId, id);
   }
 
   @Post('transfer-member')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
   @Roles('superadmin', 'admin', 'manager')
-  @ManagerPermission('branches', 'create')
-  @ApiOperation({ summary: 'Transfer a client from one branch to another' })
+  @ApiOperation({ summary: 'Transfer a member from one branch to another' })
   @ApiParam({ name: 'gymId', description: 'Gym ID' })
   async transferMember(
     @Param('gymId', ParseIntPipe) gymId: number,
     @Body() dto: TransferMemberDto,
   ) {
-    const result = await this.branchService.transferMember(gymId, dto);
-    this.notificationsGateway.emitBranchChanged(gymId, { action: 'member_transferred' });
-    return result;
-  }
-
-  @Get('member/:memberId/branch')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get the current branch of a client' })
-  @ApiParam({ name: 'gymId', description: 'Gym ID' })
-  @ApiParam({ name: 'memberId', description: 'Client ID' })
-  async getMemberBranch(
-    @Param('gymId', ParseIntPipe) gymId: number,
-    @Param('memberId', ParseIntPipe) memberId: number,
-  ) {
-    return this.branchService.getMemberBranch(gymId, memberId);
+    return this.branchService.transferMember(gymId, dto);
   }
 }
 
-// Separate controller for migration (superadmin only)
 @ApiTags('branches-migration')
 @Controller('branches')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -223,9 +169,7 @@ export class BranchMigrationController {
 
   @Post('migrate-existing-gyms')
   @Roles('superadmin')
-  @ApiOperation({
-    summary: 'Migrate existing gyms to have default branches (superadmin only)',
-  })
+  @ApiOperation({ summary: 'Migrate existing gyms to have default branches (superadmin only)' })
   async migrateExistingGyms() {
     return this.branchService.migrateExistingGyms();
   }

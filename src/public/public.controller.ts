@@ -17,7 +17,7 @@ export class PublicController {
 
   @Post('register')
   @ApiOperation({
-    summary: 'Register as a new member (public - no auth required)',
+    summary: 'Register as a new client (public - no auth required)',
   })
   registerMember(@Body() dto: MemberRegistrationDto) {
     return this.publicService.registerMember(dto);
@@ -29,12 +29,4 @@ export class PublicController {
     return this.publicService.getGymInfo(id);
   }
 
-  @Get('gym/:gymId/branch/:branchId')
-  @ApiOperation({ summary: 'Get branch info for registration page (public)' })
-  getBranchInfo(
-    @Param('gymId', ParseIntPipe) gymId: number,
-    @Param('branchId', ParseIntPipe) branchId: number,
-  ) {
-    return this.publicService.getBranchInfo(gymId, branchId);
-  }
 }

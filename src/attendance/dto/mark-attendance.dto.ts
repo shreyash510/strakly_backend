@@ -31,14 +31,6 @@ export class MarkAttendanceDto {
   gymId?: number;
 
   @ApiPropertyOptional({
-    description: 'Branch ID where attendance is being marked',
-  })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  branchId?: number;
-
-  @ApiPropertyOptional({
     description: 'Check-in method',
     enum: ['code', 'qr', 'manual', 'self'],
     default: 'code',
@@ -47,4 +39,10 @@ export class MarkAttendanceDto {
   @IsString()
   @IsIn(['code', 'qr', 'manual', 'self'])
   checkInMethod?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID where attendance is being marked' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }

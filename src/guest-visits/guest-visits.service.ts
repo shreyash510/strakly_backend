@@ -7,7 +7,7 @@ import { TenantService } from '../tenant/tenant.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
 import { SqlValue } from '../common/types';
 
-const MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH = 5;
+const MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH = 5;
 
 @Injectable()
 export class GuestVisitsService {
@@ -32,7 +32,7 @@ export class GuestVisitsService {
     };
   }
 
-  async findAll(gymId: number, branchId: number | null, filters: GuestVisitFiltersDto = {}) {
+  async findAll(gymId: number, filters: GuestVisitFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 20;
     const skip = (page - 1) * limit;
@@ -68,6 +68,11 @@ export class GuestVisitsService {
         paramIndex++;
       }
 
+      if (filters.branchId) {
+        conditions.push(`(gv.branch_id = $${paramIndex++} OR gv.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Sorting
@@ -100,10 +105,15 @@ export class GuestVisitsService {
     });
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     const visit = await this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['gv.id = $1'];
       const values: SqlValue[] = [id];
+
+      if (branchId) {
+        conditions.push(`(gv.branch_id = $2 OR gv.branch_id IS NULL)`);
+        values.push(branchId);
+      }
 
       const result = await client.query(
         `SELECT gv.*, u.name as brought_by_name, staff.name as checked_in_by_name
@@ -120,28 +130,27 @@ export class GuestVisitsService {
     return this.formatVisit(visit);
   }
 
-  async create(gymId: number, branchId: number | null, dto: CreateGuestVisitDto, checkedInBy: number) {
+  async create(gymId: number, dto: CreateGuestVisitDto, checkedInBy: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Enforce guest visit limit per member per month
+      // Enforce guest visit limit per client per month
       if (dto.broughtBy) {
         const monthCount = await client.query(
           `SELECT COUNT(*) FROM guest_visits
            WHERE brought_by = $1 AND visit_date >= date_trunc('month', CURRENT_DATE)`,
           [dto.broughtBy],
         );
-        if (parseInt(monthCount.rows[0].count) >= MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH) {
+        if (parseInt(monthCount.rows[0].count) >= MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH) {
           throw new BadRequestException(
-            `Member has reached the maximum of ${MAX_GUEST_VISITS_PER_MEMBER_PER_MONTH} guest visits this month`,
+            `Client has reached the maximum of ${MAX_GUEST_VISITS_PER_CLIENT_PER_MONTH} guest visits this month`,
           );
         }
       }
 
       const result = await client.query(
-        `INSERT INTO guest_visits (branch_id, guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_DATE), $7, $8, $9, $10, NOW())
+        `INSERT INTO guest_visits (guest_name, guest_phone, guest_email, brought_by, visit_date, day_pass_amount, payment_method, notes, checked_in_by, branch_id, created_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9, $10, NOW())
          RETURNING *`,
         [
-          branchId,
           dto.guestName,
           dto.guestPhone ?? null,
           dto.guestEmail ?? null,
@@ -151,6 +160,7 @@ export class GuestVisitsService {
           dto.paymentMethod ?? null,
           dto.notes ?? null,
           checkedInBy,
+          branchId ?? null,
         ],
       );
 
@@ -168,7 +178,7 @@ export class GuestVisitsService {
     });
   }
 
-  async update(id: number, gymId: number, branchId: number | null, dto: UpdateGuestVisitDto) {
+  async update(id: number, gymId: number, dto: UpdateGuestVisitDto) {
     const updates: string[] = [];
     const values: SqlValue[] = [];
     let paramIndex = 1;
@@ -182,7 +192,7 @@ export class GuestVisitsService {
     if (dto.paymentMethod !== undefined) { updates.push(`payment_method = $${paramIndex++}`); values.push(dto.paymentMethod); }
     if (dto.notes !== undefined) { updates.push(`notes = $${paramIndex++}`); values.push(dto.notes); }
 
-    if (updates.length === 0) return this.findOne(id, gymId, branchId);
+    if (updates.length === 0) return this.findOne(id, gymId);
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Build WHERE with branch scoping
@@ -210,7 +220,7 @@ export class GuestVisitsService {
     });
   }
 
-  async markConverted(id: number, gymId: number, branchId: number | null) {
+  async markConverted(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
@@ -236,7 +246,7 @@ export class GuestVisitsService {
     });
   }
 
-  async remove(id: number, gymId: number, branchId: number | null) {
+  async remove(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['id = $1'];
       const values: SqlValue[] = [id];
@@ -251,10 +261,10 @@ export class GuestVisitsService {
     });
   }
 
-  async getStats(gymId: number, branchId: number | null) {
+  async getStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchCondition = '';
-      const branchValues: SqlValue[] = [];
+      const branchCondition = branchId ? ` AND (branch_id = $1 OR branch_id IS NULL)` : '';
+      const branchValues: SqlValue[] = branchId ? [branchId] : [];
 
       const totalResult = await client.query(
         `SELECT COUNT(*) FROM guest_visits WHERE 1=1${branchCondition}`,

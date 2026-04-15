@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 
 export const PAYMENT_STATUSES = ['pending', 'paid'] as const;
-export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'upi'] as const;
+export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'upi', 'card', 'online', 'evc_plus', 'edahab', 'zaad', 'sahal', 'other'] as const;
 
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

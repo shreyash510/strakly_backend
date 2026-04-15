@@ -12,12 +12,12 @@ export class DashboardCacheService {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-  private makeKey(gymId: number, branchId: number | null): string {
-    return `${gymId}:${branchId ?? 'all'}`;
+  private cacheKey(gymId: number, branchId?: number | null): string {
+    return `${gymId}_${branchId ?? 'all'}`;
   }
 
-  get(gymId: number, branchId: number | null): AdminDashboardDto | null {
-    const key = this.makeKey(gymId, branchId);
+  get(gymId: number, branchId?: number | null): AdminDashboardDto | null {
+    const key = this.cacheKey(gymId, branchId);
     const entry = this.cache.get(key);
     if (!entry) return null;
 
@@ -27,41 +27,31 @@ export class DashboardCacheService {
       return null;
     }
 
-    this.logger.debug(`Cache hit for ${key} (age: ${Math.round(age / 1000)}s)`);
+    this.logger.debug(`Cache hit for gym ${gymId} branch ${branchId ?? 'all'} (age: ${Math.round(age / 1000)}s)`);
     return entry.stats;
   }
 
-  set(gymId: number, branchId: number | null, stats: AdminDashboardDto): void {
-    const key = this.makeKey(gymId, branchId);
+  set(gymId: number, stats: AdminDashboardDto, branchId?: number | null): void {
+    const key = this.cacheKey(gymId, branchId);
     this.cache.set(key, { stats, updatedAt: new Date() });
-    this.logger.debug(`Cache set for ${key}`);
+    this.logger.debug(`Cache set for gym ${gymId} branch ${branchId ?? 'all'}`);
   }
 
+  /** Invalidate all cache entries for a given gym (all branches). */
   invalidate(gymId: number): void {
-    const prefix = `${gymId}:`;
-    let count = 0;
     for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) {
+      if (key.startsWith(`${gymId}_`)) {
         this.cache.delete(key);
-        count++;
+        this.logger.debug(`Invalidated cache entry: ${key}`);
       }
     }
-    if (count > 0) {
-      this.logger.debug(
-        `Invalidated ${count} cache entries for gym ${gymId}`,
-      );
-    }
   }
 
-  getAllKeys(): Array<{ gymId: number; branchId: number | null }> {
-    const keys: Array<{ gymId: number; branchId: number | null }> = [];
+  getAllGymIds(): number[] {
+    const ids = new Set<number>();
     for (const key of this.cache.keys()) {
-      const [gymIdStr, branchIdStr] = key.split(':');
-      keys.push({
-        gymId: parseInt(gymIdStr, 10),
-        branchId: branchIdStr === 'all' ? null : parseInt(branchIdStr, 10),
-      });
+      ids.add(parseInt(key.split('_')[0]));
     }
-    return keys;
+    return Array.from(ids);
   }
 }

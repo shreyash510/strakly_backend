@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsInt,
   IsBoolean,
   IsArray,
   IsIn,
@@ -102,12 +103,16 @@ export class CreateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   stockQuantity?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   lowStockThreshold?: number;
 
@@ -168,6 +173,16 @@ export class UpdateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  stockQuantity?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsInt()
+  @Min(0)
   @Type(() => Number)
   lowStockThreshold?: number;
 
@@ -205,6 +220,7 @@ export class CreateProductSaleDto {
 
   @ApiProperty()
   @IsNumber()
+  @IsInt()
   @Min(1)
   @Type(() => Number)
   quantity: number;
@@ -255,6 +271,17 @@ export class CreateBatchSaleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Discount type: percentage or flat' })
+  @IsOptional()
+  @IsString()
+  discountType?: 'percentage' | 'flat';
+
+  @ApiPropertyOptional({ description: 'Discount value (percentage 0-100 or flat amount)' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountValue?: number;
 }
 
 // ─── Filter DTOs ───
@@ -288,6 +315,12 @@ export class ProductFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class SalesFiltersDto {
@@ -326,6 +359,11 @@ export class SalesFiltersDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
   page?: number;
@@ -335,6 +373,12 @@ export class SalesFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class SalesStatsFiltersDto {
@@ -347,6 +391,12 @@ export class SalesStatsFiltersDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class StockMovementFiltersDto {
@@ -407,6 +457,12 @@ export class AllStockMovementsFiltersDto {
   @IsNumber()
   @Type(() => Number)
   performedBy?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

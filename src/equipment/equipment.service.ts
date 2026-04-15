@@ -56,7 +56,6 @@ export class EquipmentService {
 
   async findAll(
     gymId: number,
-    branchId: number | null,
     filters: EquipmentFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -84,6 +83,11 @@ export class EquipmentService {
         );
         values.push(`%${filters.search}%`);
         paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(e.branch_id = $${paramIndex++} OR e.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -128,16 +132,15 @@ export class EquipmentService {
 
   async create(
     gymId: number,
-    branchId: number | null,
     dto: CreateEquipmentDto,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO equipment (branch_id, name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes)
+        `INSERT INTO equipment (name, brand, model, serial_number, purchase_date, purchase_cost, warranty_expiry, status, location, notes, branch_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
-          branchId,
           dto.name,
           dto.brand || null,
           dto.model || null,
@@ -148,6 +151,7 @@ export class EquipmentService {
           dto.status || 'operational',
           dto.location || null,
           dto.notes || null,
+          branchId || null,
         ],
       );
 
@@ -220,10 +224,10 @@ export class EquipmentService {
     });
   }
 
-  async getStats(gymId: number, branchId: number | null) {
+  async getStats(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = '';
-      const branchValues: SqlValue[] = [];
+      const branchFilter = branchId ? ` AND (branch_id = $1 OR branch_id IS NULL)` : '';
+      const branchValues: SqlValue[] = branchId ? [branchId] : [];
 
       const countByStatus = await client.query(
         `SELECT status, COUNT(*) as count FROM equipment WHERE is_deleted = FALSE ${branchFilter} GROUP BY status`,
@@ -335,12 +339,11 @@ export class EquipmentService {
   async createMaintenance(
     equipmentId: number,
     gymId: number,
-    branchId: number | null,
     dto: CreateMaintenanceDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const equip = await client.query(
-        `SELECT id, branch_id FROM equipment WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT id FROM equipment WHERE id = $1 AND is_deleted = FALSE`,
         [equipmentId],
       );
       if (equip.rows.length === 0) {
@@ -350,12 +353,11 @@ export class EquipmentService {
       }
 
       const result = await client.query(
-        `INSERT INTO equipment_maintenance (equipment_id, branch_id, type, description, scheduled_date, completed_date, performed_by, cost, notes, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO equipment_maintenance (equipment_id, type, description, scheduled_date, completed_date, performed_by, cost, notes, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           equipmentId,
-          branchId || equip.rows[0].branch_id,
           dto.type,
           dto.description,
           dto.scheduledDate,
@@ -463,7 +465,6 @@ export class EquipmentService {
 
   async getUpcomingMaintenance(
     gymId: number,
-    branchId: number | null,
     filters: MaintenanceFiltersDto = {},
   ) {
     const page = filters.page || 1;

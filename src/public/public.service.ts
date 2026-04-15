@@ -84,31 +84,13 @@ export class PublicService {
       this.tenantService,
     );
 
-    /* Validate branch if provided */
-    if (dto.branchId) {
-      const branchExists = await this.tenantService.executeInTenant(
-        dto.gymId,
-        async (client) => {
-          const result = await client.query(
-            `SELECT id FROM branches WHERE id = $1 AND is_active = true`,
-            [dto.branchId],
-          );
-          return result.rows[0];
-        },
-      );
-
-      if (!branchExists) {
-        throw new BadRequestException('Invalid branch selected');
-      }
-    }
-
     /* Create the user in tenant schema as an onboarding client */
     const user = await this.tenantService.executeInTenant(
       dto.gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
+          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
           [
             dto.name,
@@ -118,7 +100,6 @@ export class PublicService {
             dto.gender,
             dto.joinDate || null,
             attendanceCode,
-            dto.branchId || null,
           ],
         );
         return result.rows[0];
@@ -166,10 +147,9 @@ export class PublicService {
     /* Notify admin users about new registration */
     await this.notificationHelper.notifyStaff(
       dto.gymId,
-      dto.branchId || null,
       {
         type: NotificationType.NEW_MEMBER_REGISTRATION,
-        title: 'New Member Registration',
+        title: 'New Client Registration',
         message: `${dto.name} has registered and is awaiting approval.`,
         actionUrl: `/clients/${user.id}`,
         data: {
@@ -220,38 +200,4 @@ export class PublicService {
     return gym;
   }
 
-  /* Get branch info for public registration page */
-  async getBranchInfo(gymId: number, branchId: number) {
-    const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
-      select: { isActive: true },
-    });
-
-    if (!gym) {
-      throw new NotFoundException('Gym not found');
-    }
-
-    if (!gym.isActive) {
-      throw new BadRequestException(
-        'This gym is not accepting new registrations',
-      );
-    }
-
-    const branch = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id, name, address, city, state, phone FROM branches WHERE id = $1 AND is_active = true`,
-          [branchId],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (!branch) {
-      throw new NotFoundException('Branch not found');
-    }
-
-    return branch;
-  }
 }

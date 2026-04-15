@@ -20,6 +20,7 @@ import {
 } from './dto/membership.dto';
 import { SqlValue } from '../common/types';
 import { sanitizePagination } from '../common/pagination.util';
+import { PoolClient } from 'pg';
 
 @Injectable()
 export class MembershipsService {
@@ -34,7 +35,6 @@ export class MembershipsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters?: {
       status?: string;
       userId?: number;
@@ -42,6 +42,7 @@ export class MembershipsService {
       search?: string;
       page?: number;
       limit?: number;
+      branchId?: number | null;
     },
   ) {
     const { page, limit, skip } = sanitizePagination(filters?.page, filters?.limit, 15);
@@ -53,12 +54,6 @@ export class MembershipsService {
         let whereClause = '(m.is_deleted = FALSE OR m.is_deleted IS NULL)';
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering: null = admin (all branches), number = specific branch
-        if (branchId !== null) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         if (filters?.status) {
           whereClause += ` AND m.status = $${paramIndex++}`;
@@ -76,6 +71,10 @@ export class MembershipsService {
           whereClause += ` AND (u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+        if (filters?.branchId) {
+          whereClause += ` AND (m.branch_id = $${paramIndex++} OR m.branch_id IS NULL)`;
+          values.push(filters.branchId);
         }
 
         const [membershipsResult, countResult] = await Promise.all([
@@ -113,10 +112,96 @@ export class MembershipsService {
     };
   }
 
+  /**
+   * Log a snapshot of the membership into the membership_history table.
+   */
+  private async logToHistory(
+    client: PoolClient,
+    membership: Record<string, any>,
+    archiveReason: string,
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO membership_history (
+        original_id, user_id, plan_id, offer_id,
+        start_date, end_date, status,
+        original_amount, discount_amount, final_amount, currency,
+        payment_status, payment_method, payment_ref, paid_at,
+        cancelled_at, cancel_reason, notes,
+        archive_reason, original_created_at
+      ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17, $18,
+        $19, $20
+      )`,
+      [
+        membership.id,
+        membership.user_id,
+        membership.plan_id,
+        membership.offer_id ?? null,
+        membership.start_date,
+        membership.end_date,
+        membership.status,
+        membership.original_amount ?? null,
+        membership.discount_amount ?? null,
+        membership.final_amount ?? null,
+        membership.currency ?? null,
+        membership.payment_status ?? null,
+        membership.payment_method ?? null,
+        membership.payment_ref ?? null,
+        membership.paid_at ?? null,
+        membership.cancelled_at ?? null,
+        membership.cancel_reason ?? null,
+        membership.notes ?? null,
+        archiveReason,
+        membership.created_at ?? null,
+      ],
+    );
+  }
+
+  async getAuditLog(userId: number, gymId: number, limit: number = 50) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT mh.*, p.name as plan_name, p.code as plan_code
+         FROM membership_history mh
+         LEFT JOIN plans p ON p.id = mh.plan_id
+         WHERE mh.user_id = $1
+         ORDER BY mh.created_at DESC
+         LIMIT $2`,
+        [userId, limit],
+      );
+      return result.rows.map((r: Record<string, any>) => ({
+        id: r.id,
+        originalId: r.original_id,
+        userId: r.user_id,
+        planId: r.plan_id,
+        planName: r.plan_name,
+        planCode: r.plan_code,
+        status: r.status,
+        originalAmount: parseFloat(r.original_amount || '0'),
+        discountAmount: parseFloat(r.discount_amount || '0'),
+        finalAmount: parseFloat(r.final_amount || '0'),
+        currency: r.currency,
+        paymentStatus: r.payment_status,
+        paymentMethod: r.payment_method,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        cancelledAt: r.cancelled_at,
+        cancelReason: r.cancel_reason,
+        notes: r.notes,
+        archiveReason: r.archive_reason,
+        archivedAt: r.archived_at,
+        originalCreatedAt: r.original_created_at,
+        createdAt: r.created_at,
+      }));
+    });
+  }
+
   private formatMembership(m: Record<string, any>) {
     return {
       id: m.id,
-      branchId: m.branch_id,
       userId: m.user_id,
       planId: m.plan_id,
       offerId: m.offer_id,
@@ -168,7 +253,7 @@ export class MembershipsService {
     };
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const membership = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -181,12 +266,6 @@ export class MembershipsService {
          LEFT JOIN offers o ON o.id = m.offer_id
          WHERE m.id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -203,7 +282,6 @@ export class MembershipsService {
   async findByUser(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const memberships = await this.tenantService.executeInTenant(
       gymId,
@@ -215,12 +293,6 @@ export class MembershipsService {
          LEFT JOIN offers o ON o.id = m.offer_id
          WHERE m.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [userId];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $2`;
-          values.push(branchId);
-        }
 
         query += ` ORDER BY m.created_at DESC`;
 
@@ -235,7 +307,6 @@ export class MembershipsService {
   async getHistory(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
     options?: { page?: number; limit?: number },
   ) {
     const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 15);
@@ -243,16 +314,9 @@ export class MembershipsService {
     const { memberships, total } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause =
-          'm.user_id = $1 AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)';
+        let whereClause = 'm.user_id = $1';
         const values: SqlValue[] = [userId];
         let paramIndex = 2;
-
-        // Branch filtering
-        if (branchId !== null) {
-          whereClause += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         const [membershipsResult, countResult] = await Promise.all([
           client.query(
@@ -336,20 +400,18 @@ export class MembershipsService {
    * Create a new membership
    * @param dto - Membership data
    * @param gymId - Gym ID
-   * @param branchId - Branch ID for the membership
    */
   async create(
     dto: CreateMembershipDto,
     gymId: number,
-    branchId: number | null = null,
-    actorInfo?: { id: number; name: string; role: string },
+    actorInfo?: { id: number; name: string; role: string; branchId?: number | null },
   ) {
     // Verify user exists in tenant (and not soft-deleted)
     const user = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id, branch_id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [dto.userId],
         );
         return result.rows[0];
@@ -360,13 +422,17 @@ export class MembershipsService {
       throw new NotFoundException(`User with ID ${dto.userId} not found`);
     }
 
-    // Use user's branch if branchId not provided
-    const membershipBranchId = branchId ?? user.branch_id;
-
-    // Check for active membership
+    // If user already has an active membership, queue the new one after it ends (renewal)
+    // Old membership stays active and will expire naturally via the scheduler
     const activeMembership = await this.getActiveMembership(dto.userId, gymId);
+    let isRenewal = false;
     if (activeMembership) {
-      throw new ConflictException('User already has an active membership');
+      const oldEndDate = new Date(activeMembership.endDate);
+      // New membership starts from old membership's end date (not today)
+      if (oldEndDate > new Date()) {
+        dto.startDate = oldEndDate.toISOString();
+        isRenewal = true;
+      }
     }
 
     // Get plan details
@@ -401,11 +467,29 @@ export class MembershipsService {
       );
 
       if (offer) {
+        if (offer.discount_value < 0) {
+          throw new BadRequestException('Offer discount value cannot be negative')
+        }
+        if (offer.discount_type === 'percentage' && offer.discount_value > 100) {
+          throw new BadRequestException('Percentage discount value cannot exceed 100')
+        }
         if (offer.discount_type === 'percentage') {
           discountAmount = (plan.price * offer.discount_value) / 100;
         } else {
           discountAmount = offer.discount_value;
         }
+      }
+    }
+
+    // Fall back to manual discount if no offer was resolved
+    if (discountAmount === 0 && dto.discountAmount && dto.discountAmount > 0) {
+      if (dto.discountAmount < 0) {
+        throw new BadRequestException('Discount amount cannot be negative')
+      }
+      discountAmount = dto.discountAmount;
+      // Ensure discount doesn't exceed plan price
+      if (discountAmount > plan.price) {
+        discountAmount = plan.price;
       }
     }
 
@@ -425,14 +509,13 @@ export class MembershipsService {
     const { membership, userName } = await this.tenantService.executeInTenantTransaction(
       gymId,
       async (client) => {
-        // Create membership with branch_id
+        // Create membership
         const membershipResult = await client.query(
-          `INSERT INTO memberships (branch_id, user_id, plan_id, offer_id, start_date, end_date, status,
-          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $10, 'paid', $11, NOW(), $12, $13, NOW(), NOW())
+          `INSERT INTO memberships (user_id, plan_id, offer_id, start_date, end_date, status,
+          original_amount, discount_amount, final_amount, currency, payment_status, payment_method, paid_at, notes, auto_renew, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $13, $6, $7, $8, $9, 'paid', $10, NOW(), $11, $12, $14, NOW(), NOW())
          RETURNING *`,
           [
-            membershipBranchId,
             dto.userId,
             dto.planId,
             offer?.id || null,
@@ -445,6 +528,8 @@ export class MembershipsService {
             dto.paymentMethod || 'cash',
             dto.notes || null,
             dto.autoRenew || false,
+            isRenewal ? 'pending' : 'active',
+            actorInfo?.branchId ?? null,
           ],
         );
         const txMembership = membershipResult.rows[0];
@@ -457,24 +542,24 @@ export class MembershipsService {
           );
         }
 
-        // Save membership facilities
+        // Save membership facilities (bulk insert)
         if (dto.facilityIds && dto.facilityIds.length > 0) {
-          for (const facilityId of dto.facilityIds) {
-            await client.query(
-              `INSERT INTO membership_facilities (membership_id, facility_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [txMembership.id, facilityId],
-            );
-          }
+          await client.query(
+            `INSERT INTO membership_facilities (membership_id, facility_id)
+             SELECT $1, unnest($2::int[])
+             ON CONFLICT DO NOTHING`,
+            [txMembership.id, dto.facilityIds],
+          );
         }
 
-        // Save membership amenities
+        // Save membership amenities (bulk insert)
         if (dto.amenityIds && dto.amenityIds.length > 0) {
-          for (const amenityId of dto.amenityIds) {
-            await client.query(
-              `INSERT INTO membership_amenities (membership_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [txMembership.id, amenityId],
-            );
-          }
+          await client.query(
+            `INSERT INTO membership_amenities (membership_id, amenity_id)
+             SELECT $1, unnest($2::int[])
+             ON CONFLICT DO NOTHING`,
+            [txMembership.id, dto.amenityIds],
+          );
         }
 
         // Get user name for payment record
@@ -488,7 +573,6 @@ export class MembershipsService {
         await this.paymentsService.createMembershipPaymentWithClient(
           client,
           txMembership.id,
-          membershipBranchId,
           dto.userId,
           txUserName,
           originalAmount,
@@ -497,7 +581,11 @@ export class MembershipsService {
           dto.paymentMethod || 'cash',
           undefined, // paymentRef
           undefined, // processedBy
+          actorInfo?.branchId ?? null,
         );
+
+        // Log membership creation to history
+        await this.logToHistory(client, txMembership, 'created');
 
         return { membership: txMembership, userName: txUserName };
       },
@@ -507,50 +595,59 @@ export class MembershipsService {
     // transaction commits so they don't cause a rollback if they fail.
 
     // Send membership renewed notification
-    await this.notificationsService.notifyMembershipRenewed(
-      dto.userId,
-      gymId,
-      membershipBranchId,
-      {
-        planName: plan.name,
-        endDate: endDate,
-        membershipId: membership.id,
-      },
-    );
+    try {
+      await this.notificationsService.notifyMembershipRenewed(
+        dto.userId,
+        gymId,
+        {
+          planName: plan.name,
+          endDate: endDate,
+          membershipId: membership.id,
+        },
+      );
+    } catch (err) {
+      console.error('Failed to send notifyMembershipRenewed notification:', err);
+    }
 
     // Log activity
     if (actorInfo) {
-      await this.activityLogsService.logMembershipCreated(
-        gymId,
-        membershipBranchId,
-        actorInfo.id,
-        actorInfo.role,
-        actorInfo.name,
-        membership.id,
-        userName,
-        plan.name,
-      );
+      try {
+        await this.activityLogsService.logMembershipCreated(
+          gymId,
+          actorInfo.id,
+          actorInfo.role,
+          actorInfo.name,
+          membership.id,
+          userName,
+          plan.name,
+        );
+      } catch (err) {
+        console.error('Failed to log membership created activity:', err);
+      }
     }
 
     // Notify admin and manager about new enrollment
-    await this.notificationHelper.notifyStaff(
-      gymId,
-      membershipBranchId || null,
-      {
-        type: NotificationType.NEW_ENROLLMENT,
-        title: 'New Membership Enrollment',
-        message: `${userName} has been enrolled in ${plan.name}.`,
-        actionUrl: `/clients/${dto.userId}?tab=subscription`,
-        data: {
-          entityId: membership.id,
-          entityType: 'membership',
-          userId: dto.userId,
-          membershipId: membership.id,
-          metadata: { userName, planName: plan.name },
+    try {
+      await this.notificationHelper.notifyStaff(
+        gymId,
+        {
+          type: NotificationType.NEW_ENROLLMENT,
+          title: 'New Membership Enrollment',
+          message: `${userName} has been enrolled in ${plan.name}.`,
+          actionUrl: `/clients/${dto.userId}?tab=subscription`,
+          data: {
+            entityId: membership.id,
+            entityType: 'membership',
+            userId: dto.userId,
+            membershipId: membership.id,
+            metadata: { userName, planName: plan.name },
+          },
         },
-      },
-      { excludeUserId: actorInfo?.id },
-    );
+        { excludeUserId: actorInfo?.id },
+      );
+    } catch (err) {
+      console.error('Failed to send notifyStaff notification:', err);
+    }
 
     return this.findOne(membership.id, gymId);
   }
@@ -712,7 +809,7 @@ export class MembershipsService {
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
         values,
@@ -736,6 +833,11 @@ export class MembershipsService {
       );
     }
 
+    const endDate = new Date(membership.endDate)
+    if (endDate < new Date()) {
+      throw new BadRequestException('Cannot record payment for an expired membership')
+    }
+
     // Update membership status and create payment record atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
@@ -754,7 +856,6 @@ export class MembershipsService {
       await this.paymentsService.createMembershipPaymentWithClient(
         client,
         id,
-        membership.branchId,
         membership.userId,
         userName,
         membership.originalAmount,
@@ -764,6 +865,12 @@ export class MembershipsService {
         dto.paymentRef,
         processedBy,
       );
+
+      // Log after recording payment to capture the updated state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'payment_recorded');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -776,11 +883,21 @@ export class MembershipsService {
       throw new BadRequestException('Membership is already cancelled');
     }
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    if (membership.status === 'expired') {
+      throw new BadRequestException('Cannot cancel an already expired membership')
+    }
+
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
         `UPDATE memberships SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $1, cancellation_reason_code = $2, updated_at = NOW() WHERE id = $3`,
         [dto.reason || null, dto.cancellationReasonCode || null, id],
       );
+
+      // Log after cancelling so cancel_reason and cancellation metadata are captured
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'cancelled');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -810,6 +927,12 @@ export class MembershipsService {
         [id, deletedById || null],
       );
 
+      // Log after soft deleting so deletion metadata is captured in the history entry
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'deleted');
+      }
+
       // Void the associated payment record
       await client.query(
         `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE reference_table = 'memberships' AND reference_id = $1`,
@@ -820,10 +943,112 @@ export class MembershipsService {
     return { id, deleted: true };
   }
 
+  async voidDelete(id: number, gymId: number) {
+    // Verify membership exists
+    await this.findOne(id, gymId);
+
+    const txResult = await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // Log BEFORE hard deleting so we capture the membership state while it still exists
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'void_deleted');
+      }
+
+      // Hard delete attendance records linked to this membership
+      await client.query(
+        `DELETE FROM attendance WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete payments linked to this membership
+      await client.query(
+        `DELETE FROM payments WHERE reference_table = 'memberships' AND reference_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership freezes
+      await client.query(
+        `DELETE FROM membership_freezes WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership facilities
+      await client.query(
+        `DELETE FROM membership_facilities WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete membership amenities
+      await client.query(
+        `DELETE FROM membership_amenities WHERE membership_id = $1`,
+        [id],
+      );
+
+      // Hard delete the membership itself
+      await client.query(
+        `DELETE FROM memberships WHERE id = $1`,
+        [id],
+      );
+
+      // If the deleted membership was active, immediately activate the earliest pending membership for the same user
+      if (snapshot.rows[0]?.status === 'active') {
+        const pendingResult = await client.query(
+          `SELECT id FROM memberships
+           WHERE user_id = $1
+           AND status = 'pending'
+           AND end_date >= NOW()
+           AND (is_deleted = FALSE OR is_deleted IS NULL)
+           ORDER BY start_date ASC
+           LIMIT 1`,
+          [snapshot.rows[0].user_id],
+        );
+
+        if (pendingResult.rows.length > 0) {
+          const pendingId = pendingResult.rows[0].id;
+
+          await client.query(
+            `UPDATE memberships
+             SET status = 'active', updated_at = NOW()
+             WHERE id = $1`,
+            [pendingId],
+          );
+
+          await client.query(
+            `UPDATE users
+             SET status = 'active', updated_at = NOW()
+             WHERE id = $1`,
+            [snapshot.rows[0].user_id],
+          );
+
+          // Audit log for the auto-activated membership
+          const activatedSnapshot = await client.query(
+            `SELECT * FROM memberships WHERE id = $1`,
+            [pendingId],
+          );
+          if (activatedSnapshot.rows[0]) {
+            await this.logToHistory(client, activatedSnapshot.rows[0], 'activated');
+          }
+
+          return { pendingActivated: true };
+        }
+
+        // No pending membership found — mark the user as inactive
+        await client.query(
+          `UPDATE users SET status = 'inactive', updated_at = NOW() WHERE id = $1`,
+          [snapshot.rows[0].user_id],
+        );
+      }
+
+      return { pendingActivated: false };
+    });
+
+    return { id, voided: true, pendingActivated: txResult?.pendingActivated ?? false, message: 'Membership permanently deleted' };
+  }
+
   async getExpiringSoon(
     gymId: number,
-    branchId: number | null = null,
     days = 7,
+    branchId?: number | null,
   ) {
     const now = new Date();
     const futureDate = new Date();
@@ -841,12 +1066,9 @@ export class MembershipsService {
            AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [now, futureDate];
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $3`;
-          values.push(branchId);
+        if (branchId) {
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
         }
-
         query += ` ORDER BY m.end_date ASC`;
 
         const result = await client.query(query, values);
@@ -857,7 +1079,7 @@ export class MembershipsService {
     return memberships.map((m: Record<string, any>) => this.formatMembership(m));
   }
 
-  async getStats(gymId: number, branchId: number | null = null) {
+  async getStats(gymId: number, branchId?: number | null) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -865,7 +1087,7 @@ export class MembershipsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = '';
+        const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
         const softDeleteFilter =
           ' AND (is_deleted = FALSE OR is_deleted IS NULL)';
 
@@ -900,12 +1122,12 @@ export class MembershipsService {
     return stats;
   }
 
-  async getOverview(gymId: number, branchId: number | null = null) {
+  async getOverview(gymId: number, branchId?: number | null) {
     const [stats, expiringSoon, recentSubscriptions, plans, planDistribution] =
       await Promise.all([
         this.getStats(gymId, branchId),
-        this.getExpiringSoon(gymId, branchId, 7),
-        this.getRecentSubscriptions(gymId, branchId, 10),
+        this.getExpiringSoon(gymId, 7, branchId),
+        this.getRecentSubscriptions(gymId, 10, branchId),
         this.getPlansForOverview(gymId, branchId),
         this.getPlanDistribution(gymId, branchId),
       ]);
@@ -921,16 +1143,14 @@ export class MembershipsService {
 
   private async getPlansForOverview(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT id, code, name FROM plans WHERE is_active = true`;
+      let query = `SELECT id, code, name FROM plans WHERE is_active = true AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
 
-      // Branch filtering: show branch-specific plans + global plans (branch_id IS NULL)
-      if (branchId !== null) {
-        query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
-        values.push(branchId);
+      if (branchId) {
+        query += ` AND (branch_id = ${branchId} OR branch_id IS NULL)`;
       }
 
       query += ` ORDER BY display_order ASC`;
@@ -946,13 +1166,17 @@ export class MembershipsService {
 
   private async getPlanDistribution(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       let query = `SELECT plan_id, COUNT(*) as count
          FROM memberships
          WHERE status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
       const values: SqlValue[] = [];
+
+      if (branchId) {
+        query += ` AND (branch_id = ${branchId} OR branch_id IS NULL)`;
+      }
 
       query += ` GROUP BY plan_id ORDER BY count DESC`;
 
@@ -966,8 +1190,8 @@ export class MembershipsService {
 
   private async getRecentSubscriptions(
     gymId: number,
-    branchId: number | null = null,
     limit = 10,
+    branchId?: number | null,
   ) {
     const memberships = await this.tenantService.executeInTenant(
       gymId,
@@ -981,12 +1205,9 @@ export class MembershipsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND m.branch_id = $${paramIndex++}`;
-          values.push(branchId);
+        if (branchId) {
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
         }
-
         query += ` ORDER BY m.created_at DESC LIMIT $${paramIndex}`;
         values.push(limit);
 
@@ -1001,7 +1222,6 @@ export class MembershipsService {
   async renew(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
     dto: RenewMembershipDto,
   ) {
     const currentMembership = await this.getActiveMembership(userId, gymId);
@@ -1019,7 +1239,7 @@ export class MembershipsService {
       startDate = new Date();
     }
 
-    return this.create(
+    const result = await this.create(
       {
         userId,
         planId,
@@ -1027,10 +1247,24 @@ export class MembershipsService {
         startDate: startDate.toISOString(),
         paymentMethod: dto.paymentMethod,
         notes: dto.notes,
+        discountAmount: dto.discountAmount,
+        facilityIds: dto.facilityIds,
+        amenityIds: dto.amenityIds,
       },
       gymId,
-      branchId,
     );
+
+    // Log the renewed membership to history
+    if (result?.id) {
+      await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+        const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [result.id]);
+        if (snapshot.rows[0]) {
+          await this.logToHistory(client, snapshot.rows[0], 'renewed');
+        }
+      });
+    }
+
+    return result;
   }
 
   private calculateEndDate(
@@ -1043,6 +1277,9 @@ export class MembershipsService {
     switch (durationType) {
       case 'day':
         endDate.setDate(endDate.getDate() + durationValue);
+        break;
+      case 'week':
+        endDate.setDate(endDate.getDate() + durationValue * 7);
         break;
       case 'month':
         endDate.setMonth(endDate.getMonth() + durationValue);
@@ -1076,6 +1313,14 @@ export class MembershipsService {
       throw new BadRequestException('End date must be after start date');
     }
 
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const freezeStart = new Date(dto.startDate)
+    freezeStart.setHours(0, 0, 0, 0)
+    if (freezeStart < today) {
+      throw new BadRequestException('Freeze start date cannot be in the past')
+    }
+
     // Check against plan's max freeze days
     const plan = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(`SELECT * FROM plans WHERE id = $1`, [membership.planId]);
@@ -1094,9 +1339,9 @@ export class MembershipsService {
     // Create freeze record and update membership atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
-        `INSERT INTO membership_freezes (branch_id, membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())`,
-        [membership.branchId, id, startDate, endDate, dto.reason || null, approvedBy],
+        `INSERT INTO membership_freezes (membership_id, start_date, end_date, reason, approved_by, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())`,
+        [id, startDate, endDate, dto.reason || null, approvedBy],
       );
 
       await client.query(
@@ -1104,6 +1349,12 @@ export class MembershipsService {
          total_freeze_days = total_freeze_days + $4, updated_at = NOW() WHERE id = $5`,
         [startDate, endDate, dto.reason || null, freezeDays, id],
       );
+
+      // Log after freezing to capture the frozen state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'frozen');
+      }
     });
 
     return this.findOne(id, gymId);
@@ -1120,6 +1371,10 @@ export class MembershipsService {
     const now = new Date();
     const actualFreezeDays = Math.ceil((now.getTime() - freezeStart.getTime()) / (1000 * 60 * 60 * 24));
 
+    if (actualFreezeDays <= 0) {
+      throw new BadRequestException('Membership freeze has not started yet')
+    }
+
     // Complete freeze and extend membership atomically
     await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
@@ -1135,6 +1390,12 @@ export class MembershipsService {
          updated_at = NOW() WHERE id = $2`,
         [actualFreezeDays, id],
       );
+
+      // Log after unfreezing to capture the unfrozen state
+      const snapshot = await client.query(`SELECT * FROM memberships WHERE id = $1`, [id]);
+      if (snapshot.rows[0]) {
+        await this.logToHistory(client, snapshot.rows[0], 'unfrozen');
+      }
     });
 
     return this.findOne(id, gymId);

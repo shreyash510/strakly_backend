@@ -13,7 +13,6 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { AuthRegisterDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RegisterAdminWithGymDto } from './dto/register-admin-with-gym.dto';
@@ -35,20 +34,6 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Throttle({ default: { limit: 5, ttl: 900000 } })
-  @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() createUserDto: AuthRegisterDto) {
-    return this.authService.register(createUserDto);
-  }
-
-  @Throttle({ default: { limit: 5, ttl: 900000 } })
-  @Post('register-admin')
-  @ApiOperation({ summary: 'Register a new admin user' })
-  registerAdmin(@Body() createUserDto: AuthRegisterDto) {
-    return this.authService.registerAdmin(createUserDto);
-  }
-
-  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('register-admin-with-gym')
   @ApiOperation({ summary: 'Register a new admin user with gym' })
   registerAdminWithGym(@Body() dto: RegisterAdminWithGymDto) {
@@ -63,20 +48,15 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('logout')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Logout user' })
-  logout(@UserId() userId: number) {
-    return this.authService.logout(userId);
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@UserId() userId: number, @OptionalGymId() gymId: number | null, @Request() req: any) {
     const isSuperAdmin = req.user?.isSuperAdmin === true;
-    return this.authService.getProfile(userId, gymId ?? undefined, false, isSuperAdmin);
+    const isAdmin = req.user?.role === 'admin';
+    // Tenant users are manager, trainer, client — they live in tenant schema, not public.users
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.getProfile(userId, gymId ?? undefined, isTenantUser, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -90,7 +70,9 @@ export class AuthController {
     @Request() req: any,
   ) {
     const isSuperAdmin = req.user?.isSuperAdmin === true;
-    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto, false, isSuperAdmin);
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
+    return this.authService.updateProfile(userId, gymId ?? undefined, updateProfileDto, isTenantUser, isSuperAdmin);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -101,21 +83,18 @@ export class AuthController {
     @UserId() userId: number,
     @OptionalGymId() gymId: number | null,
     @Body() dto: ChangePasswordDto,
+    @Request() req: any,
   ) {
+    const isSuperAdmin = req.user?.isSuperAdmin === true;
+    const isAdmin = req.user?.role === 'admin';
+    const isTenantUser = !isSuperAdmin && !isAdmin;
     return this.authService.changePassword(
       userId,
       gymId ?? undefined,
       dto.currentPassword,
       dto.newPassword,
+      isTenantUser,
     );
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('refresh')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Refresh access token' })
-  refreshToken(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
-    return this.authService.refreshToken(userId, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -138,14 +117,6 @@ export class AuthController {
       pageNum,
       limitNum,
     );
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('switch-gym')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Switch to a different gym (for multi-gym staff)' })
-  switchGym(@UserId() userId: number, @Body('gymId') targetGymId: number) {
-    return this.authService.switchGym(userId, targetGymId);
   }
 
   @Throttle({ default: { limit: 5, ttl: 900000 } })
@@ -180,18 +151,6 @@ export class AuthController {
     return this.authService.resendOtp(dto.email);
   }
 
-  @Post('verify-email')
-  @ApiOperation({ summary: 'Verify email with OTP' })
-  verifyEmail(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyEmail(dto.email, dto.otp);
-  }
-
-  @Post('resend-verification')
-  @ApiOperation({ summary: 'Resend email verification OTP' })
-  resendVerification(@Body() dto: RequestPasswordResetDto) {
-    return this.authService.resendVerificationEmail(dto.email);
-  }
-
   @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('send-signup-otp')
   @ApiOperation({ summary: 'Send OTP for signup email verification' })
@@ -204,14 +163,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify signup OTP' })
   verifySignupOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifySignupOtp(dto.email, dto.otp);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('email-verification-status')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Check email verification status' })
-  checkEmailVerification(@UserId() userId: number, @OptionalGymId() gymId: number | null) {
-    return this.authService.checkEmailVerification(userId, false, gymId ?? undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

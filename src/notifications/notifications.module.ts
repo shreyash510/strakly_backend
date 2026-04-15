@@ -16,7 +16,12 @@ import { NotificationsGateway } from './notifications.gateway';
       useFactory: (configService: ConfigService) => ({
         secret:
           configService.get<string>('JWT_SECRET') ||
-          'strakly-secret-key-change-in-production',
+          (() => {
+            if (process.env.NODE_ENV === 'production') {
+              throw new Error('JWT_SECRET must be set in production');
+            }
+            return 'strakly-secret-key-change-in-production';
+          })(),
       }),
     }),
   ],

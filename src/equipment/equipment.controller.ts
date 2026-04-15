@@ -9,6 +9,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,19 +28,17 @@ import {
 } from './dto/equipment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('equipment')
 @Controller('equipment')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.EQUIPMENT_TRACKING)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class EquipmentController {
   constructor(private readonly equipmentService: EquipmentService) {}
@@ -49,20 +48,20 @@ export class EquipmentController {
   @ApiOperation({ summary: 'List all equipment' })
   findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: EquipmentFiltersDto,
   ) {
-    return this.equipmentService.findAll(gymId, branchId, filters);
+    return this.equipmentService.findAll(gymId, filters);
   }
 
   @Get('stats')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get equipment statistics' })
   getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.equipmentService.getStats(gymId, branchId);
+    return this.equipmentService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('maintenance/upcoming')
@@ -70,12 +69,10 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Get upcoming maintenance across all equipment' })
   getUpcomingMaintenance(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: MaintenanceFiltersDto,
   ) {
     return this.equipmentService.getUpcomingMaintenance(
       gymId,
-      branchId,
       filters,
     );
   }
@@ -106,13 +103,11 @@ export class EquipmentController {
   createMaintenance(
     @Param('id', ParseIntPipe) equipmentId: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateMaintenanceDto,
   ) {
     return this.equipmentService.createMaintenance(
       equipmentId,
       gymId,
-      branchId,
       dto,
     );
   }
@@ -161,10 +156,10 @@ export class EquipmentController {
   @ApiOperation({ summary: 'Create equipment' })
   create(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateEquipmentDto,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.equipmentService.create(gymId, branchId, dto);
+    return this.equipmentService.create(gymId, dto, branchId);
   }
 
   @Patch(':id')
@@ -182,7 +177,9 @@ export class EquipmentController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @Roles('admin', 'manager')
+  @ManagerPermission('equipment', 'delete')
   @ApiOperation({ summary: 'Delete equipment' })
   @ApiParam({ name: 'id', type: Number })
   remove(

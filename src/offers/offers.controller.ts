@@ -24,16 +24,13 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('offers')
 @Controller('offers')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.OFFERS)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class OffersController {
   constructor(
@@ -41,102 +38,28 @@ export class OffersController {
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Get()
   @ApiOperation({ summary: 'Get all offers' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
-    @Query('branchId') queryBranchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.offersService.findAll(
       req.user.gymId!,
-      branchId,
       includeInactive === 'true',
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
   @Get('active')
   @ApiOperation({ summary: 'Get currently active offers' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  findActive(@Request() req: AuthenticatedRequest, @Query('branchId') queryBranchId?: string) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findActive(req.user.gymId!, branchId);
-  }
-
-  @Get('validate/:code')
-  @ApiOperation({ summary: 'Validate an offer code' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  validateCode(
+  findActive(
     @Request() req: AuthenticatedRequest,
-    @Param('code') code: string,
-    @Query('branchId') queryBranchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.validateOfferCode(code, req.user.gymId!, branchId);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get offer by ID' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  findOne(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findOne(id, req.user.gymId!, branchId);
-  }
-
-  @Get('code/:code')
-  @ApiOperation({ summary: 'Get offer by code' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  findByCode(
-    @Request() req: AuthenticatedRequest,
-    @Param('code') code: string,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.offersService.findByCode(code, req.user.gymId!, branchId);
+    return this.offersService.findActive(req.user.gymId!, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Post()
@@ -144,19 +67,11 @@ export class OffersController {
   @Roles('superadmin', 'admin', 'manager')
   @ManagerPermission('offers', 'create')
   @ApiOperation({ summary: 'Create a new offer' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for the offer (admin only)',
-  })
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateOfferDto,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    const result = await this.offersService.create(dto, req.user.gymId!, branchId);
+    const result = await this.offersService.create(dto, req.user.gymId!);
     this.notificationsGateway.emitOfferChanged(req.user.gymId!, { action: 'created' });
     return result;
   }

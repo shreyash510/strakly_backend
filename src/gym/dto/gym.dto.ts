@@ -7,6 +7,7 @@ import {
   IsEmail,
   IsNotEmpty,
   ValidateNested,
+  ValidateIf,
   MinLength,
 } from 'class-validator';
 import {
@@ -69,7 +70,8 @@ export class CreateGymDto {
 
   @ApiPropertyOptional({ description: 'Contact email' })
   @IsOptional()
-  @IsEmail()
+  @IsEmail({}, { message: 'Please enter a valid email address' })
+  @ValidateIf((o) => o.email !== '' && o.email !== null)
   email?: string;
 
   @ApiPropertyOptional({ description: 'Website URL' })
@@ -101,6 +103,11 @@ export class CreateGymDto {
   @IsOptional()
   @IsString()
   country?: string;
+
+  @ApiPropertyOptional({ description: 'Currency code', default: 'USD' })
+  @IsOptional()
+  @IsString()
+  currency?: string;
 
   @ApiPropertyOptional({
     description: 'Opening time (HH:MM format)',

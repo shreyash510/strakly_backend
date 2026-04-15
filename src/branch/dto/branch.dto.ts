@@ -1,13 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsEmail,
-  IsNotEmpty,
-  MaxLength,
-  IsNumber,
-  IsEnum,
-} from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsEmail, IsNotEmpty, MaxLength, IsNumber, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateBranchDto {
@@ -52,36 +43,6 @@ export class CreateBranchDto {
   @IsString()
   zipCode?: string;
 
-  @ApiPropertyOptional({ description: 'Opening time (HH:MM)', example: '06:00' })
-  @IsOptional()
-  @IsString()
-  openingTime?: string;
-
-  @ApiPropertyOptional({ description: 'Closing time (HH:MM)', example: '22:00' })
-  @IsOptional()
-  @IsString()
-  closingTime?: string;
-
-  @ApiPropertyOptional({ description: 'GPS latitude' })
-  @IsOptional()
-  @IsNumber()
-  latitude?: number;
-
-  @ApiPropertyOptional({ description: 'GPS longitude' })
-  @IsOptional()
-  @IsNumber()
-  longitude?: number;
-
-  @ApiPropertyOptional({ description: 'Maximum occupancy' })
-  @IsOptional()
-  @IsNumber()
-  capacity?: number;
-
-  @ApiPropertyOptional({ description: 'Branch description' })
-  @IsOptional()
-  @IsString()
-  description?: string;
-
   @ApiPropertyOptional({ description: 'Is branch active', default: true })
   @IsOptional()
   @IsBoolean()
@@ -121,24 +82,6 @@ export class BranchResponseDto {
   @ApiPropertyOptional()
   zipCode?: string;
 
-  @ApiPropertyOptional()
-  openingTime?: string;
-
-  @ApiPropertyOptional()
-  closingTime?: string;
-
-  @ApiPropertyOptional()
-  latitude?: number;
-
-  @ApiPropertyOptional()
-  longitude?: number;
-
-  @ApiPropertyOptional()
-  capacity?: number;
-
-  @ApiPropertyOptional()
-  description?: string;
-
   @ApiProperty()
   isActive: boolean;
 
@@ -167,13 +110,13 @@ export class BranchLimitResponseDto {
 }
 
 export enum MembershipTransferAction {
-  CANCEL = 'cancel', // Cancel current membership
-  TRANSFER = 'transfer', // Transfer membership to new branch
-  KEEP = 'keep', // Keep membership unchanged (for later manual handling)
+  CANCEL = 'cancel',
+  TRANSFER = 'transfer',
+  KEEP = 'keep',
 }
 
 export class TransferMemberDto {
-  @ApiProperty({ description: 'Client ID to transfer' })
+  @ApiProperty({ description: 'Member/Client ID to transfer' })
   @IsNumber()
   memberId: number;
 
@@ -207,7 +150,7 @@ export class TransferMemberResponseDto {
   @ApiProperty({ description: 'Transfer message' })
   message: string;
 
-  @ApiProperty({ description: 'Client ID that was transferred' })
+  @ApiProperty({ description: 'Member ID that was transferred' })
   memberId: number;
 
   @ApiProperty({ description: 'Old branch ID' })

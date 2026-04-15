@@ -29,13 +29,12 @@ export class FacilitiesService {
   /**
    * Get all facilities for a gym
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    * @param includeInactive - Include inactive facilities
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
@@ -46,7 +45,10 @@ export class FacilitiesService {
         conditions.push('is_active = true');
       }
 
-      // Branch filtering removed — tenant-level isolation is sufficient
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+        values.push(branchId);
+      }
 
       const whereClause =
         conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -61,7 +63,7 @@ export class FacilitiesService {
   /**
    * Get a single facility by ID
    */
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const facility = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -86,9 +88,8 @@ export class FacilitiesService {
   async create(
     dto: CreateFacilityDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
-    // Check for duplicate code within the same branch
+    // Check for duplicate code
     const existing = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -110,11 +111,10 @@ export class FacilitiesService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO facilities (branch_id, name, code, description, icon, is_active, display_order, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+          `INSERT INTO facilities (name, code, description, icon, is_active, display_order, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
             dto.name,
             dto.code,
             dto.description || null,

@@ -53,6 +53,11 @@ export class CreateMembershipDto {
   @IsOptional()
   @IsBoolean()
   autoRenew?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountAmount?: number;
 }
 
 export class UpdateMembershipDto {
@@ -104,10 +109,6 @@ export class FreezeMembershipDto {
 }
 
 export class RenewMembershipDto {
-  @IsNumber()
-  @Type(() => Number)
-  gymId: number;
-
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
@@ -124,6 +125,37 @@ export class RenewMembershipDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discountAmount?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  facilityIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  amenityIds?: number[];
+}
+
+export class UpdateMembershipFacilitiesDto {
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  facilityIds?: number[]
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Type(() => Number)
+  amenityIds?: number[]
 }
 
 export class RecordPaymentDto {

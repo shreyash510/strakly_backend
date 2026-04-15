@@ -276,6 +276,11 @@ export class ClassFiltersDto {
   @Type(() => Number)
   @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class SessionFiltersDto {
@@ -312,4 +317,9 @@ export class SessionFiltersDto {
   @Type(() => Number)
   @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }

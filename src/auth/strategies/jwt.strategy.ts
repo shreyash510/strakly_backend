@@ -12,7 +12,6 @@ export interface JwtPayload {
   role?: string;
   gymId: number | null;
   tenantSchemaName: string | null;
-  branchId: number | null; // null = all branches access
   isSuperAdmin?: boolean;
   isAdmin?: boolean; // Admin users are in public.users, not tenant.users
   isImpersonating?: boolean; // Superadmin impersonating a gym
@@ -26,9 +25,11 @@ export interface AuthenticatedUser {
   role: string;
   gymId: number | null;
   tenantSchemaName: string | null;
-  branchId: number | null; // null = all branches access
   isSuperAdmin: boolean;
   isImpersonating: boolean;
+  branchId?: number | null;
+  /** All branches the user is allowed to access (non-admin multi-branch users) */
+  branchIds?: number[];
 }
 
 @Injectable()
@@ -57,7 +58,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
     const gymId = payload.gymId;
     const tenantSchemaName = payload.tenantSchemaName;
-    const branchId = payload.branchId;
     const isSuperAdmin = payload.isSuperAdmin === true;
     const isAdmin = payload.isAdmin === true;
     const isImpersonating = payload.isImpersonating === true;
@@ -71,7 +71,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: payload.role || 'superadmin',
         gymId: null,
         tenantSchemaName: null,
-        branchId: null,
         isSuperAdmin: true,
         isImpersonating: false,
       };
@@ -86,7 +85,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: payload.role || 'admin',
         gymId: gymId,
         tenantSchemaName: tenantSchemaName,
-        branchId: branchId,
         isSuperAdmin: false,
         isImpersonating: true,
       };
@@ -120,6 +118,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('Your account is inactive');
       }
 
+      // Check if gym is active
+      if (payload.gymId) {
+        const gym = await this.prisma.gym.findUnique({
+          where: { id: payload.gymId },
+          select: { isActive: true },
+        });
+        if (gym && !gym.isActive) {
+          throw new UnauthorizedException('Your gym account has been deactivated');
+        }
+      }
+
+      const branchId = adminUser.gymAssignments?.[0]?.branchId ?? null;
+
       return {
         userId: userId,
         email: payload.email,
@@ -127,9 +138,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: payload.role || 'admin',
         gymId: gymId,
         tenantSchemaName: tenantSchemaName,
-        branchId: branchId, // null for admin = all branches access
         isSuperAdmin: false,
         isImpersonating: false,
+        branchId,
       };
     }
 
@@ -145,7 +156,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT id, email, name, status, role, branch_id
+          `SELECT id, email, name, status, role, branch_id, allowed_branch_ids
          FROM users
          WHERE id = $1`,
           [userId],
@@ -183,6 +194,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
+    // Check if gym is active
+    if (payload.gymId) {
+      const gym = await this.prisma.gym.findUnique({
+        where: { id: payload.gymId },
+        select: { isActive: true },
+      });
+      if (gym && !gym.isActive) {
+        throw new UnauthorizedException('Your gym account has been deactivated');
+      }
+    }
+
     return {
       userId: userId,
       email: payload.email,
@@ -190,9 +212,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role || userData.role || 'client',
       gymId: gymId,
       tenantSchemaName: tenantSchemaName,
-      branchId: branchId ?? userData.branch_id ?? null,
       isSuperAdmin: false,
       isImpersonating: false,
+      branchId: userData.branch_id ?? null,
+      branchIds: (() => {
+        const raw = userData.allowed_branch_ids;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw as number[];
+        try { return JSON.parse(raw) as number[]; } catch { return []; }
+      })(),
     };
   }
 }

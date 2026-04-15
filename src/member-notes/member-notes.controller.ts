@@ -18,10 +18,11 @@ import {
 } from './dto/member-note.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('member-notes')
@@ -36,35 +37,26 @@ export class MemberNotesController {
   @ApiOperation({ summary: 'Get client notes' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: MemberNoteFiltersDto,
   ) {
-    return this.memberNotesService.findAll(gymId, branchId, filters);
-  }
-
-  @Get(':id')
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Get a client note by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.memberNotesService.findOne(id, gymId);
+    return this.memberNotesService.findAll(gymId, filters);
   }
 
   @Post()
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Create a client note' })
   async create(
     @Body() dto: CreateMemberNoteDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.memberNotesService.create(dto, gymId, branchId, userId);
+    return this.memberNotesService.create(dto, gymId, userId, branchId);
   }
 
   @Patch(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Update a client note' })
   async update(
@@ -76,6 +68,7 @@ export class MemberNotesController {
   }
 
   @Patch(':id/pin')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Toggle pin on a client note' })
   async togglePin(
@@ -86,6 +79,7 @@ export class MemberNotesController {
   }
 
   @Delete(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Delete a client note' })
   async remove(

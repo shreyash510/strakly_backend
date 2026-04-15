@@ -21,9 +21,9 @@ export class MemberRegistrationDto {
   @IsEmail()
   email: string;
 
-  @ApiPropertyOptional({ description: 'Password (minimum 6 characters, optional)' })
+  @ApiPropertyOptional({ description: 'Password (minimum 8 characters, optional)' })
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   @IsOptional()
   password?: string;
 
@@ -41,11 +41,6 @@ export class MemberRegistrationDto {
   @IsNumber()
   @IsNotEmpty()
   gymId: number;
-
-  @ApiPropertyOptional({ description: 'Branch ID to register for' })
-  @IsNumber()
-  @IsOptional()
-  branchId?: number;
 
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsString()

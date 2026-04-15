@@ -90,7 +90,6 @@ export class PaymentsService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: PaymentFiltersDto = {},
   ) {
     const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 15);
@@ -137,6 +136,11 @@ export class PaymentsService {
           values.push(new Date(filters.endDate));
         }
 
+        if (filters.branchId) {
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -170,15 +174,21 @@ export class PaymentsService {
   async findOne(
     id: number,
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     const payment = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const query = `SELECT * FROM payments WHERE id = $1`;
         const values: SqlValue[] = [id];
+        const branchClause = branchId
+          ? ` AND (branch_id = $2 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
 
-        const result = await client.query(query, values);
+        const result = await client.query(
+          `SELECT * FROM payments WHERE id = $1${branchClause}`,
+          values,
+        );
         return result.rows[0];
       },
     );
@@ -197,13 +207,20 @@ export class PaymentsService {
     referenceTable: string,
     referenceId: number,
     gymId: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord[]> {
     const payments = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const values: SqlValue[] = [referenceTable, referenceId];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
+
         const result = await client.query(
-          `SELECT * FROM payments WHERE reference_table = $1 AND reference_id = $2 ORDER BY created_at DESC`,
-          [referenceTable, referenceId],
+          `SELECT * FROM payments WHERE reference_table = $1 AND reference_id = $2${branchClause} ORDER BY created_at DESC`,
+          values,
         );
         return result.rows;
       },
@@ -219,23 +236,29 @@ export class PaymentsService {
     dto: CreatePaymentDto,
     gymId: number,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
+    // Use gym's currency as fallback instead of hardcoded 'INR'
+    if (!dto.currency) {
+      const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { currency: true } });
+      dto.currency = gym?.currency || 'USD';
+    }
+
     const payment = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
           `INSERT INTO payments (
-          branch_id, payment_type, reference_id, reference_table,
+          payment_type, reference_id, reference_table,
           payer_type, payer_id, payer_name,
           payee_type, payee_id, payee_name,
           amount, currency, tax_amount, discount_amount, net_amount,
           payment_method, payment_ref, payment_gateway, payment_gateway_ref,
-          status, processed_at, processed_by, notes, metadata, created_at, updated_at
+          status, processed_at, processed_by, notes, metadata, branch_id, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, $23, NOW(), NOW()
         ) RETURNING *`,
           [
-            dto.branchId || null,
             dto.paymentType,
             dto.referenceId,
             dto.referenceTable,
@@ -246,7 +269,7 @@ export class PaymentsService {
             dto.payeeId || null,
             dto.payeeName || null,
             dto.amount,
-            dto.currency || 'INR',
+            dto.currency || 'USD',
             dto.taxAmount || 0,
             dto.discountAmount || 0,
             dto.netAmount,
@@ -258,6 +281,7 @@ export class PaymentsService {
             processedBy || null,
             dto.notes || null,
             dto.metadata ? JSON.stringify(dto.metadata) : null,
+            branchId || null,
           ],
         );
         return result.rows[0];
@@ -275,7 +299,22 @@ export class PaymentsService {
     gymId: number,
     dto: UpdatePaymentDto,
   ): Promise<PaymentRecord> {
-    await this.findOne(id, gymId);
+    const currentPayment = await this.findOne(id, gymId);
+
+    // Validate payment status transitions
+    if (dto.status) {
+      const allowedTransitions: Record<string, string[]> = {
+        [PaymentStatus.PENDING]: [PaymentStatus.COMPLETED, PaymentStatus.FAILED, PaymentStatus.CANCELLED],
+        [PaymentStatus.COMPLETED]: [PaymentStatus.REFUNDED],
+      };
+
+      const allowed = allowedTransitions[currentPayment.status];
+      if (!allowed || !allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          `Invalid status transition from '${currentPayment.status}' to '${dto.status}'`,
+        );
+      }
+    }
 
     const updates: string[] = [];
     const values: SqlValue[] = [];
@@ -340,9 +379,9 @@ export class PaymentsService {
    */
   async getStats(
     gymId: number,
-    branchId: number | null = null,
     startDate?: Date,
     endDate?: Date,
+    branchId?: number | null,
   ) {
     const now = new Date();
     const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1);
@@ -351,7 +390,11 @@ export class PaymentsService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const branchFilter = '';
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        const baseValues: SqlValue[] = [start, end];
+        if (branchId) baseValues.push(branchId);
 
         const [totalResult, byTypeResult, byMethodResult, byStatusResult] =
           await Promise.all([
@@ -361,29 +404,29 @@ export class PaymentsService {
             COALESCE(SUM(net_amount), 0) as total_amount,
             COALESCE(SUM(CASE WHEN status = 'completed' THEN net_amount ELSE 0 END), 0) as completed_amount
           FROM payments
-          WHERE created_at >= $1 AND created_at <= $2${branchFilter}`,
-              [start, end],
+          WHERE created_at >= $1 AND created_at <= $2${branchClause}`,
+              baseValues,
             ),
             client.query(
               `SELECT payment_type, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchClause}
            GROUP BY payment_type`,
-              [start, end],
+              baseValues,
             ),
             client.query(
               `SELECT payment_method, COUNT(*) as count, COALESCE(SUM(net_amount), 0) as amount
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2 AND status = 'completed'${branchClause}
            GROUP BY payment_method`,
-              [start, end],
+              baseValues,
             ),
             client.query(
               `SELECT status, COUNT(*) as count
            FROM payments
-           WHERE created_at >= $1 AND created_at <= $2${branchFilter}
+           WHERE created_at >= $1 AND created_at <= $2${branchClause}
            GROUP BY status`,
-              [start, end],
+              baseValues,
             ),
           ]);
 
@@ -418,7 +461,6 @@ export class PaymentsService {
   async createMembershipPayment(
     membershipId: number,
     gymId: number,
-    branchId: number | null,
     payerId: number,
     payerName: string,
     amount: number,
@@ -430,7 +472,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.MEMBERSHIP,
         referenceId: membershipId,
         referenceTable: 'memberships',
@@ -455,7 +496,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     membershipId: number,
-    branchId: number | null,
     payerId: number,
     payerName: string,
     amount: number,
@@ -464,11 +504,11 @@ export class PaymentsService {
     paymentMethod: string,
     paymentRef?: string,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.MEMBERSHIP,
         referenceId: membershipId,
         referenceTable: 'memberships',
@@ -482,6 +522,7 @@ export class PaymentsService {
         paymentRef,
       },
       processedBy,
+      branchId,
     );
   }
 
@@ -491,7 +532,6 @@ export class PaymentsService {
   async createSalaryPayment(
     salaryId: number,
     gymId: number,
-    branchId: number | null,
     staffId: number,
     staffName: string,
     amount: number,
@@ -501,7 +541,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.SALARY,
         referenceId: salaryId,
         referenceTable: 'staff_salaries',
@@ -527,7 +566,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     salaryId: number,
-    branchId: number | null,
     staffId: number,
     staffName: string,
     amount: number,
@@ -538,12 +576,11 @@ export class PaymentsService {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.SALARY,
         referenceId: salaryId,
         referenceTable: 'staff_salaries',
         payerType: 'gym',
-        payerId: undefined,
+        payerId: undefined, // Intentional: gym is identified by the tenant schema, no numeric ID needed
         payeeType: 'staff',
         payeeId: staffId,
         payeeName: staffName,
@@ -559,25 +596,29 @@ export class PaymentsService {
   /**
    * Create a payment record using an existing DB client (avoids nested executeInTenant)
    */
+  /**
+   * Create a payment record using an existing DB client (avoids nested executeInTenant).
+   * NOTE: Callers should set dto.currency to the gym's currency before calling this method.
+   */
   async createWithClient(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     dto: CreatePaymentDto,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     const result = await client.query(
       `INSERT INTO payments (
-        branch_id, payment_type, reference_id, reference_table,
+        payment_type, reference_id, reference_table,
         payer_type, payer_id, payer_name,
         payee_type, payee_id, payee_name,
         amount, currency, tax_amount, discount_amount, net_amount,
         payment_method, payment_ref, payment_gateway, payment_gateway_ref,
-        status, processed_at, processed_by, notes, metadata, created_at, updated_at
+        status, processed_at, processed_by, notes, metadata, branch_id, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), $21, $22, $23, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), $20, $21, $22, $23, NOW(), NOW()
       ) RETURNING *`,
       [
-        dto.branchId || null,
         dto.paymentType,
         dto.referenceId,
         dto.referenceTable,
@@ -588,7 +629,7 @@ export class PaymentsService {
         dto.payeeId || null,
         dto.payeeName || null,
         dto.amount,
-        dto.currency || 'INR',
+        dto.currency || 'USD',
         dto.taxAmount || 0,
         dto.discountAmount || 0,
         dto.netAmount,
@@ -600,6 +641,7 @@ export class PaymentsService {
         processedBy || null,
         dto.notes || null,
         dto.metadata ? JSON.stringify(dto.metadata) : null,
+        branchId || null,
       ],
     );
     return this.formatPayment(result.rows[0]);
@@ -611,7 +653,6 @@ export class PaymentsService {
   async createProductSalePayment(
     saleId: number,
     gymId: number,
-    branchId: number | null,
     buyerId: number | null,
     buyerName: string,
     amount: number,
@@ -622,7 +663,6 @@ export class PaymentsService {
   ): Promise<PaymentRecord> {
     return this.create(
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.PRODUCT_SALE,
         referenceId: saleId,
         referenceTable: 'product_sales',
@@ -646,7 +686,6 @@ export class PaymentsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: any,
     saleId: number,
-    branchId: number | null,
     buyerId: number | null,
     buyerName: string,
     amount: number,
@@ -654,11 +693,11 @@ export class PaymentsService {
     netAmount: number,
     paymentMethod: string,
     processedBy?: number,
+    branchId?: number | null,
   ): Promise<PaymentRecord> {
     return this.createWithClient(
       client,
       {
-        branchId: branchId || undefined,
         paymentType: PaymentType.PRODUCT_SALE,
         referenceId: saleId,
         referenceTable: 'product_sales',
@@ -671,6 +710,7 @@ export class PaymentsService {
         paymentMethod,
       },
       processedBy,
+      branchId,
     );
   }
 }

@@ -4,12 +4,11 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
-  Inject,
-  forwardRef,
+  ForbiddenException,
 } from '@nestjs/common';
+import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
-import { BranchService } from '../branch/branch.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
 import {
@@ -20,6 +19,7 @@ import {
 } from '../common/pagination.util';
 import { hashPassword } from '../common/utils';
 import { ROLES, USER_STATUS, GYM_STATUS } from '../common/constants';
+import { getCurrencyFromCountry } from '../common/constants/currencies';
 
 export interface GymFilters extends PaginationParams {
   status?: string;
@@ -34,8 +34,6 @@ export class GymService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
-    @Inject(forwardRef(() => BranchService))
-    private readonly branchService: BranchService,
     private readonly uploadService: UploadService,
   ) {}
 
@@ -93,10 +91,33 @@ export class GymService {
       },
     });
 
+    // Fetch total client count per gym from each tenant schema (in parallel)
+    const clientCounts = await Promise.all(
+      gyms.map(async (gym) => {
+        if (!gym.tenantSchemaName || gym.tenantSchemaName === 'pending') {
+          return 0;
+        }
+        try {
+          const exists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!exists) return 0;
+          return await this.tenantService.executeInTenant(gym.id, async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            );
+            return parseInt(result.rows[0]?.count || '0', 10);
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to count clients for gym ${gym.id}`, err);
+          return 0;
+        }
+      }),
+    );
+
     // Format response with owner info
-    const formattedGyms = gyms.map((gym) => {
+    const formattedGyms = gyms.map((gym, index) => {
       const adminAssignment = gym.userAssignments[0];
       return {
+        totalClients: clientCounts[index],
         id: gym.id,
         name: gym.name,
         description: gym.description,
@@ -109,6 +130,7 @@ export class GymService {
         state: gym.state,
         zipCode: gym.zipCode,
         country: gym.country,
+        currency: gym.currency,
         openingTime: gym.openingTime,
         closingTime: gym.closingTime,
         capacity: gym.capacity,
@@ -127,7 +149,11 @@ export class GymService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, caller?: AuthenticatedUser) {
+    if (caller && !caller.isSuperAdmin && caller.gymId !== id) {
+      throw new ForbiddenException('Access denied: not your gym');
+    }
+
     const gym = await this.prisma.gym.findUnique({
       where: { id },
       include: {
@@ -166,6 +192,7 @@ export class GymService {
       state: gym.state,
       zipCode: gym.zipCode,
       country: gym.country,
+      currency: gym.currency,
       openingTime: gym.openingTime,
       closingTime: gym.closingTime,
       capacity: gym.capacity,
@@ -200,6 +227,10 @@ export class GymService {
     // Hash password
     const passwordHash = await hashPassword(dto.admin.password);
 
+    // Determine currency from country
+    const country = dto.country || 'India';
+    const currency = getCurrencyFromCountry(country).code;
+
     // Create gym first with a temporary schema name
     const gym = await this.prisma.gym.create({
       data: {
@@ -214,7 +245,8 @@ export class GymService {
         city: dto.city,
         state: dto.state,
         zipCode: dto.zipCode,
-        country: dto.country || 'India',
+        country,
+        currency,
         openingTime: dto.openingTime,
         closingTime: dto.closingTime,
         capacity: dto.capacity,
@@ -233,12 +265,6 @@ export class GymService {
     // Create the tenant schema with all tables (for clients)
     await this.tenantService.createTenantSchema(gym.id);
 
-    // Create default branch for this gym
-    const defaultBranch = await this.branchService.createDefaultBranch(
-      gym.id,
-      gym,
-    );
-
     // Create admin user in PUBLIC.users
     const createdUser = await this.prisma.user.create({
       data: {
@@ -250,12 +276,11 @@ export class GymService {
       },
     });
 
-    // Create user-gym assignment with admin role (null branchId = all branches)
+    // Create user-gym assignment with admin role
     await this.prisma.userGymXref.create({
       data: {
         userId: createdUser.id,
         gymId: gym.id,
-        branchId: null, // Admin has access to all branches
         role: ROLES.ADMIN,
         isPrimary: true,
         isActive: true,
@@ -282,7 +307,7 @@ export class GymService {
           status: 'trial',
           trialEndsAt: trialEnd,
           amount: 0,
-          currency: 'INR',
+          currency,
           paymentStatus: 'paid',
           autoRenew: true,
           isActive: true,
@@ -290,20 +315,44 @@ export class GymService {
       });
     }
 
+    // Create default branch for the new gym
+    await this.prisma.branch.create({
+      data: {
+        gymId: gym.id,
+        name: gym.name,
+        code: 'MAIN',
+        phone: dto.phone,
+        email: dto.email,
+        address: dto.address,
+        city: dto.city,
+        state: dto.state,
+        zipCode: dto.zipCode,
+        isDefault: true,
+        isActive: true,
+      },
+    });
+
     return this.findOne(gym.id);
   }
 
-  async update(id: number, dto: UpdateGymDto) {
-    await this.findOne(id);
+  async update(id: number, dto: UpdateGymDto, caller?: AuthenticatedUser) {
+    await this.findOne(id, caller);
+
+    const data: Record<string, any> = { ...dto };
+
+    // Auto-set currency when country changes (only if currency not explicitly provided)
+    if (dto.country && !dto.currency) {
+      data.currency = getCurrencyFromCountry(dto.country).code;
+    }
 
     return this.prisma.gym.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 
-  async remove(id: number) {
-    const gym = await this.findOne(id);
+  async remove(id: number, caller?: AuthenticatedUser) {
+    const gym = await this.findOne(id, caller);
 
     // Check if gym has any staff assignments
     const staffCount = await this.prisma.userGymXref.count({
@@ -492,8 +541,8 @@ export class GymService {
     };
   }
 
-  async toggleStatus(id: number) {
-    const gym = await this.findOne(id);
+  async toggleStatus(id: number, caller?: AuthenticatedUser) {
+    const gym = await this.findOne(id, caller);
 
     return this.prisma.gym.update({
       where: { id },
@@ -502,162 +551,9 @@ export class GymService {
   }
 
   /**
-   * Get all staff members assigned to a gym
-   */
-  async getGymStaff(gymId: number) {
-    const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
-    });
-
-    if (!gym) {
-      throw new NotFoundException(`Gym with ID ${gymId} not found`);
-    }
-
-    const staffAssignments = await this.prisma.userGymXref.findMany({
-      where: { gymId, isActive: true },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            avatar: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-      orderBy: [{ role: 'asc' }, { createdAt: 'desc' }],
-    });
-
-    return staffAssignments.map((assignment) => ({
-      id: assignment.user.id,
-      name: assignment.user.name,
-      email: assignment.user.email,
-      phone: assignment.user.phone,
-      avatar: assignment.user.avatar,
-      status: assignment.user.status,
-      role: assignment.role,
-      isPrimary: assignment.isPrimary,
-      joinedAt: assignment.joinedAt,
-      createdAt: assignment.user.createdAt,
-    }));
-  }
-
-  /**
-   * Add a staff member to a gym
-   */
-  async addStaffToGym(gymId: number, userId: number, role: string) {
-    const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
-    });
-
-    if (!gym) {
-      throw new NotFoundException(`Gym with ID ${gymId} not found`);
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-
-    // Check if already assigned
-    const existingAssignment = await this.prisma.userGymXref.findUnique({
-      where: {
-        userId_gymId: { userId, gymId },
-      },
-    });
-
-    if (existingAssignment) {
-      if (existingAssignment.isActive) {
-        throw new ConflictException('User is already assigned to this gym');
-      }
-      // Reactivate the assignment
-      return this.prisma.userGymXref.update({
-        where: { id: existingAssignment.id },
-        data: { isActive: true, role },
-      });
-    }
-
-    // Create new assignment
-    return this.prisma.userGymXref.create({
-      data: {
-        userId,
-        gymId,
-        role,
-        isPrimary: false,
-        isActive: true,
-      },
-    });
-  }
-
-  /**
-   * Remove a staff member from a gym
-   */
-  async removeStaffFromGym(gymId: number, userId: number) {
-    const assignment = await this.prisma.userGymXref.findUnique({
-      where: {
-        userId_gymId: { userId, gymId },
-      },
-    });
-
-    if (!assignment) {
-      throw new NotFoundException('Staff assignment not found');
-    }
-
-    // Don't allow removing the primary admin
-    if (assignment.role === ROLES.ADMIN && assignment.isPrimary) {
-      throw new BadRequestException(
-        'Cannot remove the primary admin from the gym',
-      );
-    }
-
-    // Soft delete by setting isActive to false
-    return this.prisma.userGymXref.update({
-      where: { id: assignment.id },
-      data: { isActive: false },
-    });
-  }
-
-  /**
-   * Update staff role in a gym
-   */
-  async updateStaffRole(gymId: number, userId: number, newRole: string) {
-    const assignment = await this.prisma.userGymXref.findUnique({
-      where: {
-        userId_gymId: { userId, gymId },
-      },
-    });
-
-    if (!assignment) {
-      throw new NotFoundException('Staff assignment not found');
-    }
-
-    // Don't allow changing the primary admin's role
-    if (
-      assignment.role === ROLES.ADMIN &&
-      assignment.isPrimary &&
-      newRole !== ROLES.ADMIN
-    ) {
-      throw new BadRequestException(
-        'Cannot change the role of the primary admin',
-      );
-    }
-
-    return this.prisma.userGymXref.update({
-      where: { id: assignment.id },
-      data: { role: newRole },
-    });
-  }
-
-  /**
    * Get gym profile for authenticated user with branch details and stats
    */
-  async getProfile(gymId: number, branchId?: number | null) {
+  async getProfile(gymId: number) {
     // Get gym details
     const gym = await this.prisma.gym.findUnique({
       where: { id: gymId },
@@ -682,73 +578,65 @@ export class GymService {
       throw new NotFoundException(`Gym with ID ${gymId} not found`);
     }
 
-    // Get branches with stats
-    let branches: Record<string, any>[];
-    if (branchId) {
-      // Get single branch with stats
-      const branch = await this.branchService.findOne(gymId, branchId);
-      branches = branch ? [branch] : [];
-    } else {
-      // Get all branches with stats
-      const allBranches = await this.prisma.branch.findMany({
-        where: { gymId },
-        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-      });
+    // Get all branches with stats
+    const allBranches = await this.prisma.branch.findMany({
+      where: { gymId },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+    });
 
-      // Fetch stats for all branches in a single tenant query
-      const branchIds = allBranches.map((b) => b.id);
-      const allCounts = await this.tenantService.executeInTenant(
-        gymId,
-        async (client) => {
-          const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
-            await Promise.all([
-              client.query(
-                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role = 'client' AND status = 'active' GROUP BY branch_id`,
-                [branchIds],
-              ),
-              client.query(
-                `SELECT branch_id, COUNT(*) as count FROM users WHERE branch_id = ANY($1) AND role IN ('manager', 'trainer') AND status = 'active' GROUP BY branch_id`,
-                [branchIds],
-              ),
-              client.query(
-                `SELECT COALESCE(branch_id, 0) as branch_id, COUNT(*) as count FROM facilities WHERE (branch_id = ANY($1) OR branch_id IS NULL) AND is_active = true GROUP BY COALESCE(branch_id, 0)`,
-                [branchIds],
-              ),
-              client.query(
-                `SELECT COALESCE(branch_id, 0) as branch_id, COUNT(*) as count FROM amenities WHERE (branch_id = ANY($1) OR branch_id IS NULL) AND is_active = true GROUP BY COALESCE(branch_id, 0)`,
-                [branchIds],
-              ),
-            ]);
+    // Fetch stats for all branches in a single tenant query
+    const branchIds = allBranches.map((b) => b.id);
+    const allCounts = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const [membersResult, staffResult, facilitiesResult, amenitiesResult] =
+          await Promise.all([
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM users WHERE role IN ('manager', 'trainer') AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM facilities WHERE is_active = true`,
+            ),
+            client.query(
+              `SELECT COUNT(*) as count FROM amenities WHERE is_active = true`,
+            ),
+          ]);
 
-          const toMap = (rows: any[]) => {
-            const map: Record<number, number> = {};
-            for (const row of rows) {
-              map[row.branch_id] = parseInt(row.count, 10);
-            }
-            return map;
-          };
+        const totalMembers = parseInt(membersResult.rows[0]?.count || '0', 10);
+        const totalStaff = parseInt(staffResult.rows[0]?.count || '0', 10);
+        const totalFacilities = parseInt(facilitiesResult.rows[0]?.count || '0', 10);
+        const totalAmenities = parseInt(amenitiesResult.rows[0]?.count || '0', 10);
 
-          return {
-            members: toMap(membersResult.rows),
-            staff: toMap(staffResult.rows),
-            facilities: toMap(facilitiesResult.rows),
-            amenities: toMap(amenitiesResult.rows),
-          };
-        },
-      );
+        // Return same count for all branches (no branch filtering)
+        const members: Record<number, number> = {};
+        const staff: Record<number, number> = {};
+        const facilities: Record<number, number> = {};
+        const amenities: Record<number, number> = {};
+        for (const id of branchIds) {
+          members[id] = totalMembers;
+          staff[id] = totalStaff;
+          facilities[id] = totalFacilities;
+          amenities[id] = totalAmenities;
+        }
 
-      branches = allBranches.map((branch) => ({
-        ...branch,
-        membersCount: allCounts.members[branch.id] || 0,
-        staffCount: allCounts.staff[branch.id] || 0,
-        facilitiesCount:
-          (allCounts.facilities[branch.id] || 0) +
-          (allCounts.facilities[0] || 0),
-        amenitiesCount:
-          (allCounts.amenities[branch.id] || 0) +
-          (allCounts.amenities[0] || 0),
-      }));
-    }
+        return { members, staff, facilities, amenities };
+      },
+    );
+
+    const branches = allBranches.map((branch) => ({
+      ...branch,
+      membersCount: allCounts.members[branch.id] || 0,
+      staffCount: allCounts.staff[branch.id] || 0,
+      facilitiesCount:
+        (allCounts.facilities[branch.id] || 0) +
+        (allCounts.facilities[0] || 0),
+      amenitiesCount:
+        (allCounts.amenities[branch.id] || 0) +
+        (allCounts.amenities[0] || 0),
+    }));
 
     const adminAssignment = gym.userAssignments[0];
 
@@ -765,6 +653,7 @@ export class GymService {
       state: gym.state,
       zipCode: gym.zipCode,
       country: gym.country,
+      currency: gym.currency,
       openingTime: gym.openingTime,
       closingTime: gym.closingTime,
       capacity: gym.capacity,

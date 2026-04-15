@@ -22,7 +22,6 @@ export class BodyMetricsService {
     return {
       id: m.id,
       userId: m.user_id,
-      branchId: m.branch_id,
       height: m.height,
       weight: m.weight,
       bmi: m.bmi,
@@ -56,7 +55,21 @@ export class BodyMetricsService {
     };
   }
 
-  async getMetrics(userId: number, gymId: number, branchId?: number | null) {
+  async getUserRole(userId: number, gymId: number): Promise<string | null> {
+    const user = await this.tenantService.executeInTenant(
+      gymId,
+      async (client) => {
+        const result = await client.query(
+          `SELECT role FROM users WHERE id = $1`,
+          [userId],
+        );
+        return result.rows[0];
+      },
+    );
+    return user?.role ?? null;
+  }
+
+  async getMetrics(userId: number, gymId: number) {
     const metrics = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
@@ -78,7 +91,6 @@ export class BodyMetricsService {
   async getOrCreateMetrics(
     userId: number,
     gymId: number,
-    branchId?: number | null,
   ) {
     let metrics = await this.tenantService.executeInTenant(
       gymId,
@@ -96,8 +108,8 @@ export class BodyMetricsService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `INSERT INTO body_metrics (user_id, branch_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
-            [userId, branchId ?? null],
+            `INSERT INTO body_metrics (user_id, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING *`,
+            [userId],
           );
           return result.rows[0];
         },
@@ -111,7 +123,6 @@ export class BodyMetricsService {
     userId: number,
     gymId: number,
     dto: UpdateBodyMetricsDto,
-    branchId?: number | null,
   ) {
     // Verify user exists
     const user = await this.tenantService.executeInTenant(
@@ -258,11 +269,10 @@ export class BodyMetricsService {
           );
         } else {
           await client.query(
-            `INSERT INTO body_metrics (user_id, branch_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
+            `INSERT INTO body_metrics (user_id, height, weight, bmi, body_fat, muscle_mass, last_measured_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW())`,
             [
               userId,
-              branchId ?? null,
               dto.height,
               dto.weight,
               bmi,
@@ -287,10 +297,9 @@ export class BodyMetricsService {
     userId: number,
     gymId: number,
     dto: RecordMetricsDto,
-    branchId?: number | null,
   ) {
     // Update current metrics
-    await this.updateMetrics(userId, gymId, dto, branchId);
+    await this.updateMetrics(userId, gymId, dto);
 
     const currentMetrics = await this.getMetrics(userId, gymId);
     const height = dto.height || currentMetrics?.height;
@@ -302,12 +311,11 @@ export class BodyMetricsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO body_metrics_history (user_id, branch_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, biceps, thighs, calves, shoulders, neck, forearms, upper_abdomen, middle_abdomen, lower_abdomen, upper_calf, lower_calf, subcutaneous_fat, visceral_fat, resting_metabolism, bone_mass, water_percentage, resting_heart_rate, blood_pressure_sys, blood_pressure_dia, target_weight, target_body_fat, measured_by, notes, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW())
+          `INSERT INTO body_metrics_history (user_id, measured_at, height, weight, bmi, body_fat, muscle_mass, waist, chest, hips, biceps, thighs, calves, shoulders, neck, forearms, upper_abdomen, middle_abdomen, lower_abdomen, upper_calf, lower_calf, subcutaneous_fat, visceral_fat, resting_metabolism, bone_mass, water_percentage, resting_heart_rate, blood_pressure_sys, blood_pressure_dia, target_weight, target_body_fat, measured_by, notes, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW())
          RETURNING *`,
           [
             userId,
-            branchId ?? null,
             measuredAt,
             dto.height || null,
             dto.weight || null,
@@ -350,7 +358,6 @@ export class BodyMetricsService {
     return {
       id: historyRecord.id,
       userId: historyRecord.user_id,
-      branchId: historyRecord.branch_id,
       measuredAt: historyRecord.measured_at,
       height: historyRecord.height,
       weight: historyRecord.weight,
@@ -395,7 +402,6 @@ export class BodyMetricsService {
       endDate?: Date;
       page?: number;
       limit?: number;
-      branchId?: number | null;
     },
   ) {
     const { page, limit, skip } = sanitizePagination(options?.page, options?.limit, 10);
@@ -431,7 +437,6 @@ export class BodyMetricsService {
       const data = result.rows.map((h: Record<string, any>) => ({
         id: h.id,
         userId: h.user_id,
-        branchId: h.branch_id,
         measuredAt: h.measured_at,
         height: h.height,
         weight: h.weight,
@@ -479,8 +484,8 @@ export class BodyMetricsService {
     });
   }
 
-  async getProgress(userId: number, gymId: number, branchId?: number | null) {
-    const current = await this.getMetrics(userId, gymId, branchId);
+  async getProgress(userId: number, gymId: number) {
+    const current = await this.getMetrics(userId, gymId);
 
     if (!current) {
       return null;

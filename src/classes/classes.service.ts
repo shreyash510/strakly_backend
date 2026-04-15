@@ -32,19 +32,6 @@ export class ClassesService {
     private readonly notificationHelper: NotificationHelperService,
   ) {}
 
-  /**
-   * Resolve the default branchId for a gym when admin has all-branch access (branchId = null).
-   */
-  private async resolveDefaultBranchId(gymId: number): Promise<number | null> {
-    return this.tenantService.executeInTenant(gymId, async (client) => {
-      const result = await client.query(
-        `SELECT id FROM public.branches WHERE gym_id = $1 AND is_active = TRUE ORDER BY is_default DESC, id ASC LIMIT 1`,
-        [gymId],
-      );
-      return result.rows[0]?.id ?? null;
-    });
-  }
-
   // ─── Formatters ───
 
   private formatClassType(row: Record<string, any>) {
@@ -128,7 +115,7 @@ export class ClassesService {
 
   // ─── Class Types ───
 
-  async findAllTypes(gymId: number, branchId: number | null, filters: ClassFiltersDto = {}) {
+  async findAllTypes(gymId: number, filters: ClassFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 50;
     const skip = (page - 1) * limit;
@@ -137,11 +124,6 @@ export class ClassesService {
       const conditions: string[] = ['ct.is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(ct.branch_id = $${paramIndex++} OR ct.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       if (filters.category) {
         conditions.push(`ct.category = $${paramIndex++}`);
@@ -152,6 +134,11 @@ export class ClassesService {
         conditions.push(`(ct.name ILIKE $${paramIndex} OR ct.description ILIKE $${paramIndex})`);
         values.push(`%${filters.search}%`);
         paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(ct.branch_id = $${paramIndex++} OR ct.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -192,16 +179,13 @@ export class ClassesService {
     return this.formatClassType(type);
   }
 
-  async createType(gymId: number, branchId: number | null, dto: CreateClassTypeDto) {
-    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
-
+  async createType(gymId: number, dto: CreateClassTypeDto, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_types (branch_id, name, description, category, default_duration, default_capacity, color, icon, created_at, updated_at)
+        `INSERT INTO class_types (name, description, category, default_duration, default_capacity, color, icon, branch_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
-          resolvedBranchId,
           dto.name,
           dto.description ?? null,
           dto.category ?? null,
@@ -209,6 +193,7 @@ export class ClassesService {
           dto.defaultCapacity ?? 20,
           dto.color ?? null,
           dto.icon ?? null,
+          branchId ?? null,
         ],
       );
       return this.formatClassType(result.rows[0]);
@@ -262,16 +247,11 @@ export class ClassesService {
 
   // ─── Schedules ───
 
-  async findAllSchedules(gymId: number, branchId: number | null) {
+  async findAllSchedules(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['cs.is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(cs.branch_id = $${paramIndex++} OR cs.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -297,17 +277,21 @@ export class ClassesService {
     });
   }
 
-  async createSchedule(gymId: number, branchId: number | null, dto: CreateClassScheduleDto) {
-    const resolvedBranchId = branchId ?? await this.resolveDefaultBranchId(gymId);
+  async createSchedule(gymId: number, dto: CreateClassScheduleDto, branchId?: number | null) {
+    if (dto.startTime >= dto.endTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+    if (dto.startDate && dto.endDate && dto.endDate < dto.startDate) {
+      throw new BadRequestException('End date must be on or after start date');
+    }
 
     const schedule = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO class_schedules (class_type_id, branch_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, created_at, updated_at)
+        `INSERT INTO class_schedules (class_type_id, instructor_id, room, day_of_week, start_time, end_time, capacity, is_recurring, start_date, end_date, branch_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
          RETURNING *`,
         [
           dto.classTypeId,
-          resolvedBranchId,
           dto.instructorId ?? null,
           dto.room ?? null,
           dto.dayOfWeek,
@@ -317,6 +301,7 @@ export class ClassesService {
           dto.isRecurring !== undefined ? dto.isRecurring : true,
           dto.startDate ?? null,
           dto.endDate ?? null,
+          branchId ?? null,
         ],
       );
 
@@ -337,7 +322,7 @@ export class ClassesService {
     try {
       if (dto.instructorId) {
         await this.notificationsService.notifyClassScheduleAssigned(
-          dto.instructorId, gymId, resolvedBranchId, {
+          dto.instructorId, gymId, {
             scheduleId: schedule.id,
             className: schedule.classTypeName,
             dayOfWeek: dto.dayOfWeek,
@@ -346,7 +331,7 @@ export class ClassesService {
         );
       }
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      await this.notificationHelper.notifyStaff(gymId, resolvedBranchId, {
+      await this.notificationHelper.notifyStaff(gymId, {
         type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
         title: 'New Class Schedule',
         message: `${schedule.classTypeName} scheduled on ${days[dto.dayOfWeek]}s at ${dto.startTime}.`,
@@ -427,7 +412,7 @@ export class ClassesService {
 
   // ─── Sessions ───
 
-  async findAllSessions(gymId: number, branchId: number | null, filters: SessionFiltersDto = {}) {
+  async findAllSessions(gymId: number, filters: SessionFiltersDto = {}) {
     const page = filters.page || 1;
     const limit = filters.limit || 50;
     const skip = (page - 1) * limit;
@@ -436,11 +421,6 @@ export class ClassesService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       if (filters.fromDate) {
         conditions.push(`s.date >= $${paramIndex++}`);
@@ -465,6 +445,11 @@ export class ClassesService {
       if (filters.status) {
         conditions.push(`s.status = $${paramIndex++}`);
         values.push(filters.status);
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -521,7 +506,7 @@ export class ClassesService {
     return this.formatSession(session);
   }
 
-  async generateSessions(gymId: number, branchId: number | null, dto: GenerateSessionsDto) {
+  async generateSessions(gymId: number, dto: GenerateSessionsDto) {
     const fromDate = new Date(dto.fromDate);
     const toDate = new Date(dto.toDate);
 
@@ -541,11 +526,6 @@ export class ClassesService {
         const conditions: string[] = ['cs.is_deleted = FALSE', 'cs.is_active = TRUE'];
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        if (branchId !== null) {
-          conditions.push(`cs.branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
 
         if (dto.scheduleId) {
           conditions.push(`cs.id = $${paramIndex++}`);
@@ -572,9 +552,9 @@ export class ClassesService {
 
               if (existing.rows.length === 0) {
                 await client.query(
-                  `INSERT INTO class_sessions (schedule_id, branch_id, date, instructor_id, status, created_at, updated_at)
+                  `INSERT INTO class_sessions (schedule_id, date, instructor_id, branch_id, status, created_at, updated_at)
                    VALUES ($1, $2, $3, $4, 'scheduled', NOW(), NOW())`,
-                  [schedule.id, schedule.branch_id, dateStr, schedule.instructor_id],
+                  [schedule.id, dateStr, schedule.instructor_id, schedule.branch_id || null],
                 );
                 created++;
               }
@@ -780,7 +760,7 @@ export class ClassesService {
         // Notifications (after commit, non-blocking)
         try {
           const classInfo = await client.query(
-            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id, cs.instructor_id
+            `SELECT ct.name as class_type_name, cs.start_time, s.date, cs.instructor_id
              FROM class_sessions s
              JOIN class_schedules cs ON cs.id = s.schedule_id
              JOIN class_types ct ON ct.id = cs.class_type_id
@@ -792,14 +772,14 @@ export class ClassesService {
             const dateStr = info.date?.toISOString?.().split('T')[0] || String(info.date);
             // Notify the client
             await this.notificationsService.notifyClassBooked(
-              userId, gymId, info.branch_id, {
+              userId, gymId, {
                 sessionId, className: info.class_type_name, date: dateStr,
                 startTime: info.start_time, isWaitlisted, position,
               },
             );
             // Notify the instructor
             if (info.instructor_id) {
-              await this.notificationHelper.notifyStaff(gymId, info.branch_id, {
+              await this.notificationHelper.notifyStaff(gymId, {
                 type: NotificationType.CLASS_BOOKED,
                 title: 'New Class Booking',
                 message: `${booking.rows[0].user_name || 'A client'} booked ${info.class_type_name} on ${dateStr}.`,
@@ -913,7 +893,7 @@ export class ClassesService {
         // Notifications (after commit, non-blocking)
         try {
           const classInfo = await client.query(
-            `SELECT ct.name as class_type_name, cs.start_time, s.date, s.branch_id
+            `SELECT ct.name as class_type_name, cs.start_time, s.date
              FROM class_sessions s
              JOIN class_schedules cs ON cs.id = s.schedule_id
              JOIN class_types ct ON ct.id = cs.class_type_id
@@ -926,7 +906,7 @@ export class ClassesService {
             // Notify booking owner about cancellation
             if (dto.status === 'cancelled') {
               await this.notificationsService.notifyClassBookingCancelled(
-                current.rows[0].user_id, gymId, info.branch_id, {
+                current.rows[0].user_id, gymId, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name, date: dateStr,
                 },
               );
@@ -934,7 +914,7 @@ export class ClassesService {
             // Notify promoted waitlist user
             if (promotedUserId) {
               await this.notificationsService.notifyClassWaitlistPromoted(
-                promotedUserId, gymId, info.branch_id, {
+                promotedUserId, gymId, {
                   sessionId: current.rows[0].session_id, className: info.class_type_name,
                   date: dateStr, startTime: info.start_time,
                 },

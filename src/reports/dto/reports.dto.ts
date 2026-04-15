@@ -2,7 +2,6 @@ import {
   IsOptional,
   IsNumber,
   IsString,
-  IsEnum,
   Min,
   Max,
 } from 'class-validator';
@@ -98,11 +97,6 @@ export class DailySalesFilterDto {
   @IsOptional()
   @IsString()
   date?: string; // YYYY-MM-DD, defaults to today
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  branchId?: number;
 }
 
 export class PaymentDuesReportDto {

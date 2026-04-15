@@ -24,10 +24,9 @@ import {
   UpdateSaasPlanDto,
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
-  CancelSubscriptionDto,
-  CreatePaymentHistoryDto,
-  UpdatePaymentHistoryDto,
   InitiateManualPaymentDto,
+  CreateRazorpayOrderDto,
+  VerifyRazorpayPaymentDto,
 } from './dto/saas-subscriptions.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -62,13 +61,6 @@ export class SaasSubscriptionsController {
   @ApiOperation({ summary: 'Get active SaaS plans (for viewing/renewal)' })
   findActivePlans() {
     return this.service.findAllPlans(false);
-  }
-
-  @Get('plans/:id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get a SaaS plan by ID' })
-  findPlanById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findPlanById(id);
   }
 
   @Post('plans')
@@ -196,6 +188,40 @@ export class SaasSubscriptionsController {
   }
 
   // ============================================
+  // Razorpay Payment Endpoints
+  // ============================================
+
+  @Post('me/create-order')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Create a Razorpay order for subscription payment' })
+  async createRazorpayOrder(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateRazorpayOrderDto,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    return this.service.createRazorpayOrder(gymId, dto.planId);
+  }
+
+  @Post('me/verify-payment')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Verify Razorpay payment and activate subscription' })
+  async verifyRazorpayPayment(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: VerifyRazorpayPaymentDto,
+  ) {
+    const gymId = req.user.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym associated with this account');
+    }
+    const result = await this.service.verifyRazorpayPayment(gymId, dto);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'razorpay_payment_verified' });
+    return result;
+  }
+
+  // ============================================
   // Payment History Endpoints (static routes before :id)
   // ============================================
 
@@ -240,34 +266,6 @@ export class SaasSubscriptionsController {
     return this.service.getPaymentStats(gymId ? parseInt(gymId, 10) : undefined);
   }
 
-  @Get('payments/:id')
-  @Roles('superadmin', 'admin')
-  @ApiOperation({ summary: 'Get payment by ID' })
-  getPaymentById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getPaymentById(id);
-  }
-
-  @Post('payments/:id/approve')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Approve a pending payment and activate subscription' })
-  async approvePayment(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.service.approvePayment(id);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_approved' });
-    return result;
-  }
-
-  @Patch('payments/:id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Update a payment record' })
-  async updatePayment(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePaymentHistoryDto,
-  ) {
-    const result = await this.service.updatePaymentHistory(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_updated' });
-    return result;
-  }
-
   @Get('gym/:gymId')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Get subscription by gym ID' })
@@ -278,13 +276,6 @@ export class SaasSubscriptionsController {
   // ============================================
   // Wildcard :id routes (MUST be last)
   // ============================================
-
-  @Get(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get a gym subscription by ID' })
-  findSubscriptionById(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findSubscriptionById(id);
-  }
 
   @Post()
   @Roles('superadmin')
@@ -303,53 +294,20 @@ export class SaasSubscriptionsController {
     @Body() dto: UpdateGymSubscriptionDto,
   ) {
     const result = await this.service.updateSubscription(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_updated' });
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_updated', gymId: result.gym.id });
     return result;
   }
 
-  @Post(':id/cancel')
+  @Post(':id/renew')
   @Roles('superadmin')
-  @ApiOperation({ summary: 'Cancel a gym subscription' })
-  async cancelSubscription(
+  @ApiOperation({ summary: 'Renew a gym subscription (extends by plan duration)' })
+  async renewSubscription(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CancelSubscriptionDto,
+    @Body('planId') planId?: number,
   ) {
-    const result = await this.service.cancelSubscription(id, dto);
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_cancelled' });
+    const result = await this.service.renewSubscription(id, planId);
+    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_renewed', gymId: result.gym.id });
     return result;
   }
 
-  @Post(':id/payments')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Record a payment for a subscription' })
-  async createPayment(
-    @Param('id', ParseIntPipe) subscriptionId: number,
-    @Body() dto: CreatePaymentHistoryDto,
-  ) {
-    const result = await this.service.createPaymentHistory({
-      ...dto,
-      subscriptionId,
-    });
-    this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'payment_recorded' });
-    return result;
-  }
-
-  @Get(':id/payment-history')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get payment history for a subscription' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'status', required: false, type: String })
-  getSubscriptionPaymentHistory(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('status') status?: string,
-  ) {
-    return this.service.getPaymentHistoryBySubscriptionId(id, {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      status,
-    });
-  }
 }

@@ -7,7 +7,7 @@ const compression = require('compression');
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Enable gzip/deflate compression for all responses
   app.use(compression());
@@ -16,15 +16,17 @@ async function bootstrap() {
   app.use(json({ limit: '2mb' }));
   app.use(urlencoded({ extended: true, limit: '2mb' }));
 
-  // Swagger API Documentation
-  const config = new DocumentBuilder()
-    .setTitle('Strakly API')
-    .setDescription('Personal Growth API - Goals, Habits, Streaks & More')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  // Swagger API Documentation (disabled in production)
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Strakly API')
+      .setDescription('Personal Growth API - Goals, Habits, Streaks & More')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   // Enable CORS for frontend
   const allowedOrigins: string[] = [
@@ -44,7 +46,7 @@ async function bootstrap() {
   app.enableCors({
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-user-id', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'x-user-id', 'Authorization', 'x-branch-id'],
     exposedHeaders: ['X-Total-Count', 'X-Page', 'X-Per-Page', 'X-Total-Pages'],
     credentials: true,
     preflightContinue: false,
@@ -62,6 +64,8 @@ async function bootstrap() {
 
   // Set global prefix
   app.setGlobalPrefix('api');
+
+  app.enableShutdownHooks();
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');

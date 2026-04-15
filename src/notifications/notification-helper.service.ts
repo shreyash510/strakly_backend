@@ -36,7 +36,6 @@ export class NotificationHelperService {
    */
   async notifyStaff(
     gymId: number,
-    branchId: number | null,
     payload: NotifyStaffPayload,
     options?: NotifyStaffOptions,
   ): Promise<void> {
@@ -78,7 +77,6 @@ export class NotificationHelperService {
             title: payload.title,
             message: payload.message,
             priority: NotificationPriority.NORMAL,
-            branchId: branchId || null,
             actionUrl: payload.actionUrl,
             data: payload.data,
           },

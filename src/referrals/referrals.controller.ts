@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import {
@@ -18,20 +19,17 @@ import {
 } from './dto/referral.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('referrals')
 @Controller('referrals')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.REFERRAL_TRACKING)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
@@ -41,20 +39,20 @@ export class ReferralsController {
   @ApiOperation({ summary: 'List all referrals' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ReferralFiltersDto,
   ) {
-    return this.referralsService.findAll(gymId, branchId, filters);
+    return this.referralsService.findAll(gymId, filters);
   }
 
   @Get('stats')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get referral statistics' })
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.referralsService.getStats(gymId, branchId);
+    return this.referralsService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('user/:userId')
@@ -67,16 +65,6 @@ export class ReferralsController {
     return this.referralsService.findByUser(userId, gymId);
   }
 
-  @Get(':id')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get a referral by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.referralsService.findOne(id, gymId);
-  }
-
   @Post()
   @Roles('admin', 'manager')
   @UseGuards(ManagerPermissionsGuard)
@@ -85,9 +73,9 @@ export class ReferralsController {
   async create(
     @Body() dto: CreateReferralDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.referralsService.create(gymId, branchId, dto);
+    return this.referralsService.create(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

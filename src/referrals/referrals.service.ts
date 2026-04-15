@@ -44,7 +44,6 @@ export class ReferralsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: ReferralFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -56,9 +55,9 @@ export class ReferralsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`r.branch_id = $${paramIndex++}`);
-        values.push(branchId);
+      if (filters.branchId) {
+        conditions.push(`(r.branch_id = $${paramIndex++} OR r.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       if (filters.status) {
@@ -158,8 +157,8 @@ export class ReferralsService {
 
   async create(
     gymId: number,
-    branchId: number | null,
     dto: CreateReferralDto,
+    branchId?: number | null,
   ) {
     // Prevent self-referral
     if (dto.referredId && dto.referrerId === dto.referredId) {
@@ -171,15 +170,15 @@ export class ReferralsService {
       const referralCode = dto.referralCode || this.generateReferralCode();
 
       const result = await client.query(
-        `INSERT INTO referrals (branch_id, referrer_id, referred_id, referral_code, status, notes)
-         VALUES ($1, $2, $3, $4, 'pending', $5)
+        `INSERT INTO referrals (referrer_id, referred_id, referral_code, status, notes, branch_id)
+         VALUES ($1, $2, $3, 'pending', $4, $5)
          RETURNING *`,
         [
-          branchId,
           dto.referrerId,
           dto.referredId || null,
           referralCode,
           dto.notes || null,
+          branchId ?? null,
         ],
       );
       return result.rows[0];
@@ -250,14 +249,14 @@ export class ReferralsService {
     return this.findOne(id, gymId);
   }
 
-  async getStats(gymId: number, branchId: number | null = null) {
+  async getStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`branch_id = $${paramIndex++}`);
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
       }
 

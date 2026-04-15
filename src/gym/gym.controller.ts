@@ -43,19 +43,12 @@ export class GymController {
   @Get('profile')
   @Roles('superadmin', 'admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Get current user gym profile with branch details' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Filter by specific branch',
-  })
-  async getProfile(@Request() req: AuthenticatedRequest, @Query('branchId') branchId?: string) {
+  async getProfile(@Request() req: AuthenticatedRequest) {
     const gymId = req.user?.gymId;
     if (!gymId) {
       throw new BadRequestException('No gym associated with this user');
     }
-    const parsedBranchId = branchId ? parseInt(branchId, 10) : null;
-    return this.gymService.getProfile(gymId, parsedBranchId);
+    return this.gymService.getProfile(gymId);
   }
 
   @Get()
@@ -163,8 +156,8 @@ export class GymController {
   @Get(':id')
   @Roles('superadmin', 'admin', 'trainer', 'manager')
   @ApiOperation({ summary: 'Get gym by ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.gymService.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    return this.gymService.findOne(id, req.user);
   }
 
   @Post()
@@ -174,9 +167,14 @@ export class GymController {
   }
 
   @Patch(':id')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update a gym' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGymDto) {
-    const result = await this.gymService.update(id, dto);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateGymDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const result = await this.gymService.update(id, dto, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'updated' });
     return result;
   }
@@ -191,17 +189,19 @@ export class GymController {
   }
 
   @Delete(':id')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete a gym' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.gymService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    const result = await this.gymService.remove(id, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
     return result;
   }
 
   @Post(':id/toggle-status')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Toggle gym active status' })
-  async toggleStatus(@Param('id', ParseIntPipe) id: number) {
-    const result = await this.gymService.toggleStatus(id);
+  async toggleStatus(@Param('id', ParseIntPipe) id: number, @Request() req: AuthenticatedRequest) {
+    const result = await this.gymService.toggleStatus(id, req.user);
     this.notificationsGateway.emitGymChanged(id, { action: 'status_changed' });
     return result;
   }

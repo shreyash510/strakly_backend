@@ -158,6 +158,7 @@ model Gym {
   state             String?
   zipCode           String?   @map("zip_code")
   country           String?   @default("India")
+  currency          String    @default("USD")
 
   // Operating hours (stored as HH:MM format)
   openingTime       String?   @map("opening_time")
@@ -329,13 +330,13 @@ model SaasPlan {
   // Pricing
   price           Decimal   @db.Decimal(10, 2)
   currency        String    @default("USD")
-  billingPeriod   String    @default("monthly") @map("billing_period")
   durationMonths  Int       @default(1) @map("duration_months")
 
   // Limits
   maxClients      Int       @default(-1) @map("max_members")
   maxStaff        Int       @default(-1) @map("max_staff")
   maxBranches     Int       @default(1) @map("max_branches")
+  maxProducts     Int       @default(-1) @map("max_products")
 
   // Features
   features        Json?
@@ -573,4 +574,18 @@ model ContactRequest {
   @@index([email])
   @@index([createdAt])
   @@map("contact_requests")
+}
+
+// ============================================
+// PLATFORM SETTINGS (key-value config store)
+// ============================================
+
+model PlatformSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
 }

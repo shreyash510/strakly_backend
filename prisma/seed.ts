@@ -324,13 +324,11 @@ const saasPlans = [
     description: 'Perfect for trying out Strakly',
     price: 0,
     currency: 'USD',
-    billingPeriod: 'monthly',
     maxClients: 50,
     maxStaff: 1,
     maxBranches: 1,
-    features: [
-      'announcements',
-    ],
+    maxProducts: 10,
+    features: ['client_membership', 'attendance', 'staff_salary'],
     displayOrder: 1,
     isFeatured: false,
     badge: null,
@@ -341,25 +339,11 @@ const saasPlans = [
     description: 'For growing gyms and fitness centers',
     price: 8,
     currency: 'USD',
-    billingPeriod: 'monthly',
     maxClients: 500,
     maxStaff: 5,
     maxBranches: 2,
-    features: [
-      'ai_chat',
-      'diet_planning',
-      'body_metrics',
-      'announcements',
-      'offers',
-      'trainer_assignment',
-      'amenities_management',
-      'lead_crm',
-      'referral_tracking',
-      'class_scheduling',
-      'appointment_booking',
-      'guest_day_pass',
-      'pos_retail',
-    ],
+    maxProducts: 100,
+    features: ['client_membership', 'attendance', 'classes', 'guest_visits', 'announcements', 'appointments', 'staff_salary', 'leads_referrals', 'resources', 'products_sales', 'inventory', 'reports'],
     displayOrder: 2,
     isFeatured: true,
     badge: 'Most Popular',
@@ -370,30 +354,11 @@ const saasPlans = [
     description: 'For large fitness chains and franchises',
     price: 15,
     currency: 'USD',
-    billingPeriod: 'monthly',
     maxClients: -1, // unlimited
     maxStaff: -1, // unlimited
     maxBranches: -1, // unlimited
-    features: [
-      'ai_chat',
-      'diet_planning',
-      'body_metrics',
-      'salary_management',
-      'activity_logs',
-      'announcements',
-      'offers',
-      'payment_gateway',
-      'advanced_reports',
-      'trainer_assignment',
-      'amenities_management',
-      'lead_crm',
-      'referral_tracking',
-      'class_scheduling',
-      'appointment_booking',
-      'guest_day_pass',
-      'pos_retail',
-      'equipment_tracking',
-    ],
+    maxProducts: -1, // unlimited
+    features: ['client_membership', 'attendance', 'classes', 'guest_visits', 'announcements', 'appointments', 'staff_salary', 'leads_referrals', 'resources', 'products_sales', 'inventory', 'reports'],
     displayOrder: 3,
     isFeatured: false,
     badge: 'Best Value',
@@ -530,10 +495,10 @@ async function seedSaasPlans() {
         description: planData.description,
         price: planData.price,
         currency: planData.currency,
-        billingPeriod: planData.billingPeriod,
         maxClients: planData.maxClients,
         maxStaff: planData.maxStaff,
         maxBranches: planData.maxBranches,
+        maxProducts: planData.maxProducts,
         features: planData.features,
         displayOrder: planData.displayOrder,
         isFeatured: planData.isFeatured,
@@ -829,7 +794,7 @@ async function seedTenantFacilitiesAndAmenities() {
             INSERT INTO "${schemaName}"."facilities"
             (code, name, description, icon, display_order, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
-            ON CONFLICT (branch_id, code) DO NOTHING
+            ON CONFLICT (code) DO NOTHING
           `, [
             facility.code,
             facility.name,
@@ -852,7 +817,7 @@ async function seedTenantFacilitiesAndAmenities() {
             INSERT INTO "${schemaName}"."amenities"
             (code, name, description, icon, display_order, is_active, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
-            ON CONFLICT (branch_id, code) DO NOTHING
+            ON CONFLICT (code) DO NOTHING
           `, [
             amenity.code,
             amenity.name,

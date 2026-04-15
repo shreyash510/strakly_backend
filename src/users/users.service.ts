@@ -35,11 +35,46 @@ import { ROLES, USER_STATUS } from '../common/constants';
 
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
+const CRUD_DEFAULT = { create: true, read: true, update: true, delete: false };
+const DEFAULT_MANAGER_PERMISSIONS = {
+  // Daily Operations
+  clients: CRUD_DEFAULT,
+  attendance: CRUD_DEFAULT,
+  classes: CRUD_DEFAULT,
+  appointments: CRUD_DEFAULT,
+  guestVisits: CRUD_DEFAULT,
+  requests: CRUD_DEFAULT,
+  // Programs & Content
+  programs: CRUD_DEFAULT,
+  announcements: CRUD_DEFAULT,
+  // Staff Management
+  trainers: CRUD_DEFAULT,
+  salary: CRUD_DEFAULT,
+  // Resources
+  facilities: CRUD_DEFAULT,
+  amenities: CRUD_DEFAULT,
+  equipment: CRUD_DEFAULT,
+  // Growth & Marketing
+  leads: CRUD_DEFAULT,
+  referrals: CRUD_DEFAULT,
+  // Finance
+  subscriptions: CRUD_DEFAULT,
+  plans: CRUD_DEFAULT,
+  offers: CRUD_DEFAULT,
+  products: CRUD_DEFAULT,
+  productSales: { create: true, read: true, update: true, delete: false },
+  financialReports: { read: true },
+  expenses: CRUD_DEFAULT,
+  // Admin
+  settings: { read: true },
+  reports: { read: true },
+  support: CRUD_DEFAULT,
+};
+
 export interface UserFilters extends PaginationParams {
   role?: string;
   status?: string;
   gymId?: number;
-  branchId?: number | null; // null = all branches, number = specific branch
   isSuperAdmin?: boolean;
   userType?: 'staff' | 'client' | 'all'; // New: filter by user type
   // Column-specific filters
@@ -49,6 +84,7 @@ export interface UserFilters extends PaginationParams {
   gender?: string;
   joinDateFrom?: string;
   joinDateTo?: string;
+  branchId?: number | null;
 }
 
 @Injectable()
@@ -78,6 +114,50 @@ export class UsersService {
    */
   private async getStatusCode(statusId: number): Promise<string | null> {
     return this.lookupsService.getLookupCode(statusId);
+  }
+
+  /**
+   * Check if email already exists in any tenant schema across all gyms.
+   * Returns gym name and role if found, null otherwise.
+   */
+  private async emailExistsInAnyTenant(
+    email: string,
+    excludeGymId?: number,
+  ): Promise<{ gymName: string; role: string } | null> {
+    const gyms = await this.prisma.gym.findMany({
+      where: { isActive: true, tenantSchemaName: { not: null } },
+      select: { id: true, name: true },
+    });
+
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < gyms.length; i += BATCH_SIZE) {
+      const batch = gyms.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (gym) => {
+          if (excludeGymId && gym.id === excludeGymId) return null;
+
+          const schemaExists = await this.tenantService.tenantSchemaExists(gym.id);
+          if (!schemaExists) return null;
+
+          const user = await this.tenantService.executeInTenant(gym.id, async (client) => {
+            const result = await client.query(
+              `SELECT role FROM users WHERE email = $1 AND (is_deleted = FALSE OR is_deleted IS NULL) LIMIT 1`,
+              [email],
+            );
+            return result.rows[0];
+          });
+
+          return user ? { gymName: gym.name, role: user.role } : null;
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          return result.value;
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -135,6 +215,7 @@ export class UsersService {
       city: user.city,
       state: user.state,
       zipCode: user.zipCode,
+      authType: user.authType || 'email',
       userType: 'admin',
       gymId: primaryAssignment?.gymId || null,
       gym: primaryAssignment?.gym
@@ -158,7 +239,7 @@ export class UsersService {
     };
   }
 
-  private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null, _branchAssignments?: Record<string, any>[]) {
+  private formatTenantUser(user: Record<string, any>, gym?: Record<string, any> | null) {
     const role = user.role || ROLES.CLIENT;
 
     return {
@@ -196,10 +277,15 @@ export class UsersService {
       idType: user.id_type || user.idType,
       idNumber: user.id_number || user.idNumber,
       managerPermissions: user.manager_permissions || user.managerPermissions || null,
+      branchId: user.branch_id ?? user.branchId ?? null,
+      branchIds: (() => {
+        const raw = user.allowed_branch_ids ?? user.allowedBranchIds;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw;
+        try { return JSON.parse(raw); } catch { return []; }
+      })(),
       userType: role === ROLES.CLIENT ? 'client' : 'staff',
       gymId: gym?.id,
-      branchIds: [],
-      branchNames: [],
       gym: gym
         ? {
             id: gym.id,
@@ -251,20 +337,12 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    // Check if email exists in tenant schema
-    const existingTenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (existingTenantUser) {
-      throw new ConflictException('Email already exists in this gym');
+    // Check if email already exists in any tenant schema across all gyms
+    const emailExistsInTenant = await this.emailExistsInAnyTenant(dto.email);
+    if (emailExistsInTenant) {
+      throw new ConflictException(
+        `This email is already registered as a ${emailExistsInTenant.role} in "${emailExistsInTenant.gymName}". Please delete the user from that gym first.`,
+      );
     }
 
     const passwordHash = await hashPassword(dto.password);
@@ -304,7 +382,7 @@ export class UsersService {
     });
 
     // Notify existing admins about new admin
-    await this.notificationHelper.notifyStaff(gymId, null, {
+    await this.notificationHelper.notifyStaff(gymId, {
       type: NotificationType.NEW_STAFF_ADDED,
       title: 'New Admin Added',
       message: `${dto.name} has been added as admin.`,
@@ -582,7 +660,7 @@ export class UsersService {
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer')`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -614,31 +692,17 @@ export class UsersService {
       throw new ConflictException('Email already exists as a system user');
     }
 
-    // Check if email already exists in this tenant
-    const existingTenantUser = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
-
-    if (existingTenantUser) {
+    // Check if email already exists in any other gym's tenant schema
+    const existingInTenant = await this.emailExistsInAnyTenant(dto.email);
+    if (existingInTenant) {
       throw new ConflictException(
-        'User with this email already exists in this gym',
+        `This email is already registered as a ${existingInTenant.role} in "${existingInTenant.gymName}". Please delete the user from that gym first.`,
       );
     }
 
     const passwordHash = await hashPassword(dto.password);
     const status = dto.status || USER_STATUS.ACTIVE;
     const statusId = await this.getStatusId(status);
-
-    // Determine primary branch: use branchIds[0] if available, otherwise branchId
-    const branchIds = dto.branchIds || (dto.branchId ? [dto.branchId] : []);
-    const primaryBranchId = branchIds.length > 0 ? branchIds[0] : null;
 
     // Create staff in tenant schema
     const createdStaff = await this.tenantService.executeInTenant(
@@ -648,8 +712,8 @@ export class UsersService {
           `INSERT INTO users (
           name, email, password_hash, phone, avatar, bio, role, status, status_id,
           date_of_birth, gender, address, city, state, zip_code,
-          join_date, branch_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+          join_date, manager_permissions, branch_id, allowed_branch_ids, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
         RETURNING *`,
           [
             dto.name,
@@ -668,41 +732,17 @@ export class UsersService {
             dto.state || null,
             dto.zipCode || null,
             new Date(),
-            primaryBranchId,
+            role === ROLES.MANAGER
+              ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
+              : null,
+            dto.branchId || null,
+            JSON.stringify(dto.allowedBranchIds || []),
           ],
         );
 
         const user = result.rows[0];
 
-        // For staff with multiple branches, create user_branch_xref entries
-        let branchAssignments: Record<string, any>[] = [];
-        if (
-          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role) &&
-          branchIds.length > 0
-        ) {
-          for (let i = 0; i < branchIds.length; i++) {
-            const branchId = branchIds[i];
-            const isPrimary = i === 0; // First branch is primary
-            await client.query(
-              `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
-             VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
-             ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
-              [user.id, branchId, isPrimary],
-            );
-          }
-          // Fetch the created assignments with branch names
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [user.id],
-          );
-          branchAssignments = assignmentsResult.rows;
-        }
-
-        return { user, branchAssignments };
+        return { user };
       },
     );
 
@@ -712,7 +752,6 @@ export class UsersService {
     if (actorInfo) {
       await this.activityLogsService.logUserCreated(
         gymId,
-        primaryBranchId,
         actorInfo.id,
         actorInfo.role,
         actorInfo.name,
@@ -722,7 +761,7 @@ export class UsersService {
     }
 
     // Notify admin about new staff
-    await this.notificationHelper.notifyStaff(gymId, primaryBranchId, {
+    await this.notificationHelper.notifyStaff(gymId, {
       type: NotificationType.NEW_STAFF_ADDED,
       title: 'New Staff Added',
       message: `${dto.name} has been added as ${role}.`,
@@ -738,7 +777,6 @@ export class UsersService {
     return this.formatTenantUser(
       createdStaff.user,
       gym,
-      createdStaff.branchAssignments,
     );
   }
 
@@ -749,13 +787,12 @@ export class UsersService {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
     const gymId = filters.gymId;
-    const branchId = filters.branchId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching staff');
     }
 
-    const { users, total, branchAssignmentsMap } = await this.tenantService.executeInTenant(
+    const { users, total } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const conditions: string[] = [
@@ -787,10 +824,14 @@ export class UsersService {
           paramIndex++;
         }
 
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
+        }
+
         const whereClause = conditions.join(' AND ');
 
-        let query = `SELECT u.*, b.name as branch_name FROM users u
-           LEFT JOIN public.branches b ON b.id = u.branch_id
+        let query = `SELECT u.* FROM users u
            WHERE ${whereClause}
            ORDER BY u.created_at DESC`;
         const queryValues = [...values];
@@ -808,33 +849,9 @@ export class UsersService {
           ),
         ]);
 
-        // Fetch branch assignments for all users in the result
-        const userIds = usersResult.rows.map((u: Record<string, any>) => u.id);
-        let branchAssignmentsMap: Record<number, Record<string, any>[]> = {};
-
-        if (userIds.length > 0) {
-          const assignmentsResult = await client.query(
-            `SELECT ubx.user_id, ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = ANY($1) AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [userIds],
-          );
-
-          // Group assignments by user_id
-          for (const row of assignmentsResult.rows) {
-            if (!branchAssignmentsMap[row.user_id]) {
-              branchAssignmentsMap[row.user_id] = [];
-            }
-            branchAssignmentsMap[row.user_id].push(row);
-          }
-        }
-
         return {
           users: usersResult.rows,
           total: parseInt(countResult.rows[0].count, 10),
-          branchAssignmentsMap,
         };
       },
     );
@@ -843,8 +860,7 @@ export class UsersService {
 
     return {
       data: users.map((user: Record<string, any>) => {
-        const assignments = branchAssignmentsMap[user.id] || [];
-        return this.formatTenantUser(user, gym, assignments);
+        return this.formatTenantUser(user, gym);
       }),
       pagination: createPaginationMeta(total, page, limit, noPagination),
     };
@@ -854,40 +870,20 @@ export class UsersService {
    * Get a single staff member from tenant schema
    */
   async findOneStaff(id: number, gymId: number): Promise<any> {
-    const { staffData, branchAssignments } =
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        const result = await client.query(
-          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
-          [id],
-        );
-        const staff = result.rows[0];
-
-        // Fetch branch assignments for all staff roles with branch names
-        let assignments: Record<string, any>[] = [];
-        if (
-          staff &&
-          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(staff.role)
-        ) {
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        }
-
-        return { staffData: staff, branchAssignments: assignments };
-      });
+    const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+        [id],
+      );
+      return result.rows[0];
+    });
 
     if (!staffData) {
       throw new NotFoundException(`Staff member with ID ${id} not found`);
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(staffData, gym, branchAssignments);
+    return this.formatTenantUser(staffData, gym);
   }
 
   /**
@@ -962,11 +958,10 @@ export class UsersService {
       updates.push(`zip_code = $${paramIndex++}`);
       values.push(updateDto.zipCode);
     }
-    if (updateDto.branchId !== undefined) {
-      updates.push(`branch_id = $${paramIndex++}`);
-      values.push(updateDto.branchId);
+    if (updateDto.allowedBranchIds !== undefined) {
+      updates.push(`allowed_branch_ids = $${paramIndex++}`);
+      values.push(JSON.stringify(updateDto.allowedBranchIds));
     }
-
     if (updates.length === 0) {
       return this.findOneStaff(id, gymId);
     }
@@ -974,89 +969,20 @@ export class UsersService {
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
-    const { updatedStaff, branchAssignments } =
-      await this.tenantService.executeInTenant(gymId, async (client) => {
-        if (updates.length > 0) {
-          await client.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-            values,
-          );
-        }
+    const updatedStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      await client.query(
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values,
+      );
 
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
-          id,
-        ]);
-        const user = result.rows[0];
-
-        // Handle branch assignments update for all roles that can have branch assignments
-        const rolesWithBranches = [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT];
-        let assignments: Record<string, any>[] = [];
-        if (
-          updateDto.branchIds &&
-          updateDto.branchIds.length > 0 &&
-          rolesWithBranches.includes(user.role)
-        ) {
-          // Deactivate all existing assignments
-          await client.query(
-            `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
-            [id],
-          );
-
-          // Update primary branch_id in users table
-          await client.query(
-            `UPDATE users SET branch_id = $1, updated_at = NOW() WHERE id = $2`,
-            [updateDto.branchIds[0], id],
-          );
-
-          // Insert/update new assignments
-          for (let i = 0; i < updateDto.branchIds.length; i++) {
-            const branchId = updateDto.branchIds[i];
-            const isPrimary = i === 0;
-            await client.query(
-              `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
-             VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
-             ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
-              [id, branchId, isPrimary],
-            );
-          }
-
-          // Fetch updated assignments with branch names
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        } else if (rolesWithBranches.includes(user.role)) {
-          // Fetch existing assignments with branch names
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        }
-
-        // Re-fetch user to get updated branch_id
-        const updatedResult = await client.query(
-          `SELECT * FROM users WHERE id = $1`,
-          [id],
-        );
-
-        return {
-          updatedStaff: updatedResult.rows[0],
-          branchAssignments: assignments,
-        };
-      });
+      const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
+        id,
+      ]);
+      return result.rows[0];
+    });
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedStaff, gym, branchAssignments);
+    return this.formatTenantUser(updatedStaff, gym);
   }
 
   /**
@@ -1097,7 +1023,7 @@ export class UsersService {
   }
 
   /**
-   * Delete a staff member from tenant schema
+   * Delete a staff member (manager/trainer) from tenant schema — hard delete
    */
   async removeStaff(
     id: number,
@@ -1119,18 +1045,13 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${id} not found`);
     }
 
-    // Soft delete staff from tenant schema
+    // Hard delete staff from tenant schema
     await this.tenantService.executeInTenant(gymId, async (client) => {
-      // Deactivate user_branch_xref entries
-      await client.query(
-        `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
-        [id],
-      );
-      // Soft delete the user
-      await client.query(
-        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-        [id, deletedById || null],
-      );
+      await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`, [id]);
+      await client.query(`DELETE FROM trainer_availability WHERE trainer_id = $1`, [id]);
+      await client.query(`DELETE FROM appointments WHERE trainer_id = $1`, [id]);
+      await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
     return { success: true };
@@ -1167,7 +1088,7 @@ export class UsersService {
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role = 'client'`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -1181,39 +1102,25 @@ export class UsersService {
       }
     }
 
-    // Check if email already exists in this tenant
-    const existingClient = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
-          [dto.email],
-        );
-        return result.rows[0];
-      },
-    );
+    // Check if email already exists in public.users (admin) or system_users (superadmin)
+    const [existingAdmin, existingSystemUser] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email: dto.email } }),
+      this.prisma.systemUser.findUnique({ where: { email: dto.email } }),
+    ]);
 
-    if (existingClient) {
-      throw new ConflictException(
-        'Client with this email already exists in this gym',
-      );
+    if (existingAdmin) {
+      throw new ConflictException('User with this email already exists');
     }
-
-    // Also check public.users and system_users
-    const existingStaff = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    if (existingStaff) {
-      throw new ConflictException('Email already exists as a staff member');
-    }
-
-    const existingSystemUser = await this.prisma.systemUser.findUnique({
-      where: { email: dto.email },
-    });
-
     if (existingSystemUser) {
-      throw new ConflictException('Email already exists as a system user');
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Check if email already exists in any tenant schema across all gyms
+    const emailExists = await this.emailExistsInAnyTenant(dto.email);
+    if (emailExists) {
+      throw new ConflictException(
+        `This email is already registered as a ${emailExists.role} in "${emailExists.gymName}". Please delete the user from that gym first.`,
+      );
     }
 
     const status = dto.status || USER_STATUS.ACTIVE;
@@ -1224,7 +1131,9 @@ export class UsersService {
     ]);
 
     // Create client in tenant schema with role='client'
-    const createdClient = await this.tenantService.executeInTenant(
+    let createdClient: Record<string, any>;
+    try {
+    createdClient = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
@@ -1274,6 +1183,12 @@ export class UsersService {
         return result.rows[0];
       },
     );
+    } catch (error: any) {
+      if (error?.code === '23505' || error?.message?.includes('duplicate key')) {
+        throw new ConflictException('A user with this email already exists in this gym');
+      }
+      throw error;
+    }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
@@ -1281,7 +1196,6 @@ export class UsersService {
     if (actorInfo) {
       await this.activityLogsService.logUserCreated(
         gymId,
-        dto.branchId || null,
         actorInfo.id,
         actorInfo.role,
         actorInfo.name,
@@ -1299,7 +1213,7 @@ export class UsersService {
   async getStatusCounts(
     role: string,
     gymId: number | undefined,
-    branchId: number | null,
+    branchId?: number | null,
   ): Promise<Record<string, number>> {
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching status counts');
@@ -1314,6 +1228,11 @@ export class UsersService {
         ];
         const values: SqlValue[] = [role];
         let paramIndex = 2;
+
+        if (branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(branchId);
+        }
 
         const whereClause = conditions.join(' AND ');
         const result = await client.query(
@@ -1341,7 +1260,6 @@ export class UsersService {
     const { page, limit, skip, take, noPagination } =
       getPaginationParams(filters);
     const gymId = filters.gymId;
-    const branchId = filters.branchId;
 
     if (!gymId) {
       throw new BadRequestException('gymId is required for fetching clients');
@@ -1401,10 +1319,14 @@ export class UsersService {
           values.push(filters.joinDateTo + ' 23:59:59');
         }
 
+        if (filters.branchId) {
+          conditions.push(`u.branch_id = $${paramIndex++}`);
+          values.push(filters.branchId);
+        }
+
         const whereClause = conditions.join(' AND ');
 
-        let query = `SELECT u.*, b.name as branch_name FROM users u
-           LEFT JOIN public.branches b ON b.id = u.branch_id
+        let query = `SELECT u.* FROM users u
            WHERE ${whereClause}
            ORDER BY u.created_at DESC`;
         const queryValues = [...values];
@@ -1442,30 +1364,15 @@ export class UsersService {
    * Includes membership details (active membership + history)
    */
   async findOneClient(id: number, gymId: number): Promise<any> {
-    const { clientData, branchAssignments, activeMembership, membershipHistory } =
+    const { clientData, activeMembership, membershipHistory } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         const result = await client.query(
-          `SELECT u.*, b.name as branch_name
+          `SELECT u.*
            FROM users u
-           LEFT JOIN branches b ON u.branch_id = b.id
            WHERE u.id = $1 AND u.role = 'client' AND (u.is_deleted = FALSE OR u.is_deleted IS NULL)`,
           [id],
         );
         const userData = result.rows[0];
-
-        // Fetch branch assignments for clients with branch names
-        let assignments: Record<string, any>[] = [];
-        if (userData) {
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        }
 
         // Fetch active membership
         let activeMembershipData = null;
@@ -1504,7 +1411,6 @@ export class UsersService {
 
         return {
           clientData: userData,
-          branchAssignments: assignments,
           activeMembership: activeMembershipData,
           membershipHistory: membershipHistoryData,
         };
@@ -1515,7 +1421,7 @@ export class UsersService {
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    const formattedUser = this.formatTenantUser(clientData, gym, branchAssignments);
+    const formattedUser = this.formatTenantUser(clientData, gym);
 
     // Format and add membership data
     const formatMembership = (m: Record<string, any> | null) => {
@@ -1539,7 +1445,6 @@ export class UsersService {
 
       return {
         id: m.id,
-        branchId: m.branch_id,
         planId: m.plan_id,
         offerId: m.offer_id,
         startDate: m.start_date,
@@ -1695,22 +1600,14 @@ export class UsersService {
       updates.push(`id_number = $${paramIndex++}`);
       values.push(updateDto.idNumber);
     }
-    // Handle branchId (singular) - for backwards compatibility
-    if (updateDto.branchId !== undefined && !updateDto.branchIds) {
+    if (updateDto.branchId !== undefined) {
       updates.push(`branch_id = $${paramIndex++}`);
-      values.push(updateDto.branchId);
+      values.push(updateDto.branchId ?? null);
     }
-
-    // Handle branchIds (array) - set primary branch_id from first element
-    if (updateDto.branchIds && updateDto.branchIds.length > 0) {
-      updates.push(`branch_id = $${paramIndex++}`);
-      values.push(updateDto.branchIds[0]);
-    }
-
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
-    const { updatedClient, branchAssignments } = await this.tenantService.executeInTenant(
+    const updatedClient = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         await client.query(
@@ -1718,60 +1615,15 @@ export class UsersService {
           values,
         );
 
-        let assignments: Record<string, any>[] = [];
-
-        // Handle branch assignments update if branchIds provided
-        if (updateDto.branchIds && updateDto.branchIds.length > 0) {
-          // Deactivate all existing assignments
-          await client.query(
-            `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
-            [id],
-          );
-
-          // Insert/update new assignments
-          for (let i = 0; i < updateDto.branchIds.length; i++) {
-            const branchId = updateDto.branchIds[i];
-            const isPrimary = i === 0;
-            await client.query(
-              `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
-               VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
-               ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
-              [id, branchId, isPrimary],
-            );
-          }
-
-          // Fetch updated assignments with branch names
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        } else {
-          // Fetch existing assignments
-          const assignmentsResult = await client.query(
-            `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-             FROM user_branch_xref ubx
-             LEFT JOIN public.branches b ON b.id = ubx.branch_id
-             WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-             ORDER BY ubx.is_primary DESC`,
-            [id],
-          );
-          assignments = assignmentsResult.rows;
-        }
-
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           id,
         ]);
-        return { updatedClient: result.rows[0], branchAssignments: assignments };
+        return result.rows[0];
       },
     );
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedClient, gym, branchAssignments);
+    return this.formatTenantUser(updatedClient, gym);
   }
 
   /**
@@ -1797,32 +1649,33 @@ export class UsersService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check for active memberships (exclude soft-deleted memberships)
-    const activeMemberships = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT COUNT(*) as count FROM memberships
-         WHERE user_id = $1 AND status IN ('active', 'pending')
-         AND (is_deleted = FALSE OR is_deleted IS NULL)`,
-          [id],
-        );
-        return parseInt(result.rows[0].count, 10);
-      },
-    );
-
-    if (activeMemberships > 0) {
-      throw new BadRequestException(
-        'Cannot delete client. Client has active or pending memberships. Please cancel the memberships first.',
-      );
-    }
-
-    // Soft delete client from tenant schema
+    // Cancel any active memberships before deleting
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
-        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-        [id, deletedById || null],
+        `UPDATE memberships SET status = 'cancelled', updated_at = NOW()
+         WHERE user_id = $1 AND status IN ('active', 'pending')
+         AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+        [id],
       );
+    });
+
+    // Hard delete client and all related records from tenant schema
+    await this.tenantService.executeInTenant(gymId, async (client) => {
+      // Delete all related records (order matters — FK dependencies)
+      await client.query(`DELETE FROM payments WHERE payer_id = $1`, [id]);
+      await client.query(`DELETE FROM memberships WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM attendance WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM member_notes WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM class_bookings WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM appointments WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM product_sales WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM diet_assignments WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM body_metrics WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM body_metrics_history WHERE user_id = $1`, [id]);
+      await client.query(`DELETE FROM notifications WHERE user_id = $1`, [id]);
+      // Delete the user last
+      await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
 
     return { success: true };
@@ -1844,13 +1697,6 @@ export class UsersService {
     actorInfo?: { id: number; name: string; role: string },
   ): Promise<any> {
     const role = createUserDto.role || ROLES.CLIENT;
-
-    // Normalize branchId / branchIds so both paths work regardless of which field the caller sends
-    if (createUserDto.branchIds?.length && !createUserDto.branchId) {
-      createUserDto.branchId = createUserDto.branchIds[0];
-    } else if (createUserDto.branchId && !createUserDto.branchIds?.length) {
-      createUserDto.branchIds = [createUserDto.branchId];
-    }
 
     // Validate role hierarchy if callerRole is provided
     if (callerRole) {
@@ -2102,37 +1948,21 @@ export class UsersService {
 
       for (const gym of gyms) {
         try {
-          const { tenantUser, branchAssignments } = await this.tenantService.executeInTenant(
+          const tenantUser = await this.tenantService.executeInTenant(
             gym.id,
             async (client) => {
               const result = await client.query(
-                `SELECT u.*, b.name as branch_name
+                `SELECT u.*
                  FROM users u
-                 LEFT JOIN branches b ON u.branch_id = b.id
                  WHERE u.id = $1`,
                 [id],
               );
-              const userData = result.rows[0];
-
-              let assignments: Record<string, any>[] = [];
-              if (userData) {
-                const assignmentsResult = await client.query(
-                  `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-                   FROM user_branch_xref ubx
-                   LEFT JOIN public.branches b ON b.id = ubx.branch_id
-                   WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-                   ORDER BY ubx.is_primary DESC`,
-                  [id],
-                );
-                assignments = assignmentsResult.rows;
-              }
-
-              return { tenantUser: userData, branchAssignments: assignments };
+              return result.rows[0];
             },
           );
 
           if (tenantUser) {
-            return this.formatTenantUser(tenantUser, gym, branchAssignments);
+            return this.formatTenantUser(tenantUser, gym);
           }
         } catch (e) {
           // Tenant schema might not exist, continue to next gym
@@ -2189,7 +2019,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT role FROM users WHERE id = $1`,
+            `SELECT role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [id],
           );
           return result.rows[0];
@@ -2255,7 +2085,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT role FROM users WHERE id = $1`,
+            `SELECT role FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [id],
           );
           return result.rows[0];
@@ -2335,7 +2165,7 @@ export class UsersService {
         gymId,
         async (client) => {
           const result = await client.query(
-            `SELECT id FROM users WHERE id = $1`,
+            `SELECT id FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [userId],
           );
           return result.rows[0];
@@ -2414,11 +2244,12 @@ export class UsersService {
     userId: number,
     gymId: number,
     dto?: ApproveRequestDto,
+    branchId?: number | null,
   ): Promise<any> {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           userId,
         ]);
         return result.rows[0];
@@ -2439,7 +2270,7 @@ export class UsersService {
 
     const role = dto?.role || ROLES.CLIENT;
 
-    const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
+    const updatedUser = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         await client.query(
@@ -2448,23 +2279,13 @@ export class UsersService {
         );
 
         const result = await client.query(
-          `SELECT u.*, b.name as branch_name
+          `SELECT u.*
            FROM users u
-           LEFT JOIN branches b ON u.branch_id = b.id
            WHERE u.id = $1`,
           [userId],
         );
 
-        const assignmentsResult = await client.query(
-          `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-           FROM user_branch_xref ubx
-           LEFT JOIN public.branches b ON b.id = ubx.branch_id
-           WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-           ORDER BY ubx.is_primary DESC`,
-          [userId],
-        );
-
-        return { updatedUser: result.rows[0], branchAssignments: assignmentsResult.rows };
+        return result.rows[0];
       },
     );
 
@@ -2474,12 +2295,12 @@ export class UsersService {
         userId,
         gymId,
         dto,
-        userData.branch_id,
+        branchId,
       );
     }
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedUser, gym, branchAssignments);
+    return this.formatTenantUser(updatedUser, gym);
   }
 
   /**
@@ -2489,7 +2310,7 @@ export class UsersService {
     userId: number,
     gymId: number,
     dto: ApproveRequestDto,
-    branchId: number | null,
+    branchId?: number | null,
   ): Promise<void> {
     // Get plan details
     const plan = await this.tenantService.executeInTenant(
@@ -2516,11 +2337,13 @@ export class UsersService {
     const durationValue = parseInt(plan.duration_value) || 30;
     const durationType = plan.duration_type || 'days';
 
-    if (durationType === 'days') {
+    if (durationType === 'day' || durationType === 'days') {
       endDate.setDate(endDate.getDate() + durationValue);
-    } else if (durationType === 'months') {
+    } else if (durationType === 'week' || durationType === 'weeks') {
+      endDate.setDate(endDate.getDate() + durationValue * 7);
+    } else if (durationType === 'month' || durationType === 'months') {
       endDate.setMonth(endDate.getMonth() + durationValue);
-    } else if (durationType === 'years') {
+    } else if (durationType === 'year' || durationType === 'years') {
       endDate.setFullYear(endDate.getFullYear() + durationValue);
     } else {
       // Default to days
@@ -2534,15 +2357,14 @@ export class UsersService {
     await this.tenantService.executeInTenant(gymId, async (client) => {
       await client.query(
         `INSERT INTO memberships (
-          user_id, plan_id, branch_id, start_date, end_date,
+          user_id, plan_id, start_date, end_date,
           original_amount, discount_amount, final_amount,
-          status, payment_status, payment_method, notes,
+          status, payment_status, payment_method, notes, branch_id,
           created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
         [
           userId,
           dto.planId,
-          branchId,
           startDate,
           endDate,
           originalAmount,
@@ -2552,6 +2374,7 @@ export class UsersService {
           'pending',
           dto.paymentMethod || null,
           dto.notes || null,
+          branchId || null,
         ],
       );
     });
@@ -2564,7 +2387,7 @@ export class UsersService {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const result = await client.query(`SELECT * FROM users WHERE id = $1`, [
+        const result = await client.query(`SELECT * FROM users WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`, [
           userId,
         ]);
         return result.rows[0];
@@ -2583,7 +2406,7 @@ export class UsersService {
 
     const statusId = await this.getStatusId(USER_STATUS.REJECTED);
 
-    const { updatedUser, branchAssignments } = await this.tenantService.executeInTenant(
+    const updatedUser = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         await client.query(
@@ -2592,28 +2415,18 @@ export class UsersService {
         );
 
         const result = await client.query(
-          `SELECT u.*, b.name as branch_name
+          `SELECT u.*
            FROM users u
-           LEFT JOIN branches b ON u.branch_id = b.id
            WHERE u.id = $1`,
           [userId],
         );
 
-        const assignmentsResult = await client.query(
-          `SELECT ubx.branch_id, ubx.is_primary, b.name as branch_name
-           FROM user_branch_xref ubx
-           LEFT JOIN public.branches b ON b.id = ubx.branch_id
-           WHERE ubx.user_id = $1 AND ubx.is_active = TRUE
-           ORDER BY ubx.is_primary DESC`,
-          [userId],
-        );
-
-        return { updatedUser: result.rows[0], branchAssignments: assignmentsResult.rows };
+        return result.rows[0];
       },
     );
 
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
-    return this.formatTenantUser(updatedUser, gym, branchAssignments);
+    return this.formatTenantUser(updatedUser, gym);
   }
 
   // ============================================
@@ -2715,7 +2528,6 @@ export class UsersService {
     await this.notificationsService.notifyTrainerAssigned(
       dto.clientId,
       gymId,
-      null, // branchId can be added if needed
       {
         trainerId: trainer.id,
         trainerName: trainer.name,
@@ -2877,7 +2689,6 @@ export class UsersService {
     await this.notificationsService.notifyTrainerUnassigned(
       clientId,
       gymId,
-      null, // branchId can be added if needed
       {
         trainerId,
         trainerName: assignment.trainer_name,
@@ -2986,12 +2797,12 @@ export class UsersService {
   }
 
   /**
-   * Bulk update users - move to branch or update status
+   * Bulk update users - update status
    * Skips users that cannot be updated (e.g., admins, users from other gyms)
    */
   async bulkUpdate(
     userIds: number[],
-    updateData: { branchIds?: number[]; status?: string },
+    updateData: { status?: string },
     gymId: number,
     callerRole: string,
   ): Promise<{ success: number; failed: number; skipped: number; errors: string[] }> {
@@ -3030,35 +2841,6 @@ export class UsersService {
         }
 
         // Perform update
-        if (updateData.branchIds && updateData.branchIds.length > 0) {
-          // Update branch assignments
-          await this.tenantService.executeInTenant(gymId, async (client) => {
-            // Update primary branch_id
-            await client.query(
-              `UPDATE users SET branch_id = $1, updated_at = NOW() WHERE id = $2`,
-              [updateData.branchIds![0], userId],
-            );
-
-            // Deactivate existing branch assignments
-            await client.query(
-              `UPDATE user_branch_xref SET is_active = FALSE, updated_at = NOW() WHERE user_id = $1`,
-              [userId],
-            );
-
-            // Insert/update new branch assignments
-            for (let i = 0; i < updateData.branchIds!.length; i++) {
-              const branchId = updateData.branchIds![i];
-              const isPrimary = i === 0;
-              await client.query(
-                `INSERT INTO user_branch_xref (user_id, branch_id, is_primary, is_active, assigned_at, created_at, updated_at)
-                 VALUES ($1, $2, $3, TRUE, NOW(), NOW(), NOW())
-                 ON CONFLICT (user_id, branch_id) DO UPDATE SET is_active = TRUE, is_primary = $3, updated_at = NOW()`,
-                [userId, branchId, isPrimary],
-              );
-            }
-          });
-        }
-
         if (updateData.status) {
           const statusId = await this.getStatusId(updateData.status);
           if (statusId !== null) {
@@ -3147,13 +2929,23 @@ export class UsersService {
           }
         }
 
-        // Soft delete the user
-        await this.tenantService.executeInTenant(gymId, async (client) => {
-          await client.query(
-            `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
-            [userId, deletedById || null],
-          );
-        });
+        // Hard delete for manager/trainer, soft delete for clients
+        if (user.role === ROLES.MANAGER || user.role === ROLES.TRAINER) {
+          await this.tenantService.executeInTenant(gymId, async (client) => {
+            await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [userId]);
+            await client.query(`DELETE FROM trainer_client_xref WHERE trainer_id = $1 OR client_id = $1`, [userId]);
+            await client.query(`DELETE FROM trainer_availability WHERE trainer_id = $1`, [userId]);
+            await client.query(`DELETE FROM appointments WHERE trainer_id = $1`, [userId]);
+            await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+          });
+        } else {
+          await this.tenantService.executeInTenant(gymId, async (client) => {
+            await client.query(
+              `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1`,
+              [userId, deletedById || null],
+            );
+          });
+        }
 
         results.success++;
       } catch (error: unknown) {

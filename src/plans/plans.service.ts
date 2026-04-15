@@ -19,16 +19,14 @@ export class PlansService {
   /**
    * Get all plans for a gym
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    * @param includeInactive - Include inactive plans
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Always filter out soft-deleted plans
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
@@ -38,16 +36,12 @@ export class PlansService {
       if (!includeInactive) {
         conditions.push('is_active = true');
       }
-
-      // Branch filtering: null = admin (all branches), number = specific branch
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
-        paramIndex++;
       }
 
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
       const result = await client.query(
         `SELECT * FROM plans ${whereClause} ORDER BY display_order ASC`,
         values,
@@ -59,9 +53,8 @@ export class PlansService {
   /**
    * Get featured plans
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = all branches for admin)
    */
-  async findFeatured(gymId: number, branchId: number | null = null) {
+  async findFeatured(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
@@ -69,10 +62,10 @@ export class PlansService {
         'is_featured = true',
       ];
       const values: SqlValue[] = [];
-      const paramIndex = 1;
+      let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
       }
 
@@ -87,7 +80,6 @@ export class PlansService {
   private formatPlan(p: Record<string, any>) {
     return {
       id: p.id,
-      branchId: p.branch_id,
       code: p.code,
       name: p.name,
       description: p.description,
@@ -107,18 +99,12 @@ export class PlansService {
     };
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const plan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM plans WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM plans WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -135,18 +121,12 @@ export class PlansService {
   async findByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const plan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM plans WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM plans WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [code];
-
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -164,12 +144,10 @@ export class PlansService {
    * Create a new plan
    * @param dto - Plan data
    * @param gymId - Gym ID
-   * @param branchId - Branch ID (null = available to all branches)
    */
   async create(
     dto: CreatePlanDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const existing = await this.tenantService.executeInTenant(
       gymId,
@@ -186,28 +164,34 @@ export class PlansService {
       throw new ConflictException(`Plan with code ${dto.code} already exists`);
     }
 
+    // Use gym's currency as fallback instead of hardcoded 'INR'
+    if (!dto.currency) {
+      const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { currency: true } });
+      dto.currency = gym?.currency || 'USD';
+    }
+
     const plan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO plans (branch_id, code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, max_freeze_days, includes_pt_sessions, access_hours, is_active, created_at, updated_at)
+          `INSERT INTO plans (code, name, description, duration_value, duration_type, price, currency, features, display_order, is_featured, max_freeze_days, includes_pt_sessions, access_hours, branch_id, is_active, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
             dto.code,
             dto.name,
             dto.description || null,
             dto.durationValue,
             dto.durationType,
             dto.price,
-            dto.currency || 'INR',
+            dto.currency || 'USD',
             JSON.stringify(dto.features || []),
             dto.displayOrder || 0,
             dto.isFeatured || false,
             dto.maxFreezeDays || 0,
             dto.includesPtSessions || 0,
             dto.accessHours || 'all_day',
+            dto.branchId || null,
           ],
         );
         return result.rows[0];
@@ -331,10 +315,9 @@ export class PlansService {
   async calculatePriceWithOffer(
     planId: number,
     gymId: number,
-    branchId: number | null = null,
     offerCode?: string,
   ) {
-    const plan = await this.findOne(planId, gymId, branchId);
+    const plan = await this.findOne(planId, gymId);
 
     let discount = 0;
     let validOffer: Record<string, any> | null = null;
@@ -343,14 +326,8 @@ export class PlansService {
       const offer = await this.tenantService.executeInTenant(
         gymId,
         async (client) => {
-          let query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND start_date <= NOW() AND end_date >= NOW()`;
+          const query = `SELECT * FROM offers WHERE code = $1 AND is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL)`;
           const values: SqlValue[] = [offerCode];
-
-          // Branch filtering for offers
-          if (branchId !== null) {
-            query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-            values.push(branchId);
-          }
 
           const result = await client.query(query, values);
           return result.rows[0];

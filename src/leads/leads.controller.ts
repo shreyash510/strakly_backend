@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
 import {
@@ -21,21 +22,19 @@ import {
 } from './dto/lead.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('leads')
 @Controller('leads')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.LEAD_CRM)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
@@ -45,10 +44,9 @@ export class LeadsController {
   @ApiOperation({ summary: 'List leads with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: LeadFiltersDto,
   ) {
-    return this.leadsService.findAll(gymId, branchId, filters);
+    return this.leadsService.findAll(gymId, filters);
   }
 
   @Get('sources')
@@ -63,10 +61,9 @@ export class LeadsController {
   @ApiOperation({ summary: 'Get lead pipeline stats' })
   async getStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: LeadStatsFiltersDto,
   ) {
-    return this.leadsService.getStats(gymId, branchId, filters);
+    return this.leadsService.getStats(gymId, filters);
   }
 
   @Get(':id/stage-history')
@@ -83,29 +80,30 @@ export class LeadsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a lead by ID' })
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
   ) {
-    return this.leadsService.findOne(id, gymId);
+    return this.leadsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Post()
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Create a new lead' })
   async create(
     @Body() dto: CreateLeadDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.leadsService.create(gymId, branchId, dto, userId);
+    return this.leadsService.create(gymId, dto, userId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update a lead' })
   async update(
@@ -119,7 +117,7 @@ export class LeadsController {
 
   @Patch(':id/stage')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Update lead pipeline stage' })
   async updateStage(
@@ -133,21 +131,20 @@ export class LeadsController {
 
   @Patch(':id/convert')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'update')
   @ApiOperation({ summary: 'Convert lead to user' })
   async convertToUser(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
   ) {
-    return this.leadsService.convertToUser(id, gymId, branchId, userId);
+    return this.leadsService.convertToUser(id, gymId, userId);
   }
 
   @Delete(':id')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'delete')
   @ApiOperation({ summary: 'Soft delete a lead' })
   async remove(
@@ -159,7 +156,7 @@ export class LeadsController {
 
   @Post(':id/activities')
   @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('leads', 'create')
   @ApiOperation({ summary: 'Add an activity to a lead' })
   async createActivity(

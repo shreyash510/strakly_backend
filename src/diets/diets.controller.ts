@@ -28,38 +28,24 @@ import {
   UpdateDietAssignmentDto,
 } from './dto/diet.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @ApiTags('diets')
 @Controller('diets')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.DIET_PLANNING)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class DietsController {
   constructor(
     private readonly dietsService: DietsService,
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
-
-  /**
-   * Resolve branchId from request: null = all branches, number = specific branch
-   */
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    if (req.user.role === 'superadmin') {
-      return queryBranchId ? parseInt(queryBranchId) : null;
-    }
-    return queryBranchId
-      ? parseInt(queryBranchId)
-      : (req.user.branchId ?? null);
-  }
 
   @Get()
   @UseGuards(RolesGuard)
@@ -89,12 +75,6 @@ export class DietsController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering',
-  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('status') status?: string,
@@ -104,7 +84,7 @@ export class DietsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     const gymId =
       req.user.role === 'superadmin'
@@ -117,8 +97,6 @@ export class DietsController {
       throw new BadRequestException('gymId is required');
     }
 
-    const branchId = this.resolveBranchId(req, queryBranchId);
-
     return this.dietsService.findAll(gymId, {
       status,
       type,
@@ -126,7 +104,7 @@ export class DietsController {
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
-      branchId,
+      branchId: resolveEffectiveBranchId(req.user, branchId) ?? undefined,
     });
   }
 
@@ -160,13 +138,11 @@ export class DietsController {
   @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Create a new diet plan' })
   async create(@Request() req: AuthenticatedRequest, @Body() dto: CreateDietDto) {
-    // Use branchId from request body if provided, otherwise fallback to user's branchId
-    const branchId = dto.branchId ?? req.user.branchId ?? null;
     const result = await this.dietsService.create(
       dto,
       req.user.gymId!,
       req.user.userId,
-      branchId,
+      resolveEffectiveBranchId(req.user, undefined),
     );
     this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'created' });
     return result;
@@ -201,17 +177,15 @@ export class DietsController {
   // ============ ASSIGNMENT ENDPOINTS ============
 
   @Post('assign')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'create')
   @ApiOperation({ summary: 'Assign a diet plan to a user' })
   async assignDiet(@Request() req: AuthenticatedRequest, @Body() dto: AssignDietDto) {
-    const branchId = req.user.branchId ?? null;
     const result = await this.dietsService.assignDiet(
       dto,
       req.user.gymId!,
       req.user.userId,
-      branchId,
     );
     this.notificationsGateway.emitDietChanged(req.user.gymId!, { action: 'assigned' });
     return result;
@@ -266,7 +240,7 @@ export class DietsController {
   }
 
   @Patch('assignments/:id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'update')
   @ApiOperation({ summary: 'Update a diet assignment' })
@@ -281,7 +255,7 @@ export class DietsController {
   }
 
   @Delete('assignments/:id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager', 'trainer')
   @ManagerPermission('programs', 'delete')
   @ApiOperation({ summary: 'Unassign (cancel) a diet assignment' })

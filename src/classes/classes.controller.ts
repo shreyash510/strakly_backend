@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { ClassesService } from './classes.service';
 import {
@@ -24,21 +25,19 @@ import {
 } from './dto/class.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('classes')
 @Controller('classes')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
-@PlanFeatures(PLAN_FEATURES.CLASS_SCHEDULING)
+@UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
 @ApiBearerAuth()
 export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}
@@ -50,10 +49,9 @@ export class ClassesController {
   @ApiOperation({ summary: 'List class types' })
   async findAllTypes(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ClassFiltersDto,
   ) {
-    return this.classesService.findAllTypes(gymId, branchId, filters);
+    return this.classesService.findAllTypes(gymId, filters);
   }
 
   @Get('types/:id')
@@ -73,9 +71,9 @@ export class ClassesController {
   async createType(
     @Body() dto: CreateClassTypeDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.classesService.createType(gymId, branchId, dto);
+    return this.classesService.createType(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch('types/:id')
@@ -108,9 +106,8 @@ export class ClassesController {
   @ApiOperation({ summary: 'List class schedules' })
   async findAllSchedules(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.classesService.findAllSchedules(gymId, branchId);
+    return this.classesService.findAllSchedules(gymId);
   }
 
   @Post('schedules')
@@ -120,9 +117,9 @@ export class ClassesController {
   async createSchedule(
     @Body() dto: CreateClassScheduleDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.classesService.createSchedule(gymId, branchId, dto);
+    return this.classesService.createSchedule(gymId, dto, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch('schedules/:id')
@@ -155,10 +152,9 @@ export class ClassesController {
   @ApiOperation({ summary: 'List class sessions with filters' })
   async findAllSessions(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SessionFiltersDto,
   ) {
-    return this.classesService.findAllSessions(gymId, branchId, filters);
+    return this.classesService.findAllSessions(gymId, filters);
   }
 
   @Post('sessions/generate')
@@ -168,19 +164,8 @@ export class ClassesController {
   async generateSessions(
     @Body() dto: GenerateSessionsDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.classesService.generateSessions(gymId, branchId, dto);
-  }
-
-  @Get('sessions/:id')
-  @Roles('admin', 'manager', 'trainer', 'client')
-  @ApiOperation({ summary: 'Get a single session by ID' })
-  async findOneSession(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.classesService.findOneSession(id, gymId);
+    return this.classesService.generateSessions(gymId, dto);
   }
 
   @Patch('sessions/:id')
@@ -208,6 +193,7 @@ export class ClassesController {
   }
 
   @Post('sessions/:id/book')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer', 'client')
   @ManagerPermission('classes', 'create')
   @ApiOperation({ summary: 'Book into a session (auto-waitlist if full)' })
@@ -220,6 +206,7 @@ export class ClassesController {
   }
 
   @Patch('bookings/:id/status')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer', 'client')
   @ManagerPermission('classes', 'update')
   @ApiOperation({ summary: 'Update booking status (attend, no_show, cancel)' })

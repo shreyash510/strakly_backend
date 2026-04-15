@@ -1,414 +1,461 @@
 import { Injectable } from '@nestjs/common';
 import { FullReportData } from './dto/pdf-report.dto';
+import { getCurrencySymbol } from '../common/constants/currencies';
+import type { TDocumentDefinitions, Content, TableCell } from 'pdfmake/interfaces';
+
+/* ─── Color Palette ────────────────────────────── */
+const C = {
+  primary: '#6366f1',
+  text: '#1a1a2e',
+  green: '#16a34a',
+  red: '#dc2626',
+  muted: '#64748b',
+  headerBg: '#f1f5f9',
+  cardBg: '#f8fafc',
+  border: '#e2e8f0',
+  badgeGreen: { bg: '#dcfce7', text: '#166534' },
+  badgeRed: { bg: '#fee2e2', text: '#991b1b' },
+  badgeBlue: { bg: '#dbeafe', text: '#1e40af' },
+  badgePurple: { bg: '#f3e8ff', text: '#6b21a8' },
+  badgeOrange: { bg: '#ffedd5', text: '#9a3412' },
+  highlightBg: '#fffbeb',
+};
 
 @Injectable()
 export class PdfTemplateService {
-  buildFullReportHtml(data: FullReportData): string {
+  buildDocDefinition(data: FullReportData): TDocumentDefinitions {
     const { gymInfo, period, dashboardSummary, incomeExpense, membershipSales, paymentDues, attendanceReport, trainerStaffReport, generatedAt, branchName } = data;
+    const currency = gymInfo.currency || 'USD';
 
     const periodLabel = period.month
       ? `${this.getMonthName(period.month)} ${period.year}`
       : `Year ${period.year}`;
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a2e; font-size: 12px; line-height: 1.5; background: #fff; }
+    const generatedDate = new Date(generatedAt).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
 
-  .header-bar { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff; padding: 32px; border-radius: 12px; margin-bottom: 28px; }
-  .header-bar h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
-  .header-bar .sub { font-size: 13px; opacity: 0.85; }
-  .header-bar .meta { margin-top: 12px; font-size: 11px; opacity: 0.7; }
+    const content: Content[] = [];
 
-  .section { margin-bottom: 28px; }
-  .section-title { font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 2px solid #6366f1; }
+    /* ═══ Header Bar ═══ */
+    content.push(this.buildHeader(gymInfo, periodLabel, branchName, generatedDate));
+    content.push({ text: '', margin: [0, 0, 0, 16] });
 
-  .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-  .card { flex: 1; min-width: 140px; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-  .card .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .card .value { font-size: 20px; font-weight: 700; }
+    /* ═══ Dashboard Summary ═══ */
+    content.push(this.sectionTitle('Dashboard Summary'));
+    content.push(this.buildCards([
+      { label: 'Active Clients', value: String(dashboardSummary.activeMembers) },
+      { label: 'New This Month', value: String(dashboardSummary.newMembersThisMonth) },
+      { label: 'Expired', value: String(dashboardSummary.expiredMemberships), color: C.red },
+      { label: 'Monthly Revenue', value: this.fmt(dashboardSummary.monthlyRevenue, currency), color: C.green },
+      { label: 'Pending Dues', value: this.fmt(dashboardSummary.pendingDues, currency), color: C.red },
+      { label: 'Present Today', value: String(dashboardSummary.attendanceToday) },
+    ]));
 
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11.5px; }
-  thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e2e8f0; color: #334155; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
-  tbody td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
-  tbody tr:nth-child(even) { background: #fafbfc; }
+    /* ═══ Income & Expense ═══ */
+    content.push(this.sectionTitle('Income & Expense Report'));
+    content.push(this.buildCards([
+      { label: 'Total Income', value: this.fmt(incomeExpense.income.totalIncome, currency), color: C.green },
+      { label: 'Total Expense', value: this.fmt(incomeExpense.expense.totalExpense, currency), color: C.red },
+      { label: `Net ${incomeExpense.netProfit >= 0 ? 'Profit' : 'Loss'}`, value: this.fmt(Math.abs(incomeExpense.netProfit), currency), color: incomeExpense.netProfit >= 0 ? C.green : C.red },
+    ]));
 
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
-  .badge-green { background: #dcfce7; color: #166534; }
-  .badge-red { background: #fee2e2; color: #991b1b; }
-  .badge-blue { background: #dbeafe; color: #1e40af; }
-  .badge-purple { background: #f3e8ff; color: #6b21a8; }
-  .badge-orange { background: #ffedd5; color: #9a3412; }
+    if (incomeExpense.breakdown.incomeByMonth.length > 0) {
+      content.push({
+        columns: [
+          {
+            width: '*',
+            stack: [
+              { text: 'Income by Month', style: 'subheading' },
+              this.buildTable(
+                ['Month', { text: 'Amount', alignment: 'right' as const }],
+                incomeExpense.breakdown.incomeByMonth.map(item => [
+                  item.month,
+                  { text: this.fmt(item.amount, currency), alignment: 'right' as const, color: C.green },
+                ]),
+              ),
+            ],
+          },
+          { width: 16, text: '' },
+          {
+            width: '*',
+            stack: [
+              { text: 'Expense by Month', style: 'subheading' },
+              incomeExpense.breakdown.expenseByMonth.length > 0
+                ? this.buildTable(
+                    ['Month', { text: 'Amount', alignment: 'right' as const }],
+                    incomeExpense.breakdown.expenseByMonth.map(item => [
+                      item.month,
+                      { text: this.fmt(item.amount, currency), alignment: 'right' as const, color: C.red },
+                    ]),
+                  )
+                : { text: 'No expense data', color: C.muted, fontSize: 10, margin: [0, 4, 0, 8] as [number, number, number, number] },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, 12] as [number, number, number, number],
+      });
+    }
 
-  .text-green { color: #16a34a; }
-  .text-red { color: #dc2626; }
-  .text-muted { color: #64748b; font-size: 11px; }
+    if (incomeExpense.breakdown.incomeByPaymentMethod.length > 0) {
+      content.push({ text: 'Income by Payment Method', style: 'subheading' });
+      content.push(this.buildTable(
+        ['Method', { text: 'Amount', alignment: 'right' as const }, { text: 'Transactions', alignment: 'right' as const }],
+        incomeExpense.breakdown.incomeByPaymentMethod.map(item => [
+          this.badge(item.method, C.badgeBlue),
+          { text: this.fmt(item.amount, currency), alignment: 'right' as const },
+          { text: String(item.count), alignment: 'right' as const },
+        ]),
+      ));
+    }
 
-  .highlight-box { padding: 14px 18px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fffbeb; margin-bottom: 16px; }
+    /* ═══ Membership Sales (page break) ═══ */
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(this.sectionTitle('Membership Sales Report'));
+    content.push(this.buildCards([
+      { label: 'Total Sales', value: String(membershipSales.summary.totalSales) },
+      { label: 'Total Revenue', value: this.fmt(membershipSales.summary.totalRevenue, currency), color: C.green },
+      { label: 'Avg Order Value', value: this.fmt(membershipSales.summary.averageOrderValue, currency) },
+      { label: 'New Memberships', value: String(membershipSales.summary.newMemberships) },
+    ]));
 
-  .page-break { page-break-before: always; }
+    if (membershipSales.topPerformingPlan) {
+      const tp = membershipSales.topPerformingPlan;
+      content.push({
+        table: {
+          widths: ['*'],
+          body: [[{
+            stack: [
+              { text: '🏆 Top Performing Plan', fontSize: 9, color: '#92400e', bold: true, margin: [0, 0, 0, 4] as [number, number, number, number] },
+              { text: tp.planName, fontSize: 14, bold: true },
+              { text: `${this.fmt(tp.revenue, currency)} revenue • ${tp.count} sales`, fontSize: 10, color: C.muted },
+            ],
+            fillColor: C.highlightBg,
+            margin: [12, 10, 12, 10] as [number, number, number, number],
+          }]],
+        },
+        layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => C.border, vLineColor: () => C.border },
+        margin: [0, 0, 0, 12] as [number, number, number, number],
+      } as Content);
+    }
 
-  .footer { text-align: center; color: #94a3b8; font-size: 10px; margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+    if (membershipSales.salesByPlan.length > 0) {
+      content.push({ text: 'Sales by Plan', style: 'subheading' });
+      content.push(this.buildTable(
+        ['Plan', { text: 'Sales', alignment: 'right' as const }, { text: 'Revenue', alignment: 'right' as const }, { text: 'Share', alignment: 'right' as const }],
+        membershipSales.salesByPlan.map(plan => [
+          { text: [{ text: plan.planName, bold: true }, ' ', this.badge(plan.planCode, C.badgePurple)] },
+          { text: String(plan.count), alignment: 'right' as const },
+          { text: this.fmt(plan.revenue, currency), alignment: 'right' as const, color: C.green },
+          { text: `${plan.percentage}%`, alignment: 'right' as const },
+        ]),
+      ));
+    }
 
-  .two-col { display: flex; gap: 16px; }
-  .two-col > div { flex: 1; }
+    if (membershipSales.salesByMonth.length > 0) {
+      content.push({ text: 'Monthly Sales Trend', style: 'subheading' });
+      content.push(this.buildTable(
+        ['Month', { text: 'Sales', alignment: 'right' as const }, { text: 'Revenue', alignment: 'right' as const }],
+        membershipSales.salesByMonth.map(item => [
+          item.month,
+          { text: String(item.count), alignment: 'right' as const },
+          { text: this.fmt(item.revenue, currency), alignment: 'right' as const, color: C.green },
+        ]),
+      ));
+    }
 
-  .progress-bar-container { background: #e2e8f0; border-radius: 4px; height: 6px; margin-top: 4px; }
-  .progress-bar { background: #6366f1; border-radius: 4px; height: 6px; }
+    /* ═══ Payment Dues (page break) ═══ */
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(this.sectionTitle('Payment Dues Report'));
+    content.push(this.buildCards([
+      { label: 'Total Due', value: this.fmt(paymentDues.summary.totalDueAmount, currency), color: C.red },
+      { label: 'Membership Dues', value: this.fmt(paymentDues.summary.membershipDues, currency), color: C.red },
+      { label: 'Salary Dues', value: this.fmt(paymentDues.summary.salaryDues, currency), color: C.red },
+      { label: 'Overdue', value: String(paymentDues.summary.overdueCount), color: C.red },
+    ]));
 
-  .weekly-grid { display: flex; gap: 8px; margin-bottom: 16px; }
-  .weekly-item { flex: 1; text-align: center; padding: 10px 6px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-  .weekly-item .day { font-size: 10px; color: #64748b; font-weight: 600; }
-  .weekly-item .count { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-top: 2px; }
-</style>
-</head>
-<body>
+    if (paymentDues.membershipDues.length > 0) {
+      content.push({ text: `Membership Dues (${paymentDues.membershipDues.length})`, style: 'subheading' });
+      content.push(this.buildTable(
+        ['Client', 'Plan', { text: 'Amount', alignment: 'right' as const }, 'Due Date', 'Status'],
+        paymentDues.membershipDues.map(due => [
+          { text: [{ text: due.clientName, bold: true }, '\n', { text: due.clientEmail, fontSize: 9, color: C.muted }] },
+          this.badge(due.planName, C.badgePurple),
+          { text: this.fmt(due.amount, currency), alignment: 'right' as const, color: C.red },
+          due.dueDate,
+          due.daysOverdue > 0
+            ? this.badge(`${due.daysOverdue}d overdue`, C.badgeRed)
+            : this.badge('Pending', C.badgeOrange),
+        ]),
+      ));
+    } else {
+      content.push({ text: 'No pending membership dues.', color: C.muted, fontSize: 10, margin: [0, 0, 0, 12] as [number, number, number, number] });
+    }
 
-<!-- Header -->
-<div class="header-bar">
-  <h1>${this.escapeHtml(gymInfo.name)}</h1>
-  <div class="sub">Comprehensive Report &mdash; ${periodLabel}${branchName ? ` &mdash; ${this.escapeHtml(branchName)}` : ''}</div>
-  <div class="meta">
-    ${gymInfo.address ? `${this.escapeHtml(gymInfo.address)}${gymInfo.city ? `, ${this.escapeHtml(gymInfo.city)}` : ''}${gymInfo.state ? `, ${this.escapeHtml(gymInfo.state)}` : ''}` : ''}
-    ${gymInfo.phone ? ` &bull; ${this.escapeHtml(gymInfo.phone)}` : ''}
-    ${gymInfo.email ? ` &bull; ${this.escapeHtml(gymInfo.email)}` : ''}
-    <br>Generated on ${new Date(generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-  </div>
-</div>
+    if (paymentDues.salaryDues.length > 0) {
+      content.push({ text: `Salary Dues (${paymentDues.salaryDues.length})`, style: 'subheading', margin: [0, 12, 0, 8] as [number, number, number, number] });
+      content.push(this.buildTable(
+        ['Staff', 'Role', 'Period', { text: 'Amount', alignment: 'right' as const }],
+        paymentDues.salaryDues.map(due => [
+          { text: [{ text: due.staffName, bold: true }, '\n', { text: due.staffEmail, fontSize: 9, color: C.muted }] },
+          this.badge(due.staffRole, C.badgeBlue),
+          due.period,
+          { text: this.fmt(due.amount, currency), alignment: 'right' as const, color: C.red },
+        ]),
+      ));
+    } else {
+      content.push({ text: 'No pending salary dues.', color: C.muted, fontSize: 10, margin: [0, 0, 0, 12] as [number, number, number, number] });
+    }
 
-<!-- Dashboard Summary -->
-<div class="section">
-  <div class="section-title">Dashboard Summary</div>
-  <div class="cards">
-    <div class="card">
-      <div class="label">Active Clients</div>
-      <div class="value">${dashboardSummary.activeMembers}</div>
-    </div>
-    <div class="card">
-      <div class="label">New This Month</div>
-      <div class="value">${dashboardSummary.newMembersThisMonth}</div>
-    </div>
-    <div class="card">
-      <div class="label">Expired</div>
-      <div class="value text-red">${dashboardSummary.expiredMemberships}</div>
-    </div>
-    <div class="card">
-      <div class="label">Monthly Revenue</div>
-      <div class="value text-green">${this.formatCurrency(dashboardSummary.monthlyRevenue)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Pending Dues</div>
-      <div class="value text-red">${this.formatCurrency(dashboardSummary.pendingDues)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Present Today</div>
-      <div class="value">${dashboardSummary.attendanceToday}</div>
-    </div>
-  </div>
-</div>
+    /* ═══ Attendance Report (page break) ═══ */
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(this.sectionTitle('Attendance Report'));
+    content.push(this.buildCards([
+      { label: 'Total Check-Ins', value: String(attendanceReport.summary.totalCheckIns) },
+      { label: 'Avg Daily', value: attendanceReport.summary.avgDailyCheckIns.toFixed(1) },
+      { label: 'Unique Clients', value: String(attendanceReport.summary.uniqueMembers) },
+      { label: 'Avg Duration', value: `${attendanceReport.summary.avgDuration} min` },
+    ]));
 
-<!-- Income & Expense -->
-<div class="section">
-  <div class="section-title">Income & Expense Report</div>
-  <div class="cards">
-    <div class="card">
-      <div class="label">Total Income</div>
-      <div class="value text-green">${this.formatCurrency(incomeExpense.income.totalIncome)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Total Expense</div>
-      <div class="value text-red">${this.formatCurrency(incomeExpense.expense.totalExpense)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Net ${incomeExpense.netProfit >= 0 ? 'Profit' : 'Loss'}</div>
-      <div class="value ${incomeExpense.netProfit >= 0 ? 'text-green' : 'text-red'}">${this.formatCurrency(Math.abs(incomeExpense.netProfit))}</div>
-    </div>
-  </div>
+    if (attendanceReport.weeklyPattern.length > 0) {
+      content.push({ text: 'Weekly Pattern', style: 'subheading' });
+      content.push({
+        columns: attendanceReport.weeklyPattern.map(day => ({
+          width: '*',
+          stack: [
+            { text: day.day.substring(0, 3), fontSize: 9, color: C.muted, bold: true, alignment: 'center' as const },
+            { text: String(day.count), fontSize: 14, bold: true, alignment: 'center' as const },
+          ],
+          margin: [2, 6, 2, 6] as [number, number, number, number],
+        })),
+        margin: [0, 0, 0, 12] as [number, number, number, number],
+      } as Content);
+    }
 
-  ${incomeExpense.breakdown.incomeByMonth.length > 0 ? `
-  <div class="two-col">
-    <div>
-      <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Income by Month</h4>
-      <table>
-        <thead><tr><th>Month</th><th style="text-align:right;">Amount</th></tr></thead>
-        <tbody>
-          ${incomeExpense.breakdown.incomeByMonth.map(item => `
-            <tr><td>${item.month}</td><td style="text-align:right;" class="text-green">${this.formatCurrency(item.amount)}</td></tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div>
-      <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Expense by Month</h4>
-      <table>
-        <thead><tr><th>Month</th><th style="text-align:right;">Amount</th></tr></thead>
-        <tbody>
-          ${incomeExpense.breakdown.expenseByMonth.length > 0
-            ? incomeExpense.breakdown.expenseByMonth.map(item => `
-              <tr><td>${item.month}</td><td style="text-align:right;" class="text-red">${this.formatCurrency(item.amount)}</td></tr>
-            `).join('')
-            : '<tr><td colspan="2" class="text-muted">No expense data</td></tr>'
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>` : ''}
+    if (attendanceReport.genderDistribution) {
+      const gd = attendanceReport.genderDistribution;
+      content.push({ text: 'Gender Distribution', style: 'subheading' });
+      content.push(this.buildCards([
+        { label: 'Male', value: String(gd.male) },
+        { label: 'Female', value: String(gd.female) },
+        { label: 'Other', value: String(gd.other) },
+      ]));
+    }
 
-  ${incomeExpense.breakdown.incomeByPaymentMethod.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Income by Payment Method</h4>
-  <table>
-    <thead><tr><th>Method</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Transactions</th></tr></thead>
-    <tbody>
-      ${incomeExpense.breakdown.incomeByPaymentMethod.map(item => `
-        <tr>
-          <td><span class="badge badge-blue">${this.escapeHtml(item.method)}</span></td>
-          <td style="text-align:right;">${this.formatCurrency(item.amount)}</td>
-          <td style="text-align:right;">${item.count}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : ''}
-</div>
+    if (attendanceReport.dailyTrend.length > 0) {
+      content.push({ text: 'Daily Attendance Trend', style: 'subheading' });
+      content.push(this.buildTable(
+        ['Date', { text: 'Check-Ins', alignment: 'right' as const }],
+        attendanceReport.dailyTrend.slice(0, 30).map(day => [
+          day.date,
+          { text: String(day.count), alignment: 'right' as const },
+        ]),
+      ));
+    }
 
-<!-- Membership Sales - Page Break -->
-<div class="page-break"></div>
-<div class="section">
-  <div class="section-title">Membership Sales Report</div>
-  <div class="cards">
-    <div class="card">
-      <div class="label">Total Sales</div>
-      <div class="value">${membershipSales.summary.totalSales}</div>
-    </div>
-    <div class="card">
-      <div class="label">Total Revenue</div>
-      <div class="value text-green">${this.formatCurrency(membershipSales.summary.totalRevenue)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Avg Order Value</div>
-      <div class="value">${this.formatCurrency(membershipSales.summary.averageOrderValue)}</div>
-    </div>
-    <div class="card">
-      <div class="label">New Memberships</div>
-      <div class="value">${membershipSales.summary.newMemberships}</div>
-    </div>
-  </div>
+    if (attendanceReport.topMembers.length > 0) {
+      content.push({ text: 'Top Clients by Visits', style: 'subheading' });
+      content.push(this.buildTable(
+        ['#', 'Client', { text: 'Visits', alignment: 'right' as const }],
+        attendanceReport.topMembers.slice(0, 10).map((member, i) => [
+          String(i + 1),
+          member.name,
+          { text: String(member.visits), alignment: 'right' as const, bold: true },
+        ]),
+      ));
+    }
 
-  ${membershipSales.topPerformingPlan ? `
-  <div class="highlight-box">
-    <div style="font-size:11px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">&#127942; Top Performing Plan</div>
-    <div style="font-size:16px;font-weight:700;">${this.escapeHtml(membershipSales.topPerformingPlan.planName)}</div>
-    <div class="text-muted">${this.formatCurrency(membershipSales.topPerformingPlan.revenue)} revenue &bull; ${membershipSales.topPerformingPlan.count} sales</div>
-  </div>` : ''}
+    /* ═══ Trainer & Staff Report (page break) ═══ */
+    if (trainerStaffReport.length > 0) {
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(this.sectionTitle('Trainer & Staff Report'));
+      content.push(this.buildTable(
+        ['Name', 'Role', { text: 'Assigned Clients', alignment: 'right' as const }, { text: 'Salary Paid (Year)', alignment: 'right' as const }],
+        trainerStaffReport.map(staff => [
+          { text: [{ text: staff.name, bold: true }, '\n', { text: staff.email, fontSize: 9, color: C.muted }] },
+          this.badge(staff.role, C.badgeBlue),
+          { text: String(staff.clientCount), alignment: 'right' as const },
+          { text: this.fmt(staff.totalSalaryPaid, currency), alignment: 'right' as const, color: C.green },
+        ]),
+      ));
+    }
 
-  ${membershipSales.salesByPlan.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Sales by Plan</h4>
-  <table>
-    <thead><tr><th>Plan</th><th style="text-align:right;">Sales</th><th style="text-align:right;">Revenue</th><th style="text-align:right;">Share</th></tr></thead>
-    <tbody>
-      ${membershipSales.salesByPlan.map(plan => `
-        <tr>
-          <td><strong>${this.escapeHtml(plan.planName)}</strong> <span class="badge badge-purple">${this.escapeHtml(plan.planCode)}</span></td>
-          <td style="text-align:right;">${plan.count}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(plan.revenue)}</td>
-          <td style="text-align:right;">${plan.percentage}%</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : ''}
+    /* ═══ Footer line ═══ */
+    content.push({
+      text: `Generated by Strakly • ${new Date(generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+      alignment: 'center',
+      color: '#94a3b8',
+      fontSize: 9,
+      margin: [0, 24, 0, 0],
+    });
 
-  ${membershipSales.salesByMonth.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Monthly Sales Trend</h4>
-  <table>
-    <thead><tr><th>Month</th><th style="text-align:right;">Sales</th><th style="text-align:right;">Revenue</th></tr></thead>
-    <tbody>
-      ${membershipSales.salesByMonth.map(item => `
-        <tr>
-          <td>${item.month}</td>
-          <td style="text-align:right;">${item.count}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(item.revenue)}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : ''}
-</div>
-
-<!-- Payment Dues - Page Break -->
-<div class="page-break"></div>
-<div class="section">
-  <div class="section-title">Payment Dues Report</div>
-  <div class="cards">
-    <div class="card">
-      <div class="label">Total Due</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.totalDueAmount)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Membership Dues</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.membershipDues)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Salary Dues</div>
-      <div class="value text-red">${this.formatCurrency(paymentDues.summary.salaryDues)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Overdue</div>
-      <div class="value text-red">${paymentDues.summary.overdueCount}</div>
-    </div>
-  </div>
-
-  ${paymentDues.membershipDues.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Membership Dues (${paymentDues.membershipDues.length})</h4>
-  <table>
-    <thead><tr><th>Client</th><th>Plan</th><th style="text-align:right;">Amount</th><th>Due Date</th><th>Status</th></tr></thead>
-    <tbody>
-      ${paymentDues.membershipDues.map(due => `
-        <tr>
-          <td><strong>${this.escapeHtml(due.clientName)}</strong><br><span class="text-muted">${this.escapeHtml(due.clientEmail)}</span></td>
-          <td><span class="badge badge-purple">${this.escapeHtml(due.planName)}</span></td>
-          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount)}</td>
-          <td>${due.dueDate}</td>
-          <td>${due.daysOverdue > 0 ? `<span class="badge badge-red">${due.daysOverdue}d overdue</span>` : '<span class="badge badge-orange">Pending</span>'}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : '<p class="text-muted">No pending membership dues.</p>'}
-
-  ${paymentDues.salaryDues.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;margin-top:16px;color:#334155;">Salary Dues (${paymentDues.salaryDues.length})</h4>
-  <table>
-    <thead><tr><th>Staff</th><th>Role</th><th>Period</th><th style="text-align:right;">Amount</th></tr></thead>
-    <tbody>
-      ${paymentDues.salaryDues.map(due => `
-        <tr>
-          <td><strong>${this.escapeHtml(due.staffName)}</strong><br><span class="text-muted">${this.escapeHtml(due.staffEmail)}</span></td>
-          <td><span class="badge badge-blue">${this.escapeHtml(due.staffRole)}</span></td>
-          <td>${this.escapeHtml(due.period)}</td>
-          <td style="text-align:right;" class="text-red">${this.formatCurrency(due.amount)}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : '<p class="text-muted">No pending salary dues.</p>'}
-</div>
-
-<!-- Attendance Report - Page Break -->
-<div class="page-break"></div>
-<div class="section">
-  <div class="section-title">Attendance Report</div>
-  <div class="cards">
-    <div class="card">
-      <div class="label">Total Check-Ins</div>
-      <div class="value">${attendanceReport.summary.totalCheckIns}</div>
-    </div>
-    <div class="card">
-      <div class="label">Avg Daily</div>
-      <div class="value">${attendanceReport.summary.avgDailyCheckIns.toFixed(1)}</div>
-    </div>
-    <div class="card">
-      <div class="label">Unique Clients</div>
-      <div class="value">${attendanceReport.summary.uniqueMembers}</div>
-    </div>
-    <div class="card">
-      <div class="label">Avg Duration</div>
-      <div class="value">${attendanceReport.summary.avgDuration} min</div>
-    </div>
-  </div>
-
-  ${attendanceReport.weeklyPattern.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Weekly Pattern</h4>
-  <div class="weekly-grid">
-    ${attendanceReport.weeklyPattern.map(day => `
-      <div class="weekly-item">
-        <div class="day">${day.day.substring(0, 3)}</div>
-        <div class="count">${day.count}</div>
-      </div>
-    `).join('')}
-  </div>` : ''}
-
-  ${attendanceReport.genderDistribution ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Gender Distribution</h4>
-  <div class="cards" style="margin-bottom:16px;">
-    <div class="card"><div class="label">Male</div><div class="value">${attendanceReport.genderDistribution.male}</div></div>
-    <div class="card"><div class="label">Female</div><div class="value">${attendanceReport.genderDistribution.female}</div></div>
-    <div class="card"><div class="label">Other</div><div class="value">${attendanceReport.genderDistribution.other}</div></div>
-  </div>` : ''}
-
-  ${attendanceReport.dailyTrend.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Daily Attendance Trend</h4>
-  <table>
-    <thead><tr><th>Date</th><th style="text-align:right;">Check-Ins</th></tr></thead>
-    <tbody>
-      ${attendanceReport.dailyTrend.slice(0, 30).map(day => `
-        <tr><td>${day.date}</td><td style="text-align:right;">${day.count}</td></tr>
-      `).join('')}
-    </tbody>
-  </table>` : ''}
-
-  ${attendanceReport.topMembers.length > 0 ? `
-  <h4 style="font-size:13px;margin-bottom:8px;color:#334155;">Top Clients by Visits</h4>
-  <table>
-    <thead><tr><th>#</th><th>Client</th><th style="text-align:right;">Visits</th></tr></thead>
-    <tbody>
-      ${attendanceReport.topMembers.slice(0, 10).map((member, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${this.escapeHtml(member.name)}</td>
-          <td style="text-align:right;"><strong>${member.visits}</strong></td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>` : ''}
-</div>
-
-<!-- Trainer/Staff Report -->
-${trainerStaffReport.length > 0 ? `
-<div class="page-break"></div>
-<div class="section">
-  <div class="section-title">Trainer & Staff Report</div>
-  <table>
-    <thead><tr><th>Name</th><th>Role</th><th style="text-align:right;">Assigned Clients</th><th style="text-align:right;">Salary Paid (Year)</th></tr></thead>
-    <tbody>
-      ${trainerStaffReport.map(staff => `
-        <tr>
-          <td><strong>${this.escapeHtml(staff.name)}</strong><br><span class="text-muted">${this.escapeHtml(staff.email)}</span></td>
-          <td><span class="badge badge-blue">${this.escapeHtml(staff.role)}</span></td>
-          <td style="text-align:right;">${staff.clientCount}</td>
-          <td style="text-align:right;" class="text-green">${this.formatCurrency(staff.totalSalaryPaid)}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-</div>` : ''}
-
-<!-- Footer -->
-<div class="footer">
-  Generated by Strakly &bull; ${new Date(generatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-</div>
-
-</body>
-</html>`;
+    return {
+      pageSize: 'A4',
+      pageMargins: [42, 42, 42, 60], // ~15mm sides, 15mm top, 21mm bottom
+      defaultStyle: {
+        font: 'Roboto',
+        fontSize: 11,
+        color: C.text,
+        lineHeight: 1.4,
+      },
+      styles: {
+        subheading: {
+          fontSize: 11,
+          bold: true,
+          color: '#334155',
+          margin: [0, 4, 0, 6],
+        },
+      },
+      footer: (currentPage: number, pageCount: number) => ({
+        text: `Page ${currentPage} of ${pageCount}`,
+        alignment: 'center' as const,
+        fontSize: 9,
+        color: '#94a3b8',
+        margin: [0, 16, 0, 0] as [number, number, number, number],
+      }),
+      content,
+    };
   }
 
-  private formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+  /* ─── Helper: Header bar ────────────────────── */
+  private buildHeader(gymInfo: FullReportData['gymInfo'], periodLabel: string, branchName: string | null, generatedDate: string): Content {
+    const addressParts: string[] = [];
+    if (gymInfo.address) addressParts.push(gymInfo.address);
+    if (gymInfo.city) addressParts.push(gymInfo.city);
+    if (gymInfo.state) addressParts.push(gymInfo.state);
+    const meta: string[] = [];
+    if (addressParts.length) meta.push(addressParts.join(', '));
+    if (gymInfo.phone) meta.push(gymInfo.phone);
+    if (gymInfo.email) meta.push(gymInfo.email);
+
+    return {
+      table: {
+        widths: ['*'],
+        body: [[{
+          stack: [
+            { text: gymInfo.name, fontSize: 22, bold: true, color: '#ffffff' },
+            { text: `Comprehensive Report — ${periodLabel}${branchName ? ` — ${branchName}` : ''}`, fontSize: 11, color: '#ffffffd9', margin: [0, 2, 0, 0] as [number, number, number, number] },
+            ...(meta.length || generatedDate ? [{
+              text: `${meta.join(' • ')}${meta.length ? '\n' : ''}Generated on ${generatedDate}`,
+              fontSize: 9, color: '#ffffffb3', margin: [0, 8, 0, 0] as [number, number, number, number],
+            }] : []),
+          ],
+          fillColor: C.primary,
+          margin: [20, 18, 20, 18] as [number, number, number, number],
+        }]],
+      },
+      layout: 'noBorders',
+    } as Content;
+  }
+
+  /* ─── Helper: Section title ─────────────────── */
+  private sectionTitle(title: string): Content {
+    return {
+      stack: [
+        { text: title, fontSize: 15, bold: true, color: C.primary, margin: [0, 0, 0, 4] as [number, number, number, number] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: C.primary }] },
+      ],
+      margin: [0, 16, 0, 10] as [number, number, number, number],
+    } as Content;
+  }
+
+  /* ─── Helper: Metric cards (as a table row) ─── */
+  private buildCards(items: { label: string; value: string; color?: string }[]): Content {
+    return {
+      table: {
+        widths: items.map(() => '*'),
+        body: [
+          items.map(item => ({
+            stack: [
+              { text: item.label.toUpperCase(), fontSize: 8, color: C.muted, letterSpacing: 0.3, margin: [0, 0, 0, 3] as [number, number, number, number] },
+              { text: item.value, fontSize: 16, bold: true, color: item.color || C.text },
+            ],
+            fillColor: C.cardBg,
+            margin: [10, 8, 10, 8] as [number, number, number, number],
+          } as TableCell)),
+        ],
+      },
+      layout: {
+        hLineWidth: () => 1,
+        vLineWidth: () => 1,
+        hLineColor: () => C.border,
+        vLineColor: () => C.border,
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
+      },
+      margin: [0, 0, 0, 14] as [number, number, number, number],
+    } as Content;
+  }
+
+  /* ─── Helper: Data table ────────────────────── */
+  private buildTable(headers: (string | { text: string; alignment?: string })[], rows: any[][]): Content {
+    const headerRow: TableCell[] = headers.map(h => {
+      const obj = typeof h === 'string' ? { text: h } : h;
+      return {
+        text: obj.text.toUpperCase(),
+        fontSize: 9,
+        bold: true,
+        color: '#334155',
+        fillColor: C.headerBg,
+        alignment: (obj as any).alignment || 'left',
+        margin: [8, 7, 8, 7] as [number, number, number, number],
+      } as TableCell;
+    });
+
+    const dataRows = rows.map((row, rowIndex) =>
+      row.map(cell => {
+        const base = typeof cell === 'string' ? { text: cell } : cell;
+        return {
+          ...base,
+          fontSize: base.fontSize || 10,
+          fillColor: rowIndex % 2 === 1 ? '#fafbfc' : undefined,
+          margin: base.margin || [8, 6, 8, 6] as [number, number, number, number],
+        } as TableCell;
+      }),
+    );
+
+    return {
+      table: {
+        headerRows: 1,
+        widths: headers.map(() => '*'),
+        body: [headerRow, ...dataRows],
+      },
+      layout: {
+        hLineWidth: (i: number, node: any) => i === 1 ? 2 : 1,
+        vLineWidth: () => 0,
+        hLineColor: (i: number, node: any) => i === 1 ? C.border : '#f1f5f9',
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
+      },
+      margin: [0, 0, 0, 12] as [number, number, number, number],
+    } as Content;
+  }
+
+  /* ─── Helper: Badge ─────────────────────────── */
+  private badge(text: string, colors: { bg: string; text: string }): Content {
+    return {
+      text: text,
+      fontSize: 9,
+      bold: true,
+      color: colors.text,
+      background: colors.bg,
+    } as any;
+  }
+
+  /* ─── Helper: Format currency ───────────────── */
+  private fmt(amount: number, currency: string = 'USD'): string {
+    const symbol = getCurrencySymbol(currency);
+    return `${symbol} ${new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount)}`;
   }
 
-  private escapeHtml(text: string): string {
-    if (!text) return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
+  /* ─── Helper: Month name ────────────────────── */
   private getMonthName(month: number): string {
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',

@@ -14,14 +14,24 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 interface SocketData {
   userId: number;
   gymId: number | null;
-  branchId: number | null;
   role: string;
   isSuperAdmin: boolean;
 }
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: [
+      process.env.FRONTEND_URL,
+      process.env.NEXT_FRONTEND_URL,
+      'https://strakly.com',
+      'https://www.strakly.com',
+      'https://app.strakly.com',
+      'https://strakly-g9ovf.ondigitalocean.app',
+      'https://shark-app-yak3y.ondigitalocean.app',
+      ...(process.env.NODE_ENV !== 'production'
+        ? ['http://localhost:5173', 'http://localhost:3000']
+        : []),
+    ].filter(Boolean),
     credentials: true,
   },
   namespace: '/notifications',
@@ -63,7 +73,12 @@ export class NotificationsGateway
       // Verify JWT
       const secret =
         this.configService.get<string>('JWT_SECRET') ||
-        'strakly-secret-key-change-in-production';
+        (() => {
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error('JWT_SECRET must be set in production');
+          }
+          return 'strakly-secret-key-change-in-production';
+        })();
 
       let payload: JwtPayload;
       try {
@@ -77,7 +92,6 @@ export class NotificationsGateway
       const userId =
         typeof payload.sub === 'string' ? parseInt(payload.sub) : payload.sub;
       const gymId = payload.gymId;
-      const branchId = payload.branchId;
       const role = payload.role || 'client';
       const isSuperAdmin = payload.isSuperAdmin === true;
 
@@ -85,7 +99,6 @@ export class NotificationsGateway
       const data: SocketData = {
         userId,
         gymId,
-        branchId,
         role,
         isSuperAdmin,
       };
@@ -107,9 +120,6 @@ export class NotificationsGateway
       } else if (gymId) {
         client.join(`gym:${gymId}`);
         client.join(`user:${gymId}:${userId}`);
-        if (branchId) {
-          client.join(`branch:${gymId}:${branchId}`);
-        }
       }
 
       this.logger.log(
@@ -205,22 +215,6 @@ export class NotificationsGateway
   }
 
   /**
-   * Emit to all connected users in a branch
-   */
-  emitToBranch(
-    gymId: number,
-    branchId: number,
-    notification: Notification,
-  ) {
-    this.server
-      .to(`branch:${gymId}:${branchId}`)
-      .emit('notification', notification);
-    this.logger.debug(
-      `Notification broadcast to branch ${branchId} in gym ${gymId}`,
-    );
-  }
-
-  /**
    * Emit to all superadmins
    */
   emitToAllSuperadmins(notification: Notification) {
@@ -235,16 +229,6 @@ export class NotificationsGateway
     this.server.to(`gym:${gymId}`).emit('user:changed', payload);
     this.logger.debug(
       `user:changed event emitted to gym ${gymId} (action: ${payload.action})`,
-    );
-  }
-
-  /**
-   * Emit branch:changed event to all connected users in a gym
-   */
-  emitBranchChanged(gymId: number, payload: { action: string }) {
-    this.server.to(`gym:${gymId}`).emit('branch:changed', payload);
-    this.logger.debug(
-      `branch:changed event emitted to gym ${gymId} (action: ${payload.action})`,
     );
   }
 
@@ -421,10 +405,13 @@ export class NotificationsGateway
   /**
    * Emit saas-subscription:changed event to all superadmins
    */
-  emitSaasSubscriptionChanged(payload: { action: string }) {
+  emitSaasSubscriptionChanged(payload: { action: string; gymId?: number }) {
     this.server.to('superadmin').emit('saas-subscription:changed', payload);
+    if (payload.gymId) {
+      this.server.to(`gym:${payload.gymId}`).emit('saas-subscription:changed', payload);
+    }
     this.logger.debug(
-      `saas-subscription:changed event emitted to superadmins (action: ${payload.action})`,
+      `saas-subscription:changed event emitted to superadmins${payload.gymId ? ` and gym ${payload.gymId}` : ''} (action: ${payload.action})`,
     );
   }
 

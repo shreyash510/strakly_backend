@@ -50,6 +50,20 @@ export class PlanFeaturesGuard implements CanActivate {
       );
     }
 
+    // Check subscription status
+    if (subscription.status !== 'active' && subscription.status !== 'trial') {
+      throw new ForbiddenException('Your subscription is not active');
+    }
+
+    // Check if trial has expired
+    if (
+      subscription.status === 'trial' &&
+      subscription.trialEndsAt &&
+      new Date(subscription.trialEndsAt) < new Date()
+    ) {
+      throw new ForbiddenException('Your trial period has expired. Please subscribe to a plan.');
+    }
+
     const planFeatures: string[] = Array.isArray(subscription.plan.features)
       ? (subscription.plan.features as string[])
       : [];

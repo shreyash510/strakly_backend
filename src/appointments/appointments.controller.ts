@@ -4,43 +4,39 @@ import {
   Post,
   Patch,
   Delete,
-  Put,
   Body,
   Param,
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import {
   CreateServiceDto,
   UpdateServiceDto,
-  SetAvailabilityDto,
   CreateAppointmentDto,
   UpdateAppointmentDto,
   UpdateAppointmentStatusDto,
-  CreateSessionPackageDto,
   AppointmentFiltersDto,
   AvailableSlotsDto,
 } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('appointments')
 @Controller('appointments')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.APPOINTMENT_BOOKING)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class AppointmentsController {
   constructor(
@@ -55,9 +51,8 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'List PT/appointment services' })
   async findAllServices(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.appointmentsService.findAllServices(gymId, branchId);
+    return this.appointmentsService.findAllServices(gymId);
   }
 
   @Post('services')
@@ -68,9 +63,8 @@ export class AppointmentsController {
   async createService(
     @Body() dto: CreateServiceDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    const result = await this.appointmentsService.createService(gymId, branchId, dto);
+    const result = await this.appointmentsService.createService(gymId, dto);
     this.notificationsGateway.emitServiceChanged(gymId, { action: 'created' });
     return result;
   }
@@ -116,21 +110,6 @@ export class AppointmentsController {
     return this.appointmentsService.getAvailability(trainerId, gymId);
   }
 
-  @Put('availability')
-  @Roles('admin', 'manager', 'trainer')
-  @UseGuards(ManagerPermissionsGuard)
-  @ManagerPermission('appointments', 'update')
-  @ApiOperation({ summary: 'Set/update trainer availability for a day' })
-  async setAvailability(
-    @Body() dto: SetAvailabilityDto,
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-    @UserId() userId: number,
-    @CurrentUserRole() userRole: string,
-  ) {
-    return this.appointmentsService.setAvailability(gymId, branchId, dto, userId, userRole);
-  }
-
   // ─── Appointments ───
 
   @Get('available-slots')
@@ -169,34 +148,33 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'List appointments with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: AppointmentFiltersDto,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
   ) {
-    return this.appointmentsService.findAllAppointments(gymId, branchId, filters, userId, userRole);
+    return this.appointmentsService.findAllAppointments(gymId, filters, userId, userRole);
   }
 
   @Post()
   @Roles('admin', 'manager', 'trainer', 'client')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'create')
   @ApiOperation({ summary: 'Book an appointment (checks trainer conflicts)' })
   async create(
     @Body() dto: CreateAppointmentDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @CurrentUserRole() userRole: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    const result = await this.appointmentsService.createAppointment(gymId, branchId, dto, userId, userRole);
+    const result = await this.appointmentsService.createAppointment(gymId, dto, userId, userRole, resolveEffectiveBranchId(req.user, undefined));
     this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'created' });
     return result;
   }
 
   @Patch(':id')
   @Roles('admin', 'manager', 'trainer')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update an appointment' })
   async update(
@@ -213,7 +191,7 @@ export class AppointmentsController {
 
   @Patch(':id/status')
   @Roles('admin', 'manager', 'trainer', 'client')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @ManagerPermission('appointments', 'update')
   @ApiOperation({ summary: 'Update appointment status (confirm, complete, cancel, no_show)' })
   async updateStatus(
@@ -226,63 +204,5 @@ export class AppointmentsController {
     const result = await this.appointmentsService.updateAppointmentStatus(id, gymId, dto, userId, userRole);
     this.notificationsGateway.emitAppointmentChanged(gymId, { action: 'status_changed' });
     return result;
-  }
-
-  // ─── Session Packages ───
-
-  @Get('packages')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'List session packages' })
-  async findAllPackages(
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.appointmentsService.findAllPackages(
-      gymId,
-      branchId,
-      page ? (parseInt(page, 10) || 1) : 1,
-      limit ? (parseInt(limit, 10) || 20) : 20,
-    );
-  }
-
-  @Post('packages')
-  @Roles('admin', 'manager')
-  @UseGuards(ManagerPermissionsGuard)
-  @ManagerPermission('appointments', 'create')
-  @ApiOperation({ summary: 'Create a session package' })
-  async createPackage(
-    @Body() dto: CreateSessionPackageDto,
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-  ) {
-    return this.appointmentsService.createPackage(gymId, branchId, dto);
-  }
-
-  @Get('packages/user/:userId')
-  @Roles('admin', 'manager', 'trainer', 'client')
-  @ApiOperation({ summary: 'Get session packages for a user' })
-  async getUserPackages(
-    @Param('userId', ParseIntPipe) userId: number,
-    @GymId() gymId: number,
-    @UserId() authUserId: number,
-    @CurrentUserRole() userRole: string,
-  ) {
-    return this.appointmentsService.getUserPackages(userId, gymId, authUserId, userRole);
-  }
-
-  // ─── Single Appointment ───
-
-  @Get(':id')
-  @Roles('admin', 'manager', 'trainer', 'client')
-  @ApiOperation({ summary: 'Get a single appointment by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-    @UserId() userId: number,
-    @CurrentUserRole() userRole: string,
-  ) {
-    return this.appointmentsService.findOneAppointment(id, gymId, userId, userRole);
   }
 }

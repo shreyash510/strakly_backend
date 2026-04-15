@@ -10,6 +10,8 @@ import {
   ParseIntPipe,
   UseGuards,
   Res,
+  Request,
+  Req,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -30,8 +32,6 @@ import {
   ProductFiltersDto,
   SalesFiltersDto,
   SalesStatsFiltersDto,
-  StockMovementFiltersDto,
-  SalesTrendFiltersDto,
   AllStockMovementsFiltersDto,
   BatchStockAdjustDto,
   StockTakeFiltersDto,
@@ -41,21 +41,20 @@ import {
 } from './dto/products.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-/* PlanFeaturesGuard removed – products/POS must work for ALL plans */
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-/* PlanFeatures decorator removed – no longer needed here */
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
-/* PLAN_FEATURES import removed – no longer needed here */
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { setPaginationHeaders } from '../common/pagination.util';
 
 @ApiTags('products')
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
-/* @PlanFeatures(PLAN_FEATURES.POS_RETAIL) removed – products available for all plans */
 @ApiBearerAuth()
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -67,24 +66,24 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all product categories' })
   findAllCategories(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.findAllCategories(gymId, branchId);
+    return this.productsService.findAllCategories(gymId);
   }
 
   @Post('categories')
   @Roles('admin', 'manager')
+  @ManagerPermission('products', 'create')
   @ApiOperation({ summary: 'Create product category' })
   createCategory(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductCategoryDto,
   ) {
-    return this.productsService.createCategory(gymId, branchId, dto);
+    return this.productsService.createCategory(gymId, dto);
   }
 
   @Patch('categories/:id')
   @Roles('admin', 'manager')
+  @ManagerPermission('products', 'update')
   @ApiOperation({ summary: 'Update product category' })
   @ApiParam({ name: 'id', type: Number })
   updateCategory(
@@ -97,6 +96,7 @@ export class ProductsController {
 
   @Delete('categories/:id')
   @Roles('admin')
+  @ManagerPermission('products', 'delete')
   @ApiOperation({ summary: 'Delete product category' })
   @ApiParam({ name: 'id', type: Number })
   removeCategory(
@@ -113,10 +113,19 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all product sales' })
   findAllSales(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesFiltersDto,
   ) {
-    return this.productsService.findAllSales(gymId, branchId, filters);
+    return this.productsService.findAllSales(gymId, filters);
+  }
+
+  @Get('sales/transactions')
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'List sales grouped by transaction (paymentId)' })
+  findSalesTransactions(
+    @GymId() gymId: number,
+    @Query() filters: SalesFiltersDto,
+  ) {
+    return this.productsService.findSalesTransactions(gymId, filters);
   }
 
   @Get('sales/stats')
@@ -124,69 +133,65 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get sales statistics' })
   getSalesStats(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: SalesStatsFiltersDto,
   ) {
-    return this.productsService.getSalesStats(gymId, branchId, filters);
-  }
-
-  @Get('sales/stats/trend')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sales trend data grouped by period' })
-  getSalesStatsTrend(
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-    @Query() filters: SalesTrendFiltersDto,
-  ) {
-    return this.productsService.getSalesStatsTrend(gymId, branchId, filters);
-  }
-
-  @Get('sales/:id')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sale by ID' })
-  @ApiParam({ name: 'id', type: Number })
-  findOneSale(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.productsService.findOneSale(id, gymId);
-  }
-
-  @Get('sales/:id/receipt')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get sale receipt with gym info and all items' })
-  @ApiParam({ name: 'id', type: Number })
-  getSaleReceipt(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-  ) {
-    return this.productsService.getSaleReceipt(id, gymId);
+    return this.productsService.getSalesStats(gymId, filters);
   }
 
   @Post('sales')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
-  @ManagerPermission('products', 'create')
+  @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductSaleDto,
   ) {
-    return this.productsService.createSale(gymId, branchId, dto, userId);
+    return this.productsService.createSale(gymId, dto, userId, branchId);
   }
 
   @Post('sales/batch')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
-  @ManagerPermission('products', 'create')
+  @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateBatchSaleDto,
   ) {
-    return this.productsService.createBatchSale(gymId, branchId, dto, userId);
+    return this.productsService.createBatchSale(gymId, dto, userId, branchId);
+  }
+
+  @Delete('sales/batch/:paymentId')
+  @UseGuards(RequireBranchGuard)
+  @Roles('admin', 'manager')
+  @ManagerPermission('productSales', 'delete')
+  @ApiOperation({ summary: 'Void all sales in a batch' })
+  @ApiParam({ name: 'paymentId', type: Number })
+  voidBatchSale(
+    @Param('paymentId', ParseIntPipe) paymentId: number,
+    @GymId() gymId: number,
+    @Request() req,
+  ) {
+    return this.productsService.voidBatchSale(paymentId, gymId, req.user.userId);
+  }
+
+  @Delete('sales/:id')
+  @UseGuards(RequireBranchGuard)
+  @Roles('admin', 'manager')
+  @ManagerPermission('productSales', 'delete')
+  @ApiOperation({ summary: 'Void a product sale' })
+  @ApiParam({ name: 'id', type: Number })
+  voidSale(
+    @Param('id', ParseIntPipe) id: number,
+    @GymId() gymId: number,
+    @Request() req,
+  ) {
+    return this.productsService.voidSale(id, gymId, req.user.userId);
   }
 
   /* ─── Cross-product Stock Movements ─── */
@@ -196,11 +201,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'List stock movements across all products' })
   async getAllStockMovements(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: AllStockMovementsFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.getAllStockMovements(gymId, branchId, filters);
+    const result = await this.productsService.getAllStockMovements(gymId, filters);
     const total = result.total;
     const page = result.page;
     const limit = result.limit;
@@ -220,11 +224,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'List all products' })
   async findAllProducts(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: ProductFiltersDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.productsService.findAllProducts(gymId, branchId, filters);
+    const result = await this.productsService.findAllProducts(gymId, filters);
     /* Set standard pagination headers */
     const total = result.total;
     const page = result.page;
@@ -242,32 +245,22 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get products with low stock' })
   findLowStockProducts(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.findLowStockProducts(gymId, branchId);
-  }
-
-  @Get('barcode/:barcode')
-  @Roles('admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Look up a product by barcode' })
-  @ApiParam({ name: 'barcode', type: String })
-  findByBarcode(
-    @Param('barcode') barcode: string,
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-  ) {
-    return this.productsService.findByBarcode(gymId, branchId, barcode);
+    return this.productsService.findLowStockProducts(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get('inventory/stats')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get inventory valuation and stock stats' })
   getInventoryStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getInventoryStats(gymId, branchId);
+    return this.productsService.getInventoryStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Batch Stock Adjustment ─── */
@@ -290,10 +283,11 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get reorder suggestions based on sales velocity' })
   getReorderSuggestions(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getReorderSuggestions(gymId, branchId);
+    return this.productsService.getReorderSuggestions(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Dead Stock ─── */
@@ -302,11 +296,12 @@ export class ProductsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get dead stock products with no recent sales' })
   getDeadStock(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query('days') days?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.productsService.getDeadStock(gymId, branchId, days ? parseInt(days) : 30);
+    return this.productsService.getDeadStock(gymId, days ? parseInt(days) : 30, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   /* ─── Stock Take (Physical Count) ─── */
@@ -317,11 +312,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Start a new stock take session' })
   startStockTake(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
     @Body() dto: StartStockTakeDto,
   ) {
-    return this.productsService.startStockTake(gymId, branchId, userId, dto);
+    return this.productsService.startStockTake(gymId, userId, dto);
   }
 
   @Get('inventory/stock-takes')
@@ -329,10 +323,9 @@ export class ProductsController {
   @ApiOperation({ summary: 'List stock take sessions' })
   getStockTakes(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: StockTakeFiltersDto,
   ) {
-    return this.productsService.getStockTakes(gymId, branchId, filters);
+    return this.productsService.getStockTakes(gymId, filters);
   }
 
   @Get('inventory/stock-takes/:id')
@@ -392,10 +385,10 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a product' })
   createProduct(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Body() dto: CreateProductDto,
+    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.productsService.createProduct(gymId, branchId, dto);
+    return this.productsService.createProduct(gymId, dto, branchId);
   }
 
   @Patch(':id')
@@ -423,19 +416,6 @@ export class ProductsController {
     @Body() dto: AdjustStockDto,
   ) {
     return this.productsService.adjustStock(id, gymId, dto, userId);
-  }
-
-  @Get(':id/stock-movements')
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Get stock movements for a product' })
-  @ApiParam({ name: 'id', type: Number })
-  getStockMovements(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
-    @Query() filters: StockMovementFiltersDto,
-  ) {
-    return this.productsService.getStockMovements(gymId, id, branchId, filters);
   }
 
   @Delete(':id')

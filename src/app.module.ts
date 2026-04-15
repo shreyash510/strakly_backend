@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -20,7 +20,6 @@ import { OffersModule } from './offers/offers.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { BodyMetricsModule } from './body-metrics/body-metrics.module';
 import { GymModule } from './gym/gym.module';
-import { BranchModule } from './branch/branch.module';
 import { SupportModule } from './support/support.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PublicModule } from './public/public.module';
@@ -47,6 +46,14 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { GuestVisitsModule } from './guest-visits/guest-visits.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { ProductsModule } from './products/products.module';
+import { MigrationModule } from './migration/migration.module';
+import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { BranchModule } from './branch/branch.module';
+import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
+import { BranchContextInterceptor } from './auth/interceptors/branch-context.interceptor';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { ActivityLogsService } from './activity-logs/activity-logs.service';
 
 // Health check
 import { HealthModule } from './health/health.module';
@@ -63,7 +70,7 @@ import { HealthModule } from './health/health.module';
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000,
-      limit: 100,
+      limit: 300,
     }]),
     HealthModule,
     DatabaseModule,
@@ -80,7 +87,6 @@ import { HealthModule } from './health/health.module';
     MembershipsModule,
     BodyMetricsModule,
     GymModule,
-    BranchModule,
     SupportModule,
     DashboardModule,
     PublicModule,
@@ -106,13 +112,29 @@ import { HealthModule } from './health/health.module';
     GuestVisitsModule,
     EquipmentModule,
     ProductsModule,
+    MigrationModule,
+    PlatformSettingsModule,
+    ExpensesModule,
+    BranchModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: BranchContextInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ActivityLogInterceptor,
     },
   ],
 })

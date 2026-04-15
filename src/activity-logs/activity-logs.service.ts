@@ -58,7 +58,6 @@ export class ActivityLogsService {
    */
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: ActivityLogFiltersDto = {},
   ) {
     const { page, limit, skip } = sanitizePagination(filters.page, filters.limit, 20);
@@ -70,11 +69,8 @@ export class ActivityLogsService {
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
-        // Branch filtering
-        if (branchId !== null) {
-          conditions.push(`branch_id = $${paramIndex++}`);
-          values.push(branchId);
-        }
+        // Only show manager and trainer activity logs
+        conditions.push(`actor_type IN ('manager', 'trainer')`);
 
         if (filters.actorId) {
           conditions.push(`actor_id = $${paramIndex++}`);
@@ -116,6 +112,11 @@ export class ActivityLogsService {
           values.push(new Date(filters.endDate));
         }
 
+        if (filters.branchId) {
+          conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+          values.push(filters.branchId);
+        }
+
         const whereClause =
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -150,14 +151,18 @@ export class ActivityLogsService {
     targetType: string,
     targetId: number,
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<ActivityLogRecord[]> {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 ORDER BY created_at DESC LIMIT 100`;
         const values: SqlValue[] = [targetType, targetId];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
 
+        const query = `SELECT * FROM activity_logs WHERE target_type = $1 AND target_id = $2 AND actor_type IN ('manager', 'trainer')${branchClause} ORDER BY created_at DESC LIMIT 100`;
         const result = await client.query(query, values);
         return result.rows;
       },
@@ -174,13 +179,21 @@ export class ActivityLogsService {
     actorType: string,
     gymId: number,
     limit = 50,
+    branchId?: number | null,
   ): Promise<ActivityLogRecord[]> {
     const logs = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const values: SqlValue[] = [actorId, actorType];
+        const branchClause = branchId
+          ? ` AND (branch_id = $3 OR branch_id IS NULL)`
+          : '';
+        if (branchId) values.push(branchId);
+        values.push(limit);
+
         const result = await client.query(
-          `SELECT * FROM activity_logs WHERE actor_id = $1 AND actor_type = $2 ORDER BY created_at DESC LIMIT $3`,
-          [actorId, actorType, limit],
+          `SELECT * FROM activity_logs WHERE actor_id = $1 AND actor_type = $2${branchClause} ORDER BY created_at DESC LIMIT $${values.length}`,
+          values,
         );
         return result.rows;
       },
@@ -201,15 +214,16 @@ export class ActivityLogsService {
       async (client) => {
         const result = await client.query(
           `INSERT INTO activity_logs (
-          branch_id, actor_id, actor_type, actor_name,
+          actor_id, actor_type, actor_name,
           action, action_category, target_type, target_id, target_name,
           description, old_values, new_values, metadata,
-          ip_address, user_agent, request_id, created_at
+          ip_address, user_agent, request_id, branch_id, created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          (SELECT branch_id FROM users WHERE id = $1),
+          NOW()
         ) RETURNING *`,
           [
-            dto.branchId || null,
             dto.actorId,
             dto.actorType,
             dto.actorName || null,
@@ -239,7 +253,6 @@ export class ActivityLogsService {
    */
   async logUserCreated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -248,7 +261,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -265,7 +277,6 @@ export class ActivityLogsService {
 
   async logUserUpdated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -275,7 +286,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -293,7 +303,6 @@ export class ActivityLogsService {
 
   async logMembershipCreated(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -303,7 +312,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -320,7 +328,6 @@ export class ActivityLogsService {
 
   async logAttendanceMarked(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -329,7 +336,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,
@@ -344,9 +350,60 @@ export class ActivityLogsService {
     );
   }
 
+  /**
+   * Get activity stats (counts by action, most active staff)
+   */
+  async getStats(
+    gymId: number,
+    branchId?: number,
+  ) {
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const staffFilter = `actor_type IN ('manager', 'trainer')`;
+      const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+
+      const [actionCountsResult, activeStaffResult, totalResult, todayResult] =
+        await Promise.all([
+          client.query(
+            `SELECT action_category, COUNT(*) as count
+             FROM activity_logs
+             WHERE ${staffFilter}${branchFilter}
+             GROUP BY action_category
+             ORDER BY count DESC
+             LIMIT 20`,
+          ),
+          client.query(
+            `SELECT actor_id, actor_name, actor_type, COUNT(*) as count
+             FROM activity_logs
+             WHERE ${staffFilter}${branchFilter}
+             GROUP BY actor_id, actor_name, actor_type
+             ORDER BY count DESC
+             LIMIT 10`,
+          ),
+          client.query(`SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}${branchFilter}`),
+          client.query(
+            `SELECT COUNT(*) as count FROM activity_logs WHERE ${staffFilter}${branchFilter} AND created_at >= CURRENT_DATE`,
+          ),
+        ]);
+
+      return {
+        totalLogs: parseInt(totalResult.rows[0]?.count || '0', 10),
+        todayLogs: parseInt(todayResult.rows[0]?.count || '0', 10),
+        actionCounts: actionCountsResult.rows.map((r: Record<string, any>) => ({
+          category: r.action_category,
+          count: parseInt(r.count, 10),
+        })),
+        activeStaff: activeStaffResult.rows.map((r: Record<string, any>) => ({
+          actorId: r.actor_id,
+          actorName: r.actor_name,
+          actorType: r.actor_type,
+          count: parseInt(r.count, 10),
+        })),
+      };
+    });
+  }
+
   async logPaymentReceived(
     gymId: number,
-    branchId: number | null,
     actorId: number,
     actorType: string,
     actorName: string,
@@ -356,7 +413,6 @@ export class ActivityLogsService {
   ): Promise<ActivityLogRecord> {
     return this.log(
       {
-        branchId: branchId || undefined,
         actorId,
         actorType,
         actorName,

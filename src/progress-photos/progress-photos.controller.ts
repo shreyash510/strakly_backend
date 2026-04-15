@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
   Delete,
   Body,
   Param,
@@ -17,14 +16,15 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ProgressPhotosService } from './progress-photos.service';
 import {
   CreateProgressPhotoDto,
-  UpdateProgressPhotoDto,
   PhotoFiltersDto,
 } from './dto/progress-photo.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GymId } from '../common/decorators/gym-id.decorator';
 import { UserId, CurrentUserRole } from '../common/decorators/user-id.decorator';
+import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 
 @ApiTags('progress-photos')
@@ -35,6 +35,7 @@ export class ProgressPhotosController {
   constructor(private readonly progressPhotosService: ProgressPhotosService) {}
 
   @Post('upload')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager', 'trainer')
   @ApiOperation({ summary: 'Upload a progress photo' })
   @ApiConsumes('multipart/form-data')
@@ -57,11 +58,12 @@ export class ProgressPhotosController {
     @Body() dto: CreateProgressPhotoDto,
     @GymId() gymId: number,
     @UserId() userId: number,
+    @OptionalBranchId() branchId: number | null,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
-    return this.progressPhotosService.upload(file, gymId, dto, userId);
+    return this.progressPhotosService.upload(file, gymId, dto, userId, branchId);
   }
 
   @Get('user/:userId')
@@ -87,29 +89,8 @@ export class ProgressPhotosController {
     return this.progressPhotosService.findMyPhotos(userId, gymId, filters);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a progress photo by ID' })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @GymId() gymId: number,
-    @UserId() requesterId: number,
-    @CurrentUserRole() requesterRole: string,
-  ) {
-    return this.progressPhotosService.findOne(id, gymId, requesterId, requesterRole);
-  }
-
-  @Patch(':id')
-  @Roles('admin', 'manager', 'trainer')
-  @ApiOperation({ summary: 'Update progress photo metadata' })
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateProgressPhotoDto,
-    @GymId() gymId: number,
-  ) {
-    return this.progressPhotosService.update(id, gymId, dto);
-  }
-
   @Delete(':id')
+  @UseGuards(RequireBranchGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Soft delete a progress photo' })
   async remove(

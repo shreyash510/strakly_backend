@@ -39,17 +39,19 @@ export class ReportsService {
   async getIncomeExpenseReport(
     gymId: number,
     filters: ReportFilterDto,
-    branchId: number | null = null,
   ): Promise<IncomeExpenseReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
+    const branchId = filters.branchId;
+    const membershipBranchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+    const productBranchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
     // Get membership income
     const membershipIncome = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        let whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -79,7 +81,7 @@ export class ReportsService {
     const productSalesIncome = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `(is_deleted = FALSE OR is_deleted IS NULL)`;
+        let whereClause = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -142,8 +144,8 @@ export class ReportsService {
     const incomeByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM sold_at) = $1`;
+        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter} AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter} AND EXTRACT(YEAR FROM sold_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -197,8 +199,8 @@ export class ReportsService {
     const incomeByPaymentMethod = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
-        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM sold_at) = $1`;
+        const membershipWhere = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter} AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const productWhere = `(is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter} AND EXTRACT(YEAR FROM sold_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -254,17 +256,18 @@ export class ReportsService {
   async getMembershipSalesReport(
     gymId: number,
     filters: ReportFilterDto,
-    branchId: number | null = null,
   ): Promise<MembershipSalesReportDto> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
     const month = filters.month;
+    const branchId = filters.branchId;
+    const branchFilter = branchId ? ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)` : '';
 
     // Get sales summary
     const salesSummary = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
+        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -297,7 +300,7 @@ export class ReportsService {
     const salesByPlan = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
+        let whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -346,7 +349,8 @@ export class ReportsService {
     const salesByMonth = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND EXTRACT(YEAR FROM paid_at) = $1`;
+        const branchClause = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+        const whereClause = `payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchClause} AND EXTRACT(YEAR FROM paid_at) = $1`;
         const values: SqlValue[] = [year];
 
         const result = await client.query(
@@ -392,7 +396,7 @@ export class ReportsService {
 
   async getPaymentDuesReport(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<PaymentDuesReportDto> {
     // Get membership dues (pending payments)
     const membershipDues = await this.tenantService.executeInTenant(
@@ -412,6 +416,9 @@ export class ReportsService {
           WHERE m.payment_status = 'pending' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
+        if (branchId) {
+          query += ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)`;
+        }
         query += ` ORDER BY m.created_at ASC`;
 
         const result = await client.query(query, values);
@@ -495,11 +502,47 @@ export class ReportsService {
 
   async getDeletedTransactions(
     gymId: number,
-    branchId: number | null = null,
+    filters?: { month?: number; year?: number; branchId?: number },
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const branchFilter = '';
-      const productBranchFilter = '';
+      const branchFilter = filters?.branchId ? ` AND (m.branch_id = ${filters.branchId} OR m.branch_id IS NULL)` : '';
+      const productBranchFilter = filters?.branchId ? ` AND (ps.branch_id = ${filters.branchId} OR ps.branch_id IS NULL)` : '';
+
+      // Build date filter conditions
+      const membershipDateConditions: string[] = [];
+      const membershipDateValues: SqlValue[] = [];
+      const productDateConditions: string[] = [];
+      const productDateValues: SqlValue[] = [];
+      const voidedDateConditions: string[] = [];
+      const voidedDateValues: SqlValue[] = [];
+
+      if (filters?.month) {
+        membershipDateConditions.push(`EXTRACT(MONTH FROM m.deleted_at) = $PARAM`);
+        membershipDateValues.push(filters.month);
+        productDateConditions.push(`EXTRACT(MONTH FROM ps.deleted_at) = $PARAM`);
+        productDateValues.push(filters.month);
+        voidedDateConditions.push(`EXTRACT(MONTH FROM mh.archived_at) = $PARAM`);
+        voidedDateValues.push(filters.month);
+      }
+      if (filters?.year) {
+        membershipDateConditions.push(`EXTRACT(YEAR FROM m.deleted_at) = $PARAM`);
+        membershipDateValues.push(filters.year);
+        productDateConditions.push(`EXTRACT(YEAR FROM ps.deleted_at) = $PARAM`);
+        productDateValues.push(filters.year);
+        voidedDateConditions.push(`EXTRACT(YEAR FROM mh.archived_at) = $PARAM`);
+        voidedDateValues.push(filters.year);
+      }
+
+      // Build parameterized WHERE clauses
+      const membershipDateFilter = membershipDateConditions.length > 0
+        ? ' AND ' + membershipDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
+      const productDateFilter = productDateConditions.length > 0
+        ? ' AND ' + productDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
+      const voidedDateFilter = voidedDateConditions.length > 0
+        ? ' AND ' + voidedDateConditions.map((c, i) => c.replace('$PARAM', `$${i + 1}`)).join(' AND ')
+        : '';
 
       // Deleted memberships
       const membershipsResult = await client.query(
@@ -518,9 +561,10 @@ export class ReportsService {
         LEFT JOIN plans p ON p.id = m.plan_id
         LEFT JOIN public.users pub_del ON pub_del.id = m.deleted_by
         LEFT JOIN users del ON del.id = m.deleted_by
-        WHERE m.is_deleted = TRUE${branchFilter}
+        WHERE m.is_deleted = TRUE${branchFilter}${membershipDateFilter}
         ORDER BY m.deleted_at DESC
         LIMIT 100`,
+        membershipDateValues,
       );
 
       // Deleted product sales
@@ -540,9 +584,31 @@ export class ReportsService {
         LEFT JOIN products pr ON pr.id = ps.product_id
         LEFT JOIN public.users pub_del ON pub_del.id = COALESCE(ps.deleted_by, ps.sold_by)
         LEFT JOIN users del ON del.id = COALESCE(ps.deleted_by, ps.sold_by)
-        WHERE ps.is_deleted = TRUE${productBranchFilter}
+        WHERE ps.is_deleted = TRUE${productBranchFilter}${productDateFilter}
         ORDER BY ps.deleted_at DESC
         LIMIT 100`,
+        productDateValues,
+      );
+
+      // Voided memberships from membership_history
+      const voidedMembershipsResult = await client.query(
+        `SELECT
+          mh.id,
+          'voided_membership' as type,
+          u.name as client_name,
+          p.name as plan_name,
+          mh.final_amount as amount,
+          mh.payment_method,
+          mh.paid_at,
+          mh.archived_at as deleted_at,
+          NULL as deleted_by_name
+        FROM membership_history mh
+        LEFT JOIN users u ON u.id = mh.user_id
+        LEFT JOIN plans p ON p.id = mh.plan_id
+        WHERE mh.archive_reason = 'void_deleted'${voidedDateFilter}
+        ORDER BY mh.archived_at DESC
+        LIMIT 100`,
+        voidedDateValues,
       );
 
       const deletedMemberships = membershipsResult.rows.map((r: Record<string, any>) => ({
@@ -554,6 +620,17 @@ export class ReportsService {
         originalDate: r.paid_at,
         deletedAt: r.deleted_at,
         deletedBy: r.deleted_by_name || 'Unknown',
+      }));
+
+      const voidedMemberships = voidedMembershipsResult.rows.map((r: Record<string, any>) => ({
+        id: r.id,
+        type: r.type,
+        description: r.plan_name ? `${r.plan_name} - ${r.client_name}` : r.client_name,
+        amount: parseFloat(r.amount || 0),
+        paymentMethod: r.payment_method,
+        originalDate: r.paid_at,
+        deletedAt: r.deleted_at,
+        deletedBy: 'System',
       }));
 
       const deletedProductSales = productSalesResult.rows.map((r: Record<string, any>) => ({
@@ -568,7 +645,7 @@ export class ReportsService {
       }));
 
       // Combine and sort by deletion date
-      const allDeleted = [...deletedMemberships, ...deletedProductSales]
+      const allDeleted = [...deletedMemberships, ...voidedMemberships, ...deletedProductSales]
         .sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 
       return {
@@ -576,6 +653,7 @@ export class ReportsService {
         summary: {
           totalDeletedAmount: allDeleted.reduce((sum, t) => sum + t.amount, 0),
           deletedMemberships: deletedMemberships.length,
+          voidedMemberships: voidedMemberships.length,
           deletedProductSales: deletedProductSales.length,
         },
       };
@@ -589,16 +667,18 @@ export class ReportsService {
   async getDailySalesReport(
     gymId: number,
     date: string,
-    branchId: number | null = null,
+    branchId?: number | null,
   ) {
     const dayStart = `${date} 00:00:00`;
     const dayEnd = `${date} 23:59:59.999`;
+    const membershipBranchClause = branchId ? ` AND (m.branch_id = ${branchId} OR m.branch_id IS NULL)` : '';
+    const productBranchClause = branchId ? ` AND (ps.branch_id = ${branchId} OR ps.branch_id IS NULL)` : '';
 
     // 1. Get membership payments for the day
     const membershipSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL) AND m.paid_at >= $1 AND m.paid_at <= $2`;
+        const whereClause = `m.payment_status = 'paid' AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)${membershipBranchClause} AND m.paid_at >= $1 AND m.paid_at <= $2`;
         const values: SqlValue[] = [dayStart, dayEnd];
 
         const result = await client.query(
@@ -632,7 +712,7 @@ export class ReportsService {
     const productSales = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const whereClause = `(ps.is_deleted = FALSE OR ps.is_deleted IS NULL) AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
+        const whereClause = `(ps.is_deleted = FALSE OR ps.is_deleted IS NULL)${productBranchClause} AND ps.sold_at >= $1 AND ps.sold_at <= $2`;
         const values: SqlValue[] = [dayStart, dayEnd];
 
         const result = await client.query(
@@ -790,7 +870,6 @@ export class ReportsService {
     clientId: number,
     gymId: number,
     filters?: ClientReportFilterDto,
-    branchId?: number | null,
   ): Promise<ClientProgressReportDto> {
     // Verify trainer has access to this client
     const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
@@ -931,7 +1010,6 @@ export class ReportsService {
     clientId: number,
     gymId: number,
     filters?: ClientReportFilterDto,
-    branchId?: number | null,
   ): Promise<ClientAttendanceReportDto> {
     // Verify trainer has access to this client
     const { clientName, clientEmail } = await this.verifyTrainerClientAccess(
@@ -1100,7 +1178,6 @@ export class ReportsService {
   async getTrainerClientsSummary(
     trainerId: number,
     gymId: number,
-    branchId?: number | null,
   ): Promise<TrainerClientsSummaryDto> {
     const summary = await this.tenantService.executeInTenant(
       gymId,
@@ -1327,7 +1404,6 @@ export class ReportsService {
   async getFullReportData(
     gymId: number,
     filters: PdfReportFilterDto,
-    branchId: number | null = null,
   ): Promise<FullReportData> {
     const currentDate = new Date();
     const year = filters.year || currentDate.getFullYear();
@@ -1353,14 +1429,14 @@ export class ReportsService {
       gymInfo,
       branchName,
     ] = await Promise.all([
-      this.getIncomeExpenseReport(gymId, reportFilters, branchId),
-      this.getMembershipSalesReport(gymId, reportFilters, branchId),
-      this.getPaymentDuesReport(gymId, branchId),
-      this.attendanceService.getReports(gymId, branchId, startDate, endDate),
-      this.getDashboardSummary(gymId, branchId, year, month),
-      this.getTrainerStaffReport(gymId, year, branchId),
+      this.getIncomeExpenseReport(gymId, reportFilters),
+      this.getMembershipSalesReport(gymId, reportFilters),
+      this.getPaymentDuesReport(gymId),
+      this.attendanceService.getReports(gymId, startDate, endDate),
+      this.getDashboardSummary(gymId, year, month),
+      this.getTrainerStaffReport(gymId, year),
       this.getGymInfo(gymId),
-      this.getBranchName(gymId, branchId),
+      this.getBranchName(gymId),
     ]);
 
     return {
@@ -1379,28 +1455,27 @@ export class ReportsService {
 
   private async getDashboardSummary(
     gymId: number,
-    branchId: number | null,
     year: number,
     month?: number,
   ): Promise<DashboardSummary> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Active members
+      // Active clients
       const activeMembersResult = await client.query(
-        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`,
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       );
 
-      // New members this month
+      // New clients this month
       const firstOfMonth = new Date(year, (month || new Date().getMonth() + 1) - 1, 1)
         .toISOString()
         .split('T')[0];
       const newMembersResult = await client.query(
-        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND created_at >= $1`,
+        `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL) AND created_at >= $1`,
         [firstOfMonth],
       );
 
       // Expired memberships
       const expiredResult = await client.query(
-        `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired'`,
+        `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       );
 
       // Monthly revenue
@@ -1442,10 +1517,9 @@ export class ReportsService {
   private async getTrainerStaffReport(
     gymId: number,
     year: number,
-    branchId: number | null,
   ): Promise<TrainerStaffReportItem[]> {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const whereClause = `u.role IN ('trainer', 'manager')`;
+      const whereClause = `u.role IN ('trainer', 'manager') AND (u.is_deleted = FALSE OR u.is_deleted IS NULL)`;
       const values: SqlValue[] = [year];
 
       const result = await client.query(
@@ -1482,6 +1556,7 @@ export class ReportsService {
         address: true,
         city: true,
         state: true,
+        currency: true,
       },
     });
 
@@ -1494,21 +1569,14 @@ export class ReportsService {
       address: gym?.address || null,
       city: gym?.city || null,
       state: gym?.state || null,
+      currency: gym?.currency || 'USD',
     };
   }
 
   private async getBranchName(
     gymId: number,
-    branchId: number | null,
   ): Promise<string | null> {
-    if (branchId === null) return null;
-
-    const branch = await this.prisma.branch.findFirst({
-      where: { id: branchId, gymId },
-      select: { name: true },
-    });
-
-    return branch?.name || null;
+    return null;
   }
 
   private getMonthName(month: number): string {

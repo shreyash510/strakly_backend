@@ -27,12 +27,14 @@ import {
   CancelMembershipDto,
   FreezeMembershipDto,
   RenewMembershipDto,
-  RecordPaymentDto,
+  UpdateMembershipFacilitiesDto,
 } from './dto/membership.dto';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -46,18 +48,6 @@ export class MembershipsController {
     private readonly membershipsService: MembershipsService,
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
-
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
 
   @Get()
   @UseGuards(RolesGuard)
@@ -84,12 +74,6 @@ export class MembershipsController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('status') status?: string,
@@ -99,8 +83,8 @@ export class MembershipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
-  ) {
+    @Query('branchId') branchId?: string,
+  ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
         ? queryGymId
@@ -112,15 +96,14 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    const branchId = this.resolveBranchId(req, queryBranchId);
-
-    return this.membershipsService.findAll(gymId, branchId, {
+    return this.membershipsService.findAll(gymId, {
       status,
       userId: clientId ? parseInt(clientId) : undefined,
       planId: planId ? parseInt(planId) : undefined,
       search,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
+      branchId: resolveEffectiveBranchId(req.user, branchId),
     });
   }
 
@@ -128,15 +111,11 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership statistics' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  getStats(@Request() req: AuthenticatedRequest, @Query('branchId') queryBranchId?: string) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.getStats(req.user.gymId!, branchId);
+  getStats(
+    @Request() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
+  ): Promise<any> {
+    return this.membershipsService.getStats(req.user.gymId!, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('overview')
@@ -151,17 +130,11 @@ export class MembershipsController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   getOverview(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
-  ) {
+    @Query('branchId') branchId?: string,
+  ): Promise<any> {
     const gymId =
       req.user.role === 'superadmin'
         ? queryGymId
@@ -173,8 +146,7 @@ export class MembershipsController {
       throw new BadRequestException('gymId is required');
     }
 
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.getOverview(gymId, branchId);
+    return this.membershipsService.getOverview(gymId, resolveEffectiveBranchId(req.user, branchId));
   }
 
   @Get('expiring')
@@ -182,21 +154,12 @@ export class MembershipsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get memberships expiring soon' })
   @ApiQuery({ name: 'days', required: false, type: Number })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   getExpiringSoon(
     @Request() req: AuthenticatedRequest,
     @Query('days') days?: string,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
+  ): Promise<any> {
     return this.membershipsService.getExpiringSoon(
       req.user.gymId!,
-      branchId,
       days ? parseInt(days) : 7,
     );
   }
@@ -211,29 +174,20 @@ export class MembershipsController {
     type: Number,
     description: 'Client user ID',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getHistory(
     @Request() req: AuthenticatedRequest,
     @Query('clientId') clientId?: string,
-    @Query('branchId') queryBranchId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-  ) {
+  ): Promise<any> {
     if (!clientId) {
       throw new BadRequestException('clientId query parameter is required');
     }
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.getHistory(
       parseInt(clientId),
       req.user.gymId!,
-      branchId,
       {
         page: page ? parseInt(page) : undefined,
         limit: limit ? parseInt(limit) : undefined,
@@ -241,31 +195,42 @@ export class MembershipsController {
     );
   }
 
+  @Get('audit-log')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Get membership audit log from membership_history table' })
+  @ApiQuery({ name: 'clientId', required: true, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getAuditLog(
+    @Request() req: AuthenticatedRequest,
+    @Query('clientId') clientId?: string,
+    @Query('limit') limit?: string,
+  ): Promise<any> {
+    if (!clientId) {
+      throw new BadRequestException('clientId query parameter is required');
+    }
+    return this.membershipsService.getAuditLog(
+      parseInt(clientId),
+      req.user.gymId!,
+      limit ? parseInt(limit) : 50,
+    );
+  }
+
   // ============ CURRENT USER ENDPOINTS ============
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user memberships' })
-  getMyMemberships(@Request() req: AuthenticatedRequest) {
+  getMyMemberships(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.findByUser(
       req.user.userId,
       req.user.gymId!,
-      req.user.branchId,
     );
   }
 
   @Get('me/active')
   @ApiOperation({ summary: 'Get current user active membership' })
-  getMyActiveMembership(@Request() req: AuthenticatedRequest) {
+  getMyActiveMembership(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getActiveMembership(
-      req.user.userId,
-      req.user.gymId!,
-    );
-  }
-
-  @Get('me/status')
-  @ApiOperation({ summary: 'Check current user membership status' })
-  checkMyStatus(@Request() req: AuthenticatedRequest) {
-    return this.membershipsService.checkMembershipStatus(
       req.user.userId,
       req.user.gymId!,
     );
@@ -275,7 +240,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Get facilities for current user active membership',
   })
-  async getMyFacilities(@Request() req: AuthenticatedRequest) {
+  async getMyFacilities(@Request() req: AuthenticatedRequest): Promise<any> {
     const activeMembership = await this.membershipsService.getActiveMembership(
       req.user.userId,
       req.user.gymId!,
@@ -290,12 +255,12 @@ export class MembershipsController {
   }
 
   @Post('me/renew')
+  @UseGuards(RequireBranchGuard)
   @ApiOperation({ summary: 'Renew current user membership' })
-  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto) {
+  async renewMyMembership(@Request() req: AuthenticatedRequest, @Body() dto: RenewMembershipDto): Promise<any> {
     const result = await this.membershipsService.renew(
       req.user.userId,
       req.user.gymId!,
-      req.user.branchId,
       dto,
     );
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
@@ -313,23 +278,14 @@ export class MembershipsController {
     required: true,
     description: 'Target user ID',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findByUser(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
-    @Query('branchId') queryBranchId?: string,
-  ) {
+  ): Promise<any> {
     if (!userId) throw new BadRequestException('x-user-id header is required');
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.membershipsService.findByUser(
       parseInt(userId),
       req.user.gymId!,
-      branchId,
     );
   }
 
@@ -345,62 +301,12 @@ export class MembershipsController {
   getActiveMembership(
     @Request() req: AuthenticatedRequest,
     @Headers('x-user-id') userId: string,
-  ) {
+  ): Promise<any> {
     if (!userId) throw new BadRequestException('x-user-id header is required');
     return this.membershipsService.getActiveMembership(
       parseInt(userId),
       req.user.gymId!,
     );
-  }
-
-  @Get('user/status')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Check membership status for a user' })
-  @ApiHeader({
-    name: 'x-user-id',
-    required: true,
-    description: 'Target user ID',
-  })
-  checkStatus(@Request() req: AuthenticatedRequest, @Headers('x-user-id') userId: string) {
-    if (!userId) throw new BadRequestException('x-user-id header is required');
-    return this.membershipsService.checkMembershipStatus(
-      parseInt(userId),
-      req.user.gymId!,
-    );
-  }
-
-  @Post('user/renew')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Renew membership for a user' })
-  @ApiHeader({
-    name: 'x-user-id',
-    required: true,
-    description: 'Target user ID',
-  })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
-  async renew(
-    @Request() req: AuthenticatedRequest,
-    @Headers('x-user-id') userId: string,
-    @Body() dto: RenewMembershipDto,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    if (!userId) throw new BadRequestException('x-user-id header is required');
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    const result = await this.membershipsService.renew(
-      parseInt(userId),
-      req.user.gymId!,
-      branchId,
-      dto,
-    );
-    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'renewed' });
-    return result;
   }
 
   // ============ LOOKUP ENDPOINTS (must be before :id to avoid route shadowing) ============
@@ -409,7 +315,7 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get cancellation reasons' })
-  async getCancellationReasons(@Request() req: AuthenticatedRequest) {
+  async getCancellationReasons(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getCancellationReasons(req.user.gymId!);
   }
 
@@ -419,19 +325,11 @@ export class MembershipsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get membership by ID' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findOne(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.membershipsService.findOne(id, req.user.gymId!, branchId);
+  ): Promise<any> {
+    return this.membershipsService.findOne(id, req.user.gymId!);
   }
 
   @Get(':id/facilities')
@@ -441,7 +339,7 @@ export class MembershipsController {
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.getMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
@@ -449,14 +347,14 @@ export class MembershipsController {
   }
 
   @Patch(':id/facilities')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update facilities and amenities for a membership' })
   async updateMembershipFacilities(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { facilityIds?: number[]; amenityIds?: number[] },
-  ) {
+    @Body() dto: UpdateMembershipFacilitiesDto,
+  ): Promise<any> {
     const result = await this.membershipsService.updateMembershipFacilitiesAndAmenities(
       id,
       req.user.gymId!,
@@ -468,33 +366,26 @@ export class MembershipsController {
   }
 
   @Post()
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'create')
   @ApiOperation({ summary: 'Create a new membership' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for the membership (admin only)',
-  })
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateMembershipDto,
-    @Query('branchId') queryBranchId?: string,
-  ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    const result = await this.membershipsService.create(dto, req.user.gymId!, branchId, {
+  ): Promise<any> {
+    const result = await this.membershipsService.create(dto, req.user.gymId!, {
       id: req.user.userId,
       name: req.user.name || req.user.email,
       role: req.user.role,
+      branchId: resolveEffectiveBranchId(req.user, undefined),
     });
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'created' });
     return result;
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Update a membership' })
@@ -502,33 +393,14 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMembershipDto,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.update(id, req.user.gymId!, dto);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'updated' });
     return result;
   }
 
-  @Post(':id/payment')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Record payment for a membership' })
-  async recordPayment(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: RecordPaymentDto,
-  ) {
-    const result = await this.membershipsService.recordPayment(
-      id,
-      req.user.gymId!,
-      dto,
-      req.user.userId,
-    );
-    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'payment_recorded' });
-    return result;
-  }
-
   @Post(':id/cancel')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('subscriptions', 'update')
   @ApiOperation({ summary: 'Cancel a membership' })
@@ -536,14 +408,27 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelMembershipDto,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.cancel(id, req.user.gymId!, dto);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'cancelled' });
     return result;
   }
 
+  @Delete(':id/void')
+  @UseGuards(RequireBranchGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'Permanently delete a membership and its related data' })
+  async voidDelete(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<any> {
+    const result = await this.membershipsService.voidDelete(id, req.user.gymId!);
+    this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'voided' });
+    return result;
+  }
+
   @Delete(':id')
-  @UseGuards(RolesGuard, ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
   @Roles('admin')
   @ManagerPermission('subscriptions', 'delete')
   @ApiOperation({ summary: 'Delete a membership' })
@@ -557,32 +442,32 @@ export class MembershipsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Query('force') force?: string,
-  ) {
+  ): Promise<any> {
     const result = await this.membershipsService.delete(id, req.user.gymId!, force === 'true', req.user.userId);
     this.notificationsGateway.emitMembershipChanged(req.user.gymId!, { action: 'deleted' });
     return result;
   }
 
   @Post(':id/freeze')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Freeze a membership' })
   async freeze(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: FreezeMembershipDto,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.freeze(id, req.user.gymId!, dto, req.user.userId);
   }
 
   @Post(':id/unfreeze')
-  @UseGuards(RolesGuard)
+  @UseGuards(RequireBranchGuard, RolesGuard)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Unfreeze a membership' })
   async unfreeze(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.unfreeze(id, req.user.gymId!);
   }
 
@@ -593,7 +478,7 @@ export class MembershipsController {
   async getFreezeHistory(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-  ) {
+  ): Promise<any> {
     return this.membershipsService.getFreezeHistory(id, req.user.gymId!);
   }
 

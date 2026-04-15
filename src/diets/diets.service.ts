@@ -27,13 +27,13 @@ export class DietsService {
         await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."diets" (
           id SERIAL PRIMARY KEY,
-          branch_id INTEGER,
           title VARCHAR(255) NOT NULL,
           type VARCHAR(50) NOT NULL,
           description TEXT,
           category VARCHAR(100) NOT NULL,
           content TEXT NOT NULL,
           status VARCHAR(50) DEFAULT 'draft',
+          branch_id INTEGER,
           created_by INTEGER NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -42,18 +42,13 @@ export class DietsService {
 
         // Add branch_id column if it doesn't exist (for existing tables)
         await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schemaName}' AND table_name = 'diets' AND column_name = 'branch_id') THEN
-            ALTER TABLE "${schemaName}"."diets" ADD COLUMN branch_id INTEGER;
-          END IF;
-        END $$;
-      `);
+          ALTER TABLE "${schemaName}"."diets" ADD COLUMN IF NOT EXISTS branch_id INTEGER
+        `);
 
         // Create diet_assignments (xref) table
         await client.query(`
         CREATE TABLE IF NOT EXISTS "${schemaName}"."diet_assignments" (
           id SERIAL PRIMARY KEY,
-          branch_id INTEGER,
           diet_id INTEGER NOT NULL REFERENCES "${schemaName}"."diets"(id) ON DELETE CASCADE,
           user_id INTEGER NOT NULL REFERENCES "${schemaName}"."users"(id) ON DELETE CASCADE,
           assigned_by INTEGER NOT NULL,
@@ -63,15 +58,6 @@ export class DietsService {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-      `);
-
-        // Add branch_id column to diet_assignments if it doesn't exist (for existing tables)
-        await client.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = '${schemaName}' AND table_name = 'diet_assignments' AND column_name = 'branch_id') THEN
-            ALTER TABLE "${schemaName}"."diet_assignments" ADD COLUMN branch_id INTEGER;
-          END IF;
-        END $$;
       `);
 
         // Create indexes
@@ -109,7 +95,7 @@ export class DietsService {
       search?: string;
       page?: number;
       limit?: number;
-      branchId?: number | null;
+      branchId?: number;
     },
   ) {
     await this.ensureTablesExist(gymId);
@@ -124,12 +110,6 @@ export class DietsService {
         let whereClause = '1=1';
         const values: SqlValue[] = [];
         let paramIndex = 1;
-
-        // Branch filtering
-        if (filters?.branchId !== undefined && filters.branchId !== null) {
-          whereClause += ` AND d.branch_id = $${paramIndex++}`;
-          values.push(filters.branchId);
-        }
 
         if (filters?.status && filters.status !== 'all') {
           whereClause += ` AND d.status = $${paramIndex++}`;
@@ -147,6 +127,11 @@ export class DietsService {
           whereClause += ` AND (d.title ILIKE $${paramIndex} OR d.description ILIKE $${paramIndex})`;
           values.push(`%${filters.search}%`);
           paramIndex++;
+        }
+
+        if (filters?.branchId) {
+          whereClause += ` AND (d.branch_id = $${paramIndex++} OR d.branch_id IS NULL)`;
+          values.push(filters.branchId);
         }
 
         const [dietsResult, countResult] = await Promise.all([
@@ -180,20 +165,14 @@ export class DietsService {
   /**
    * Find a single diet by ID
    */
-  async findOne(id: number, gymId: number, branchId?: number | null) {
+  async findOne(id: number, gymId: number) {
     await this.ensureTablesExist(gymId);
 
     const diet = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT d.* FROM diets d WHERE d.id = $1`;
+        const query = `SELECT d.* FROM diets d WHERE d.id = $1`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          query += ` AND d.branch_id = $2`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -222,11 +201,10 @@ export class DietsService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO diets (branch_id, title, type, description, category, content, status, created_by, created_at, updated_at)
+          `INSERT INTO diets (title, type, description, category, content, status, created_by, branch_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
          RETURNING *`,
           [
-            branchId ?? null,
             dto.title,
             dto.type,
             dto.description || null,
@@ -234,6 +212,7 @@ export class DietsService {
             dto.content,
             dto.status || 'active',
             userId,
+            branchId ?? null,
           ],
         );
         return result.rows[0];
@@ -315,7 +294,6 @@ export class DietsService {
     dto: AssignDietDto,
     gymId: number,
     assignedBy: number,
-    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
 
@@ -343,11 +321,10 @@ export class DietsService {
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Insert the assignment
         const assignmentResult = await client.query(
-          `INSERT INTO diet_assignments (branch_id, diet_id, user_id, assigned_by, assigned_at, status, notes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), 'active', $5, NOW(), NOW())
+          `INSERT INTO diet_assignments (diet_id, user_id, assigned_by, assigned_at, status, notes, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), 'active', $4, NOW(), NOW())
          RETURNING *`,
           [
-            branchId ?? null,
             dto.dietId,
             dto.userId,
             assignedBy,
@@ -391,7 +368,6 @@ export class DietsService {
   async getDietAssignments(
     dietId: number,
     gymId: number,
-    branchId?: number | null,
   ) {
     await this.ensureTablesExist(gymId);
     await this.findOne(dietId, gymId); // Verify diet exists
@@ -399,15 +375,8 @@ export class DietsService {
     const assignments = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
+        const whereClause = `da.diet_id = $1 AND da.status != 'cancelled'`;
         const values: SqlValue[] = [dietId];
-        let paramIndex = 2;
-
-        // Branch filtering
-        if (branchId !== null && branchId !== undefined) {
-          whereClause += ` AND da.branch_id = $${paramIndex++}`;
-          values.push(branchId);
-        }
 
         const result = await client.query(
           `SELECT da.*, d.title as diet_title, d.type as diet_type, d.category as diet_category,
@@ -658,7 +627,6 @@ export class DietsService {
   private formatDiet(d: Record<string, any>) {
     return {
       id: d.id,
-      branchId: d.branch_id,
       title: d.title,
       type: d.type,
       description: d.description,
@@ -679,7 +647,6 @@ export class DietsService {
   ) {
     return {
       id: assignment.id,
-      branchId: assignment.branch_id,
       dietId: diet.id,
       dietTitle: diet.title,
       dietType: diet.type,

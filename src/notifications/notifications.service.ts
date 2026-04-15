@@ -50,7 +50,6 @@ export class NotificationsService {
         await client.query(`
           CREATE TABLE IF NOT EXISTS notifications (
             id SERIAL PRIMARY KEY,
-            branch_id INTEGER,
             user_id INTEGER NOT NULL,
             type VARCHAR(50) NOT NULL,
             title VARCHAR(255) NOT NULL,
@@ -88,12 +87,11 @@ export class NotificationsService {
         const result = await client.query(
           `
         INSERT INTO notifications
-        (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `,
           [
-            dto.branchId || null,
             dto.userId,
             dto.type,
             dto.title,
@@ -122,6 +120,74 @@ export class NotificationsService {
   }
 
   /**
+   * Create many notifications with different content per row (single bulk INSERT).
+   * Each DTO can have a different userId, type, title, message, etc.
+   */
+  async createMany(
+    dtos: CreateNotificationDto[],
+    gymId: number,
+  ): Promise<number> {
+    if (!dtos || dtos.length === 0) {
+      return 0;
+    }
+
+    const notifications = await this.executeWithTable(
+      gymId,
+      async (client) => {
+        const values: SqlValue[] = [];
+        const placeholders: string[] = [];
+        let paramIndex = 1;
+
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
+        for (const dto of dtos) {
+          placeholders.push(
+            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
+          );
+          values.push(
+            dto.userId,
+            dto.type,
+            dto.title,
+            dto.message,
+            dto.data ? JSON.stringify(dto.data) : null,
+            dto.actionUrl || null,
+            dto.priority || NotificationPriority.NORMAL,
+            dto.expiresAt || defaultExpiry,
+            dto.createdBy || null,
+          );
+        }
+
+        const result = await client.query(
+          `
+        INSERT INTO notifications
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        VALUES ${placeholders.join(', ')}
+        RETURNING *
+      `,
+          values,
+        );
+
+        return result.rows.map((row: Record<string, any>) => this.mapToNotification(row));
+      },
+    );
+
+    // Emit real-time notifications via WebSocket
+    try {
+      notifications.forEach((notification: Notification) => {
+        this.gateway.emitToUser(gymId, notification.userId, notification);
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to emit bulk real-time notifications: ${msg}`,
+      );
+    }
+
+    return notifications.length;
+  }
+
+  /**
    * Create notifications for multiple users
    */
   async createBulk(
@@ -145,10 +211,9 @@ export class NotificationsService {
 
         for (const userId of dto.userIds) {
           placeholders.push(
-            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
+            `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`,
           );
           values.push(
-            dto.branchId || null,
             userId,
             dto.type,
             dto.title,
@@ -164,7 +229,7 @@ export class NotificationsService {
         const result = await client.query(
           `
         INSERT INTO notifications
-        (branch_id, user_id, type, title, message, data, action_url, priority, expires_at, created_by)
+        (user_id, type, title, message, data, action_url, priority, expires_at, created_by)
         VALUES ${placeholders.join(', ')}
         RETURNING *
       `,
@@ -196,7 +261,6 @@ export class NotificationsService {
   async findAll(
     userId: number,
     gymId: number,
-    branchId: number | null,
     query: NotificationQueryDto,
   ): Promise<{ data: Notification[]; pagination: Record<string, number> }> {
     return this.executeWithTable(gymId, async (client) => {
@@ -207,13 +271,6 @@ export class NotificationsService {
       const conditions: string[] = ['user_id = $1'];
       const params: SqlValue[] = [userId];
       let paramIndex = 2;
-
-      // Branch filter - if user has branch restriction
-      if (branchId !== null) {
-        conditions.push(`(branch_id IS NULL OR branch_id = $${paramIndex})`);
-        params.push(branchId);
-        paramIndex++;
-      }
 
       // Type filter
       if (query.type) {
@@ -272,7 +329,6 @@ export class NotificationsService {
   async getUnreadCount(
     userId: number,
     gymId: number,
-    branchId: number | null,
   ): Promise<number> {
     return this.executeWithTable(gymId, async (client) => {
       let query = `
@@ -281,11 +337,6 @@ export class NotificationsService {
         AND (expires_at IS NULL OR expires_at > NOW())
       `;
       const params: SqlValue[] = [userId];
-
-      if (branchId !== null) {
-        query += ` AND (branch_id IS NULL OR branch_id = $2)`;
-        params.push(branchId);
-      }
 
       const result = await client.query(query, params);
       return parseInt(result.rows[0].count, 10);
@@ -325,7 +376,6 @@ export class NotificationsService {
   async markAllAsRead(
     userId: number,
     gymId: number,
-    branchId: number | null,
   ): Promise<number> {
     return this.executeWithTable(gymId, async (client) => {
       let query = `
@@ -334,11 +384,6 @@ export class NotificationsService {
         WHERE user_id = $1 AND is_read = FALSE
       `;
       const params: SqlValue[] = [userId];
-
-      if (branchId !== null) {
-        query += ` AND (branch_id IS NULL OR branch_id = $2)`;
-        params.push(branchId);
-      }
 
       const result = await client.query(query, params);
       return result.rowCount || 0;
@@ -370,9 +415,9 @@ export class NotificationsService {
       const result = await client.query(
         `
         DELETE FROM notifications
-        WHERE created_at < NOW() - INTERVAL '${daysOld} days'
+        WHERE created_at < NOW() - ($1 * INTERVAL '1 day')
       `,
-        [],
+        [daysOld],
       );
 
       return result.rowCount || 0;
@@ -385,14 +430,12 @@ export class NotificationsService {
   async notifyMembershipExpiry(
     userId: number,
     gymId: number,
-    branchId: number | null,
     membershipData: { planName: string; endDate: Date; daysRemaining: number; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.MEMBERSHIP_EXPIRY,
           title: 'Membership Expiring Soon',
           message: `Your ${membershipData.planName} membership expires in ${membershipData.daysRemaining} day${membershipData.daysRemaining > 1 ? 's' : ''}. Renew now to continue your fitness journey!`,
@@ -425,14 +468,12 @@ export class NotificationsService {
   async notifyMembershipRenewed(
     userId: number,
     gymId: number,
-    branchId: number | null,
     membershipData: { planName: string; endDate: Date; membershipId?: number },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.MEMBERSHIP_RENEWED,
           title: 'Membership Activated',
           message: `Your ${membershipData.planName} membership is now active until ${membershipData.endDate.toLocaleDateString()}.`,
@@ -461,14 +502,12 @@ export class NotificationsService {
   async notifyTrainerAssigned(
     clientUserId: number,
     gymId: number,
-    branchId: number | null,
     trainerData: { trainerId: number; trainerName: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId: clientUserId,
-          branchId,
           type: NotificationType.TRAINER_ASSIGNED,
           title: 'Trainer Assigned',
           message: `${trainerData.trainerName} has been assigned as your trainer.`,
@@ -495,14 +534,12 @@ export class NotificationsService {
   async notifyTrainerUnassigned(
     clientUserId: number,
     gymId: number,
-    branchId: number | null,
     trainerData: { trainerId: number; trainerName: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId: clientUserId,
-          branchId,
           type: NotificationType.TRAINER_UNASSIGNED,
           title: 'Trainer Changed',
           message: `${trainerData.trainerName} is no longer your assigned trainer.`,
@@ -522,115 +559,9 @@ export class NotificationsService {
     }
   }
 
-  /**
-   * Trigger notification for new announcement
-   */
-  async notifyNewAnnouncement(
-    userIds: number[],
-    gymId: number,
-    branchId: number | null,
-    announcementData: {
-      announcementId: number;
-      title: string;
-      priority?: string;
-    },
-  ): Promise<void> {
-    try {
-      await this.createBulk(
-        {
-          userIds,
-          branchId,
-          type: NotificationType.NEW_ANNOUNCEMENT,
-          title: 'New Announcement',
-          message: announcementData.title,
-          data: {
-            entityType: 'announcement',
-            entityId: announcementData.announcementId,
-          },
-          actionUrl: `/announcements/${announcementData.announcementId}`,
-          priority:
-            announcementData.priority === 'urgent'
-              ? NotificationPriority.URGENT
-              : NotificationPriority.NORMAL,
-        },
-        gymId,
-      );
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to create announcement notification: ${msg}`,
-      );
-    }
-  }
-
   // ============================================
   // SUPERADMIN NOTIFICATIONS (main schema)
   // ============================================
-
-  /**
-   * Create a notification for a superadmin
-   */
-  async createSystemNotification(data: {
-    userId: number;
-    type: string;
-    title: string;
-    message: string;
-    data?: Record<string, any>;
-    actionUrl?: string;
-    priority?: string;
-  }): Promise<Record<string, any>> {
-    try {
-      // Default expiry: 15 days from now
-      const defaultExpiry = new Date();
-      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
-
-      const notification = await this.prisma.systemNotification.create({
-        data: {
-          userId: data.userId,
-          type: data.type,
-          title: data.title,
-          message: data.message,
-          data: data.data || undefined,
-          actionUrl: data.actionUrl || null,
-          priority: data.priority || 'normal',
-          expiresAt: defaultExpiry,
-        },
-      });
-
-      // Emit real-time notification to superadmin
-      try {
-        this.gateway.emitToSuperadmin(data.userId, {
-          id: notification.id,
-          branchId: null,
-          userId: notification.userId,
-          type: notification.type as NotificationType,
-          title: notification.title,
-          message: notification.message,
-          data: notification.data as NotificationData | null,
-          isRead: notification.isRead,
-          readAt: notification.readAt,
-          actionUrl: notification.actionUrl,
-          priority: notification.priority as NotificationPriority,
-          expiresAt: null,
-          createdAt: notification.createdAt,
-          createdBy: null,
-        });
-      } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `Failed to emit real-time system notification: ${msg}`,
-        );
-      }
-
-      return notification;
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to create system notification: ${msg}`,
-      );
-      throw error;
-    }
-  }
 
   /**
    * Create notifications for all superadmins
@@ -672,7 +603,6 @@ export class NotificationsService {
       try {
         this.gateway.emitToAllSuperadmins({
           id: 0,
-          branchId: null,
           userId: 0,
           type: data.type as NotificationType,
           title: data.title,
@@ -865,15 +795,46 @@ export class NotificationsService {
     assignedByName: string;
   }): Promise<void> {
     try {
-      await this.createSystemNotification({
-        userId: ticketData.assignedToUserId,
-        type: SystemNotificationType.SUPPORT_TICKET_ASSIGNED,
-        title: 'Support Ticket Assigned',
-        message: `Ticket #${ticketData.ticketNumber} "${ticketData.subject}" has been assigned to you by ${ticketData.assignedByName}.`,
-        data: { ticketId: ticketData.ticketId },
-        actionUrl: `/superadmin/support/${ticketData.ticketId}`,
-        priority: 'high',
+      // Default expiry: 15 days from now
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 15);
+
+      const notification = await this.prisma.systemNotification.create({
+        data: {
+          userId: ticketData.assignedToUserId,
+          type: SystemNotificationType.SUPPORT_TICKET_ASSIGNED,
+          title: 'Support Ticket Assigned',
+          message: `Ticket #${ticketData.ticketNumber} "${ticketData.subject}" has been assigned to you by ${ticketData.assignedByName}.`,
+          data: { ticketId: ticketData.ticketId },
+          actionUrl: `/superadmin/support/${ticketData.ticketId}`,
+          priority: 'high',
+          expiresAt: defaultExpiry,
+        },
       });
+
+      // Emit real-time notification to superadmin
+      try {
+        this.gateway.emitToSuperadmin(ticketData.assignedToUserId, {
+          id: notification.id,
+          userId: notification.userId,
+          type: notification.type as NotificationType,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data as NotificationData | null,
+          isRead: notification.isRead,
+          readAt: notification.readAt,
+          actionUrl: notification.actionUrl,
+          priority: notification.priority as NotificationPriority,
+          expiresAt: null,
+          createdAt: notification.createdAt,
+          createdBy: null,
+        });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to emit real-time system notification: ${msg}`,
+        );
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -916,7 +877,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId: null,
           type: NotificationType.SUPPORT_TICKET_RESOLVED,
           title: 'Support Ticket Resolved',
           message: `Your support ticket #${ticketData.ticketNumber} has been resolved.`,
@@ -947,14 +907,12 @@ export class NotificationsService {
   async notifyClassBooked(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string; startTime: string; isWaitlisted: boolean; position?: number | null },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.CLASS_BOOKED,
           title: data.isWaitlisted ? 'Added to Waitlist' : 'Class Booking Confirmed',
           message: data.isWaitlisted
@@ -981,14 +939,12 @@ export class NotificationsService {
   async notifyClassBookingCancelled(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.CLASS_BOOKING_CANCELLED,
           title: 'Class Booking Cancelled',
           message: `Your booking for ${data.className} on ${data.date} has been cancelled.`,
@@ -1013,14 +969,12 @@ export class NotificationsService {
   async notifyClassWaitlistPromoted(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { sessionId: number; className: string; date: string; startTime: string },
   ): Promise<void> {
     try {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.CLASS_WAITLIST_PROMOTED,
           title: 'Moved Off Waitlist',
           message: `A spot opened up! You're now booked for ${data.className} on ${data.date} at ${data.startTime}.`,
@@ -1045,7 +999,6 @@ export class NotificationsService {
   async notifyClassScheduleAssigned(
     instructorId: number,
     gymId: number,
-    branchId: number | null,
     data: { scheduleId: number; className: string; dayOfWeek: number; startTime: string },
   ): Promise<void> {
     try {
@@ -1053,7 +1006,6 @@ export class NotificationsService {
       await this.create(
         {
           userId: instructorId,
-          branchId,
           type: NotificationType.CLASS_SCHEDULE_ASSIGNED,
           title: 'Class Schedule Assigned',
           message: `You've been assigned to teach ${data.className} on ${days[data.dayOfWeek]}s at ${data.startTime}.`,
@@ -1082,7 +1034,6 @@ export class NotificationsService {
   async notifyAppointmentBooked(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { appointmentId: number; otherPartyName: string; startTime: string; serviceName?: string },
   ): Promise<void> {
     try {
@@ -1091,7 +1042,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.APPOINTMENT_BOOKED,
           title: 'Appointment Booked',
           message: data.serviceName
@@ -1118,7 +1068,6 @@ export class NotificationsService {
   async notifyAppointmentStatusChanged(
     userId: number,
     gymId: number,
-    branchId: number | null,
     data: { appointmentId: number; status: string; startTime: string },
   ): Promise<void> {
     try {
@@ -1134,7 +1083,6 @@ export class NotificationsService {
       await this.create(
         {
           userId,
-          branchId,
           type: NotificationType.APPOINTMENT_STATUS_CHANGED,
           title: 'Appointment Updated',
           message: `Your appointment on ${dateStr} ${statusText}.`,
@@ -1160,7 +1108,6 @@ export class NotificationsService {
   private mapToNotification(row: Record<string, any>): Notification {
     return {
       id: row.id,
-      branchId: row.branch_id,
       userId: row.user_id,
       type: row.type as NotificationType,
       title: row.title,

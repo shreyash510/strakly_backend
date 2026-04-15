@@ -22,19 +22,16 @@ import { CreateFacilityDto } from './dto/create-facility.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('facilities')
 @Controller('facilities')
-@UseGuards(JwtAuthGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.AMENITIES_MANAGEMENT)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class FacilitiesController {
   constructor(
@@ -42,55 +39,29 @@ export class FacilitiesController {
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Get()
   @ApiOperation({ summary: 'Get all facilities' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
-    @Query('branchId') queryBranchId?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
     return this.facilitiesService.findAll(
       req.user.gymId!,
-      branchId,
       includeInactive === 'true',
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get facility by ID' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   findOne(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.facilitiesService.findOne(id, req.user.gymId!, branchId);
+    return this.facilitiesService.findOne(id, req.user.gymId!);
   }
 
   @Post()
@@ -98,19 +69,11 @@ export class FacilitiesController {
   @Roles('superadmin', 'admin', 'manager')
   @ManagerPermission('facilities', 'create')
   @ApiOperation({ summary: 'Create a new facility' })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for the facility (admin only)',
-  })
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() dto: CreateFacilityDto,
-    @Query('branchId') queryBranchId?: string,
   ) {
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    const result = await this.facilitiesService.create(dto, req.user.gymId!, branchId);
+    const result = await this.facilitiesService.create(dto, req.user.gymId!);
     this.notificationsGateway.emitFacilityChanged(req.user.gymId!, { action: 'created' });
     return result;
   }

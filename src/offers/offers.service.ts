@@ -36,11 +36,10 @@ export class OffersService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     includeInactive = false,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      // Always filter out soft-deleted offers
       const conditions: string[] = [
         '(is_deleted = FALSE OR is_deleted IS NULL)',
       ];
@@ -50,16 +49,12 @@ export class OffersService {
       if (!includeInactive) {
         conditions.push('is_active = true');
       }
-
-      // Branch filtering: null = admin (all branches), number = specific branch + global offers
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $${paramIndex} OR branch_id IS NULL)`);
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
-        paramIndex++;
       }
 
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
       const result = await client.query(
         `SELECT * FROM offers ${whereClause} ORDER BY created_at DESC`,
         values,
@@ -68,36 +63,36 @@ export class OffersService {
     });
   }
 
-  async findActive(gymId: number, branchId: number | null = null) {
+  async findActive(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      let query = `SELECT * FROM offers WHERE is_active = true AND valid_from <= NOW() AND valid_to >= NOW() AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+      const conditions = [
+        'is_active = true',
+        'valid_from <= NOW()',
+        'valid_to >= NOW()',
+        '(is_deleted = FALSE OR is_deleted IS NULL)',
+      ];
       const values: SqlValue[] = [];
+      let paramIndex = 1;
 
-      // Branch filtering for non-admin users
-      if (branchId !== null) {
-        query += ` AND (branch_id = $1 OR branch_id IS NULL)`;
+      if (branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
         values.push(branchId);
       }
 
-      query += ` ORDER BY valid_to ASC`;
-
-      const result = await client.query(query, values);
+      const result = await client.query(
+        `SELECT * FROM offers WHERE ${conditions.join(' AND ')} ORDER BY valid_to ASC`,
+        values,
+      );
       return result.rows.map((o: Record<string, any>) => this.formatOffer(o));
     });
   }
 
-  async findOne(id: number, gymId: number, branchId: number | null = null) {
+  async findOne(id: number, gymId: number) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [id];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -114,19 +109,12 @@ export class OffersService {
   async findByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [code];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -143,19 +131,12 @@ export class OffersService {
   async validateOfferCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const offer = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        const query = `SELECT * FROM offers WHERE code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [code];
-
-        // Branch filtering for non-admin users
-        if (branchId !== null) {
-          query += ` AND (branch_id = $2 OR branch_id IS NULL)`;
-          values.push(branchId);
-        }
 
         const result = await client.query(query, values);
         return result.rows[0];
@@ -189,7 +170,6 @@ export class OffersService {
   async create(
     dto: CreateOfferDto,
     gymId: number,
-    branchId: number | null = null,
   ) {
     const existing = await this.tenantService.executeInTenant(
       gymId,
@@ -217,11 +197,10 @@ export class OffersService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO offers (branch_id, code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, true, NOW(), NOW())
+          `INSERT INTO offers (code, name, description, discount_type, discount_value, valid_from, valid_to, max_usage_count, used_count, branch_id, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, true, NOW(), NOW())
          RETURNING *`,
           [
-            branchId,
             dto.code,
             dto.name,
             dto.description || null,
@@ -230,6 +209,7 @@ export class OffersService {
             startDate,
             endDate,
             dto.maxUsageCount || null,
+            dto.branchId || null,
           ],
         );
         return result.rows[0];
@@ -313,12 +293,4 @@ export class OffersService {
     return { id, deleted: true };
   }
 
-  async incrementUsage(offerId: number, gymId: number) {
-    await this.tenantService.executeInTenant(gymId, async (client) => {
-      await client.query(
-        `UPDATE offers SET used_count = used_count + 1, updated_at = NOW() WHERE id = $1`,
-        [offerId],
-      );
-    });
-  }
 }

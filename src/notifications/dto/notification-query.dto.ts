@@ -32,11 +32,4 @@ export class NotificationQueryDto {
   @IsBoolean()
   unreadOnly?: boolean;
 
-  @ApiPropertyOptional({
-    description: 'Filter by branch ID',
-  })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  branchId?: number;
 }

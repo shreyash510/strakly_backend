@@ -13,7 +13,6 @@ import { TenantService } from '../../tenant/tenant.service';
  * - tenant.staff_salaries.paid_by_id -> public.users.id
  * - tenant.memberships.created_by -> public.users.id
  * - tenant.body_metrics.measured_by -> public.users.id
- * - tenant.users.branch_id -> public.branches.id
  */
 @Injectable()
 export class CrossSchemaValidatorService {
@@ -57,24 +56,6 @@ export class CrossSchemaValidatorService {
       select: { id: true },
     });
     return !!assignment;
-  }
-
-  /**
-   * Validate that a branch exists and belongs to the specified gym
-   */
-  async validateBranchExists(
-    branchId: number,
-    gymId: number,
-  ): Promise<boolean> {
-    const branch = await this.prisma.branch.findFirst({
-      where: {
-        id: branchId,
-        gymId,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    return !!branch;
   }
 
   /**
@@ -190,7 +171,6 @@ export class CrossSchemaValidatorService {
   async validateStaffForOperation(
     staffId: number,
     gymId: number,
-    branchId?: number,
   ): Promise<{
     valid: boolean;
     message?: string;
@@ -215,28 +195,6 @@ export class CrossSchemaValidatorService {
       };
     }
 
-    // If branchId is specified, validate branch access
-    if (branchId) {
-      const assignment = await this.prisma.userGymXref.findFirst({
-        where: {
-          userId: staffId,
-          gymId,
-          isActive: true,
-          OR: [
-            { branchId: null }, // Has access to all branches
-            { branchId }, // Has access to this specific branch
-          ],
-        },
-      });
-
-      if (!assignment) {
-        return {
-          valid: false,
-          message: 'User does not have access to this branch',
-        };
-      }
-    }
-
     return { valid: true };
   }
 
@@ -245,7 +203,7 @@ export class CrossSchemaValidatorService {
    */
   async batchValidate(
     validations: Array<{
-      type: 'publicUser' | 'branch' | 'gym' | 'tenantUser' | 'plan' | 'offer';
+      type: 'publicUser' | 'gym' | 'tenantUser' | 'plan' | 'offer';
       id: number;
       gymId?: number;
     }>,
@@ -260,11 +218,6 @@ export class CrossSchemaValidatorService {
         switch (v.type) {
           case 'publicUser':
             valid = await this.validatePublicUserId(v.id);
-            break;
-          case 'branch':
-            valid = v.gymId
-              ? await this.validateBranchExists(v.id, v.gymId)
-              : false;
             break;
           case 'gym':
             valid = await this.validateGymExists(v.id);

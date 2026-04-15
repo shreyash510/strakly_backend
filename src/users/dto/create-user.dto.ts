@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsArray,
   IsIn,
+  MinLength,
   ValidateNested,
   ArrayMinSize,
   ArrayMaxSize,
@@ -105,13 +106,10 @@ export class CreateUserDto {
   @IsInt()
   branchId?: number;
 
-  @ApiPropertyOptional({
-    description: 'Branch IDs (for users with multiple branches)',
-  })
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
+  allowedBranchIds?: number[];
 
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
@@ -189,6 +187,7 @@ export class CreateStaffDto {
   @ApiProperty({ description: 'Staff password' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(8)
   password: string;
 
   @ApiProperty({
@@ -249,21 +248,18 @@ export class CreateStaffDto {
   @IsString()
   zipCode?: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
+  @ApiPropertyOptional({ description: 'Branch ID to assign the staff to' })
   @IsOptional()
   @IsInt()
   branchId?: number;
 
-  @ApiPropertyOptional({
-    description: 'Branch IDs (for users with multiple branches)',
-  })
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
+  allowedBranchIds?: number[];
 }
 
-// DTO for creating client (member) - stored in tenant.users
+// DTO for creating client - stored in tenant.users
 export class CreateClientDto {
   @ApiProperty({ description: 'Client name' })
   @IsString()
@@ -278,6 +274,7 @@ export class CreateClientDto {
   @ApiProperty({ description: 'Client password' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(8)
   password: string;
 
   @ApiPropertyOptional({ description: 'Client phone' })
@@ -395,15 +392,15 @@ export class CreateClientDto {
   @IsString()
   idNumber?: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
   joinDate?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID to assign the client to' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
 }
 
 export class UpdateUserDto {
@@ -482,17 +479,6 @@ export class UpdateUserDto {
   @IsInt()
   trainerId?: number;
 
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
-
-  @ApiPropertyOptional({ description: 'Branch IDs (for users with multiple branches)' })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
-
   @ApiPropertyOptional({ description: 'Date of joining' })
   @IsOptional()
   @IsString()
@@ -562,6 +548,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Branch ID' })
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Allowed branch IDs (for managers with multi-branch access)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  allowedBranchIds?: number[];
 }
 
 export class UpdateManagerPermissionsDto {
@@ -572,6 +568,7 @@ export class UpdateManagerPermissionsDto {
 
 export class AdminResetPasswordDto {
   @IsString()
+  @MinLength(8)
   newPassword: string;
 }
 
@@ -618,12 +615,6 @@ export class BulkUpdateUserDto {
   @IsNotEmpty()
   userIds: number[];
 
-  @ApiPropertyOptional({ description: 'Branch IDs to assign' })
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  branchIds?: number[];
-
   @ApiPropertyOptional({ description: 'Status to set', enum: USER_STATUSES_ARRAY })
   @IsOptional()
   @IsEnum(USER_STATUSES_ARRAY)
@@ -649,9 +640,4 @@ export class BulkCreateUserDto {
   @ValidateNested({ each: true })
   @Type(() => CreateUserDto)
   users: CreateUserDto[];
-
-  @ApiPropertyOptional({ description: 'Branch ID' })
-  @IsOptional()
-  @IsInt()
-  branchId?: number;
 }

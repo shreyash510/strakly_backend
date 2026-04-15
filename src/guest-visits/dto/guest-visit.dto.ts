@@ -128,4 +128,9 @@ export class GuestVisitFiltersDto {
   @Type(() => Number)
   @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }

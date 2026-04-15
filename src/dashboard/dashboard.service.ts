@@ -234,9 +234,8 @@ export class DashboardService {
   async getAdminDashboard(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<AdminDashboardDto> {
-    // Check cache first
     const cached = this.dashboardCacheService.get(gymId, branchId);
     if (cached) {
       return cached;
@@ -244,22 +243,22 @@ export class DashboardService {
 
     // Cache miss — compute and store
     const result = await this.computeAdminDashboard(gymId, branchId);
-    this.dashboardCacheService.set(gymId, branchId, result);
+    this.dashboardCacheService.set(gymId, result, branchId);
     return result;
   }
 
   /** Raw computation without cache — used by consumer and scheduler */
   async computeAdminDashboard(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<AdminDashboardDto> {
     const [stats, newClients, newInquiries, recentTickets, recentAttendance, expiringMemberships] = await Promise.all([
       this.getAdminStats(gymId, branchId),
-      this.getNewClients(gymId, branchId, 1, 5),
-      this.getNewInquiries(gymId, branchId, 1, 5),
+      this.getNewClients(gymId, 1, 5, branchId),
+      this.getNewInquiries(gymId, 1, 5, branchId),
       this.getRecentTicketsForGym(gymId),
-      this.getRecentAttendance(gymId, branchId, 5),
-      this.getExpiringMemberships(gymId, branchId, 5),
+      this.getRecentAttendance(gymId, 5),
+      this.getExpiringMemberships(gymId, 5, branchId),
     ]);
 
     return {
@@ -275,18 +274,23 @@ export class DashboardService {
   // Get new clients (status = 'active') with pagination
   async getNewClients(
     gymId: number,
-    branchId: number | null = null,
     page: number = 1,
     limit: number = 5,
+    branchId?: number | null,
   ) {
     const offset = (page - 1) * limit;
 
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status = 'active'`;
         const values: SqlValue[] = [];
+        let baseWhere = `role = 'client' AND status = 'active' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        if (branchId) {
+          values.push(branchId);
+          baseWhere += ` AND (branch_id = $${values.length} OR branch_id IS NULL)`;
+        }
+        const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
@@ -328,18 +332,23 @@ export class DashboardService {
   // Get new inquiries (status = 'onboarding' or 'confirm') with pagination
   async getNewInquiries(
     gymId: number,
-    branchId: number | null = null,
     page: number = 1,
     limit: number = 5,
+    branchId?: number | null,
   ) {
     const offset = (page - 1) * limit;
 
     const result = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let countQuery = `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
-        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')`;
         const values: SqlValue[] = [];
+        let baseWhere = `role = 'client' AND status IN ('onboarding', 'confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)`;
+        if (branchId) {
+          values.push(branchId);
+          baseWhere += ` AND (branch_id = $${values.length} OR branch_id IS NULL)`;
+        }
+        const countQuery = `SELECT COUNT(*) as count FROM users WHERE ${baseWhere}`;
+        let dataQuery = `SELECT id, name, email, avatar, status, created_at FROM users WHERE ${baseWhere}`;
 
         dataQuery += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
@@ -380,7 +389,7 @@ export class DashboardService {
 
   private async getAdminStats(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number | null,
   ): Promise<AdminDashboardStatsDto> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -389,180 +398,148 @@ export class DashboardService {
     const today = now.toISOString().split('T')[0];
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+    const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Branch filtering removed — always return gym-wide results
-        const userBranchFilter = '';
-        const membershipBranchFilter = '';
-        const attendanceBranchFilter = '';
-
-        const productBranchFilter = '';
-
+        // Consolidated: 4 queries instead of 19
         const [
-          totalMembersResult,
-          activeMembersResult,
-          totalTrainersResult,
-          activeMembershipsResult,
-          revenueResult,
-          cashRevenueResult,
-          lastMonthRevenueResult,
-          thisMonthRevenueResult,
-          presentTodayResult,
-          expiredMembershipsResult,
-          pendingOnboardingResult,
-          maleClientsResult,
-          femaleClientsResult,
-          newClientsThisMonthResult,
-          newEnquiriesThisMonthResult,
-          expiringSoonResult,
-          productRevenueResult,
-          productLastMonthResult,
-          productThisMonthResult,
+          userStatsResult,
+          membershipStatsResult,
+          attendanceResult,
+          productStatsResult,
         ] = await Promise.all([
+          // 1) All user counts in ONE query using FILTER clauses
           client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client'${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active'${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'trainer'${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active'${membershipBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL)${membershipBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND payment_method = 'cash'${membershipBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1 AND paid_at <= $2${membershipBranchFilter}`,
-            [startOfLastMonth, endOfLastMonth],
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(final_amount), 0) as sum FROM memberships WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${membershipBranchFilter}`,
+            `SELECT
+              COUNT(*) FILTER (WHERE role = 'client') as total_members,
+              COUNT(*) FILTER (WHERE role = 'client' AND status = 'active') as active_members,
+              COUNT(*) FILTER (WHERE role = 'trainer') as total_trainers,
+              COUNT(*) FILTER (WHERE role = 'client' AND gender = 'male') as male_clients,
+              COUNT(*) FILTER (WHERE role = 'client' AND gender = 'female') as female_clients,
+              COUNT(*) FILTER (WHERE role = 'client' AND status = 'active' AND created_at >= $1) as new_clients_this_month,
+              COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm')) as pending_onboarding,
+              COUNT(*) FILTER (WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1) as new_enquiries_this_month
+            FROM users
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
             [startOfMonth],
           ),
+          // 2) All membership counts + revenue in ONE query
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${attendanceBranchFilter}`,
+            `SELECT
+              COUNT(*) FILTER (WHERE status = 'active') as active_memberships,
+              COUNT(*) FILTER (WHERE status = 'active' AND end_date >= $1::TIMESTAMP AND end_date <= $2::TIMESTAMP) as expiring_soon,
+              COUNT(*) FILTER (WHERE status = 'expired') as expired_memberships,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid'), 0) as total_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND payment_method = 'cash'), 0) as total_cash_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $3 AND paid_at <= $4), 0) as last_month_revenue,
+              COALESCE(SUM(final_amount) FILTER (WHERE payment_status = 'paid' AND paid_at >= $5), 0) as this_month_revenue
+            FROM memberships
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
+            [now, endOfWeek, startOfLastMonth, endOfLastMonth, startOfMonth],
+          ),
+          // 3) Attendance: present today
+          client.query(
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${branchFilter}`,
             [today],
           ),
+          // 4) Product sales revenue + product count
           client.query(
-            `SELECT COUNT(*) as count FROM memberships WHERE status = 'expired'${membershipBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm')${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND gender = 'male'${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND gender = 'female'${userBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status = 'active' AND created_at >= $1${userBranchFilter}`,
-            [startOfMonth],
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM users WHERE role = 'client' AND status IN ('onboarding', 'confirm') AND created_at >= $1${userBranchFilter}`,
-            [startOfMonth],
-          ),
-          client.query(
-            `SELECT COUNT(*) as count FROM memberships WHERE status = 'active' AND end_date >= $1::TIMESTAMP AND end_date <= $2::TIMESTAMP${membershipBranchFilter}`,
-            [now, endOfWeek],
-          ),
-          // Product sales revenue
-          client.query(
-            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL)${productBranchFilter}`,
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1 AND sold_at <= $2${productBranchFilter}`,
-            [startOfLastMonth, endOfLastMonth],
-          ),
-          client.query(
-            `SELECT COALESCE(SUM(total_amount), 0) as sum FROM product_sales WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${productBranchFilter}`,
-            [startOfMonth],
+            `SELECT
+              COALESCE(SUM(s.total_amount), 0) as total_revenue,
+              COALESCE(SUM(s.total_amount) FILTER (WHERE s.sold_at >= $1 AND s.sold_at <= $2), 0) as last_month_revenue,
+              COALESCE(SUM(s.total_amount) FILTER (WHERE s.sold_at >= $3), 0) as this_month_revenue,
+              (SELECT COUNT(*) FROM products WHERE is_deleted = FALSE OR is_deleted IS NULL) as total_products
+            FROM product_sales s
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)${branchFilter}`,
+            [startOfLastMonth, endOfLastMonth, startOfMonth],
           ),
         ]);
 
+        const u = userStatsResult.rows[0];
+        const m = membershipStatsResult.rows[0];
+        const p = productStatsResult.rows[0];
+
         return {
-          totalMembers: parseInt(totalMembersResult.rows[0].count, 10),
-          activeMembers: parseInt(activeMembersResult.rows[0].count, 10),
-          totalTrainers: parseInt(totalTrainersResult.rows[0].count, 10),
-          activeMemberships: parseInt(
-            activeMembershipsResult.rows[0].count,
-            10,
-          ),
-          totalRevenue: parseFloat(revenueResult.rows[0].sum) + parseFloat(productRevenueResult.rows[0].sum),
-          totalCashRevenue: parseFloat(cashRevenueResult.rows[0].sum),
-          lastMonthRevenue: parseFloat(lastMonthRevenueResult.rows[0].sum) + parseFloat(productLastMonthResult.rows[0].sum),
-          monthlyRevenue: parseFloat(thisMonthRevenueResult.rows[0].sum) + parseFloat(productThisMonthResult.rows[0].sum),
-          presentToday: parseInt(presentTodayResult.rows[0].count, 10),
-          expiredMemberships: parseInt(expiredMembershipsResult.rows[0].count, 10),
-          pendingOnboardingCount: parseInt(
-            pendingOnboardingResult.rows[0].count,
-            10,
-          ),
-          maleClients: parseInt(maleClientsResult.rows[0].count, 10),
-          femaleClients: parseInt(femaleClientsResult.rows[0].count, 10),
-          newClientsThisMonth: parseInt(newClientsThisMonthResult.rows[0].count, 10),
-          newEnquiriesThisMonth: parseInt(newEnquiriesThisMonthResult.rows[0].count, 10),
-          expiringSoon: parseInt(expiringSoonResult.rows[0].count, 10),
+          totalMembers: parseInt(u.total_members, 10),
+          activeMembers: parseInt(u.active_members, 10),
+          totalTrainers: parseInt(u.total_trainers, 10),
+          activeMemberships: parseInt(m.active_memberships, 10),
+          totalRevenue:
+            parseFloat(m.total_revenue) + parseFloat(p.total_revenue),
+          totalCashRevenue: parseFloat(m.total_cash_revenue),
+          lastMonthRevenue:
+            parseFloat(m.last_month_revenue) +
+            parseFloat(p.last_month_revenue),
+          monthlyRevenue:
+            parseFloat(m.this_month_revenue) +
+            parseFloat(p.this_month_revenue),
+          presentToday: parseInt(attendanceResult.rows[0].count, 10),
+          expiredMemberships: parseInt(m.expired_memberships, 10),
+          pendingOnboardingCount: parseInt(u.pending_onboarding, 10),
+          maleClients: parseInt(u.male_clients, 10),
+          femaleClients: parseInt(u.female_clients, 10),
+          newClientsThisMonth: parseInt(u.new_clients_this_month, 10),
+          newEnquiriesThisMonth: parseInt(u.new_enquiries_this_month, 10),
+          expiringSoon: parseInt(m.expiring_soon, 10),
+          totalProducts: parseInt(p.total_products, 10),
+          thisMonthProductSales: parseFloat(p.this_month_revenue),
         };
       },
     );
 
-    // Get last 5 months revenue history (memberships + product sales)
+    // Get last 5 months revenue history (membership + product sales separately)
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
-    const revenueHistory = await this.tenantService.executeInTenant(
+    const [membershipRevenueRows, productSalesRows] = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        const membershipBranchFilter = '';
-        const productBranchFilter = '';
-        const result = await client.query(
-          `SELECT month, month_num, year_num, SUM(revenue) as revenue FROM (
-            SELECT
+        const [mResult, pResult] = await Promise.all([
+          client.query(
+            `SELECT
               TO_CHAR(DATE_TRUNC('month', paid_at), 'Mon') as month,
               EXTRACT(MONTH FROM DATE_TRUNC('month', paid_at)) as month_num,
               EXTRACT(YEAR FROM DATE_TRUNC('month', paid_at)) as year_num,
-              final_amount as revenue
+              COALESCE(SUM(final_amount), 0) as revenue
             FROM memberships
-            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${membershipBranchFilter}
-            UNION ALL
-            SELECT
+            WHERE payment_status = 'paid' AND (is_deleted = FALSE OR is_deleted IS NULL) AND paid_at >= $1${branchFilter}
+            GROUP BY month, month_num, year_num
+            ORDER BY year_num ASC, month_num ASC`,
+            [fiveMonthsAgo],
+          ),
+          client.query(
+            `SELECT
               TO_CHAR(DATE_TRUNC('month', sold_at), 'Mon') as month,
               EXTRACT(MONTH FROM DATE_TRUNC('month', sold_at)) as month_num,
               EXTRACT(YEAR FROM DATE_TRUNC('month', sold_at)) as year_num,
-              total_amount as revenue
+              COALESCE(SUM(total_amount), 0) as revenue
             FROM product_sales
-            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${productBranchFilter}
-          ) combined
-          GROUP BY month, month_num, year_num
-          ORDER BY year_num ASC, month_num ASC`,
-          [fiveMonthsAgo],
-        );
-        return result.rows;
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND sold_at >= $1${branchFilter}
+            GROUP BY month, month_num, year_num
+            ORDER BY year_num ASC, month_num ASC`,
+            [fiveMonthsAgo],
+          ),
+        ]);
+        return [mResult.rows, pResult.rows];
       },
     );
 
-    // Build full 5-month array (fill missing months with 0)
-    const monthlyRevenueHistory: { month: string; revenue: number }[] = [];
-    for (let i = 4; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
-      const found = revenueHistory.find(
-        (r: Record<string, any>) =>
-          parseInt(r.month_num) === d.getMonth() + 1 &&
-          parseInt(r.year_num) === d.getFullYear(),
-      );
-      monthlyRevenueHistory.push({
-        month: monthLabel,
-        revenue: found ? parseFloat(found.revenue) : 0,
-      });
-    }
+    // Build full 5-month arrays (fill missing months with 0)
+    const buildMonthlyHistory = (rows: Record<string, any>[]) => {
+      const history: { month: string; revenue: number }[] = [];
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+        const found = rows.find(
+          (r) => parseInt(r.month_num) === d.getMonth() + 1 && parseInt(r.year_num) === d.getFullYear(),
+        );
+        history.push({ month: monthLabel, revenue: found ? parseFloat(found.revenue) : 0 });
+      }
+      return history;
+    };
+
+    const monthlyRevenueHistory = buildMonthlyHistory(membershipRevenueRows);
+    const monthlyProductSalesHistory = buildMonthlyHistory(productSalesRows);
 
     // Get open tickets count from public schema
     const openTickets = await this.prisma.supportTicket.count({
@@ -583,6 +560,178 @@ export class DashboardService {
       monthlyGrowth = 100;
     }
 
+    // Week-over-week comparison + daily sparklines (last 7 days)
+    const startOfThisWeek = new Date(now);
+    startOfThisWeek.setDate(now.getDate() - now.getDay()); // Sunday
+    startOfThisWeek.setHours(0, 0, 0, 0);
+
+    const startOfLastWeek = new Date(startOfThisWeek);
+    startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const { weekComparison, sparklines } =
+      await this.tenantService.executeInTenant(gymId, async (client) => {
+        const [weekCompResult, sparkResult] = await Promise.all([
+          // Week-over-week counts
+          client.query(
+            `SELECT
+              COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $1) as this_week_clients,
+              COUNT(*) FILTER (WHERE role='client' AND status='active' AND created_at >= $2 AND created_at < $1) as last_week_clients,
+              COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $1) as this_week_enquiries,
+              COUNT(*) FILTER (WHERE role='client' AND status IN ('onboarding','confirm') AND created_at >= $2 AND created_at < $1) as last_week_enquiries
+            FROM users
+            WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
+            [startOfThisWeek, startOfLastWeek],
+          ),
+          // Daily sparkline data for last 7 days
+          client.query(
+            `WITH days AS (
+              SELECT generate_series($1::date, CURRENT_DATE, '1 day'::interval)::date AS day
+            )
+            SELECT
+              d.day,
+              COALESCE(c.cnt, 0) as new_clients,
+              COALESCE(a.cnt, 0) as attendance,
+              COALESCE(e.cnt, 0) as enquiries,
+              COALESCE(r.rev, 0) + COALESCE(ps.prod_rev, 0) as revenue,
+              COALESCE(ex.cnt, 0) as expired
+            FROM days d
+            LEFT JOIN (
+              SELECT created_at::date AS day, COUNT(*) AS cnt
+              FROM users WHERE role='client' AND status='active' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND created_at >= $1
+              GROUP BY created_at::date
+            ) c ON c.day = d.day
+            LEFT JOIN (
+              SELECT attendance_date AS day, COUNT(*) AS cnt
+              FROM attendance WHERE status='present'${branchFilter} AND attendance_date >= $1
+              GROUP BY attendance_date
+            ) a ON a.day = d.day
+            LEFT JOIN (
+              SELECT created_at::date AS day, COUNT(*) AS cnt
+              FROM users WHERE role='client' AND status IN ('onboarding','confirm') AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND created_at >= $1
+              GROUP BY created_at::date
+            ) e ON e.day = d.day
+            LEFT JOIN (
+              SELECT paid_at::date AS day, COALESCE(SUM(final_amount),0) AS rev
+              FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $1
+              GROUP BY paid_at::date
+            ) r ON r.day = d.day
+            LEFT JOIN (
+              SELECT sold_at::date AS day, COALESCE(SUM(total_amount),0) AS prod_rev
+              FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $1
+              GROUP BY sold_at::date
+            ) ps ON ps.day = d.day
+            LEFT JOIN (
+              SELECT end_date::date AS day, COUNT(*) AS cnt
+              FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter} AND end_date >= $1
+              GROUP BY end_date::date
+            ) ex ON ex.day = d.day
+            ORDER BY d.day ASC`,
+            [sevenDaysAgo],
+          ),
+        ]);
+
+        // Week attendance + revenue + expired
+        const weekAttendanceResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE attendance_date >= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE attendance_date >= $2::date AND attendance_date < $1::date) as last_week
+          FROM attendance WHERE status='present'${branchFilter}`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        const weekRevenueResult = await client.query(
+          `SELECT
+            COALESCE(
+              (SELECT SUM(final_amount) FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $1), 0
+            ) + COALESCE(
+              (SELECT SUM(total_amount) FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $1), 0
+            ) as this_week,
+            COALESCE(
+              (SELECT SUM(final_amount) FROM memberships WHERE payment_status='paid' AND (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND paid_at >= $2 AND paid_at < $1), 0
+            ) + COALESCE(
+              (SELECT SUM(total_amount) FROM product_sales WHERE (is_deleted=FALSE OR is_deleted IS NULL)${branchFilter} AND sold_at >= $2 AND sold_at < $1), 0
+            ) as last_week`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        const weekExpiredResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE end_date >= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date < $1::date) as last_week
+          FROM memberships WHERE status='expired' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
+          [startOfThisWeek, startOfLastWeek],
+        );
+
+        const endOfWeekDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const lastWeekEnd = new Date(startOfThisWeek);
+        const lastWeekEndPlus7 = new Date(
+          startOfThisWeek.getTime() + 7 * 24 * 60 * 60 * 1000,
+        );
+        const weekExpiringSoonResult = await client.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE status='active' AND end_date >= CURRENT_DATE AND end_date <= $1::date) as this_week,
+            COUNT(*) FILTER (WHERE end_date >= $2::date AND end_date <= $3::date) as last_week
+          FROM memberships
+          WHERE (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`,
+          [endOfWeekDate, lastWeekEnd, lastWeekEndPlus7],
+        );
+
+        const wc = weekCompResult.rows[0];
+        const wa = weekAttendanceResult.rows[0];
+        const wr = weekRevenueResult.rows[0];
+        const we = weekExpiredResult.rows[0];
+        const wes = weekExpiringSoonResult.rows[0];
+
+        return {
+          weekComparison: {
+            newClients: {
+              thisWeek: parseInt(wc.this_week_clients, 10),
+              lastWeek: parseInt(wc.last_week_clients, 10),
+            },
+            attendance: {
+              thisWeek: parseInt(wa.this_week, 10),
+              lastWeek: parseInt(wa.last_week, 10),
+            },
+            enquiries: {
+              thisWeek: parseInt(wc.this_week_enquiries, 10),
+              lastWeek: parseInt(wc.last_week_enquiries, 10),
+            },
+            revenue: {
+              thisWeek: parseFloat(wr.this_week),
+              lastWeek: parseFloat(wr.last_week),
+            },
+            expiringSoon: {
+              thisWeek: parseInt(wes.this_week, 10),
+              lastWeek: parseInt(wes.last_week, 10),
+            },
+            expired: {
+              thisWeek: parseInt(we.this_week, 10),
+              lastWeek: parseInt(we.last_week, 10),
+            },
+          },
+          sparklines: {
+            clients: sparkResult.rows.map((r: any) =>
+              parseInt(r.new_clients, 10),
+            ),
+            attendance: sparkResult.rows.map((r: any) =>
+              parseInt(r.attendance, 10),
+            ),
+            enquiries: sparkResult.rows.map((r: any) =>
+              parseInt(r.enquiries, 10),
+            ),
+            revenue: sparkResult.rows.map((r: any) => parseFloat(r.revenue)),
+            expiringSoon: sparkResult.rows.map(() => 0), // No daily breakdown for "expiring soon"
+            expired: sparkResult.rows.map((r: any) =>
+              parseInt(r.expired, 10),
+            ),
+          },
+        };
+      });
+
     return {
       totalMembers: stats.totalMembers,
       activeMembers: stats.activeMembers,
@@ -602,19 +751,23 @@ export class DashboardService {
       newClientsThisMonth: stats.newClientsThisMonth,
       newEnquiriesThisMonth: stats.newEnquiriesThisMonth,
       expiringSoon: stats.expiringSoon,
+      totalProducts: stats.totalProducts,
+      thisMonthProductSales: stats.thisMonthProductSales,
       monthlyRevenueHistory,
+      monthlyProductSalesHistory,
+      weekComparison,
+      sparklines,
     };
   }
 
   private async getRecentClients(
     gymId: number,
-    branchId: number | null = null,
     limit = 5,
   ): Promise<RecentClientDto[]> {
     const clients = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client'`;
+        let query = `SELECT id, name, email, avatar, status, created_at FROM users WHERE role = 'client' AND (is_deleted = FALSE OR is_deleted IS NULL)`;
         const values: SqlValue[] = [];
 
         query += ` ORDER BY created_at DESC LIMIT $${values.length + 1}`;
@@ -637,7 +790,6 @@ export class DashboardService {
 
   private async getRecentAttendance(
     gymId: number,
-    branchId: number | null = null,
     limit = 5,
   ): Promise<RecentAttendanceDto[]> {
     const today = new Date().toISOString().split('T')[0];
@@ -681,8 +833,8 @@ export class DashboardService {
 
   private async getExpiringMemberships(
     gymId: number,
-    branchId: number | null = null,
     limit = 5,
+    branchId?: number | null,
   ): Promise<ExpiringMembershipDto[]> {
     const now = new Date();
     const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -696,6 +848,11 @@ export class DashboardService {
          JOIN users u ON u.id = m.user_id
          LEFT JOIN plans p ON p.id = m.plan_id
          WHERE m.status = 'active' AND m.end_date >= $1::TIMESTAMP AND m.end_date <= $2::TIMESTAMP`;
+
+        if (branchId) {
+          values.push(branchId);
+          query += ` AND (m.branch_id = $${values.length} OR m.branch_id IS NULL)`;
+        }
 
         query += ` ORDER BY m.end_date ASC LIMIT $${values.length + 1}`;
         values.push(limit);
@@ -750,7 +907,6 @@ export class DashboardService {
   async getClientDashboard(
     userId: number,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<ClientDashboardDto> {
     const [
       user,
@@ -765,7 +921,7 @@ export class DashboardService {
       this.getClientSubscription(userId, gymId),
       this.getClientAttendanceStats(userId, gymId),
       this.getClientRecentAttendance(userId, gymId),
-      this.getClientActiveOffers(gymId, branchId),
+      this.getClientActiveOffers(gymId),
       this.getClientUpcomingClassBookings(userId, gymId),
       this.getClientUpcomingAppointments(userId, gymId),
     ]);
@@ -974,77 +1130,11 @@ export class DashboardService {
       },
     );
 
-    // Calculate current streak
-    const currentStreak = await this.calculateCurrentStreak(userId, gymId);
-
     return {
       thisMonth: stats.thisMonth,
       thisWeek: stats.thisWeek,
       total: stats.total,
-      currentStreak,
     };
-  }
-
-  private async calculateCurrentStreak(
-    userId: number,
-    gymId: number,
-  ): Promise<number> {
-    // Get all attendance records sorted by date descending
-    const attendanceRecords = await this.tenantService.executeInTenant(
-      gymId,
-      async (client) => {
-        const result = await client.query(
-          `SELECT attendance_date as date FROM attendance WHERE user_id = $1 AND status = 'present' ORDER BY attendance_date DESC LIMIT 60`,
-          [userId],
-        );
-        return result.rows;
-      },
-    );
-
-    if (attendanceRecords.length === 0) return 0;
-
-    let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Check if there's attendance today or yesterday to start counting
-    const lastAttendanceDate = attendanceRecords[0].date;
-    const lastDate = new Date(lastAttendanceDate);
-    lastDate.setHours(0, 0, 0, 0);
-
-    const diffDays = Math.floor(
-      (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    // If last attendance was more than 1 day ago, streak is 0
-    if (diffDays > 1) return 0;
-
-    // Count consecutive days
-    const uniqueDates = [
-      ...new Set(attendanceRecords.map((r: Record<string, any>) => r.date)),
-    ] as string[];
-    let expectedDate = new Date(uniqueDates[0]);
-
-    for (const dateStr of uniqueDates) {
-      const currentDate = new Date(dateStr);
-      currentDate.setHours(0, 0, 0, 0);
-      expectedDate.setHours(0, 0, 0, 0);
-
-      const dayDiff = Math.floor(
-        (expectedDate.getTime() - currentDate.getTime()) /
-          (1000 * 60 * 60 * 24),
-      );
-
-      if (dayDiff <= 1) {
-        streak++;
-        expectedDate = new Date(currentDate);
-        expectedDate.setDate(expectedDate.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-
-    return streak;
   }
 
   private async getClientRecentAttendance(
@@ -1084,7 +1174,6 @@ export class DashboardService {
 
   private async getClientActiveOffers(
     gymId: number,
-    branchId: number | null = null,
     limit = 3,
   ): Promise<ActiveOfferDto[]> {
     const now = new Date();
@@ -1130,7 +1219,7 @@ export class DashboardService {
           `SELECT cb.id, ct.name as class_name, cs.start_time, cs.end_time,
                   u.name as trainer_name, cb.status
            FROM class_bookings cb
-           JOIN class_sessions cs ON cs.id = cb.class_session_id
+           JOIN class_sessions cs ON cs.id = cb.session_id
            JOIN class_types ct ON ct.id = cs.class_type_id
            LEFT JOIN users u ON u.id = cs.trainer_id
            WHERE cb.user_id = $1

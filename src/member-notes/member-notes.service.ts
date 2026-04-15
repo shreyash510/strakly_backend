@@ -28,7 +28,6 @@ export class MemberNotesService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: MemberNoteFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -43,11 +42,6 @@ export class MemberNotesService {
       if (filters.userId) {
         conditions.push(`n.user_id = $${paramIndex++}`);
         values.push(filters.userId);
-      }
-
-      if (branchId !== null) {
-        conditions.push(`(n.branch_id = $${paramIndex++} OR n.branch_id IS NULL)`);
-        values.push(branchId);
       }
 
       if (filters.noteType) {
@@ -104,21 +98,21 @@ export class MemberNotesService {
   async create(
     dto: CreateMemberNoteDto,
     gymId: number,
-    branchId: number | null,
     createdBy: number,
+    branchId?: number | null,
   ) {
     const note = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO member_notes (branch_id, user_id, note_type, content, visibility, created_by, created_at, updated_at)
+        `INSERT INTO member_notes (user_id, note_type, content, visibility, created_by, branch_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
           dto.userId,
           dto.noteType || 'general',
           dto.content,
           dto.visibility || 'all',
           createdBy,
+          branchId || null,
         ],
       );
       return result.rows[0];

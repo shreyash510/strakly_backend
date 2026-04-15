@@ -145,8 +145,6 @@ export class UpdateStageDto {
   winLossReason?: string;
 }
 
-export class ConvertLeadDto {}
-
 export class CreateLeadActivityDto {
   @IsEnum(ActivityType)
   @IsNotEmpty()
@@ -173,6 +171,11 @@ export class LeadStatsFiltersDto {
   @IsOptional()
   @IsDateString()
   dateTo?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }
 
 export class LeadFiltersDto {
@@ -202,4 +205,9 @@ export class LeadFiltersDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  branchId?: number;
 }

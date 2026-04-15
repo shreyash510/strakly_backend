@@ -30,18 +30,15 @@ import type { AuthenticatedRequest } from '../common/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { setPaginationHeaders } from '../common/pagination.util';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { resolveEffectiveBranchId } from '../common/helpers/gym-context.helper';
 
 @ApiTags('salary')
 @Controller('salary')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard, ManagerPermissionsGuard)
-@PlanFeatures(PLAN_FEATURES.SALARY_MANAGEMENT)
+@UseGuards(JwtAuthGuard, RolesGuard, ManagerPermissionsGuard)
 @Roles('superadmin', 'admin')
 @ApiBearerAuth()
 export class SalaryController {
@@ -62,18 +59,6 @@ export class SalaryController {
     return req.user.gymId!;
   }
 
-  private resolveBranchId(req: AuthenticatedRequest, queryBranchId?: string): number | null {
-    // If user has a specific branch assigned, they can only see their branch
-    if (req.user.branchId !== null && req.user.branchId !== undefined) {
-      return req.user.branchId;
-    }
-    // User is admin with access to all branches - use query param if provided
-    if (queryBranchId && queryBranchId !== 'all' && queryBranchId !== '') {
-      return parseInt(queryBranchId);
-    }
-    return null; // all branches
-  }
-
   @Post()
   @Roles('superadmin', 'admin', 'manager')
   @ManagerPermission('salary', 'create')
@@ -90,7 +75,8 @@ export class SalaryController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const result = await this.salaryService.create(createSalaryDto, gymId, req.user.userId);
+    const branchId = resolveEffectiveBranchId(req.user, undefined);
+    const result = await this.salaryService.create(createSalaryDto, gymId, req.user.userId, branchId);
     this.notificationsGateway.emitSalaryChanged(gymId, { action: 'created' });
     return result;
   }
@@ -113,12 +99,6 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   async findAll(
     @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
@@ -130,11 +110,9 @@ export class SalaryController {
     @Query('paymentStatus') paymentStatus?: string,
     @Query('noPagination') noPagination?: string,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const branchId = this.resolveBranchId(req, queryBranchId);
     const result = await this.salaryService.findAll(
       {
         page: page ? parseInt(page) : undefined,
@@ -145,7 +123,6 @@ export class SalaryController {
         year: year ? parseInt(year) : undefined,
         paymentStatus,
         noPagination: noPagination === 'true',
-        branchId,
       },
       gymId,
     );
@@ -177,20 +154,12 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   getStats(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.salaryService.getStats(gymId, branchId);
+    return this.salaryService.getStats(gymId);
   }
 
   @Get('staff')
@@ -201,20 +170,12 @@ export class SalaryController {
     type: Number,
     description: 'Gym ID (required for superadmin)',
   })
-  @ApiQuery({
-    name: 'branchId',
-    required: false,
-    type: Number,
-    description: 'Branch ID for filtering (admin only)',
-  })
   getStaffList(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
-    @Query('branchId') queryBranchId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    const branchId = this.resolveBranchId(req, queryBranchId);
-    return this.salaryService.getStaffList(gymId, branchId);
+    return this.salaryService.getStaffList(gymId);
   }
 
   @Get(':id')

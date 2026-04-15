@@ -93,16 +93,15 @@ export class AttendanceService {
   async searchUserByCode(
     code: string,
     gymId: number,
-    branchId: number | null = null,
   ): Promise<SearchUserResult | null> {
     const userData = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
         // Search all users gym-wide (no branch filter)
         const query = `
-          SELECT id, name, email, phone, avatar, status, attendance_code, role, branch_id, created_at
+          SELECT id, name, email, phone, avatar, status, attendance_code, role, created_at
           FROM users
-          WHERE attendance_code = $1
+          WHERE attendance_code = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)
         `;
         const result = await client.query(query, [code]);
         return result.rows[0];
@@ -136,8 +135,8 @@ export class AttendanceService {
     },
     staffId: number,
     gymId: number,
-    branchId: number | null = null,
     checkInMethod: string = 'code',
+    branchId?: number,
   ): Promise<AttendanceRecord> {
     const today = this.getTodayDate();
 
@@ -157,29 +156,26 @@ export class AttendanceService {
     const staffName = staffUser?.name;
 
     // Single tenant query that checks existing record, membership, user branch, and inserts if valid
-    const result = await this.tenantService.executeInTenant(
+    // Wrapped in a transaction so the duplicate-check SELECT and the INSERT are atomic
+    const result = await this.tenantService.executeInTenantTransaction(
       gymId,
       async (client) => {
         // First, check all conditions in parallel
-        const [existingResult, membershipResult, userResult] =
+        const [existingResult, membershipResult] =
           await Promise.all([
             client.query(
-              `SELECT id FROM attendance WHERE user_id = $1 AND attendance_date = $2::DATE AND status = 'present'`,
+              `SELECT id FROM attendance WHERE user_id = $1 AND attendance_date = $2::DATE AND status = 'present' AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               [user.id, today],
             ),
             client.query(
               `SELECT id FROM memberships WHERE user_id = $1 AND LOWER(status) = 'active'
-               AND start_date::date <= CURRENT_DATE AND end_date::date >= CURRENT_DATE`,
+               AND start_date::date <= CURRENT_DATE AND end_date::date >= CURRENT_DATE AND (is_deleted = FALSE OR is_deleted IS NULL)`,
               [user.id],
             ),
-            client.query(`SELECT branch_id FROM users WHERE id = $1`, [
-              user.id,
-            ]),
           ]);
 
         const existingRecord = existingResult.rows[0];
         const activeMembership = membershipResult.rows[0];
-        const userBranchId = userResult.rows[0]?.branch_id;
 
         if (existingRecord) {
           return { error: 'already_checked_in' };
@@ -189,27 +185,23 @@ export class AttendanceService {
           return { error: 'no_active_membership' };
         }
 
-        // Use user's branch if branchId not provided
-        const attendanceBranchId = branchId ?? userBranchId;
-
         // Insert attendance record
         const insertResult = await client.query(
-          `INSERT INTO attendance (branch_id, user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, created_at, updated_at)
-           VALUES ($1, $2, $3, NOW(), $4::DATE, $4::DATE, $5, $6, 'present', NOW(), NOW())
+          `INSERT INTO attendance (user_id, membership_id, check_in_time, date, attendance_date, marked_by, check_in_method, status, branch_id, created_at, updated_at)
+           VALUES ($1, $2, NOW(), $3::DATE, $3::DATE, $4, $5, 'present', $6, NOW(), NOW())
            RETURNING *`,
           [
-            attendanceBranchId,
             user.id,
             activeMembership.id,
             today,
             staffId,
             checkInMethod,
+            branchId || null,
           ],
         );
 
         return {
           attendance: insertResult.rows[0],
-          attendanceBranchId,
         };
       },
     );
@@ -227,13 +219,12 @@ export class AttendanceService {
       );
     }
 
-    const { attendance, attendanceBranchId } = result;
+    const { attendance } = result;
 
     // Log activity asynchronously (don't wait for it)
     this.activityLogsService
       .logAttendanceMarked(
         gymId,
-        attendanceBranchId,
         staffId,
         'staff',
         staffName || 'Staff',
@@ -317,10 +308,12 @@ export class AttendanceService {
     });
     const staffName = staffUserForCheckout?.name;
 
-    await this.tenantService.executeInTenant(gymId, async (client) => {
+    // Wrapped in a transaction so the history INSERT and the attendance UPDATE are atomic,
+    // preventing duplicate history records under concurrent checkout requests
+    await this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       await client.query(
-        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, 'checked_out', NOW())`,
+        `INSERT INTO attendance_history (user_id, membership_id, check_in_time, check_out_time, date, attendance_date, duration, marked_by, checked_out_by, check_in_method, branch_id, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $5::DATE, $6, $7, $8, $9, $10, 'checked_out', NOW())`,
         [
           attendance.user_id,
           attendance.membership_id,
@@ -331,6 +324,7 @@ export class AttendanceService {
           attendance.marked_by,
           checkedOutById,
           attendance.check_in_method,
+          attendance.branch_id || null,
         ],
       );
 
@@ -383,7 +377,7 @@ export class AttendanceService {
 
   async getTodayAttendance(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number,
   ): Promise<AttendanceRecord[]> {
     const today = this.getTodayDate();
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
@@ -391,11 +385,12 @@ export class AttendanceService {
     const records = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
+        const branchFilter = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
         let query = `SELECT a.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar, u.attendance_code, mb.name as marked_by_name
          FROM attendance a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users mb ON mb.id = a.marked_by
-         WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
+         WHERE a.attendance_date = $1::DATE AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)${branchFilter}`;
         const values: SqlValue[] = [today];
 
         query += ` ORDER BY a.check_in_time DESC`;
@@ -411,15 +406,15 @@ export class AttendanceService {
   async getAttendanceByDate(
     date: string,
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number,
   ): Promise<AttendanceRecord[]> {
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId } });
 
     const { activeRecords, historyRecords } =
       await this.tenantService.executeInTenant(gymId, async (client) => {
         // Build filters with table aliases
-        const attendanceBranchFilter = '';
-        const historyBranchFilter = '';
+        const attendanceBranchFilter = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
+        const historyBranchFilter = branchId ? ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)` : '';
         const attendanceSoftDeleteFilter = ` AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)`;
         const historySoftDeleteFilter = ` AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)`;
 
@@ -490,7 +485,7 @@ export class AttendanceService {
            FROM attendance a
            JOIN users u ON u.id = a.user_id
            LEFT JOIN users mb ON mb.id = a.marked_by
-           WHERE a.user_id = $1
+           WHERE a.user_id = $1 AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
            ORDER BY a.check_in_time DESC`,
             [userId],
           ),
@@ -499,14 +494,14 @@ export class AttendanceService {
            FROM attendance_history ah
            JOIN users u ON u.id = ah.user_id
            LEFT JOIN users mb ON mb.id = ah.marked_by
-           WHERE ah.user_id = $1
+           WHERE ah.user_id = $1 AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
            ORDER BY ah.check_in_time DESC`,
             [userId],
           ),
           client.query(
             `SELECT
-            (SELECT COUNT(*) FROM attendance WHERE user_id = $1) +
-            (SELECT COUNT(*) FROM attendance_history WHERE user_id = $1) as total`,
+            (SELECT COUNT(*) FROM attendance WHERE user_id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)) +
+            (SELECT COUNT(*) FROM attendance_history WHERE user_id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)) as total`,
             [userId],
           ),
         ]);
@@ -555,7 +550,7 @@ export class AttendanceService {
 
   async getAttendanceStats(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number,
   ): Promise<AttendanceStats> {
     const today = this.getTodayDate();
     const weekStart = this.getWeekStartDate();
@@ -564,8 +559,7 @@ export class AttendanceService {
     const stats = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        // Branch filter removed - gym-wide results
-        const branchFilter = '';
+        const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
 
         const [
           todayResult,
@@ -575,22 +569,22 @@ export class AttendanceService {
           presentResult,
         ] = await Promise.all([
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date = $1::DATE${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date = $1::DATE${branchFilter} AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [today],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter} AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [weekStart],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE attendance_date >= $1::DATE${branchFilter} AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [monthStart],
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance_history WHERE 1=1${branchFilter} AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           ),
           client.query(
-            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${branchFilter}`,
+            `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'${branchFilter} AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             [today],
           ),
         ]);
@@ -615,12 +609,13 @@ export class AttendanceService {
 
   async getCurrentlyPresentCount(
     gymId: number,
-    branchId: number | null = null,
+    branchId?: number,
   ): Promise<number> {
     const today = this.getTodayDate();
 
     return this.tenantService.executeInTenant(gymId, async (client) => {
-      const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present'`;
+      const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+      const query = `SELECT COUNT(*) as count FROM attendance WHERE attendance_date = $1::DATE AND status = 'present' AND (is_deleted = FALSE OR is_deleted IS NULL)${branchFilter}`;
       const values: SqlValue[] = [today];
 
       const result = await client.query(query, values);
@@ -630,11 +625,11 @@ export class AttendanceService {
 
   async getAllAttendance(
     gymId: number,
-    branchId: number | null = null,
     rawPage: number = 1,
     rawLimit: number = 50,
     startDate?: string,
     endDate?: string,
+    branchId?: number,
   ): Promise<{
     records: AttendanceRecord[];
     total: number;
@@ -647,7 +642,8 @@ export class AttendanceService {
     const { records, total } = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {
-        let whereClause = '1=1';
+        let whereClause = '(ah.is_deleted = FALSE OR ah.is_deleted IS NULL)';
+        if (branchId) whereClause += ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)`;
         const values: SqlValue[] = [];
         let paramIndex = 1;
 
@@ -735,9 +731,9 @@ export class AttendanceService {
 
   async getReports(
     gymId: number,
-    branchId: number | null = null,
     startDate?: string,
     endDate?: string,
+    branchId?: number,
   ): Promise<AttendanceReportData> {
     // Default to last 30 days if no dates provided
     const end = endDate || this.getTodayDate();
@@ -749,7 +745,9 @@ export class AttendanceService {
         return d.toLocaleDateString('en-CA');
       })();
 
-    const branchFilter = '';
+    const branchFilter = branchId ? ` AND (branch_id = ${branchId} OR branch_id IS NULL)` : '';
+    const branchFilterA = branchId ? ` AND (a.branch_id = ${branchId} OR a.branch_id IS NULL)` : '';
+    const branchFilterAh = branchId ? ` AND (ah.branch_id = ${branchId} OR ah.branch_id IS NULL)` : '';
     const softDeleteFilter = ` AND (is_deleted = FALSE OR is_deleted IS NULL)`;
 
     const reportData = await this.tenantService.executeInTenant(
@@ -883,8 +881,6 @@ export class AttendanceService {
         });
 
         // 5. Top members - combine both tables
-        const topMembersBranchFilter = '';
-        const topMembersHistoryBranchFilter = '';
         const topMembersResult = await client.query(
           `
         SELECT
@@ -895,13 +891,13 @@ export class AttendanceService {
           SELECT a.user_id, u.name, COUNT(*) as visits
           FROM attendance a
           JOIN users u ON u.id = a.user_id
-          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${topMembersBranchFilter} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+          WHERE a.attendance_date >= $1::DATE AND a.attendance_date <= $2::DATE AND a.status = 'present'${branchFilterA} AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
           GROUP BY a.user_id, u.name
           UNION ALL
           SELECT ah.user_id, u.name, COUNT(*) as visits
           FROM attendance_history ah
           JOIN users u ON u.id = ah.user_id
-          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${topMembersHistoryBranchFilter} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
+          WHERE ah.attendance_date >= $1::DATE AND ah.attendance_date <= $2::DATE${branchFilterAh} AND (ah.is_deleted = FALSE OR ah.is_deleted IS NULL)
           GROUP BY ah.user_id, u.name
         ) combined
         GROUP BY user_id, name

@@ -38,11 +38,6 @@ export class CreateSaasPlanDto {
   @IsOptional()
   currency?: string;
 
-  @ApiPropertyOptional({ example: 'monthly', enum: ['monthly', 'yearly'] })
-  @IsString()
-  @IsOptional()
-  billingPeriod?: string;
-
   @ApiPropertyOptional({ example: 3, description: 'Duration in months (e.g., 3, 6, 12, 24)' })
   @IsNumber()
   @IsOptional()
@@ -62,6 +57,11 @@ export class CreateSaasPlanDto {
   @IsNumber()
   @IsOptional()
   maxBranches?: number;
+
+  @ApiPropertyOptional({ example: 100, description: '-1 for unlimited' })
+  @IsNumber()
+  @IsOptional()
+  maxProducts?: number;
 
   @ApiPropertyOptional({ example: ['QR check-in', 'Custom branding'] })
   @IsArray()
@@ -125,6 +125,11 @@ export class UpdateSaasPlanDto {
   @IsNumber()
   @IsOptional()
   maxBranches?: number;
+
+  @ApiPropertyOptional({ example: 100, description: '-1 for unlimited' })
+  @IsNumber()
+  @IsOptional()
+  maxProducts?: number;
 
   @ApiPropertyOptional({ example: ['QR check-in', 'Custom branding'] })
   @IsArray()
@@ -299,6 +304,11 @@ export class InitiateManualPaymentDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'URL of the uploaded payment proof screenshot/PDF' })
+  @IsString()
+  @IsOptional()
+  proofUrl?: string;
 }
 
 // ============================================
@@ -454,4 +464,32 @@ export class PaymentHistoryFiltersDto {
   @IsNumber()
   @IsOptional()
   limit?: number;
+}
+
+// ============================================
+// Razorpay DTOs
+// ============================================
+
+export class CreateRazorpayOrderDto {
+  @ApiProperty({ example: 1, description: 'Plan ID to subscribe to' })
+  @IsNumber()
+  planId: number;
+}
+
+export class VerifyRazorpayPaymentDto {
+  @ApiProperty({ example: 'order_ABC123' })
+  @IsString()
+  razorpay_order_id: string;
+
+  @ApiProperty({ example: 'pay_ABC123' })
+  @IsString()
+  razorpay_payment_id: string;
+
+  @ApiProperty({ example: 'signature_hash' })
+  @IsString()
+  razorpay_signature: string;
+
+  @ApiProperty({ example: 1, description: 'Plan ID to subscribe to' })
+  @IsNumber()
+  planId: number;
 }

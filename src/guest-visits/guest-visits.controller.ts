@@ -9,26 +9,25 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { GuestVisitsService } from './guest-visits.service';
 import { CreateGuestVisitDto, UpdateGuestVisitDto, GuestVisitFiltersDto } from './dto/guest-visit.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
+import { RequireBranchGuard } from '../auth/guards/require-branch.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
 import { UserId } from '../common/decorators/user-id.decorator';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ManagerPermissionsGuard } from '../auth/guards/manager-permissions.guard';
 import { ManagerPermission } from '../auth/decorators/manager-permission.decorator';
 
 @ApiTags('guest-visits')
 @Controller('guest-visits')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
-@PlanFeatures(PLAN_FEATURES.GUEST_DAY_PASS)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class GuestVisitsController {
   constructor(private readonly guestVisitsService: GuestVisitsService) {}
@@ -37,10 +36,11 @@ export class GuestVisitsController {
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.guestVisitsService.getStats(gymId, branchId);
+    return this.guestVisitsService.getStats(gymId, resolveEffectiveBranchId(req.user, branchId) ?? undefined);
   }
 
   @Get()
@@ -48,39 +48,38 @@ export class GuestVisitsController {
   @ApiOperation({ summary: 'List guest visits with filters' })
   async findAll(
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: GuestVisitFiltersDto,
   ) {
-    return this.guestVisitsService.findAll(gymId, branchId, filters);
+    return this.guestVisitsService.findAll(gymId, filters);
   }
 
   @Get(':id')
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get a guest visit by ID' })
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.findOne(id, gymId, branchId);
+    return this.guestVisitsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Post()
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'create')
   @ApiOperation({ summary: 'Record a guest visit' })
   async create(
     @Body() dto: CreateGuestVisitDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @UserId() userId: number,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.guestVisitsService.create(gymId, branchId, dto, userId);
+    return this.guestVisitsService.create(gymId, dto, userId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Update a guest visit' })
@@ -88,34 +87,31 @@ export class GuestVisitsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateGuestVisitDto,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.update(id, gymId, branchId, dto);
+    return this.guestVisitsService.update(id, gymId, dto);
   }
 
   @Patch(':id/convert')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Mark guest as converted to client' })
   async markConverted(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.markConverted(id, gymId, branchId);
+    return this.guestVisitsService.markConverted(id, gymId);
   }
 
   @Delete(':id')
-  @UseGuards(ManagerPermissionsGuard)
+  @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
   @Roles('admin', 'manager')
   @ManagerPermission('guestVisits', 'delete')
   @ApiOperation({ summary: 'Delete a guest visit' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.guestVisitsService.remove(id, gymId, branchId);
+    return this.guestVisitsService.remove(id, gymId);
   }
 }

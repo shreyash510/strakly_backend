@@ -54,7 +54,6 @@ export class LeadsService {
 
   async findAll(
     gymId: number,
-    branchId: number | null = null,
     filters: LeadFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -66,9 +65,9 @@ export class LeadsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`l.branch_id = $${paramIndex++}`);
-        values.push(branchId);
+      if (filters.branchId) {
+        conditions.push(`(l.branch_id = $${paramIndex++} OR l.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       if (filters.pipelineStage) {
@@ -121,14 +120,22 @@ export class LeadsService {
     });
   }
 
-  async findOne(id: number, gymId: number) {
+  async findOne(id: number, gymId: number, branchId?: number | null) {
     const lead = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['l.id = $1', 'l.is_deleted = FALSE'];
+      const values: SqlValue[] = [id];
+
+      if (branchId) {
+        conditions.push(`(l.branch_id = $2 OR l.branch_id IS NULL)`);
+        values.push(branchId);
+      }
+
       const result = await client.query(
         `SELECT l.*, u.name as assigned_to_name
          FROM leads l
          LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE l.id = $1 AND l.is_deleted = FALSE`,
-        [id],
+         WHERE ${conditions.join(' AND ')}`,
+        values,
       );
       return result.rows[0];
     });
@@ -140,20 +147,19 @@ export class LeadsService {
     return this.formatLead(lead);
   }
 
-  async create(gymId: number, branchId: number | null, dto: CreateLeadDto, createdBy?: number) {
+  async create(gymId: number, dto: CreateLeadDto, createdBy?: number, branchId?: number | null) {
     const lead = await this.tenantService.executeInTenant(gymId, async (client) => {
       const initialStage = dto.pipelineStage || 'new';
       const result = await client.query(
         `INSERT INTO leads (
-           branch_id, name, email, phone, lead_source,
+           name, email, phone, lead_source,
            pipeline_stage, assigned_to, score,
            inquiry_date, expected_close_date, deal_value, notes,
-           stage_entered_at, created_at, updated_at
+           branch_id, stage_entered_at, created_at, updated_at
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
          RETURNING *`,
         [
-          branchId,
           dto.name,
           dto.email || null,
           dto.phone || null,
@@ -165,6 +171,7 @@ export class LeadsService {
           dto.expectedCloseDate || null,
           dto.dealValue || null,
           dto.notes || null,
+          branchId ?? null,
         ],
       );
       const row = result.rows[0];
@@ -312,7 +319,6 @@ export class LeadsService {
   async convertToUser(
     id: number,
     gymId: number,
-    branchId: number | null,
     convertedByUserId: number,
   ) {
     const lead = await this.findOne(id, gymId);
@@ -324,15 +330,14 @@ export class LeadsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Insert a new user from the lead data
       const userResult = await client.query(
-        `INSERT INTO users (name, email, phone, role, status, lead_source, branch_id, created_at, updated_at)
-         VALUES ($1, $2, $3, 'client', 'onboarding', $4, $5, NOW(), NOW())
+        `INSERT INTO users (name, email, phone, role, status, lead_source, created_at, updated_at)
+         VALUES ($1, $2, $3, 'client', 'onboarding', $4, NOW(), NOW())
          RETURNING *`,
         [
           lead.name,
           lead.email || null,
           lead.phone || null,
           lead.leadSource || null,
-          branchId,
         ],
       );
       const user = userResult.rows[0];
@@ -380,7 +385,6 @@ export class LeadsService {
 
   async getStats(
     gymId: number,
-    branchId: number | null = null,
     dateFilters: LeadStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -388,10 +392,11 @@ export class LeadsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`branch_id = $${paramIndex++}`);
-        values.push(branchId);
+      if (dateFilters.branchId) {
+        conditions.push(`(branch_id = $${paramIndex++} OR branch_id IS NULL)`);
+        values.push(dateFilters.branchId);
       }
+
       if (dateFilters.dateFrom) {
         conditions.push(`created_at >= $${paramIndex++}`);
         values.push(dateFilters.dateFrom);
@@ -476,7 +481,7 @@ export class LeadsService {
                 COUNT(*) FILTER (WHERE l.pipeline_stage = 'won') as won
          FROM leads l
          LEFT JOIN users u ON u.id = l.assigned_to
-         WHERE ${whereClause.replace(/(?<!\.)is_deleted/g, 'l.is_deleted').replace(/(?<!\.)branch_id/g, 'l.branch_id').replace(/(?<!\.)created_at/g, 'l.created_at')}
+         WHERE ${whereClause.replace(/(?<!\.)is_deleted/g, 'l.is_deleted').replace(/(?<!\.)created_at/g, 'l.created_at')}
            AND l.assigned_to IS NOT NULL
          GROUP BY l.assigned_to, u.name ORDER BY total DESC`,
         values,

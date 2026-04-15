@@ -53,6 +53,7 @@ export interface GymInfo {
   address: string | null;
   city: string | null;
   state: string | null;
+  currency: string;
 }
 
 export interface FullReportData {

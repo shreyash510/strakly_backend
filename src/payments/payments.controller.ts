@@ -1,38 +1,33 @@
 import {
   Controller,
   Get,
-  Post,
   Body,
   Param,
   Query,
   Patch,
   UseGuards,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import {
-  CreatePaymentDto,
   UpdatePaymentDto,
   PaymentFiltersDto,
 } from './dto/payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { PlanFeaturesGuard } from '../auth/guards/plan-features.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { PlanFeatures } from '../auth/decorators/plan-features.decorator';
-import { PLAN_FEATURES } from '../common/constants/features';
 import { GymId } from '../common/decorators/gym-id.decorator';
-import { OptionalBranchId } from '../common/decorators/branch-id.decorator';
-import { UserId } from '../common/decorators/user-id.decorator';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import type { AuthenticatedRequest } from '../common/types';
+import { resolveEffectiveBranchId } from '../common';
 
 @ApiTags('payments')
 @ApiBearerAuth()
 @Controller('payments')
-@UseGuards(JwtAuthGuard, RolesGuard, PlanFeaturesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('superadmin', 'admin', 'manager')
-@PlanFeatures(PLAN_FEATURES.PAYMENT_GATEWAY)
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
@@ -41,55 +36,37 @@ export class PaymentsController {
 
   @Get()
   async findAll(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query() filters: PaymentFiltersDto,
   ) {
-    return this.paymentsService.findAll(gymId, branchId, filters);
+    filters.branchId = resolveEffectiveBranchId(req.user, filters.branchId ? String(filters.branchId) : undefined) ?? undefined;
+    return this.paymentsService.findAll(gymId, filters);
   }
 
   @Get('stats')
   async getStats(
+    @Req() req: AuthenticatedRequest,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.paymentsService.getStats(
       gymId,
-      branchId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
+      resolveEffectiveBranchId(req.user, branchId),
     );
   }
 
   @Get(':id')
   async findOne(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @GymId() gymId: number,
-    @OptionalBranchId() branchId: number | null,
   ) {
-    return this.paymentsService.findOne(id, gymId, branchId);
-  }
-
-  @Get('reference/:table/:id')
-  async findByReference(
-    @Param('table') table: string,
-    @Param('id', ParseIntPipe) referenceId: number,
-    @GymId() gymId: number,
-  ) {
-    return this.paymentsService.findByReference(table, referenceId, gymId);
-  }
-
-  @Post()
-  async create(
-    @Body() dto: CreatePaymentDto,
-    @GymId() gymId: number,
-    @UserId() userId: number,
-  ) {
-    const result = await this.paymentsService.create(dto, gymId, userId);
-    this.notificationsGateway.emitPaymentChanged(gymId, { action: 'created' });
-    return result;
+    return this.paymentsService.findOne(id, gymId, resolveEffectiveBranchId(req.user, undefined));
   }
 
   @Patch(':id')

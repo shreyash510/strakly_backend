@@ -42,6 +42,38 @@ export function resolveGymId(
 }
 
 /**
+ * Resolves the effective branchId for a request.
+ *
+ * - admin / superadmin: honours the query param freely (null = all branches)
+ * - non-admin with multiple allowed branches: query param is used only if it
+ *   appears in the user's branchIds list; otherwise falls back to primary branchId
+ * - non-admin with a single branch: always locked to their branchId, query
+ *   param is ignored
+ */
+export function resolveEffectiveBranchId(
+  user: { role: string; branchId?: number | null; branchIds?: number[] },
+  queryBranchId?: string,
+): number | null {
+  if (user.role === 'admin' || user.role === 'superadmin') {
+    if (queryBranchId) return parseInt(queryBranchId, 10);
+    // Fall back to branchId set by BranchContextInterceptor (from x-branch-id header)
+    return user.branchId ?? null;
+  }
+
+  // Multi-branch non-admin: allow switching between their assigned branches
+  const allowedBranchIds = user.branchIds ?? [];
+  if (allowedBranchIds.length > 1 && queryBranchId) {
+    const requested = parseInt(queryBranchId, 10);
+    if (allowedBranchIds.includes(requested)) {
+      return requested;
+    }
+  }
+
+  // Single-branch or unrecognised query param: locked to primary branch
+  return user.branchId ?? null;
+}
+
+/**
  * Optional version that returns null instead of throwing for operations
  * that can work without a gym context.
  */

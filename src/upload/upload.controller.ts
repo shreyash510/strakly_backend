@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
@@ -62,6 +63,16 @@ export class UploadController {
 
     if (!targetUserId) {
       throw new BadRequestException('User ID is required');
+    }
+
+    // Authorization: trainers and clients can only upload their own avatar
+    const normalizedRoleCheck = userRole?.toLowerCase();
+    if (
+      userId &&
+      String(userId) !== String(req.user?.userId) &&
+      !['superadmin', 'admin', 'manager'].includes(normalizedRoleCheck)
+    ) {
+      throw new ForbiddenException('You can only upload your own avatar');
     }
 
     const result = await this.uploadService.uploadAvatar(file, targetUserId, oldUrl);
@@ -150,6 +161,7 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
     @Body('gymId') gymId: string,
     @Body('oldUrl') oldUrl: string,
+    @Request() req: AuthenticatedRequest,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -157,6 +169,12 @@ export class UploadController {
 
     if (!gymId) {
       throw new BadRequestException('Gym ID is required');
+    }
+
+    if (!req.user.isSuperAdmin) {
+      if (req.user.gymId !== parseInt(gymId, 10)) {
+        throw new ForbiddenException('Access denied: not your gym');
+      }
     }
 
     const result = await this.uploadService.uploadGymLogo(file, gymId, oldUrl);

@@ -91,15 +91,10 @@ export class ProductsService {
 
   // ─── Categories ───
 
-  async findAllCategories(gymId: number, branchId: number | null) {
+  async findAllCategories(gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['(is_deleted = FALSE OR is_deleted IS NULL)'];
       const values: SqlValue[] = [];
-
-      if (branchId !== null) {
-        conditions.push(`(branch_id = $1 OR branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `SELECT * FROM product_categories WHERE ${conditions.join(' AND ')} ORDER BY display_order ASC, name ASC`,
@@ -112,14 +107,13 @@ export class ProductsService {
 
   async createCategory(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductCategoryDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO product_categories (branch_id, name, description, display_order)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [branchId, dto.name, dto.description || null, dto.displayOrder || 0],
+        `INSERT INTO product_categories (name, description, display_order)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [dto.name, dto.description || null, dto.displayOrder || 0],
       );
       return this.formatCategory(result.rows[0]);
     });
@@ -188,7 +182,6 @@ export class ProductsService {
 
   async findAllProducts(
     gymId: number,
-    branchId: number | null,
     filters: ProductFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -199,12 +192,6 @@ export class ProductsService {
       const conditions: string[] = ['p.is_deleted = FALSE'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-        paramIndex++;
-      }
 
       if (filters.categoryId) {
         conditions.push(`p.category_id = $${paramIndex++}`);
@@ -222,6 +209,11 @@ export class ProductsService {
         );
         values.push(`%${filters.search}%`);
         paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -267,7 +259,7 @@ export class ProductsService {
     });
   }
 
-  async findLowStockProducts(gymId: number, branchId: number | null) {
+  async findLowStockProducts(gymId: number, branchId?: number | null) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
@@ -276,9 +268,9 @@ export class ProductsService {
       ];
       const values: SqlValue[] = [];
 
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $1 OR p.branch_id IS NULL)`);
+      if (branchId) {
         values.push(branchId);
+        conditions.push(`(p.branch_id = $${values.length} OR p.branch_id IS NULL)`);
       }
 
       const result = await client.query(
@@ -296,16 +288,44 @@ export class ProductsService {
 
   async createProduct(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductDto,
+    branchId?: number | null,
   ) {
+    // Check subscription limit for maxProducts
+    const subscription = await this.prisma.saasGymSubscription.findUnique({
+      where: { gymId },
+      include: { plan: true },
+    });
+
+    if (subscription?.plan) {
+      const maxProducts = subscription.plan.maxProducts;
+      // -1 means unlimited
+      if (maxProducts !== -1) {
+        // Count current products in the gym
+        const currentProductCount = await this.tenantService.executeInTenant(
+          gymId,
+          async (client) => {
+            const result = await client.query(
+              `SELECT COUNT(*)::int as count FROM products WHERE is_deleted = FALSE`,
+            );
+            return result.rows[0]?.count || 0;
+          },
+        );
+
+        if (currentProductCount >= maxProducts) {
+          throw new BadRequestException(
+            `You have reached the maximum limit of ${maxProducts} products for your subscription plan. Please upgrade your plan to add more products.`,
+          );
+        }
+      }
+    }
+
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `INSERT INTO products (branch_id, category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active)
+        `INSERT INTO products (category_id, name, sku, barcode, description, price, cost_price, tax_rate, stock_quantity, low_stock_threshold, is_active, branch_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
-          branchId,
           dto.categoryId || null,
           dto.name,
           dto.sku || null,
@@ -317,6 +337,7 @@ export class ProductsService {
           dto.stockQuantity ?? 0,
           dto.lowStockThreshold ?? 5,
           dto.isActive ?? true,
+          branchId || null,
         ],
       );
 
@@ -378,7 +399,7 @@ export class ProductsService {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       // Get current stock before adjustment
       const current = await client.query(
-        `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+        `SELECT stock_quantity FROM products WHERE id = $1 AND is_deleted = FALSE`,
         [id],
       );
       if (current.rows.length === 0) {
@@ -403,9 +424,9 @@ export class ProductsService {
 
       // Record stock movement
       await client.query(
-        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, current.rows[0].branch_id, 'adjustment', dto.adjustment, stockBefore, stockAfter, dto.reason || null, userId],
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, 'adjustment', dto.adjustment, stockBefore, stockAfter, dto.reason || null, userId],
       );
 
       return this.formatProduct(result.rows[0]);
@@ -427,7 +448,7 @@ export class ProductsService {
       for (const item of dto.items) {
         /* Fetch current product and lock the row */
         const current = await client.query(
-          `SELECT id, name, stock_quantity, branch_id
+          `SELECT id, name, stock_quantity
            FROM products
            WHERE id = $1 AND is_deleted = FALSE
            FOR UPDATE`,
@@ -471,11 +492,10 @@ export class ProductsService {
         /* Record stock movement */
         await client.query(
           `INSERT INTO product_stock_movements
-             (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+             (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             item.productId,
-            product.branch_id,
             dto.movementType,
             signedQuantity,
             stockBefore,
@@ -519,7 +539,6 @@ export class ProductsService {
 
   async findAllSales(
     gymId: number,
-    branchId: number | null,
     filters: SalesFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -530,11 +549,6 @@ export class ProductsService {
       const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       if (filters.productId) {
         conditions.push(`s.product_id = $${paramIndex++}`);
@@ -557,13 +571,18 @@ export class ProductsService {
       }
 
       if (filters.startDate) {
-        conditions.push(`s.sold_at >= $${paramIndex++}`);
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
         values.push(filters.startDate);
       }
 
       if (filters.endDate) {
-        conditions.push(`s.sold_at <= $${paramIndex++}`);
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
         values.push(filters.endDate);
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -595,6 +614,155 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Returns sales grouped by transaction (payment_id).
+   * Each transaction row includes nested items array.
+   * Single sales without payment_id are treated as their own transaction.
+   */
+  async findSalesTransactions(
+    gymId: number,
+    filters: SalesFiltersDto = {},
+  ) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 15;
+    const offset = (page - 1) * limit;
+
+    return this.tenantService.executeInTenant(gymId, async (client) => {
+      const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
+      const values: SqlValue[] = [];
+      let paramIndex = 1;
+
+      if (filters.paymentMethod) {
+        conditions.push(`s.payment_method = $${paramIndex++}`);
+        values.push(filters.paymentMethod);
+      }
+
+      if (filters.startDate) {
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
+        values.push(filters.startDate);
+      }
+
+      if (filters.endDate) {
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
+        values.push(filters.endDate);
+      }
+
+      if (filters.search) {
+        conditions.push(`(p.name ILIKE $${paramIndex} OR u.name ILIKE $${paramIndex})`);
+        values.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Count distinct transactions (group key = COALESCE(payment_id, -id) to make single sales unique)
+      const countResult = await client.query(
+        `SELECT COUNT(DISTINCT COALESCE(s.payment_id::text, 'single_' || s.id::text)) as total
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE ${whereClause}`,
+        values,
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      // Get paginated transaction keys
+      const txKeysResult = await client.query(
+        `SELECT
+           COALESCE(s.payment_id::text, 'single_' || s.id::text) as tx_key,
+           MAX(s.sold_at) as last_sold_at
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE ${whereClause}
+         GROUP BY tx_key
+         ORDER BY last_sold_at DESC
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...values, limit, offset],
+      );
+
+      if (txKeysResult.rows.length === 0) {
+        return { data: [], total, page, limit };
+      }
+
+      // Extract payment_ids and single sale ids from transaction keys
+      const paymentIds: number[] = [];
+      const singleSaleIds: number[] = [];
+      for (const row of txKeysResult.rows) {
+        const key = row.tx_key as string;
+        if (key.startsWith('single_')) {
+          singleSaleIds.push(parseInt(key.replace('single_', '')));
+        } else {
+          paymentIds.push(parseInt(key));
+        }
+      }
+
+      // Build condition to fetch all sale rows for these transactions
+      const fetchConditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
+      const fetchValues: SqlValue[] = [];
+      let fetchParamIndex = 1;
+      const orParts: string[] = [];
+
+      if (paymentIds.length > 0) {
+        orParts.push(`s.payment_id = ANY($${fetchParamIndex++})`);
+        fetchValues.push(paymentIds);
+      }
+      if (singleSaleIds.length > 0) {
+        orParts.push(`(s.payment_id IS NULL AND s.id = ANY($${fetchParamIndex++}))`);
+        fetchValues.push(singleSaleIds);
+      }
+      fetchConditions.push(`(${orParts.join(' OR ')})`);
+
+      const salesResult = await client.query(
+        `SELECT s.*, p.name as product_name, u.name as buyer_name, staff.name as sold_by_name
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         LEFT JOIN users u ON u.id = s.user_id
+         LEFT JOIN users staff ON staff.id = s.sold_by
+         WHERE ${fetchConditions.join(' AND ')}
+         ORDER BY s.sold_at DESC`,
+        fetchValues,
+      );
+
+      // Group into transactions
+      const txMap = new Map<string, any[]>();
+      for (const row of salesResult.rows) {
+        const key = row.payment_id ? String(row.payment_id) : `single_${row.id}`;
+        if (!txMap.has(key)) txMap.set(key, []);
+        txMap.get(key)!.push(this.formatSale(row));
+      }
+
+      // Build response in same order as txKeysResult
+      const transactions = txKeysResult.rows.map((r) => {
+        const key = r.tx_key as string;
+        const items = txMap.get(key) || [];
+        const first = items[0];
+        return {
+          transactionKey: key,
+          paymentId: first?.paymentId || null,
+          receiptNumber: first?.paymentId
+            ? `INV-${String(first.paymentId).padStart(5, '0')}`
+            : `SALE-${String(first?.id || 0).padStart(5, '0')}`,
+          items,
+          itemCount: items.reduce((sum, i) => sum + i.quantity, 0),
+          totalAmount: items.reduce((sum, i) => sum + i.totalAmount, 0),
+          paymentMethod: first?.paymentMethod || 'cash',
+          soldAt: first?.soldAt,
+          buyerName: first?.buyerName || null,
+          soldByName: first?.soldByName || null,
+          notes: first?.notes || null,
+        };
+      });
+
+      return { data: transactions, total, page, limit };
+    });
+  }
+
   async findOneSale(id: number, gymId: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
@@ -615,9 +783,9 @@ export class ProductsService {
 
   async createSale(
     gymId: number,
-    branchId: number | null,
     dto: CreateProductSaleDto,
     soldBy: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Verify product and decrement stock atomically
@@ -653,11 +821,10 @@ export class ProductsService {
 
       // Create sale record
       const sale = await client.query(
-        `INSERT INTO product_sales (branch_id, product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
+        `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes, branch_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
-          branchId,
           dto.productId,
           dto.userId || null,
           dto.quantity,
@@ -667,6 +834,7 @@ export class ProductsService {
           dto.paymentMethod,
           soldBy,
           dto.notes || null,
+          branchId || null,
         ],
       );
 
@@ -676,9 +844,9 @@ export class ProductsService {
       const stockBefore = parseInt(p.stock_quantity) + dto.quantity; // stock before decrement
       const stockAfter = parseInt(p.stock_quantity); // RETURNING gave us the post-update value
       await client.query(
-        `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [dto.productId, branchId, 'sale', -dto.quantity, stockBefore, stockAfter, saleRecord.id, soldBy],
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [dto.productId, 'sale', -dto.quantity, stockBefore, stockAfter, saleRecord.id, soldBy],
       );
 
       // Create payment record
@@ -693,7 +861,6 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         saleRecord.id,
-        branchId,
         dto.userId || null,
         buyerName,
         totalAmount,
@@ -701,6 +868,7 @@ export class ProductsService {
         totalAmount,
         dto.paymentMethod,
         soldBy,
+        branchId,
       );
 
       // Link payment to sale
@@ -718,9 +886,9 @@ export class ProductsService {
 
   async createBatchSale(
     gymId: number,
-    branchId: number | null,
     dto: CreateBatchSaleDto,
     soldBy: number,
+    branchId?: number | null,
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       // Validate all products and stock upfront
@@ -791,11 +959,10 @@ export class ProductsService {
 
         // Create sale record
         const sale = await client.query(
-          `INSERT INTO product_sales (branch_id, product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes)
+          `INSERT INTO product_sales (product_id, user_id, quantity, unit_price, tax_amount, total_amount, payment_method, sold_by, notes, branch_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING *`,
           [
-            branchId,
             item.productId,
             dto.userId || null,
             item.quantity,
@@ -805,17 +972,30 @@ export class ProductsService {
             dto.paymentMethod,
             soldBy,
             dto.notes || null,
+            branchId || null,
           ],
         );
 
         await client.query(
-          `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [item.productId, branchId, 'sale', -item.quantity, batchStockBefore, batchStockAfter, sale.rows[0].id, soldBy],
+          `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [item.productId, 'sale', -item.quantity, batchStockBefore, batchStockAfter, sale.rows[0].id, soldBy],
         );
 
         sales.push({ ...sale.rows[0], product_name: p.name });
       }
+
+      // Calculate discount
+      let discountAmount = 0;
+      if (dto.discountType && dto.discountValue && dto.discountValue > 0) {
+        if (dto.discountType === 'percentage') {
+          discountAmount = batchTotal * (dto.discountValue / 100);
+        } else {
+          discountAmount = dto.discountValue;
+        }
+        discountAmount = Math.min(discountAmount, batchTotal); // Can't exceed total
+      }
+      const finalTotal = batchTotal - discountAmount;
 
       // Create single payment for the batch
       const buyerName = dto.userId
@@ -829,14 +1009,14 @@ export class ProductsService {
       const payment = await this.paymentsService.createProductSalePaymentWithClient(
         client,
         sales[0].id,
-        branchId,
         dto.userId || null,
         buyerName,
         batchTotal,
         batchTax,
-        batchTotal,
+        finalTotal,
         dto.paymentMethod,
         soldBy,
+        branchId,
       );
 
       // Link payment to all sales
@@ -849,14 +1029,13 @@ export class ProductsService {
 
       return {
         sales: sales.map((s) => this.formatSale(s)),
-        payment: { id: payment.id, totalAmount: batchTotal },
+        payment: { id: payment.id, totalAmount: batchTotal, discountAmount, finalTotal },
       };
     });
   }
 
   async getSalesStats(
     gymId: number,
-    branchId: number | null,
     filters: SalesStatsFiltersDto = {},
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
@@ -864,19 +1043,19 @@ export class ProductsService {
       const values: SqlValue[] = [];
       let paramIndex = 1;
 
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
-
       if (filters.startDate) {
-        conditions.push(`s.sold_at >= $${paramIndex++}`);
+        conditions.push(`s.sold_at >= $${paramIndex++}::DATE`);
         values.push(filters.startDate);
       }
 
       if (filters.endDate) {
-        conditions.push(`s.sold_at <= $${paramIndex++}`);
+        conditions.push(`s.sold_at < ($${paramIndex++}::DATE + INTERVAL '1 day')`);
         values.push(filters.endDate);
+      }
+
+      if (filters.branchId) {
+        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
+        values.push(filters.branchId);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -965,18 +1144,12 @@ export class ProductsService {
 
   async getSalesStatsTrend(
     gymId: number,
-    branchId: number | null,
     filters: SalesTrendFiltersDto,
   ) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['(s.is_deleted = FALSE OR s.is_deleted IS NULL)'];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(s.branch_id = $${paramIndex++} OR s.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       /* Determine date grouping expression and default range */
       let dateExpr: string;
@@ -1033,15 +1206,12 @@ export class ProductsService {
 
   /* ─── Inventory Stats ─── */
 
-  async getInventoryStats(gymId: number, branchId: number | null) {
+  async getInventoryStats(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -1106,15 +1276,10 @@ export class ProductsService {
 
   /* ─── Barcode Lookup (TASK 4) ─── */
 
-  async findByBarcode(gymId: number, branchId: number | null, barcode: string) {
+  async findByBarcode(gymId: number, barcode: string) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.barcode = $1'];
       const values: SqlValue[] = [barcode];
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $2 OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const result = await client.query(
         `SELECT p.*, pc.name as category_name
@@ -1197,7 +1362,7 @@ export class ProductsService {
           taxAmount: item.tax_amount ? parseFloat(item.tax_amount) : 0,
           totalAmount: item.total_amount ? parseFloat(item.total_amount) : 0,
         })),
-        member: sale.user_id
+        client: sale.user_id
           ? {
               id: sale.user_id,
               name: sale.buyer_name,
@@ -1222,18 +1387,15 @@ export class ProductsService {
 
   /* ─── Reorder Suggestions ─── */
 
-  async getReorderSuggestions(gymId: number, branchId: number | null) {
+  async getReorderSuggestions(gymId: number, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
       ];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -1303,20 +1465,18 @@ export class ProductsService {
 
   /* ─── Dead Stock ─── */
 
-  async getDeadStock(gymId: number, branchId: number | null, days: number = 30) {
+  async getDeadStock(gymId: number, days: number = 30, branchId?: number) {
     return this.tenantService.executeInTenant(gymId, async (client) => {
       const conditions: string[] = [
         'p.is_deleted = FALSE',
         'p.is_active = TRUE',
         'p.stock_quantity > 0',
       ];
+      if (branchId) {
+        conditions.push(`(p.branch_id = ${branchId} OR p.branch_id IS NULL)`);
+      }
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       values.push(days);
       const daysParam = paramIndex++;
@@ -1376,7 +1536,6 @@ export class ProductsService {
       id: row.id,
       productId: row.product_id,
       productName: row.product_name,
-      branchId: row.branch_id,
       movementType: row.movement_type,
       quantity: row.quantity,
       stockBefore: row.stock_before,
@@ -1392,7 +1551,6 @@ export class ProductsService {
   async getStockMovements(
     gymId: number,
     productId: number,
-    branchId: number | null,
     filters: StockMovementFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1412,11 +1570,6 @@ export class ProductsService {
       const conditions: string[] = ['sm.product_id = $1'];
       const values: SqlValue[] = [productId];
       let paramIndex = 2;
-
-      if (branchId !== null) {
-        conditions.push(`sm.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       if (filters.movementType) {
         conditions.push(`sm.movement_type = $${paramIndex++}`);
@@ -1465,7 +1618,6 @@ export class ProductsService {
 
   async getAllStockMovements(
     gymId: number,
-    branchId: number | null,
     filters: AllStockMovementsFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1476,11 +1628,6 @@ export class ProductsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`sm.branch_id = $${paramIndex++}`);
-        values.push(branchId);
-      }
 
       if (filters.productId) {
         conditions.push(`sm.product_id = $${paramIndex++}`);
@@ -1507,12 +1654,16 @@ export class ProductsService {
         values.push(filters.performedBy);
       }
 
+      if (filters.branchId) {
+        conditions.push(`(p.branch_id = ${filters.branchId} OR p.branch_id IS NULL)`);
+      }
+
       const whereClause = conditions.length > 0
         ? 'WHERE ' + conditions.join(' AND ')
         : '';
 
       const countResult = await client.query(
-        `SELECT COUNT(*) as total FROM product_stock_movements sm ${whereClause}`,
+        `SELECT COUNT(*) as total FROM product_stock_movements sm LEFT JOIN products p ON p.id = sm.product_id ${whereClause}`,
         values,
       );
       const total = parseInt(countResult.rows[0].total);
@@ -1542,7 +1693,6 @@ export class ProductsService {
   private formatStockTake(row: Record<string, any>) {
     return {
       id: row.id,
-      branchId: row.branch_id,
       status: row.status,
       startedBy: row.started_by,
       startedByName: row.started_by_name,
@@ -1579,29 +1729,22 @@ export class ProductsService {
    */
   async startStockTake(
     gymId: number,
-    branchId: number | null,
     userId: number,
     dto: StartStockTakeDto = {},
   ) {
     return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
       /* Create the stock take header */
       const stResult = await client.query(
-        `INSERT INTO stock_takes (branch_id, started_by, notes)
-         VALUES ($1, $2, $3)
+        `INSERT INTO stock_takes (started_by, notes)
+         VALUES ($1, $2)
          RETURNING *`,
-        [branchId, userId, dto.notes || null],
+        [userId, dto.notes || null],
       );
       const stockTake = stResult.rows[0];
 
       /* Fetch all active, non-deleted products for this branch */
       const conditions: string[] = ['p.is_deleted = FALSE', 'p.is_active = TRUE'];
       const values: SqlValue[] = [];
-      let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(p.branch_id = $${paramIndex++} OR p.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const products = await client.query(
         `SELECT p.id, p.name, p.stock_quantity
@@ -1638,7 +1781,6 @@ export class ProductsService {
    */
   async getStockTakes(
     gymId: number,
-    branchId: number | null,
     filters: StockTakeFiltersDto = {},
   ) {
     const page = filters.page || 1;
@@ -1649,11 +1791,6 @@ export class ProductsService {
       const conditions: string[] = [];
       const values: SqlValue[] = [];
       let paramIndex = 1;
-
-      if (branchId !== null) {
-        conditions.push(`(st.branch_id = $${paramIndex++} OR st.branch_id IS NULL)`);
-        values.push(branchId);
-      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -1806,7 +1943,7 @@ export class ProductsService {
 
           /* Get current stock (may have changed since stock take started) */
           const productResult = await client.query(
-            `SELECT stock_quantity, branch_id FROM products WHERE id = $1 AND is_deleted = FALSE`,
+            `SELECT stock_quantity FROM products WHERE id = $1 AND is_deleted = FALSE`,
             [item.product_id],
           );
           if (productResult.rows.length === 0) continue;
@@ -1824,11 +1961,10 @@ export class ProductsService {
 
           /* Record the stock movement */
           await client.query(
-            `INSERT INTO product_stock_movements (product_id, branch_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reason, performed_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               item.product_id,
-              productResult.rows[0].branch_id,
               'stock_take',
               diff,
               stockBefore,
@@ -1868,6 +2004,111 @@ export class ProductsService {
         ...this.formatStockTake(updated.rows[0]),
         adjustmentsApplied: dto.applyAdjustments || false,
       };
+    });
+  }
+
+  // ─── Void / Delete Sale ───
+
+  async voidSale(saleId: number, gymId: number, deletedById: number) {
+    // Verify sale exists and is not already deleted
+    const sale = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, p.stock_quantity as current_stock
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE s.id = $1`,
+        [saleId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Sale with ID ${saleId} not found`);
+      }
+      if (result.rows[0].is_deleted) {
+        throw new BadRequestException(`Sale with ID ${saleId} is already voided`);
+      }
+      return result.rows[0];
+    });
+
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      // 1. Soft-delete the sale
+      await client.query(
+        `UPDATE product_sales SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1`,
+        [saleId, deletedById],
+      );
+
+      // 2. Restore stock
+      const stockResult = await client.query(
+        `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING stock_quantity`,
+        [sale.quantity, sale.product_id],
+      );
+
+      // 3. Create reversal stock movement
+      const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
+      const stockBefore = stockAfter - sale.quantity;
+      await client.query(
+        `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [sale.product_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, saleId, deletedById],
+      );
+
+      // 4. Void the payment record
+      if (sale.payment_id) {
+        await client.query(
+          `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE id = $1`,
+          [sale.payment_id],
+        );
+      }
+
+      return { success: true, message: 'Sale voided successfully' };
+    });
+  }
+
+  async voidBatchSale(paymentId: number, gymId: number, deletedById: number) {
+    // Find all sales with this payment_id that are not already deleted
+    const sales = await this.tenantService.executeInTenant(gymId, async (client) => {
+      const result = await client.query(
+        `SELECT s.*, p.stock_quantity as current_stock
+         FROM product_sales s
+         LEFT JOIN products p ON p.id = s.product_id
+         WHERE s.payment_id = $1 AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)`,
+        [paymentId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`No active sales found for payment ID ${paymentId}`);
+      }
+      return result.rows;
+    });
+
+    return this.tenantService.executeInTenantTransaction(gymId, async (client) => {
+      for (const sale of sales) {
+        // 1. Soft-delete the sale
+        await client.query(
+          `UPDATE product_sales SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $2 WHERE id = $1`,
+          [sale.id, deletedById],
+        );
+
+        // 2. Restore stock
+        const stockResult = await client.query(
+          `UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING stock_quantity`,
+          [sale.quantity, sale.product_id],
+        );
+
+        // 3. Create reversal stock movement
+        const stockAfter = stockResult.rows.length > 0 ? parseInt(stockResult.rows[0].stock_quantity) : 0;
+        const stockBefore = stockAfter - sale.quantity;
+        await client.query(
+          `INSERT INTO product_stock_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_id, performed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [sale.product_id, 'sale_reversal', sale.quantity, stockBefore, stockAfter, sale.id, deletedById],
+        );
+      }
+
+      // 4. Void the payment record
+      await client.query(
+        `UPDATE payments SET status = 'voided', updated_at = NOW() WHERE id = $1`,
+        [paymentId],
+      );
+
+      return { success: true, voided: sales.length, message: `${sales.length} sale(s) voided successfully` };
     });
   }
 }
