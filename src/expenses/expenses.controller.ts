@@ -24,6 +24,9 @@ import { ExpensesService } from './expenses.service';
 import {
   CreateExpenseDto,
   UpdateExpenseDto,
+  ApproveExpenseDto,
+  RejectExpenseDto,
+  MarkExpensePaidDto,
   CreateExpenseCategoryDto,
 } from './dto/expense.dto';
 import type { AuthenticatedRequest } from '../common/types';
@@ -59,25 +62,24 @@ export class ExpensesController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'categoryId', required: false, type: Number })
+  @ApiQuery({ name: 'approvalStatus', required: false, type: String })
+  @ApiQuery({ name: 'staffId', required: false, type: Number })
   @ApiQuery({ name: 'month', required: false, type: Number })
   @ApiQuery({ name: 'year', required: false, type: Number })
   @ApiQuery({ name: 'paymentMethod', required: false, type: String })
   @ApiQuery({ name: 'isRecurring', required: false, type: Boolean })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filter from date (ISO string)' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filter to date (ISO string)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
+  @ApiQuery({ name: 'gymId', required: false, type: Number })
   async findAll(
     @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('approvalStatus') approvalStatus?: string,
+    @Query('staffId') staffId?: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
     @Query('paymentMethod') paymentMethod?: string,
@@ -97,6 +99,8 @@ export class ExpensesController {
         limit: limit ? parseInt(limit) : undefined,
         search,
         category: categoryId ? parseInt(categoryId) : undefined,
+        approvalStatus,
+        staffId: staffId ? parseInt(staffId) : undefined,
         month: month ? parseInt(month) : undefined,
         year: year ? parseInt(year) : undefined,
         paymentMethod,
@@ -122,20 +126,17 @@ export class ExpensesController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'categoryId', required: false, type: Number })
-  @ApiQuery({ name: 'categoryCode', required: false, type: String, description: 'Filter by category code (e.g. employee_salary)' })
+  @ApiQuery({ name: 'categoryCode', required: false, type: String })
+  @ApiQuery({ name: 'approvalStatus', required: false, type: String })
+  @ApiQuery({ name: 'staffId', required: false, type: Number })
   @ApiQuery({ name: 'month', required: false, type: Number })
   @ApiQuery({ name: 'year', required: false, type: Number })
   @ApiQuery({ name: 'paymentMethod', required: false, type: String })
   @ApiQuery({ name: 'isRecurring', required: false, type: Boolean })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filter from date (ISO string)' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filter to date (ISO string)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'noPagination', required: false, type: Boolean })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
+  @ApiQuery({ name: 'gymId', required: false, type: Number })
   async findAllUnified(
     @Request() req: AuthenticatedRequest,
     @Query('page') page?: string,
@@ -143,6 +144,8 @@ export class ExpensesController {
     @Query('search') search?: string,
     @Query('categoryId') categoryId?: string,
     @Query('categoryCode') categoryCode?: string,
+    @Query('approvalStatus') approvalStatus?: string,
+    @Query('staffId') staffId?: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
     @Query('paymentMethod') paymentMethod?: string,
@@ -163,6 +166,8 @@ export class ExpensesController {
         search,
         category: categoryId ? parseInt(categoryId) : undefined,
         categoryCode,
+        approvalStatus,
+        staffId: staffId ? parseInt(staffId) : undefined,
         month: month ? parseInt(month) : undefined,
         year: year ? parseInt(year) : undefined,
         paymentMethod,
@@ -184,14 +189,6 @@ export class ExpensesController {
   @Get('unified-stats')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get unified expense statistics (includes salaries)' })
-  @ApiQuery({ name: 'year', required: false, type: Number })
-  @ApiQuery({ name: 'month', required: false, type: Number })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   getUnifiedStats(
     @Request() req: AuthenticatedRequest,
     @Query('year') year?: string,
@@ -211,14 +208,6 @@ export class ExpensesController {
   @Get('stats')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get expense statistics' })
-  @ApiQuery({ name: 'year', required: false, type: Number })
-  @ApiQuery({ name: 'month', required: false, type: Number })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   getStats(
     @Request() req: AuthenticatedRequest,
     @Query('year') year?: string,
@@ -238,12 +227,6 @@ export class ExpensesController {
   @Get('categories')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get expense categories' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   getCategories(
     @Request() req: AuthenticatedRequest,
     @Query('gymId') queryGymId?: string,
@@ -255,12 +238,6 @@ export class ExpensesController {
   @Post('categories')
   @Roles('admin')
   @ApiOperation({ summary: 'Create a custom expense category' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   createCategory(
     @Request() req: AuthenticatedRequest,
     @Body() createCategoryDto: CreateExpenseCategoryDto,
@@ -270,15 +247,54 @@ export class ExpensesController {
     return this.expensesService.createCategory(createCategoryDto, gymId);
   }
 
+  @Get('staff')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Staff members selectable for expense assignment (manager, trainer). Supports search-as-you-type.' })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listStaff(
+    @Request() req: AuthenticatedRequest,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.listStaff(gymId, {
+      search,
+      limit: limit ? parseInt(limit) : undefined,
+    });
+  }
+
+  @Get('pending')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Approval queue — expenses awaiting approval' })
+  getPending(
+    @Request() req: AuthenticatedRequest,
+    @Query('gymId') queryGymId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.findPending(
+      gymId,
+      resolveEffectiveBranchId(req.user, branchId),
+    );
+  }
+
+  @Get('staff/:staffId')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'All expenses for a given staff member (transparency view)' })
+  getByStaff(
+    @Request() req: AuthenticatedRequest,
+    @Param('staffId', ParseIntPipe) staffId: number,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.findByStaff(gymId, staffId);
+  }
+
   @Get(':id')
   @Roles('superadmin', 'admin', 'manager')
   @ApiOperation({ summary: 'Get a single expense' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   findOne(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -288,33 +304,39 @@ export class ExpensesController {
     return this.expensesService.findOne(id, gymId);
   }
 
+  @Get(':id/history')
+  @Roles('superadmin', 'admin', 'manager')
+  @ApiOperation({ summary: 'Approval + edit history for an expense' })
+  getHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.getHistory(id, gymId);
+  }
+
   @Post()
   @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Create a new expense' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
+  @ApiOperation({ summary: 'Create a new expense (enters approval queue)' })
   create(
     @Request() req: AuthenticatedRequest,
     @Body() createExpenseDto: CreateExpenseDto,
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.expensesService.create(createExpenseDto, gymId, req.user.userId, resolveEffectiveBranchId(req.user, undefined));
+    return this.expensesService.create(
+      createExpenseDto,
+      gymId,
+      req.user.userId,
+      resolveEffectiveBranchId(req.user, undefined),
+      req.user.role,
+    );
   }
 
   @Patch(':id')
   @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Update an expense' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
+  @ApiOperation({ summary: 'Update an expense (edits to approved send it back for re-approval)' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -322,18 +344,51 @@ export class ExpensesController {
     @Query('gymId') queryGymId?: string,
   ) {
     const gymId = this.resolveGymId(req, queryGymId);
-    return this.expensesService.update(id, gymId, updateExpenseDto);
+    return this.expensesService.update(id, gymId, updateExpenseDto, req.user.userId);
+  }
+
+  @Post(':id/approve')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Approve a pending expense' })
+  approve(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ApproveExpenseDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.approve(id, gymId, dto, req.user.userId);
+  }
+
+  @Post(':id/reject')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Reject a pending expense' })
+  reject(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: RejectExpenseDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.reject(id, gymId, dto, req.user.userId);
+  }
+
+  @Post(':id/mark-paid')
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Record payment on an approved expense' })
+  markPaid(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: MarkExpensePaidDto,
+    @Query('gymId') queryGymId?: string,
+  ) {
+    const gymId = this.resolveGymId(req, queryGymId);
+    return this.expensesService.markPaid(id, gymId, dto, req.user.userId);
   }
 
   @Delete(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Soft delete an expense' })
-  @ApiQuery({
-    name: 'gymId',
-    required: false,
-    type: Number,
-    description: 'Gym ID (required for superadmin)',
-  })
   remove(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
