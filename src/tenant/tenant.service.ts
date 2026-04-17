@@ -313,6 +313,98 @@ export class TenantService implements OnModuleDestroy {
 
     // Add branch_id columns — runs last, isolated, so a failed table creation never blocks this
     await this.addBranchIdColumns(client, schemaName);
+
+    // Add expense approval-workflow columns and history table
+    await this.addExpenseControlColumns(client, schemaName);
+  }
+
+  /**
+   * Expense approval workflow columns + audit history table (mirrors
+   * migrations/tenant/009_tenant_expense_controls.sql). Idempotent.
+   */
+  private async addExpenseControlColumns(client: PoolClient, schemaName: string): Promise<void> {
+    const columns: Array<[string, string]> = [
+      ['title', 'VARCHAR(255)'],
+      ['created_by', 'INTEGER'],
+      ['staff_id', 'INTEGER'],
+      ['reason', 'TEXT'],
+      ['approval_status', "VARCHAR(20) NOT NULL DEFAULT 'pending_approval'"],
+      ['submitted_by_id', 'INTEGER'],
+      ['submitted_at', 'TIMESTAMP'],
+      ['approved_at', 'TIMESTAMP'],
+      ['rejected_by_id', 'INTEGER'],
+      ['rejected_at', 'TIMESTAMP'],
+      ['rejection_reason', 'TEXT'],
+    ];
+    for (const [name, type] of columns) {
+      try {
+        await client.query(
+          `ALTER TABLE "${schemaName}"."expenses" ADD COLUMN IF NOT EXISTS ${name} ${type}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to add expenses.${name} to ${schemaName}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // Backfill legacy rows as approved so they stay visible/payable
+    try {
+      await client.query(`
+        UPDATE "${schemaName}"."expenses"
+        SET approval_status = 'approved',
+            approved_at     = COALESCE(approved_at, updated_at, created_at, NOW())
+        WHERE approval_status = 'pending_approval'
+          AND created_at < NOW() - INTERVAL '1 second'
+      `);
+    } catch (error) {
+      this.logger.error(
+        `Failed to backfill approval_status in ${schemaName}.expenses:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
+    // Indexes
+    for (const stmt of [
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_expenses_staff_id" ON "${schemaName}"."expenses"(staff_id)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_expenses_approval_status" ON "${schemaName}"."expenses"(approval_status)`,
+      `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_expenses_submitted_by" ON "${schemaName}"."expenses"(submitted_by_id)`,
+    ]) {
+      try { await client.query(stmt); } catch (error) {
+        this.logger.error(
+          `Failed expense index in ${schemaName}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // Audit history table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."expense_approval_history" (
+          id          SERIAL PRIMARY KEY,
+          expense_id  INTEGER NOT NULL REFERENCES "${schemaName}"."expenses"(id) ON DELETE CASCADE,
+          action      VARCHAR(30) NOT NULL,
+          actor_id    INTEGER NOT NULL,
+          notes       TEXT,
+          old_values  JSONB,
+          new_values  JSONB,
+          created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_expense_hist_expense" ON "${schemaName}"."expense_approval_history"(expense_id)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS "idx_${schemaName}_expense_hist_created" ON "${schemaName}"."expense_approval_history"(created_at DESC)`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to create expense_approval_history in ${schemaName}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   /**
