@@ -36,11 +36,15 @@ export interface GymInfo {
   id: number;
   name: string;
   logo?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
   city?: string;
   state?: string;
   country?: string;
   currency: string;
   tenantSchemaName: string;
+  receiptSettings?: Record<string, any> | null;
   subscription?: GymSubscriptionInfo;
 }
 
@@ -124,11 +128,15 @@ export class AuthService {
         id: assignment.gym.id,
         name: assignment.gym.name,
         logo: assignment.gym.logo || undefined,
+        phone: assignment.gym.phone || undefined,
+        email: assignment.gym.email || undefined,
+        address: assignment.gym.address || undefined,
         city: assignment.gym.city || undefined,
         state: assignment.gym.state || undefined,
         country: assignment.gym.country || undefined,
         currency: assignment.gym.currency || 'USD',
         tenantSchemaName: assignment.gym.tenantSchemaName!,
+        receiptSettings: assignment.gym.receiptSettings || null,
       },
     }));
   }
@@ -184,11 +192,15 @@ export class AuthService {
           id: gym.id,
           name: gym.name,
           logo: gym.logo || undefined,
+          phone: gym.phone || undefined,
+          email: gym.email || undefined,
+          address: gym.address || undefined,
           city: gym.city || undefined,
           state: gym.state || undefined,
           country: gym.country || undefined,
           currency: gym.currency || 'USD',
           tenantSchemaName: gym.tenantSchemaName || gym.tenant_schema_name,
+          receiptSettings: gym.receiptSettings || gym.receipt_settings || null,
           subscription: subscription
             ? {
               planCode: subscription.plan?.code,

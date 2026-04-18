@@ -9,6 +9,8 @@ import {
   ValidateNested,
   ValidateIf,
   MinLength,
+  IsHexColor,
+  IsIn,
 } from 'class-validator';
 import {
   ApiProperty,
@@ -17,6 +19,25 @@ import {
   OmitType,
 } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+export class ReceiptSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showLogo?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showAddress?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showPhone?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showEmail?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showPaymentMethod?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() showReceiptNumber?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() headerText?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() footerText?: string;
+  @ApiPropertyOptional() @IsOptional() @IsHexColor() accentColor?: string;
+  @ApiPropertyOptional({
+    enum: ['Arial, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Trebuchet MS, sans-serif'],
+  })
+  @IsOptional()
+  @IsIn(['Arial, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Trebuchet MS, sans-serif'])
+  fontFamily?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() receiptPrefix?: string;
+}
 
 // Admin user details for creating a new gym
 export class CreateAdminUserDto {
@@ -144,4 +165,10 @@ export class CreateGymDto {
 // UpdateGymDto excludes admin (can't change admin on update)
 export class UpdateGymDto extends PartialType(
   OmitType(CreateGymDto, ['admin'] as const),
-) {}
+) {
+  @ApiPropertyOptional({ description: 'Receipt customization settings', type: ReceiptSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReceiptSettingsDto)
+  receiptSettings?: ReceiptSettingsDto;
+}
