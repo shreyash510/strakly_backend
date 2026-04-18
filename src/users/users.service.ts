@@ -91,6 +91,9 @@ export interface UserFilters extends PaginationParams {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
+  /* Tenants whose users.branch_id / allowed_branch_ids have been verified this process. */
+  private readonly branchColumnsHealed = new Set<number>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
@@ -962,6 +965,10 @@ export class UsersService {
       updates.push(`allowed_branch_ids = $${paramIndex++}`);
       values.push(JSON.stringify(updateDto.allowedBranchIds));
     }
+    if (updateDto.branchId !== undefined) {
+      updates.push(`branch_id = $${paramIndex++}`);
+      values.push(updateDto.branchId ?? null);
+    }
     if (updates.length === 0) {
       return this.findOneStaff(id, gymId);
     }
@@ -969,7 +976,21 @@ export class UsersService {
     updates.push(`updated_at = NOW()`);
     values.push(id);
 
+    const touchesBranchCols =
+      updateDto.allowedBranchIds !== undefined || updateDto.branchId !== undefined;
+
     const updatedStaff = await this.tenantService.executeInTenant(gymId, async (client) => {
+      /* Self-heal once per process for tenants created before the multi-branch migration. */
+      if (touchesBranchCols && !this.branchColumnsHealed.has(gymId)) {
+        await client.query(
+          `ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_branch_ids JSONB DEFAULT '[]'`,
+        );
+        await client.query(
+          `ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INTEGER`,
+        );
+        this.branchColumnsHealed.add(gymId);
+      }
+
       await client.query(
         `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
         values,
