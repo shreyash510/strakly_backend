@@ -168,6 +168,9 @@ model Gym {
   capacity          Int?
   amenities         Json?     // Array of amenities like ["Parking", "AC", "Locker", "Shower"]
 
+  // Receipt customization settings (stored as JSON)
+  receiptSettings   Json?     @map("receipt_settings")
+
   // Status
   isActive          Boolean   @default(true) @map("is_active")
 
