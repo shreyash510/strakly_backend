@@ -192,11 +192,11 @@ export class CreateStaffDto {
 
   @ApiProperty({
     description: 'Staff role',
-    enum: ['admin', 'manager', 'trainer'],
+    enum: ['admin', 'manager', 'cashier', 'trainer'],
   })
-  @IsEnum(['admin', 'manager', 'trainer'])
+  @IsEnum(['admin', 'manager', 'cashier', 'trainer'])
   @IsNotEmpty()
-  role: 'admin' | 'manager' | 'trainer';
+  role: 'admin' | 'manager' | 'cashier' | 'trainer';
 
   @ApiPropertyOptional({ description: 'Staff phone' })
   @IsOptional()
@@ -575,11 +575,11 @@ export class AdminResetPasswordDto {
 export class ApproveRequestDto {
   @ApiPropertyOptional({
     description: 'Role to assign to the user (defaults to client)',
-    enum: ['client', 'trainer', 'manager'],
+    enum: ['client', 'trainer', 'cashier', 'manager'],
   })
   @IsOptional()
   @IsString()
-  @IsIn(['client', 'trainer', 'manager'])
+  @IsIn(['client', 'trainer', 'cashier', 'manager'])
   role?: string;
 
   @ApiPropertyOptional({
