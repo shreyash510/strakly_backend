@@ -63,7 +63,7 @@ export class DashboardController {
   }
 
   @Get('admin')
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get admin dashboard data for their gym(s)' })
   @ApiResponse({
     status: 200,
@@ -105,7 +105,7 @@ export class DashboardController {
   }
 
   @Get('admin/new-clients')
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get paginated new clients (active status)' })
   @ApiResponse({
     status: 200,
@@ -144,7 +144,7 @@ export class DashboardController {
   }
 
   @Get('admin/new-inquiries')
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({
     summary: 'Get paginated new inquiries (onboarding/pending status)',
   })

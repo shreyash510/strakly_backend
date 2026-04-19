@@ -62,7 +62,7 @@ export class ProductsController {
   // ─── Categories ───
 
   @Get('categories')
-  @Roles('admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'cashier', 'trainer')
   @ApiOperation({ summary: 'List all product categories' })
   findAllCategories(
     @GymId() gymId: number,
@@ -109,7 +109,7 @@ export class ProductsController {
   // ─── Sales (before :id to avoid route conflicts) ───
 
   @Get('sales')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'List all product sales' })
   findAllSales(
     @GymId() gymId: number,
@@ -119,7 +119,7 @@ export class ProductsController {
   }
 
   @Get('sales/transactions')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'List sales grouped by transaction (paymentId)' })
   findSalesTransactions(
     @GymId() gymId: number,
@@ -129,7 +129,7 @@ export class ProductsController {
   }
 
   @Get('sales/stats')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get sales statistics' })
   getSalesStats(
     @GymId() gymId: number,
@@ -140,7 +140,7 @@ export class ProductsController {
 
   @Post('sales')
   @UseGuards(RequireBranchGuard)
-  @Roles('admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'cashier', 'trainer')
   @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a product sale' })
   createSale(
@@ -154,7 +154,7 @@ export class ProductsController {
 
   @Post('sales/batch')
   @UseGuards(RequireBranchGuard)
-  @Roles('admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'cashier', 'trainer')
   @ManagerPermission('productSales', 'create')
   @ApiOperation({ summary: 'Record a batch sale (multiple products)' })
   createBatchSale(
@@ -220,7 +220,7 @@ export class ProductsController {
   // ─── Products ───
 
   @Get()
-  @Roles('admin', 'manager', 'trainer')
+  @Roles('admin', 'manager', 'cashier', 'trainer')
   @ApiOperation({ summary: 'List all products' })
   async findAllProducts(
     @GymId() gymId: number,

@@ -51,7 +51,7 @@ export class MembershipsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get all memberships' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'planId', required: false })
@@ -109,7 +109,7 @@ export class MembershipsController {
 
   @Get('stats')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get membership statistics' })
   getStats(
     @Request() req: AuthenticatedRequest,
@@ -120,7 +120,7 @@ export class MembershipsController {
 
   @Get('overview')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({
     summary: 'Get membership overview (stats, expiring, recent)',
   })
@@ -166,7 +166,7 @@ export class MembershipsController {
 
   @Get('history')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get membership history for a client' })
   @ApiQuery({
     name: 'clientId',
@@ -271,7 +271,7 @@ export class MembershipsController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get memberships for a specific user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -291,7 +291,7 @@ export class MembershipsController {
 
   @Get('user/active')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get active membership for a user' })
   @ApiHeader({
     name: 'x-user-id',
@@ -313,7 +313,7 @@ export class MembershipsController {
 
   @Get('cancellation-reasons/list')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get cancellation reasons' })
   async getCancellationReasons(@Request() req: AuthenticatedRequest): Promise<any> {
     return this.membershipsService.getCancellationReasons(req.user.gymId!);
@@ -323,7 +323,7 @@ export class MembershipsController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get membership by ID' })
   findOne(
     @Request() req: AuthenticatedRequest,
@@ -334,7 +334,7 @@ export class MembershipsController {
 
   @Get(':id/facilities')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get facilities and amenities for a membership' })
   getMembershipFacilities(
     @Request() req: AuthenticatedRequest,
@@ -367,7 +367,7 @@ export class MembershipsController {
 
   @Post()
   @UseGuards(RequireBranchGuard, RolesGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ManagerPermission('subscriptions', 'create')
   @ApiOperation({ summary: 'Create a new membership' })
   async create(

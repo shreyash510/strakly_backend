@@ -47,8 +47,8 @@ export class ManagerPermissionsGuard implements CanActivate {
       return true;
     }
 
-    // Only enforce for managers — other roles are handled by RolesGuard
-    if (user.role !== ROLES.MANAGER) {
+    // Only enforce for managers and cashiers — other roles are handled by RolesGuard
+    if (user.role !== ROLES.MANAGER && user.role !== ROLES.CASHIER) {
       return true;
     }
 
@@ -57,7 +57,7 @@ export class ManagerPermissionsGuard implements CanActivate {
       throw new ForbiddenException('Gym context required');
     }
 
-    // Load manager permissions from tenant DB
+    // Load manager/cashier permissions from tenant DB
     const managerPermissions = await this.tenantService.executeInTenant(
       gymId,
       async (client) => {

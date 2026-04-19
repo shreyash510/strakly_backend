@@ -33,7 +33,7 @@ export class GuestVisitsController {
   constructor(private readonly guestVisitsService: GuestVisitsService) {}
 
   @Get('stats')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get guest visit stats' })
   async getStats(
     @Req() req: AuthenticatedRequest,
@@ -44,7 +44,7 @@ export class GuestVisitsController {
   }
 
   @Get()
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'List guest visits with filters' })
   async findAll(
     @GymId() gymId: number,
@@ -54,7 +54,7 @@ export class GuestVisitsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ApiOperation({ summary: 'Get a guest visit by ID' })
   async findOne(
     @Req() req: AuthenticatedRequest,
@@ -66,7 +66,7 @@ export class GuestVisitsController {
 
   @Post()
   @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ManagerPermission('guestVisits', 'create')
   @ApiOperation({ summary: 'Record a guest visit' })
   async create(
@@ -80,7 +80,7 @@ export class GuestVisitsController {
 
   @Patch(':id')
   @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Update a guest visit' })
   async update(
@@ -93,7 +93,7 @@ export class GuestVisitsController {
 
   @Patch(':id/convert')
   @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ManagerPermission('guestVisits', 'update')
   @ApiOperation({ summary: 'Mark guest as converted to client' })
   async markConverted(
@@ -105,7 +105,7 @@ export class GuestVisitsController {
 
   @Delete(':id')
   @UseGuards(RequireBranchGuard, ManagerPermissionsGuard)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'cashier')
   @ManagerPermission('guestVisits', 'delete')
   @ApiOperation({ summary: 'Delete a guest visit' })
   async remove(

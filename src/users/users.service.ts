@@ -36,6 +36,40 @@ import { ROLES, USER_STATUS } from '../common/constants';
 const USER_STATUS_LOOKUP_TYPE = 'USER_STATUS';
 
 const CRUD_DEFAULT = { create: true, read: true, update: true, delete: false };
+const DEFAULT_CASHIER_PERMISSIONS = {
+  // Daily Operations
+  clients: { create: true, read: true, update: false, delete: false },
+  attendance: { create: true, read: true, update: false, delete: false },
+  classes: { create: false, read: true, update: false, delete: false },
+  appointments: { create: false, read: true, update: false, delete: false },
+  guestVisits: { create: true, read: true, update: false, delete: false },
+  requests: { create: false, read: false, update: false, delete: false },
+  // Programs & Content
+  programs: { create: false, read: false, update: false, delete: false },
+  announcements: { create: false, read: true, update: false, delete: false },
+  // Staff Management
+  trainers: { create: false, read: false, update: false, delete: false },
+  salary: { create: false, read: false, update: false, delete: false },
+  // Resources
+  facilities: { create: false, read: false, update: false, delete: false },
+  amenities: { create: false, read: true, update: false, delete: false },
+  equipment: { create: false, read: false, update: false, delete: false },
+  // Growth & Marketing
+  leads: { create: false, read: false, update: false, delete: false },
+  referrals: { create: false, read: false, update: false, delete: false },
+  // Finance
+  subscriptions: { create: true, read: true, update: false, delete: false },
+  plans: { create: false, read: true, update: false, delete: false },
+  offers: { create: false, read: true, update: false, delete: false },
+  products: { create: false, read: true, update: false, delete: false },
+  productSales: { create: true, read: true, update: false, delete: false },
+  financialReports: { read: false },
+  expenses: { create: false, read: false, update: false, delete: false },
+  // Admin
+  settings: { read: false },
+  reports: { read: false },
+  support: { create: false, read: false, update: false, delete: false },
+};
 const DEFAULT_MANAGER_PERMISSIONS = {
   // Daily Operations
   clients: CRUD_DEFAULT,
@@ -169,11 +203,12 @@ export class UsersService {
    * admin > manager > trainer > client
    */
   private readonly ROLE_HIERARCHY: Record<string, string[]> = {
-    [ROLES.SUPERADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.MANAGER]: [ROLES.MANAGER, ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.TRAINER]: [ROLES.TRAINER, ROLES.CLIENT],
-    [ROLES.CLIENT]: [ROLES.CLIENT],
+    [ROLES.SUPERADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.MANAGER, ROLES.CASHIER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.MANAGER]: [ROLES.CASHIER, ROLES.TRAINER, ROLES.CLIENT],
+    [ROLES.CASHIER]: [ROLES.CLIENT],
+    [ROLES.TRAINER]: [ROLES.CLIENT],
+    [ROLES.CLIENT]: [],
   };
 
   /**
@@ -642,9 +677,9 @@ export class UsersService {
       return this.createAdmin(dto, gymId);
     }
 
-    if (!([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role)) {
+    if (!([ROLES.MANAGER, ROLES.CASHIER, ROLES.TRAINER] as string[]).includes(role)) {
       throw new BadRequestException(
-        'Invalid role. Staff role must be manager or trainer.',
+        'Invalid role. Staff role must be manager, cashier, or trainer.',
       );
     }
 
@@ -663,7 +698,7 @@ export class UsersService {
           gymId,
           async (client) => {
             const result = await client.query(
-              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+              `SELECT COUNT(*)::int as count FROM users WHERE role IN ('manager', 'cashier', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
             );
             return result.rows[0]?.count || 0;
           },
@@ -737,7 +772,9 @@ export class UsersService {
             new Date(),
             role === ROLES.MANAGER
               ? JSON.stringify(DEFAULT_MANAGER_PERMISSIONS)
-              : null,
+              : role === ROLES.CASHIER
+                ? JSON.stringify(DEFAULT_CASHIER_PERMISSIONS)
+                : null,
             dto.branchId || null,
             JSON.stringify(dto.allowedBranchIds || []),
           ],
@@ -799,7 +836,7 @@ export class UsersService {
       gymId,
       async (client) => {
         const conditions: string[] = [
-          "u.role IN ('manager', 'trainer')",
+          "u.role IN ('manager', 'cashier', 'trainer')",
           '(u.is_deleted = FALSE OR u.is_deleted IS NULL)',
         ];
         const values: SqlValue[] = [];
@@ -808,7 +845,7 @@ export class UsersService {
         if (
           filters.role &&
           filters.role !== 'all' &&
-          ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(filters.role)
+          ([ROLES.MANAGER, ROLES.CASHIER, ROLES.TRAINER] as string[]).includes(filters.role)
         ) {
           conditions.push(`u.role = $${paramIndex++}`);
           values.push(filters.role);
@@ -875,7 +912,7 @@ export class UsersService {
   async findOneStaff(id: number, gymId: number): Promise<any> {
     const staffData = await this.tenantService.executeInTenant(gymId, async (client) => {
       const result = await client.query(
-        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+        `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'cashier') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
         [id],
       );
       return result.rows[0];
@@ -1055,7 +1092,7 @@ export class UsersService {
       gymId,
       async (client) => {
         const result = await client.query(
-          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+          `SELECT * FROM users WHERE id = $1 AND role IN ('manager', 'trainer', 'cashier') AND (is_deleted = FALSE OR is_deleted IS NULL)`,
           [id],
         );
         return result.rows[0];
@@ -1733,7 +1770,7 @@ export class UsersService {
         actorInfo,
       );
     } else {
-      // manager or trainer
+      // manager, cashier, or trainer
       return this.createStaff(createUserDto as CreateStaffDto, gymId, actorInfo);
     }
   }
@@ -1775,8 +1812,8 @@ export class UsersService {
       return this.findAllClients(filters);
     }
 
-    // If role is manager/trainer, only get staff from tenant.users
-    if (role && ([ROLES.MANAGER, ROLES.TRAINER] as string[]).includes(role)) {
+    // If role is manager/cashier/trainer, only get staff from tenant.users
+    if (role && ([ROLES.MANAGER, ROLES.CASHIER, ROLES.TRAINER] as string[]).includes(role)) {
       return this.findAllStaff(filters);
     }
 
@@ -2254,7 +2291,7 @@ export class UsersService {
     if (role === ROLES.CLIENT) {
       return this.findAllClients({ role, gymId, noPagination: true });
     }
-    // manager or trainer
+    // manager, cashier, or trainer
     return this.findAllStaff({ role, gymId, noPagination: true });
   }
 

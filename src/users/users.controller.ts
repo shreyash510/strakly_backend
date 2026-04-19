@@ -61,7 +61,7 @@ export class UsersController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'cashier', 'trainer')
   @ApiOperation({
     summary: 'Get all users with optional filters and pagination',
   })
@@ -168,7 +168,7 @@ export class UsersController {
 
   @Post()
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ManagerPermission('clients', 'create')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiQuery({
@@ -219,7 +219,7 @@ export class UsersController {
 
   @Get('user')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'admin', 'manager', 'trainer')
+  @Roles('superadmin', 'admin', 'manager', 'cashier', 'trainer')
   @ApiOperation({ summary: 'Get single user by ID (header)' })
   @ApiHeader({
     name: 'x-user-id',
@@ -248,7 +248,7 @@ export class UsersController {
 
   @Patch('user')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Update user (header)' })
   @ApiHeader({
@@ -314,7 +314,7 @@ export class UsersController {
 
   @Patch('user/status')
   @UseGuards(RolesGuard, ManagerPermissionsGuard)
-  @Roles('superadmin', 'admin', 'manager')
+  @Roles('superadmin', 'admin', 'manager', 'cashier')
   @ManagerPermission('clients', 'update')
   @ApiOperation({ summary: 'Update user status (header)' })
   @ApiHeader({
