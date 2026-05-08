@@ -1726,10 +1726,12 @@ export class UsersService {
       await client.query(`DELETE FROM class_bookings WHERE user_id = $1`, [id]);
       await client.query(`DELETE FROM appointments WHERE user_id = $1`, [id]);
       await client.query(`DELETE FROM product_sales WHERE user_id = $1`, [id]);
-      await client.query(`DELETE FROM diet_assignments WHERE user_id = $1`, [id]);
       await client.query(`DELETE FROM body_metrics WHERE user_id = $1`, [id]);
       await client.query(`DELETE FROM body_metrics_history WHERE user_id = $1`, [id]);
       await client.query(`DELETE FROM notifications WHERE user_id = $1`, [id]);
+      // Tables that may not exist in all tenant schemas
+      await client.query(`DELETE FROM user_branch_xref WHERE user_id = $1`, [id]).catch(() => {});
+      await client.query(`DELETE FROM diet_assignments WHERE user_id = $1`, [id]).catch(() => {});
       // Delete the user last
       await client.query(`DELETE FROM users WHERE id = $1`, [id]);
     });
