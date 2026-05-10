@@ -11,6 +11,8 @@ import {
   MinLength,
   IsHexColor,
   IsIn,
+  ArrayNotEmpty,
+  ArrayMaxSize,
 } from 'class-validator';
 import {
   ApiProperty,
@@ -171,4 +173,14 @@ export class UpdateGymDto extends PartialType(
   @ValidateNested()
   @Type(() => ReceiptSettingsDto)
   receiptSettings?: ReceiptSettingsDto;
+}
+
+export class BulkForceDeleteGymDto {
+  @ApiProperty({ description: 'Gym IDs to force-delete', type: [Number] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(50)
+  @IsInt({ each: true })
+  @Type(() => Number)
+  ids: number[];
 }
