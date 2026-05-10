@@ -542,6 +542,35 @@ export class GymService {
     };
   }
 
+  /**
+   * Force-delete multiple gyms sequentially. Superadmin only. Irreversible.
+   * Continues on individual failures and returns per-id results.
+   */
+  async forceRemoveBulk(ids: number[]): Promise<{
+    succeeded: number;
+    failed: number;
+    results: Array<{ id: number; status: 'success' | 'failed'; message: string; details?: Record<string, any> }>;
+  }> {
+    const results: Array<{ id: number; status: 'success' | 'failed'; message: string; details?: Record<string, any> }> = [];
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const id of ids) {
+      try {
+        const result = await this.forceRemove(id);
+        results.push({ id, status: 'success', message: result.message, details: result.details });
+        succeeded++;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        this.logger.error(`Bulk force-delete failed for gym ${id}: ${message}`, err);
+        results.push({ id, status: 'failed', message });
+        failed++;
+      }
+    }
+
+    return { succeeded, failed, results };
+  }
+
   async toggleStatus(id: number, caller?: AuthenticatedUser) {
     const gym = await this.findOne(id, caller);
 

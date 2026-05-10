@@ -21,7 +21,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { GymService } from './gym.service';
-import { CreateGymDto, UpdateGymDto } from './dto/gym.dto';
+import { CreateGymDto, UpdateGymDto, BulkForceDeleteGymDto } from './dto/gym.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -185,6 +185,19 @@ export class GymController {
   async forceRemove(@Param('id', ParseIntPipe) id: number) {
     const result = await this.gymService.forceRemove(id);
     this.notificationsGateway.emitGymChanged(id, { action: 'deleted' });
+    return result;
+  }
+
+  @Post('bulk-force-delete')
+  @Roles('superadmin')
+  @ApiOperation({ summary: 'Force delete multiple gyms and ALL associated data (superadmin only, max 50 per call)' })
+  async bulkForceRemove(@Body() dto: BulkForceDeleteGymDto) {
+    const result = await this.gymService.forceRemoveBulk(dto.ids);
+    for (const r of result.results) {
+      if (r.status === 'success') {
+        this.notificationsGateway.emitGymChanged(r.id, { action: 'deleted' });
+      }
+    }
     return result;
   }
 
