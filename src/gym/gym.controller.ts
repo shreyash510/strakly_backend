@@ -179,6 +179,22 @@ export class GymController {
     return result;
   }
 
+  /* Must stay above the ':id' routes — otherwise 'me' is parsed as an id. */
+  @Delete('me/force')
+  @Roles('admin')
+  @ApiOperation({
+    summary:
+      'Permanently delete your own gym, all its data and your account (admin only). Irreversible.',
+  })
+  async forceRemoveOwn(@Request() req: AuthenticatedRequest) {
+    const gymId = req.user.gymId;
+    const result = await this.gymService.forceRemoveOwn(req.user);
+    if (gymId) {
+      this.notificationsGateway.emitGymChanged(gymId, { action: 'deleted' });
+    }
+    return result;
+  }
+
   @Delete(':id/force')
   @Roles('superadmin')
   @ApiOperation({ summary: 'Force delete a gym and ALL associated data (superadmin only)' })

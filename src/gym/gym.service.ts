@@ -421,6 +421,44 @@ export class GymService {
   }
 
   /**
+   * Self-service account deletion: an admin permanently deletes their OWN gym
+   * and account. Irreversible.
+   *
+   * The gym is resolved from the caller's token and never from request input, so
+   * an admin cannot target another gym. Delegates to forceRemove() so the
+   * behaviour is identical to the superadmin path.
+   */
+  async forceRemoveOwn(
+    caller: AuthenticatedUser,
+  ): Promise<{ success: boolean; message: string; details: Record<string, any> }> {
+    /* An impersonating superadmin presents as role=admin — don't let them delete
+       the gym they are merely inspecting. They have the :id/force route instead. */
+    if (caller.isImpersonating) {
+      throw new ForbiddenException(
+        'Cannot delete a gym while impersonating it. Exit gym access first.',
+      );
+    }
+
+    const gymId = caller.gymId;
+    if (!gymId) {
+      throw new BadRequestException('No gym is associated with your account');
+    }
+
+    /* This deletes the user too, so the "delete account" wording must hold: refuse
+       when the account is linked to more than one gym. */
+    const gymCount = await this.prisma.userGymXref.count({
+      where: { userId: caller.userId },
+    });
+    if (gymCount > 1) {
+      throw new BadRequestException(
+        'Your account is linked to multiple gyms. Please contact support to delete your account.',
+      );
+    }
+
+    return this.forceRemove(gymId);
+  }
+
+  /**
    * Force-delete a gym and ALL associated data. Superadmin only. Irreversible.
    */
   async forceRemove(id: number): Promise<{ success: boolean; message: string; details: Record<string, any> }> {
