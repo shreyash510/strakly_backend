@@ -2373,6 +2373,7 @@ export class AuthService {
           email: dto.user.email,
           passwordHash,
           name: dto.user.name,
+          phone: dto.user.phone,
           avatar: dto.user.picture,
           googleId: dto.user.googleId,
           status: USER_STATUS.ACTIVE,

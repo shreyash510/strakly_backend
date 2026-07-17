@@ -43,6 +43,10 @@ export class GoogleUserDto {
   @IsString()
   @IsOptional()
   picture?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }
 
 /**
