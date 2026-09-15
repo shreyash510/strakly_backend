@@ -14,6 +14,7 @@ import {
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
   CancelSubscriptionDto,
+  RenewSubscriptionDto,
   CreatePaymentHistoryDto,
   UpdatePaymentHistoryDto,
   PaymentHistoryFiltersDto,
@@ -483,8 +484,9 @@ export class SaasSubscriptionsService {
     });
   }
 
-  async renewSubscription(id: number, planId?: number) {
+  async renewSubscription(id: number, dto: RenewSubscriptionDto = {}) {
     const subscription = await this.findSubscriptionById(id);
+    const { planId } = dto;
 
     // Use provided planId or fall back to current plan
     let plan = subscription.plan;
@@ -511,8 +513,21 @@ export class SaasSubscriptionsService {
       ? currentEndDate
       : now;
 
+    // Months this payment covers - defaults to one billing cycle of the plan
+    const planMonths = plan.durationMonths || 1;
+    const months = dto.months ?? planMonths;
+
     const newEndDate = new Date(baseDate);
-    newEndDate.setMonth(newEndDate.getMonth() + (plan.durationMonths || 1));
+    newEndDate.setMonth(newEndDate.getMonth() + months);
+
+    // Amount actually received. Defaults to the plan price pro-rated over the
+    // months covered, but the caller can override it for discounts or part payments.
+    const amount =
+      dto.amount ??
+      Math.round(plan.price.toNumber() * (months / planMonths) * 100) / 100;
+
+    const paymentMethod = dto.paymentMethod || 'manual';
+    const paymentRef = dto.paymentRef || `RENEW-${Date.now()}`;
 
     // Update subscription
     const updated = await this.prisma.saasGymSubscription.update({
@@ -523,7 +538,9 @@ export class SaasSubscriptionsService {
         endDate: newEndDate,
         status: 'active',
         paymentStatus: 'paid',
-        amount: plan.price.toNumber(),
+        amount,
+        paymentMethod,
+        paymentRef,
         lastPaymentAt: now,
         cancelledAt: null,
         cancelReason: null,
@@ -548,17 +565,17 @@ export class SaasSubscriptionsService {
         subscriptionId: id,
         gymId: updated.gymId,
         planId: plan.id,
-        amount: plan.price.toNumber(),
+        amount,
         currency: plan.currency,
         status: 'completed',
-        paymentMethod: 'manual',
-        paymentRef: `RENEW-${Date.now()}`,
+        paymentMethod,
+        paymentRef,
         gateway: 'manual',
         billingPeriodStart: baseDate,
         billingPeriodEnd: newEndDate,
         invoiceNumber,
         processedAt: now,
-        notes: 'Renewed by superadmin',
+        notes: `Renewed by superadmin (${months} month${months > 1 ? 's' : ''})`,
       },
     });
 

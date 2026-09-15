@@ -7,6 +7,8 @@ import {
   IsArray,
   IsEnum,
   Min,
+  Max,
+  IsInt,
   IsDateString,
 } from 'class-validator';
 
@@ -271,6 +273,42 @@ export class UpdateGymSubscriptionDto {
   @IsString()
   @IsOptional()
   notes?: string;
+}
+
+export class RenewSubscriptionDto {
+  @ApiPropertyOptional({ example: 2, description: 'Plan to renew onto. Defaults to the current plan.' })
+  @IsInt()
+  @IsOptional()
+  planId?: number;
+
+  @ApiPropertyOptional({
+    example: 8,
+    description: 'Number of months this payment covers. Defaults to the plan duration.',
+  })
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  @IsOptional()
+  months?: number;
+
+  @ApiPropertyOptional({
+    example: 64,
+    description: 'Amount actually received. Defaults to the plan price pro-rated over months.',
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  amount?: number;
+
+  @ApiPropertyOptional({ example: 'cash', description: 'cash, upi, bank_transfer, card, cheque' })
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional({ example: 'UTR123456', description: 'Transaction reference / UTR' })
+  @IsString()
+  @IsOptional()
+  paymentRef?: string;
 }
 
 export class CancelSubscriptionDto {
