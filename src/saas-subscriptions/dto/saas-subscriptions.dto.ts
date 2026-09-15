@@ -300,6 +300,22 @@ export class RenewSubscriptionDto {
   @IsOptional()
   amount?: number;
 
+  @ApiPropertyOptional({
+    example: '2026-09-15',
+    description: 'Coverage start. Defaults to the current end date if still active, else today.',
+  })
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2027-05-15',
+    description: 'Coverage end. Overrides months when provided.',
+  })
+  @IsDateString()
+  @IsOptional()
+  endDate?: string;
+
   @ApiPropertyOptional({ example: 'cash', description: 'cash, upi, bank_transfer, card, cheque' })
   @IsString()
   @IsOptional()
