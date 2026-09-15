@@ -508,17 +508,47 @@ export class SaasSubscriptionsService {
     const now = new Date();
     const currentEndDate = new Date(subscription.endDate);
 
-    // If still active/future, extend from current endDate; otherwise from today
-    const baseDate = currentEndDate > now && ['active', 'trial'].includes(subscription.status)
-      ? currentEndDate
-      : now;
+    // An explicit startDate wins - it lets a late payment backdate its coverage so
+    // there is no gap. Otherwise extend from the current endDate if still active,
+    // else from today.
+    const baseDate = dto.startDate
+      ? new Date(dto.startDate)
+      : currentEndDate > now && ['active', 'trial'].includes(subscription.status)
+        ? currentEndDate
+        : now;
 
-    // Months this payment covers - defaults to one billing cycle of the plan
+    if (isNaN(baseDate.getTime())) {
+      throw new BadRequestException('Invalid start date');
+    }
+
     const planMonths = plan.durationMonths || 1;
-    const months = dto.months ?? planMonths;
 
-    const newEndDate = new Date(baseDate);
-    newEndDate.setMonth(newEndDate.getMonth() + months);
+    // An explicit endDate wins over months; otherwise months drives the end date.
+    let newEndDate: Date;
+    let months: number;
+    if (dto.endDate) {
+      newEndDate = new Date(dto.endDate);
+      if (isNaN(newEndDate.getTime())) {
+        throw new BadRequestException('Invalid end date');
+      }
+      // Approximate the span only to default the amount and label the receipt.
+      months =
+        dto.months ??
+        Math.max(
+          1,
+          Math.round(
+            (newEndDate.getTime() - baseDate.getTime()) / (30.44 * 24 * 60 * 60 * 1000),
+          ),
+        );
+    } else {
+      months = dto.months ?? planMonths;
+      newEndDate = new Date(baseDate);
+      newEndDate.setMonth(newEndDate.getMonth() + months);
+    }
+
+    if (newEndDate <= baseDate) {
+      throw new BadRequestException('End date must be after start date');
+    }
 
     // Amount actually received. Defaults to the plan price pro-rated over the
     // months covered, but the caller can override it for discounts or part payments.
