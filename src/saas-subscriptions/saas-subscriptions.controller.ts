@@ -24,6 +24,7 @@ import {
   UpdateSaasPlanDto,
   CreateGymSubscriptionDto,
   UpdateGymSubscriptionDto,
+  RenewSubscriptionDto,
   InitiateManualPaymentDto,
   CreateRazorpayOrderDto,
   VerifyRazorpayPaymentDto,
@@ -300,12 +301,15 @@ export class SaasSubscriptionsController {
 
   @Post(':id/renew')
   @Roles('superadmin')
-  @ApiOperation({ summary: 'Renew a gym subscription (extends by plan duration)' })
+  @ApiOperation({
+    summary:
+      'Renew a gym subscription. Optionally set months covered, amount received, payment method and reference.',
+  })
   async renewSubscription(
     @Param('id', ParseIntPipe) id: number,
-    @Body('planId') planId?: number,
+    @Body() dto: RenewSubscriptionDto,
   ) {
-    const result = await this.service.renewSubscription(id, planId);
+    const result = await this.service.renewSubscription(id, dto);
     this.notificationsGateway.emitSaasSubscriptionChanged({ action: 'subscription_renewed', gymId: result.gym.id });
     return result;
   }
