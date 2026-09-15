@@ -310,7 +310,6 @@ export class GymService {
           amount: 0,
           currency,
           paymentStatus: 'paid',
-          autoRenew: true,
           isActive: true,
         },
       });

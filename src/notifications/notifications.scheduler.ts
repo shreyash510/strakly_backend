@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+// NOTE: @nestjs/schedule imports removed - all crons in this file are currently disabled.
+// Re-add: import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { TenantService } from '../tenant/tenant.service';
 import { NotificationsService } from './notifications.service';
@@ -140,56 +141,6 @@ export class NotificationsScheduler {
     }
 
     return allNotifications.length;
-  }
-
-  /**
-   * Run every day at 11:30 PM to auto-renew subscriptions before midnight expiry check.
-   * Finds subscriptions with autoRenew=true that are about to expire and extends them.
-   */
-  @Cron('0 30 23 * * *')
-  async handleAutoRenewals() {
-    this.logger.log('Running auto-renewal check...');
-
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const subscriptionsToRenew =
-      await this.prisma.saasGymSubscription.findMany({
-        where: {
-          autoRenew: true,
-          status: { in: ['active', 'trial'] },
-          endDate: { lte: tomorrow },
-        },
-        include: { plan: true, gym: { select: { id: true, name: true } } },
-      });
-
-    for (const sub of subscriptionsToRenew) {
-      try {
-        const durationMonths = sub.plan?.durationMonths || 1;
-        const newEndDate = new Date(sub.endDate);
-        newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
-
-        await this.prisma.saasGymSubscription.update({
-          where: { id: sub.id },
-          data: {
-            startDate: sub.endDate,
-            endDate: newEndDate,
-          },
-        });
-
-        this.logger.log(
-          `Auto-renewed subscription ${sub.id} for gym "${sub.gym.name}" until ${newEndDate.toISOString()}`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to auto-renew subscription ${sub.id}: ${error.message}`,
-        );
-      }
-    }
-
-    this.logger.log(
-      `Auto-renewal check complete. Renewed ${subscriptionsToRenew.length} subscriptions.`,
-    );
   }
 
   /**

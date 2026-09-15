@@ -387,8 +387,6 @@ model SaasGymSubscription {
   cancelledAt     DateTime? @map("cancelled_at")
   cancelReason    String?   @map("cancel_reason")
 
-  // Auto-renewal
-  autoRenew       Boolean   @default(true) @map("auto_renew")
   notes           String?
   isActive        Boolean   @default(true) @map("is_active")
 

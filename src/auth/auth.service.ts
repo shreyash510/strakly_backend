@@ -418,7 +418,6 @@ export class AuthService {
               amount: 0,
               currency: txGym.currency || 'USD',
               paymentStatus: 'paid',
-              autoRenew: true,
               isActive: true,
             },
           });
@@ -2430,7 +2429,6 @@ export class AuthService {
           amount: 0,
           currency: gym.currency || 'USD',
           paymentStatus: 'paid',
-          autoRenew: true,
           isActive: true,
         },
       });
