@@ -494,7 +494,6 @@ CREATE TABLE gym_subscriptions (
     next_payment_at TIMESTAMP,
     cancelled_at TIMESTAMP,
     cancel_reason TEXT,
-    auto_renew BOOLEAN DEFAULT true,
     notes TEXT,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

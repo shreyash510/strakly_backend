@@ -435,7 +435,6 @@ export class SaasSubscriptionsService {
     if (dto.paymentMethod !== undefined)
       updateData.paymentMethod = dto.paymentMethod;
     if (dto.paymentRef !== undefined) updateData.paymentRef = dto.paymentRef;
-    if (dto.autoRenew !== undefined) updateData.autoRenew = dto.autoRenew;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
     // If payment status CHANGED to paid (was not already paid), auto-extend endDate by plan duration (renewal)
@@ -630,7 +629,6 @@ export class SaasSubscriptionsService {
         status: 'cancelled',
         cancelledAt: new Date(),
         cancelReason: dto.cancelReason,
-        autoRenew: false,
       },
       include: {
         gym: {

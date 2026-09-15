@@ -267,11 +267,6 @@ export class UpdateGymSubscriptionDto {
   @IsOptional()
   paymentRef?: string;
 
-  @ApiPropertyOptional({ example: true })
-  @IsBoolean()
-  @IsOptional()
-  autoRenew?: boolean;
-
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
