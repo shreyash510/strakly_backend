@@ -61,6 +61,10 @@ class GymDto {
   @IsString()
   @IsOptional()
   country?: string;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 }
 
 export class RegisterAdminWithGymDto {

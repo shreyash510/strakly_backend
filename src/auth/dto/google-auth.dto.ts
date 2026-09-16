@@ -84,6 +84,10 @@ class GoogleGymDto {
   @IsString()
   @IsOptional()
   country?: string;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 }
 
 /**

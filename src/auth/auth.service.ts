@@ -23,6 +23,7 @@ import {
 import { hashPassword, comparePassword } from '../common/utils';
 import { SqlValue } from '../common/types';
 import { PASSWORD_CONFIG, OTP_CONFIG, ROLES, USER_STATUS } from '../common/constants';
+import { getCurrencyFromCountry } from '../common/constants/currencies';
 import { OAuth2Client } from 'google-auth-library';
 import * as crypto from 'crypto';
 
@@ -341,6 +342,9 @@ export class AuthService {
             state: dto.gym.state,
             zipCode: dto.gym.zipCode,
             country: dto.gym.country || 'India',
+            currency:
+              dto.gym.currency ||
+              getCurrencyFromCountry(dto.gym.country || 'India').code,
             isActive: true,
           },
         });
@@ -2328,6 +2332,9 @@ export class AuthService {
           state: dto.gym.state,
           zipCode: dto.gym.zipCode,
           country: dto.gym.country || 'India',
+          currency:
+            dto.gym.currency ||
+            getCurrencyFromCountry(dto.gym.country || 'India').code,
           isActive: true,
         },
       });
