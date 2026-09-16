@@ -317,6 +317,9 @@ const rolePermissions: Record<string, string[]> = {
 };
 
 // SaaS Plans (Platform subscription plans for gyms)
+// Every feature the platform exposes - see src/common/constants/features.ts
+const ALL_PLAN_FEATURES = ['client_membership', 'attendance', 'classes', 'guest_visits', 'announcements', 'appointments', 'staff_salary', 'leads_referrals', 'resources', 'products_sales', 'inventory', 'reports'];
+
 const saasPlans = [
   {
     code: 'free',
@@ -328,7 +331,7 @@ const saasPlans = [
     maxStaff: 1,
     maxBranches: 1,
     maxProducts: 10,
-    features: ['client_membership', 'attendance', 'staff_salary'],
+    features: ALL_PLAN_FEATURES,
     displayOrder: 1,
     isFeatured: false,
     badge: null,
@@ -343,7 +346,7 @@ const saasPlans = [
     maxStaff: 5,
     maxBranches: 2,
     maxProducts: 100,
-    features: ['client_membership', 'attendance', 'classes', 'guest_visits', 'announcements', 'appointments', 'staff_salary', 'leads_referrals', 'resources', 'products_sales', 'inventory', 'reports'],
+    features: ALL_PLAN_FEATURES,
     displayOrder: 2,
     isFeatured: true,
     badge: 'Most Popular',
@@ -358,7 +361,7 @@ const saasPlans = [
     maxStaff: -1, // unlimited
     maxBranches: -1, // unlimited
     maxProducts: -1, // unlimited
-    features: ['client_membership', 'attendance', 'classes', 'guest_visits', 'announcements', 'appointments', 'staff_salary', 'leads_referrals', 'resources', 'products_sales', 'inventory', 'reports'],
+    features: ALL_PLAN_FEATURES,
     displayOrder: 3,
     isFeatured: false,
     badge: 'Best Value',
@@ -488,25 +491,15 @@ async function seedSaasPlans() {
   console.log('Seeding SaaS plans...');
 
   for (const planData of saasPlans) {
+    /* Create only. Plans are edited by superadmins in the UI, so re-running the
+       seed must not reset their features, limits or pricing back to these
+       defaults - which is what an update block here used to do. */
     await prisma.saasPlan.upsert({
       where: { code: planData.code },
-      update: {
-        name: planData.name,
-        description: planData.description,
-        price: planData.price,
-        currency: planData.currency,
-        maxClients: planData.maxClients,
-        maxStaff: planData.maxStaff,
-        maxBranches: planData.maxBranches,
-        maxProducts: planData.maxProducts,
-        features: planData.features,
-        displayOrder: planData.displayOrder,
-        isFeatured: planData.isFeatured,
-        badge: planData.badge,
-      },
+      update: {},
       create: planData,
     });
-    console.log(`  Upserted SaaS plan: ${planData.code}`);
+    console.log(`  Ensured SaaS plan exists: ${planData.code}`);
   }
 }
 
