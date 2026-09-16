@@ -84,13 +84,27 @@ export class PublicService {
       this.tenantService,
     );
 
+    /* The client list is filtered by branch, so a registration with no branch
+       would be stored but never appear in the Enquiry tab. QR registration
+       carries no branch, so fall back to the gym's default. */
+    const branch =
+      (await this.prisma.branch.findFirst({
+        where: { gymId: dto.gymId, isDefault: true, isActive: true },
+        select: { id: true },
+      })) ??
+      (await this.prisma.branch.findFirst({
+        where: { gymId: dto.gymId, isActive: true },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      }));
+
     /* Create the user in tenant schema as an onboarding client */
     const user = await this.tenantService.executeInTenant(
       dto.gymId,
       async (client) => {
         const result = await client.query(
-          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, NOW(), NOW())
+          `INSERT INTO users (name, email, password_hash, phone, gender, role, status, join_date, attendance_code, branch_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'client', 'onboarding', COALESCE($6::timestamp, NOW()), $7, $8, NOW(), NOW())
          RETURNING id, name, email, status, created_at`,
           [
             dto.name,
@@ -100,6 +114,7 @@ export class PublicService {
             dto.gender,
             dto.joinDate || null,
             attendanceCode,
+            branch?.id ?? null,
           ],
         );
         return result.rows[0];
