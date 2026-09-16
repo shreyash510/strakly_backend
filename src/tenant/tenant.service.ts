@@ -299,18 +299,6 @@ export class TenantService implements OnModuleDestroy {
       );
     }
 
-    // Seed default plans if none exist
-    try {
-      const plansResult = await client.query(
-        `SELECT COUNT(*) as count FROM "${schemaName}".plans`,
-      );
-      if (parseInt(plansResult.rows[0].count) === 0) {
-        await this.seedDefaultPlans(client, schemaName);
-      }
-    } catch (error) {
-      this.logger.error(`Error seeding plans for ${schemaName}:`, error.message);
-    }
-
     // Ensure the base expense tables exist BEFORE branch_id / approval-workflow
     // columns are added to them (mirrors 003_tenant_add_expenses.sql)
     await this.createExpensesTables(client, schemaName);
@@ -1402,9 +1390,6 @@ export class TenantService implements OnModuleDestroy {
       // abort ALL subsequent steps if any single step fails ("current transaction is aborted").
       await this.migrateTenantSchema(client, schemaName);
 
-      // Seed default plans (idempotent — checks for existing rows before inserting)
-      await this.seedDefaultPlans(client, schemaName);
-
       this.logger.log(`Created tenant schema: ${schemaName}`);
     } catch (error) {
       this.logger.error(`Failed to create tenant schema ${schemaName}:`, error);
@@ -2216,103 +2201,6 @@ export class TenantService implements OnModuleDestroy {
       }
     }
     this.logger.log(`Ensured payment CHECK constraints exist in ${schemaName}`);
-  }
-
-  /**
-   * Seed default membership plans for a new tenant
-   */
-  private async seedDefaultPlans(
-    client: PoolClient,
-    schemaName: string,
-  ): Promise<void> {
-    const defaultPlans = [
-      {
-        code: 'monthly',
-        name: 'Monthly Plan',
-        description: 'Perfect for getting started with your fitness journey',
-        duration_value: 30,
-        duration_type: 'days',
-        price: 999,
-        features: JSON.stringify([
-          'Full gym access',
-          'Basic equipment usage',
-          'Locker room access',
-          'Fitness assessment',
-        ]),
-        display_order: 1,
-        is_featured: false,
-      },
-      {
-        code: 'quarterly',
-        name: 'Quarterly Plan',
-        description:
-          'Our most popular plan with great value for committed members',
-        duration_value: 90,
-        duration_type: 'days',
-        price: 2499,
-        features: JSON.stringify([
-          'Full gym access',
-          'All equipment usage',
-          'Locker room access',
-          'Fitness assessment',
-          '1 Personal training session',
-          'Diet consultation',
-        ]),
-        display_order: 2,
-        is_featured: true,
-      },
-      {
-        code: 'annual',
-        name: 'Annual Plan',
-        description: 'Best value for long-term fitness commitment',
-        duration_value: 365,
-        duration_type: 'days',
-        price: 7999,
-        features: JSON.stringify([
-          'Full gym access',
-          'All equipment usage',
-          'Locker room access',
-          'Monthly fitness assessment',
-          '4 Personal training sessions',
-          'Diet consultation',
-          'Priority booking',
-          'Guest passes (2/month)',
-        ]),
-        display_order: 3,
-        is_featured: false,
-      },
-    ];
-
-    for (const plan of defaultPlans) {
-      // Check if plan already exists
-      const existing = await client.query(
-        `SELECT id FROM "${schemaName}"."plans" WHERE code = $1`,
-        [plan.code],
-      );
-
-      if (existing.rows.length === 0) {
-        await client.query(
-          `
-          INSERT INTO "${schemaName}"."plans"
-          (code, name, description, duration_value, duration_type, price, features, display_order, is_featured, is_active)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
-        `,
-          [
-            plan.code,
-            plan.name,
-            plan.description,
-            plan.duration_value,
-            plan.duration_type,
-            plan.price,
-            plan.features,
-            plan.display_order,
-            plan.is_featured,
-          ],
-        );
-      }
-    }
-
-    this.logger.log(`Seeded default plans for ${schemaName}`);
   }
 
   /**
